@@ -1,0 +1,37 @@
+version: "3.9"
+services:
+  api:
+    build: ../apps/api
+    command: ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "main:app", "-b", "0.0.0.0:8000"]
+    env_file: ../.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/consultaion}
+    depends_on:
+      - db
+  web:
+    build: ../apps/web
+    command: ["npm", "run", "start", "-p", "3000"]
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://nginx}
+    depends_on:
+      - api
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: consultaion
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pg_prod:/var/lib/postgresql/data
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pg_prod:

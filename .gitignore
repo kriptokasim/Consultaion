@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+apps/web/.next/
+*.log
+*.db
+exports/
+.pytest_cache/
+.env
+.venv/
+__pycache__/
+.DS_Store
