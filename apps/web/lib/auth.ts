@@ -4,7 +4,7 @@ async function buildHeaders(init?: HeadersInit): Promise<Headers> {
   const headers = new Headers(init);
   if (typeof window === "undefined") {
     const { cookies } = await import("next/headers");
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const cookieHeader = cookieStore
       .getAll()
       .map((cookie) => `${cookie.name}=${cookie.value}`)
