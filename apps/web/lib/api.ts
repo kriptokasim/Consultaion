@@ -46,3 +46,7 @@ export async function startDebate(payload: { prompt: string; config?: any }) {
 export function streamDebate(id: string) {
   return new EventSource(`${API}/debates/${id}/stream`)
 }
+
+export async function getEvents(id: string) {
+  return request<any>(`/debates/${id}/events`)
+}

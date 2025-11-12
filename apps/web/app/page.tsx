@@ -1,8 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Hero from '@/components/parliament/Hero'
+import ParliamentChamber from '@/components/parliament/ParliamentChamber'
 import LivePanel from '@/components/consultaion/consultaion/live-panel'
 import { startDebate, streamDebate } from '@/lib/api'
+import type { Member } from '@/components/parliament/types'
 
 type VoteMeta = {
   method?: string
@@ -18,6 +21,13 @@ export default function Page() {
   const [vote, setVote] = useState<VoteMeta | undefined>(undefined)
   const esRef = useRef<EventSource | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const members: Member[] = [
+    { id: 'Analyst', name: 'Analyst', role: 'agent' },
+    { id: 'Critic', name: 'Critic', role: 'critic' },
+    { id: 'Builder', name: 'Builder', role: 'agent' },
+    { id: 'JudgeAlpha', name: 'JudgeAlpha', role: 'judge' },
+  ]
 
   const reset = () => {
     setEvents([])
@@ -52,6 +62,10 @@ export default function Page() {
             const persona = msg.revised?.[0]?.persona ?? msg.candidates?.[0]?.persona
             if (persona) setActivePersona(persona)
           }
+          if (msg.type === 'score' && Array.isArray(msg.scores)) {
+            const ranking = [...msg.scores].sort((a: any, b: any) => b.score - a.score).map((s: any) => s.persona)
+            setVote({ method: 'borda', ranking })
+          }
           if (msg.type === 'final' && msg.meta?.ranking) {
             setVote({
               method: msg.meta?.vote?.method ?? 'borda',
@@ -80,7 +94,9 @@ export default function Page() {
   }, [])
 
   return (
-    <main id="main" className="p-4">
+    <main id="main" className="space-y-6 p-4">
+      <Hero onStart={onStart} />
+      <ParliamentChamber members={members} activeId={activePersona} speakerSeconds={speakerTime} />
       <LivePanel
         prompt={prompt}
         onPromptChange={setPrompt}

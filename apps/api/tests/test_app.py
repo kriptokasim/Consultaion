@@ -3,18 +3,24 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+import atexit
 
 import pytest
 from sqlmodel import Session
 
-TEST_DB_PATH = Path(tempfile.gettempdir()) / "consultaion_test.db"
-if TEST_DB_PATH.exists():
-  try:
-    TEST_DB_PATH.unlink()
-  except OSError:
-    pass
+fd, temp_path = tempfile.mkstemp(prefix="consultaion_test_", suffix=".db")
+os.close(fd)
+test_db_path = Path(temp_path)
 
-os.environ['DATABASE_URL'] = f'sqlite:///{TEST_DB_PATH}'
+def _cleanup():
+    try:
+        test_db_path.unlink()
+    except OSError:
+        pass
+
+atexit.register(_cleanup)
+
+os.environ['DATABASE_URL'] = f'sqlite:///{test_db_path}'
 os.environ.setdefault('USE_MOCK', '1')
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))

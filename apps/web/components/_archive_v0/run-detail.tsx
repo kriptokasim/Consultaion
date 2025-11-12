@@ -65,7 +65,7 @@ function FinalAnswerCard({ answer }: { answer: string }) {
 }
 
 function Scoreboard({ scores }: { scores: ScoreRow[] }) {
-  const personas = [...new Set(scores.map((score) => score.persona))]
+  const personas = Array.from(new Set(scores.map((score) => score.persona)))
   const maxScore = 10
 
   const averages = useMemo(() => {

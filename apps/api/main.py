@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 import uuid
+from typing import Any
+from contextlib import asynccontextmanager
 from pathlib import Path
 from time import time
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
@@ -16,7 +18,13 @@ from models import Debate, DebateRound, Message, Score
 from orchestrator import run_debate
 from schemas import DebateCreate, default_debate_config
 
-app = FastAPI(title="Consultaion API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Consultaion API", version="0.1.0", lifespan=lifespan)
 
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
@@ -36,11 +44,6 @@ EXPORT_DIR = Path(os.getenv("EXPORT_DIR", "exports"))
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    init_db()
 
 
 @app.get("/healthz")
@@ -185,6 +188,31 @@ async def export_debate_report(debate_id: str, session: Session = Depends(get_se
     filepath = EXPORT_DIR / f"{debate_id}.md"
     filepath.write_text(_report_to_markdown(data), encoding="utf-8")
     return {"uri": f"/exports/{filepath.name}"}
+
+
+@app.get("/debates/{debate_id}/events")
+async def get_debate_events(debate_id: str, session: Session = Depends(get_session)):
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise HTTPException(status_code=404, detail="debate not found")
+
+    rows = session.exec(
+        select(Message).where(Message.debate_id == debate_id).order_by(Message.created_at.asc())
+    ).all()
+
+    events: list[dict[str, Any]] = []
+    for message in rows:
+        if message.role in {"candidate", "revised"}:
+            events.append(
+                {
+                    "type": "message",
+                    "round": message.round_index,
+                    "actor": message.persona,
+                    "role": "agent",
+                    "text": message.content,
+                }
+            )
+    return {"items": events}
 
 
 @app.get("/debates/{debate_id}/stream")

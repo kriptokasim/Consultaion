@@ -2,11 +2,10 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Copy, Eye, MoreVertical, ChevronLeft, ChevronRight } from "lucide-react"
+import { Copy, Eye, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
 type RunStatus = "completed" | "running" | "failed" | "pending"
@@ -99,26 +98,21 @@ export default function RunsTable({ items }: { items: Run[] }) {
                     minute: "2-digit",
                   })}
                 </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/runs/${run.id}`} className="flex items-center gap-2">
-                          <Eye className="h-4 w-4" />
-                          View Details
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => copyToClipboard(run.id)}>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy ID
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                <TableCell className="flex gap-2">
+                  <Link href={`/runs/${run.id}`} className="inline-flex">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="View run details">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    aria-label="Copy run ID"
+                    onClick={() => copyToClipboard(run.id)}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
