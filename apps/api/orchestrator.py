@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
 from agents import (
@@ -27,7 +27,7 @@ def _start_round(session, debate_id: str, index: int, label: str, note: str) -> 
 
 
 def _end_round(session, round_record: DebateRound) -> None:
-    round_record.ended_at = datetime.utcnow()
+    round_record.ended_at = datetime.now(timezone.utc)
     session.add(round_record)
     session.commit()
 
@@ -129,7 +129,7 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
                 return
 
             debate.status = "running"
-            debate.updated_at = datetime.utcnow()
+            debate.updated_at = datetime.now(timezone.utc)
             session.add(debate)
             session.commit()
 
@@ -226,7 +226,7 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
                 "early_stop_reason": early_stop_reason,
             }
             debate.status = "completed" if not budget_reason else "completed_budget"
-            debate.updated_at = datetime.utcnow()
+            debate.updated_at = datetime.now(timezone.utc)
             session.add(debate)
             session.commit()
 
@@ -251,7 +251,7 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
             debate = session.get(Debate, debate_id)
             if debate:
                 debate.status = "failed"
-                debate.updated_at = datetime.utcnow()
+                debate.updated_at = datetime.now(timezone.utc)
                 debate.final_meta = {"error": str(exc)}
                 session.add(debate)
                 session.commit()

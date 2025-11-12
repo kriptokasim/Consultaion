@@ -1,15 +1,24 @@
-import type { ReactNode } from 'react'
-import '../styles/globals.css'
+import type { Metadata } from 'next'
+import DashboardShell from '@/components/consultaion/consultaion/dashboard-shell'
+import '@/styles/globals.css'
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'Consultaion',
-  description: 'AI Consultation by Multi-Agent Deliberation'
+  description: 'AI Parliament for multi-agent deliberation',
 }
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-slate-50 text-slate-900">{children}</body>
+    <html lang="en" className="dark">
+      <body className="min-h-screen bg-background text-foreground">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 z-50 rounded bg-primary px-3 py-1 text-primary-foreground"
+        >
+          Skip to content
+        </a>
+        <DashboardShell>{children}</DashboardShell>
+      </body>
     </html>
   )
 }

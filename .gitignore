@@ -4,6 +4,7 @@ apps/web/.next/
 *.log
 *.db
 exports/
+.env.local
 .pytest_cache/
 .env
 .venv/

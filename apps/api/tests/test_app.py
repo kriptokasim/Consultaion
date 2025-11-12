@@ -1,14 +1,22 @@
 import asyncio
 import os
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 from sqlmodel import Session
 
-os.environ['DATABASE_URL'] = 'sqlite:///./test_ci.db'
+TEST_DB_PATH = Path(tempfile.gettempdir()) / "consultaion_test.db"
+if TEST_DB_PATH.exists():
+  try:
+    TEST_DB_PATH.unlink()
+  except OSError:
+    pass
+
+os.environ['DATABASE_URL'] = f'sqlite:///{TEST_DB_PATH}'
 os.environ.setdefault('USE_MOCK', '1')
 
-import sys
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from database import engine, init_db  # noqa: E402
