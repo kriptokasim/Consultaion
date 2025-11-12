@@ -4,11 +4,12 @@ import type React from "react"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, PlayCircle, Settings, Search, Moon, Sun, User } from "lucide-react"
+import { FileText, PlayCircle, Settings, Search, Moon, Sun, User, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
+import { logout } from "@/lib/auth"
 
 const navigation = [
   { name: "Live", href: "/", icon: PlayCircle },
@@ -19,6 +20,9 @@ const navigation = [
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [theme, setTheme] = useState<"light" | "dark">("dark")
+  const [profile, setProfile] = useState<{ email: string; role: string } | null>(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
   useEffect(() => {
     const root = document.documentElement
@@ -29,8 +33,48 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     }
   }, [theme])
 
+  useEffect(() => {
+    let cancelled = false
+    const loadProfile = async () => {
+      try {
+        const res = await fetch(`${apiBase}/me`, { credentials: "include", cache: "no-store" })
+        if (!cancelled) {
+          if (res.ok) {
+            const data = await res.json()
+            setProfile(data)
+          } else {
+            setProfile(null)
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setProfile(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingProfile(false)
+        }
+      }
+    }
+    loadProfile()
+    return () => {
+      cancelled = true
+    }
+  }, [apiBase])
+
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark")
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    setProfile(null)
+    window.location.href = "/login"
+  }
+
+  const navItems = [...navigation]
+  if (profile?.role === "admin") {
+    navItems.push({ name: "Admin", href: "/admin", icon: Shield })
   }
 
   return (
@@ -44,7 +88,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <span className="font-semibold text-sidebar-foreground">Consultaion</span>
         </div>
         <nav className="flex-1 space-y-1 p-4">
-          {navigation.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href
             return (
               <Link
@@ -64,13 +108,24 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           })}
         </nav>
         <div className="border-t border-sidebar-border p-4">
-          <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent px-3 py-2">
-            <div className="h-8 w-8 rounded-full bg-sidebar-primary" />
-            <div className="flex-1 text-sm">
-              <div className="font-medium text-sidebar-foreground">Analyst</div>
-              <div className="text-xs text-muted-foreground">analyst@consultaion.ai</div>
+          {profile ? (
+            <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent px-3 py-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
+                {profile.email.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 text-sm">
+                <div className="font-medium text-sidebar-foreground">{profile.email}</div>
+                <div className="text-xs text-muted-foreground capitalize">{profile.role}</div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center justify-center rounded-lg bg-sidebar-accent px-3 py-2 text-sm font-medium text-sidebar-accent-foreground"
+            >
+              Sign In
+            </Link>
+          )}
         </div>
       </aside>
 
@@ -88,9 +143,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9">
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Account menu">
-              <User className="h-4 w-4" />
-            </Button>
+            {profile ? (
+              <Button variant="ghost" size="sm" onClick={handleLogout} disabled={loadingProfile}>
+                Logout
+              </Button>
+            ) : (
+              <Button variant="ghost" size="icon" asChild className="h-9 w-9" aria-label="Login">
+                <Link href="/login">
+                  <User className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
           </div>
         </header>
 

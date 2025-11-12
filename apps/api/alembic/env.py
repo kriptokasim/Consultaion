@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
-from models import Debate, DebateRound, Message, Score  # noqa: F401
+from models import User, APIKey, Debate, DebateRound, Message, Score  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

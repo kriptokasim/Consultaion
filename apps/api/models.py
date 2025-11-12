@@ -2,13 +2,31 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Optional
+import uuid
 
-from sqlalchemy import Column, DateTime, Index, JSON, Text
-from sqlmodel import Field, SQLModel
+from sqlalchemy import Column, DateTime, Index, JSON, Text, String
+from sqlmodel import Field, SQLModel, Relationship
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class User(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    email: str = Field(index=True, unique=True, nullable=False)
+    password_hash: str = Field(nullable=False)
+    role: str = Field(default="user", nullable=False, index=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class APIKey(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    key_hash: str = Field(nullable=False)
+    label: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    last_used_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
 
 class Debate(SQLModel, table=True):
@@ -20,6 +38,7 @@ class Debate(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     final_content: Optional[str] = Field(default=None, sa_column=Column(Text))
     final_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
 
 
 class DebateRound(SQLModel, table=True):

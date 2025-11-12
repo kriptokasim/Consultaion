@@ -1,0 +1,90 @@
+import base64
+import hashlib
+import hmac
+import json
+import os
+import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict
+
+from fastapi import Response
+
+COOKIE_NAME = "consultaion_token"
+JWT_SECRET = os.getenv("JWT_SECRET") or secrets.token_hex(32)
+JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "4320"))
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_ITERATIONS", "20000"))
+
+
+def _b64encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("utf-8")
+
+
+def _b64decode(data: str) -> bytes:
+    padding = "=" * ((4 - len(data) % 4) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), PBKDF2_ITERATIONS)
+    return f"pbkdf2_sha256${salt}${digest.hex()}"
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        _, salt, stored = password_hash.split("$")
+    except ValueError:
+        return False
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), PBKDF2_ITERATIONS)
+    return hmac.compare_digest(digest.hex(), stored)
+
+
+def create_access_token(*, user_id: str, email: str, role: str) -> str:
+    header = {"alg": "HS256", "typ": "JWT"}
+    expires = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRES_MINUTES)
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "role": role,
+        "exp": int(expires.timestamp()),
+    }
+    header_b64 = _b64encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    payload_b64 = _b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
+    signature = hmac.new(JWT_SECRET.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    token = f"{header_b64}.{payload_b64}.{_b64encode(signature)}"
+    return token
+
+
+def decode_access_token(token: str) -> Dict[str, Any]:
+    try:
+        header_b64, payload_b64, signature_b64 = token.split(".")
+    except ValueError as exc:
+        raise ValueError("invalid token") from exc
+    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
+    expected_sig = hmac.new(JWT_SECRET.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    actual_sig = _b64decode(signature_b64)
+    if not hmac.compare_digest(expected_sig, actual_sig):
+        raise ValueError("invalid signature")
+    payload = json.loads(_b64decode(payload_b64))
+    exp = payload.get("exp")
+    if exp and datetime.now(timezone.utc).timestamp() > float(exp):
+        raise ValueError("token expired")
+    return payload
+
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=JWT_EXPIRES_MINUTES * 60,
+        path="/",
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(COOKIE_NAME, path="/")

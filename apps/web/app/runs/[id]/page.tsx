@@ -4,7 +4,7 @@ import ExportButton from "@/components/parliament/ExportButton";
 import ExportCSVButton from "@/components/parliament/ExportCSVButton";
 import ParliamentChamber from "@/components/parliament/ParliamentChamber";
 import type { ScoreItem, VotePayload, DebateEvent, JudgeScoreEvent, Member } from "@/components/parliament/types";
-import { getDebate, getReport, getEvents, getDebateMembers } from "@/lib/api";
+import { fetchWithAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +14,35 @@ type RunDetailProps = {
 
 export default async function RunDetailPage({ params }: RunDetailProps) {
   const { id } = await params;
-  const [debate, report, eventPayload, memberPayload] = await Promise.all([
-    getDebate(id),
-    getReport(id),
-    getEvents(id),
-    getDebateMembers(id),
-  ]);
+  let debate: any, report: any, eventPayload: any, memberPayload: any;
+  try {
+    const [debateRes, reportRes, eventsRes, membersRes] = await Promise.all([
+      fetchWithAuth(`/debates/${id}`),
+      fetchWithAuth(`/debates/${id}/report`),
+      fetchWithAuth(`/debates/${id}/events`),
+      fetchWithAuth(`/debates/${id}/members`),
+    ]);
+    if ([debateRes, reportRes, eventsRes, membersRes].some((res) => !res.ok)) {
+      throw new Error("unauthorized");
+    }
+    [debate, report, eventPayload, memberPayload] = await Promise.all([
+      debateRes.json(),
+      reportRes.json(),
+      eventsRes.json(),
+      membersRes.json(),
+    ]);
+  } catch (error) {
+    return (
+      <main id="main" className="flex h-full items-center justify-center p-6">
+        <div className="rounded-lg border border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">This run is unavailable or you do not have access.</p>
+          <a href="/runs" className="mt-3 inline-flex items-center rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Back to Runs
+          </a>
+        </div>
+      </main>
+    );
+  }
 
   const events: DebateEvent[] = Array.isArray(eventPayload?.items) ? eventPayload.items : [];
 
