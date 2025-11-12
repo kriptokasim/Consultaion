@@ -23,6 +23,9 @@ jobs:
       - name: Run migrations
         run: |
           DATABASE_URL=sqlite:///./ci.db alembic upgrade head
+      - name: Migration dry-run SQL
+        run: |
+          DATABASE_URL=sqlite:///./ci.db alembic upgrade head --sql > /tmp/migration.sql
       - name: Run tests
         env:
           DATABASE_URL: sqlite:///./ci.db

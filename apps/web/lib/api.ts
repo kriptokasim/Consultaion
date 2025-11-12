@@ -50,3 +50,11 @@ export function streamDebate(id: string) {
 export async function getEvents(id: string) {
   return request<any>(`/debates/${id}/events`)
 }
+
+export async function getMembers() {
+  return request<any>('/config/members')
+}
+
+export async function getDebateMembers(id: string) {
+  return request<any>(`/debates/${id}/members`)
+}

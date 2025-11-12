@@ -26,13 +26,12 @@ os.environ.setdefault('USE_MOCK', '1')
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from database import engine, init_db  # noqa: E402
-from main import healthz  # noqa: E402
-from models import Debate  # noqa: E402
+from main import export_scores_csv, healthz  # noqa: E402
+from models import Debate, Score  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
 
 init_db()
-
 
 @pytest.fixture
 def anyio_backend():
@@ -74,3 +73,46 @@ async def test_run_debate_emits_final_events():
     meta = final_events[-1]['meta']
     assert 'ranking' in meta
     assert 'usage' in meta
+
+
+def test_export_scores_csv_endpoint():
+    debate_id = 'csv-export'
+    with Session(engine) as session:
+        existing = session.get(Debate, debate_id)
+        if existing:
+            session.delete(existing)
+            session.commit()
+        session.add(
+            Debate(
+                id=debate_id,
+                prompt='CSV prompt',
+                status='completed',
+                config=default_debate_config().model_dump(),
+            )
+        )
+        session.commit()
+        session.add(
+            Score(
+                debate_id=debate_id,
+                persona='Analyst',
+                judge='JudgeOne',
+                score=8.5,
+                rationale='Strong analysis',
+            )
+        )
+        session.add(
+            Score(
+                debate_id=debate_id,
+                persona='Builder',
+                judge='JudgeOne',
+                score=7.0,
+                rationale='Actionable plan',
+            )
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        response = asyncio.run(export_scores_csv(debate_id, session=session))
+    assert response.media_type == "text/csv"
+    assert "persona,judge,score,rationale,timestamp" in response.body.decode()
+    assert "Analyst" in response.body.decode()

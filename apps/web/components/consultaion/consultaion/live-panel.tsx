@@ -19,6 +19,7 @@ type LivePanelProps = {
   activePersona?: string
   speakerTime: number
   vote?: { method?: string; ranking?: string[] }
+  loading?: boolean
 }
 
 type EventRow = {
@@ -96,6 +97,7 @@ export default function LivePanel({
   activePersona,
   speakerTime,
   vote,
+  loading = false,
 }: LivePanelProps) {
   const mappedEvents = useMemo(() => events.map(toEventRow), [events])
 
@@ -182,14 +184,35 @@ export default function LivePanel({
         </div>
       )}
 
-      {mappedEvents.length > 0 && (
+      {(mappedEvents.length > 0 || loading) && (
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="text-lg font-semibold">Live Stream</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-96">
-              <div className="space-y-3">
+              <div
+                className="space-y-3"
+                role="feed"
+                aria-live="polite"
+                aria-busy={loading && mappedEvents.length === 0}
+              >
+                {loading && mappedEvents.length === 0
+                  ? Array.from({ length: 3 }).map((_, idx) => (
+                      <div
+                        key={`skeleton-${idx}`}
+                        className="flex animate-pulse items-start gap-3 rounded-lg border border-border bg-muted/30 p-4"
+                      >
+                        <div className="h-6 w-12 rounded-full bg-muted" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 w-1/2 rounded bg-muted" />
+                          <div className="h-3 w-3/4 rounded bg-muted" />
+                          <div className="h-3 w-1/3 rounded bg-muted" />
+                        </div>
+                        <div className="h-8 w-8 rounded-full bg-muted" />
+                      </div>
+                    ))
+                  : null}
                 {mappedEvents.map((event, index) => (
                   <div
                     key={`${event.type}-${index}`}

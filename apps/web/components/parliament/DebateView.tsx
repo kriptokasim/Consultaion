@@ -30,6 +30,13 @@ const getTypeBadge = (type: string) => {
   return badges[type as keyof typeof badges] || badges.notice;
 };
 
+const formatTimestamp = (value?: string) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 export default function DebateView({ events, className = "" }: DebateViewProps) {
   return (
     <section 
@@ -91,40 +98,50 @@ export default function DebateView({ events, className = "" }: DebateViewProps) 
                 >
                   <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {event.actor && (
+                      {event.type === "message" && event.actor && (
                         <h4 className="font-bold text-sm text-white">{event.actor}</h4>
                       )}
+
+                      {event.type === "score" && "judge" in event && (
+                        <div className="flex items-center gap-2 text-sm text-white/80">
+                          <span className="font-semibold text-white">{event.judge}</span>
+                          <span aria-hidden="true" className="text-white/40">→</span>
+                          <span className="text-white/70">{event.persona}</span>
+                        </div>
+                      )}
+
                       <Badge className={`${getTypeBadge(event.type)} border text-xs`}>
                         {event.type}
                       </Badge>
-                      {event.round !== undefined && (
+
+                      {"round" in event && event.round !== undefined && (
                         <span className="text-xs text-white/50">Round {event.round}</span>
                       )}
                     </div>
+
+                    {formatTimestamp(event.at) && (
+                      <time className="text-xs text-white/50" dateTime={event.at}>
+                        {formatTimestamp(event.at)}
+                      </time>
+                    )}
                   </div>
 
-                  {event.text && (
+                  {"text" in event && event.text && (
                     <p className="text-sm text-white/80 leading-relaxed mb-3">{event.text}</p>
                   )}
 
-                  {event.scores && event.scores.length > 0 && (
-                    <div className="mt-3 space-y-2 p-3 bg-black/20 rounded border border-white/10">
-                      <h5 className="text-xs font-semibold text-white/70 mb-2">Scores:</h5>
-                      {event.scores.map((score, idx) => (
-                        <div key={idx} className="flex items-start justify-between gap-3 text-xs">
-                          <span className="text-white/70 font-medium">{score.persona}</span>
-                          <div className="text-right">
-                            <span className="text-[--parl-gold] font-bold">{score.score.toFixed(1)}</span>
-                            {score.rationale && (
-                              <p className="text-white/50 text-xs mt-1 max-w-xs" title={score.rationale}>
-                                {score.rationale.length > 50 
-                                  ? score.rationale.substring(0, 50) + "..." 
-                                  : score.rationale}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                  {event.type === "score" && (
+                    <div className="mt-3 space-y-2 p-3 bg-black/20 rounded border border-white/10 text-xs text-white/80">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-white/90">Judge {event.judge}</span>
+                        <span className="text-[--parl-gold] font-bold text-sm">{event.score.toFixed(2)}</span>
+                      </div>
+                      <div className="text-white/70">
+                        Target: <span className="font-medium text-white">{event.persona}</span>
+                      </div>
+                      {event.rationale && (
+                        <p className="text-white/60 leading-relaxed">{event.rationale}</p>
+                      )}
                     </div>
                   )}
                 </Card>

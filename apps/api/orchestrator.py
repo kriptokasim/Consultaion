@@ -51,9 +51,11 @@ def _check_budget(budget) -> str | None:
     if not budget:
         return None
     usage = get_usage()
-    if budget.max_tokens and usage["tokens"] > budget.max_tokens:
+    tokens_total = float(usage.get("tokens", {}).get("total", 0))
+    cost_total = float(usage.get("cost_usd") or usage.get("cost", 0) or 0)
+    if budget.max_tokens and tokens_total > budget.max_tokens:
         return "token_budget_exceeded"
-    if budget.max_cost_usd and usage["cost"] > budget.max_cost_usd:
+    if budget.max_cost_usd and cost_total > budget.max_cost_usd:
         return "cost_budget_exceeded"
     return None
 

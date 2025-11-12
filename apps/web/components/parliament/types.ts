@@ -18,11 +18,36 @@ export interface VotePayload {
   ranking: string[];
 }
 
-export interface DebateEvent {
-  type: "message" | "score" | "final" | "notice";
-  round?: number;
-  actor?: string;
+export interface JudgeScoreEvent {
+  type: "score";
+  persona: string;
+  judge: string;
+  score: number;
+  rationale?: string;
+  at?: string;
   role?: Role;
-  text?: string;
-  scores?: ScoreItem[];
 }
+
+export type DebateEvent =
+  | {
+      type: "message";
+      round?: number;
+      actor?: string;
+      role?: Role;
+      text?: string;
+      at?: string;
+    }
+  | JudgeScoreEvent
+  | {
+      type: "final";
+      actor?: string;
+      text?: string;
+      at?: string;
+      role?: Role;
+    }
+  | {
+      type: "notice";
+      text?: string;
+      at?: string;
+      role?: Role;
+    };

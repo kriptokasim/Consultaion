@@ -10,39 +10,77 @@ from schemas import AgentConfig, JudgeConfig
 
 logger = logging.getLogger(__name__)
 
-_use_mock_env = os.getenv("USE_MOCK")
-_has_llm_key = any(
-    os.getenv(key)
-    for key in (
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "LITELLM_API_KEY",
-        "AZURE_API_KEY",
-    )
+PROVIDER_KEYS = (
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "AZURE_API_KEY",
+    "LITELLM_API_KEY",
 )
-USE_MOCK = (_use_mock_env != "0") if _use_mock_env is not None else not _has_llm_key
+_has_llm_key = any(os.getenv(key) for key in PROVIDER_KEYS)
+_use_mock_env = os.getenv("USE_MOCK", "1")
+USE_MOCK = not (_use_mock_env == "0" and _has_llm_key)
 LITELLM_MODEL = os.getenv("LITELLM_MODEL", "gpt-4o-mini")
 LITELLM_API_BASE = os.getenv("LITELLM_API_BASE")
 if LITELLM_API_BASE:
     os.environ["LITELLM_API_BASE"] = LITELLM_API_BASE
 
-USAGE_TRACKER: Dict[str, float] = {"tokens": 0.0, "cost": 0.0}
+USAGE_TRACKER: Dict[str, Any] = {
+    "tokens": {"prompt": 0.0, "completion": 0.0, "total": 0.0},
+    "cost_usd": 0.0,
+    "provider": None,
+    "model": LITELLM_MODEL,
+    "calls": [],
+}
 
 
 def reset_usage() -> None:
-    USAGE_TRACKER["tokens"] = 0.0
-    USAGE_TRACKER["cost"] = 0.0
+    USAGE_TRACKER["tokens"] = {"prompt": 0.0, "completion": 0.0, "total": 0.0}
+    USAGE_TRACKER["cost_usd"] = 0.0
+    USAGE_TRACKER["calls"] = []
+    USAGE_TRACKER["provider"] = None
+    USAGE_TRACKER["model"] = LITELLM_MODEL
 
 
-def get_usage() -> Dict[str, float]:
-    return {"tokens": USAGE_TRACKER["tokens"], "cost": USAGE_TRACKER["cost"]}
+def get_usage() -> Dict[str, Any]:
+    return {
+        "tokens": {**USAGE_TRACKER["tokens"]},
+        "cost_usd": USAGE_TRACKER["cost_usd"],
+        "provider": USAGE_TRACKER["provider"],
+        "model": USAGE_TRACKER["model"],
+        "calls": [dict(call) for call in USAGE_TRACKER["calls"]],
+    }
 
 
-def _record_usage(tokens: Optional[float], cost: Optional[float]) -> None:
-    if tokens:
-        USAGE_TRACKER["tokens"] += float(tokens)
-    if cost:
-        USAGE_TRACKER["cost"] += float(cost)
+def _record_usage(
+    token_counts: Dict[str, float] | None,
+    cost: Optional[float],
+    *,
+    model: Optional[str],
+    provider: Optional[str],
+) -> None:
+    tokens = token_counts or {}
+    prompt = float(tokens.get("prompt", 0.0))
+    completion = float(tokens.get("completion", 0.0))
+    total = float(tokens.get("total", prompt + completion))
+    USAGE_TRACKER["tokens"]["prompt"] += prompt
+    USAGE_TRACKER["tokens"]["completion"] += completion
+    USAGE_TRACKER["tokens"]["total"] += total or prompt + completion
+    if cost is not None:
+        USAGE_TRACKER["cost_usd"] += float(cost)
+    if model:
+        USAGE_TRACKER["model"] = model
+    if provider:
+        USAGE_TRACKER["provider"] = provider
+    USAGE_TRACKER["calls"].append(
+        {
+            "model": model,
+            "provider": provider,
+            "tokens": {"prompt": prompt, "completion": completion, "total": total or prompt + completion},
+            "cost_usd": float(cost or 0.0),
+        }
+    )
 
 
 def _estimate_cost(tokens: Optional[float]) -> float:
@@ -68,7 +106,12 @@ async def _call_llm(
     if USE_MOCK:
         text = await _fake_llm(messages[-1]["content"], role=role)
         approx_tokens = max(50, len(messages[-1]["content"]) // 2)
-        _record_usage(approx_tokens, _estimate_cost(approx_tokens))
+        _record_usage(
+            {"prompt": approx_tokens * 0.6, "completion": approx_tokens * 0.4, "total": approx_tokens},
+            _estimate_cost(approx_tokens),
+            model=model_override or LITELLM_MODEL,
+            provider="mock",
+        )
         return text
 
     try:
@@ -82,13 +125,29 @@ async def _call_llm(
         if not content:
             raise ValueError("LLM response contained no content")
         usage = getattr(response, "usage", {}) or {}
-        tokens = usage.get("total_tokens")
+        token_counts = {
+            "prompt": float(usage.get("prompt_tokens") or 0.0),
+            "completion": float(usage.get("completion_tokens") or 0.0),
+            "total": float(
+                usage.get("total_tokens")
+                or (usage.get("prompt_tokens") or 0.0) + (usage.get("completion_tokens") or 0.0)
+            ),
+        }
         cost = getattr(response, "response_cost", None)
         if isinstance(cost, dict):
             cost = cost.get("total_cost")
         if cost is None:
             cost = usage.get("total_cost")
-        _record_usage(tokens, cost if cost is not None else _estimate_cost(tokens))
+        provider = getattr(response, "provider", None)
+        hidden = getattr(response, "_hidden_params", {}) or {}
+        provider = hidden.get("api_provider") or hidden.get("provider") or provider
+        model_used = getattr(response, "model", None) or model_override or LITELLM_MODEL
+        _record_usage(
+            token_counts,
+            cost if cost is not None else _estimate_cost(token_counts.get("total")),
+            model=model_used,
+            provider=provider,
+        )
         return content.strip()
     except Exception as exc:
         logger.warning("LLM call failed, falling back to mock: %s", exc)
