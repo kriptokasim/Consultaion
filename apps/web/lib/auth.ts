@@ -3,8 +3,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 async function buildHeaders(init?: HeadersInit): Promise<Headers> {
   const headers = new Headers(init);
   if (typeof window === "undefined") {
-    const { cookies } = await import("next/headers");
-    const cookieStore = await cookies();
+    const headerModule = await import("next/headers");
+    const cookieStore = headerModule.cookies();
     const cookieHeader = cookieStore
       .getAll()
       .map((cookie) => `${cookie.name}=${cookie.value}`)

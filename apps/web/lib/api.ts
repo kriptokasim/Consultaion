@@ -1,3 +1,5 @@
+import { fetchWithAuth } from '@/lib/auth'
+
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 type ListParams = {
@@ -6,11 +8,12 @@ type ListParams = {
   offset?: number
 }
 
-async function request<T>(path: string, init?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
-    cache: 'no-store',
-    ...init,
-  })
+async function request<T>(path: string, init?: RequestInit, opts?: { auth?: boolean }) {
+  const fetcher =
+    opts?.auth && typeof fetchWithAuth === 'function'
+      ? fetchWithAuth
+      : async (url: string, init?: RequestInit) => fetch(`${API}${url}`, { cache: 'no-store', ...init })
+  const res = await fetcher(path, init)
   if (!res.ok) {
     throw new Error(`Request failed: ${res.status}`)
   }
@@ -24,15 +27,15 @@ export async function getDebates(params: ListParams = {}) {
       .map(([key, value]) => [key, String(value)]),
   )
   const suffix = query.size ? `?${query.toString()}` : ''
-  return request<any>(`/debates${suffix}`)
+  return request<any>(`/debates${suffix}`, undefined, { auth: true })
 }
 
 export async function getDebate(id: string) {
-  return request<any>(`/debates/${id}`)
+  return request<any>(`/debates/${id}`, undefined, { auth: true })
 }
 
 export async function getReport(id: string) {
-  return request<any>(`/debates/${id}/report`)
+  return request<any>(`/debates/${id}/report`, undefined, { auth: true })
 }
 
 export async function startDebate(payload: { prompt: string; config?: any }) {
@@ -48,7 +51,7 @@ export function streamDebate(id: string) {
 }
 
 export async function getEvents(id: string) {
-  return request<any>(`/debates/${id}/events`)
+  return request<any>(`/debates/${id}/events`, undefined, { auth: true })
 }
 
 export async function getMembers() {
@@ -56,5 +59,15 @@ export async function getMembers() {
 }
 
 export async function getDebateMembers(id: string) {
-  return request<any>(`/debates/${id}/members`)
+  return request<any>(`/debates/${id}/members`, undefined, { auth: true })
+}
+
+export async function getMyDebates(params: ListParams = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => [key, String(value)]),
+  )
+  const suffix = query.size ? `?${query.toString()}` : ''
+  return request<any>(`/debates${suffix}`, undefined, { auth: true })
 }

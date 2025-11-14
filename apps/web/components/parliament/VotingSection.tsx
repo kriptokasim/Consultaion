@@ -21,42 +21,37 @@ const getMethodLabel = (method: string) => {
 };
 
 export default function VotingSection({ scores, vote, onExportMarkdown }: VotingSectionProps) {
-  const maxScore = Math.max(...scores.map(s => s.score), 1);
+  const maxScore = Math.max(...scores.map((s) => s.score), 1);
   const sortedScores = [...scores].sort((a, b) => b.score - a.score);
   const winner = sortedScores[0];
   const hasTie = sortedScores.length > 1 && sortedScores[1].score === winner?.score;
 
   return (
-    <section 
-      className="py-12 [--parl-blue:#0B1D3A] [--parl-gold:#D4AF37] [--muted:#101827]"
-      aria-labelledby="voting-title"
-    >
+    <section className="space-y-6 rounded-3xl border border-stone-200 bg-white/90 p-6 shadow-sm" aria-labelledby="voting-title">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-8">
-          <h2 id="voting-title" className="text-3xl md:text-4xl font-bold text-[--parl-gold] mb-2">
+        <div className="mb-6 text-center">
+          <h2 id="voting-title" className="text-2xl font-semibold text-stone-900">
             Voting Results
           </h2>
-          <p className="text-base text-white/70">
-            Democratic decision through judicial scoring and ranking
-          </p>
+          <p className="text-sm text-stone-500">Judge aggregates and ranking summaries</p>
         </div>
 
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Winner Banner */}
           {winner && (
-            <Card className="bg-gradient-to-br from-[--parl-gold]/10 to-[--parl-blue]/20 border-2 border-[--parl-gold]/30">
+            <Card className="border border-amber-200 bg-gradient-to-br from-amber-50 to-stone-50">
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-[--parl-gold] flex items-center justify-center">
-                      <Trophy className="w-6 h-6 text-black" aria-hidden="true" />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500 text-white">
+                      <Trophy className="h-6 w-6" aria-hidden="true" />
                     </div>
                     <div>
-                      <CardTitle className="text-2xl text-white">
+                      <CardTitle className="text-2xl text-stone-900">
                         {hasTie ? "Tied Leaders" : "Winner Selected"}
                       </CardTitle>
                       {vote && (
-                        <p className="text-sm text-white/70 mt-1">
+                        <p className="mt-1 text-sm text-stone-600">
                           Method: {getMethodLabel(vote.method)}
                         </p>
                       )}
@@ -67,10 +62,10 @@ export default function VotingSection({ scores, vote, onExportMarkdown }: Voting
                       onClick={onExportMarkdown}
                       variant="outline"
                       size="sm"
-                      className="bg-white/5 border-white/20 text-white hover:bg-white/10"
+                      className="rounded-full border-amber-200 bg-white text-amber-800 hover:bg-amber-50"
                       aria-label="Export results as markdown"
                     >
-                      <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+                      <Download className="mr-2 h-4 w-4" aria-hidden="true" />
                       Export
                     </Button>
                   )}
@@ -80,9 +75,9 @@ export default function VotingSection({ scores, vote, onExportMarkdown }: Voting
           )}
 
           {/* Scores visualization */}
-          <Card className="bg-[--muted] border-white/10">
+          <Card className="border border-stone-100">
             <CardHeader>
-              <CardTitle className="text-xl text-white">Aggregate Scores</CardTitle>
+              <CardTitle className="text-xl text-stone-900">Aggregate Scores</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {sortedScores.map((item, index) => {
@@ -91,32 +86,32 @@ export default function VotingSection({ scores, vote, onExportMarkdown }: Voting
                 const isTied = item.score === winner?.score;
 
                 return (
-                  <div key={item.persona} className="space-y-2">
+                  <div key={item.persona} className="space-y-2 rounded-xl border border-stone-100 bg-stone-50/60 p-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white text-sm">{item.persona}</span>
+                        <span className="text-sm font-semibold text-stone-900">{item.persona}</span>
                         {isWinner && (
                           <Trophy 
-                            className="w-4 h-4 text-[--parl-gold] fill-[--parl-gold]" 
+                            className="h-4 w-4 text-amber-500" 
                             aria-label="Winner"
                           />
                         )}
                         {isTied && index > 0 && (
-                          <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                          <Badge className="border-amber-200 bg-amber-50 text-amber-700">
                             Tied
                           </Badge>
                         )}
                       </div>
-                      <span className="font-bold text-[--parl-gold]">{item.score.toFixed(2)}</span>
+                      <span className="font-semibold text-amber-700">{item.score.toFixed(2)}</span>
                     </div>
 
                     {/* Progress bar */}
-                    <div className="relative h-3 w-full overflow-hidden rounded-full bg-white/10">
+                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-white">
                       <div
                         className={`h-full transition-all duration-500 ${
                           isWinner 
-                            ? "bg-gradient-to-r from-[--parl-gold] to-amber-500" 
-                            : "bg-white/30"
+                            ? "bg-gradient-to-r from-amber-500 to-amber-300" 
+                            : "bg-gradient-to-r from-stone-300 to-stone-200"
                         }`}
                         style={{ width: `${percentage}%` }}
                         role="progressbar"
@@ -127,11 +122,9 @@ export default function VotingSection({ scores, vote, onExportMarkdown }: Voting
                       />
                     </div>
 
-                    {item.rationale && (
-                      <p className="text-xs text-white/60 mt-1 italic">
-                        {item.rationale}
-                      </p>
-                    )}
+                    {item.rationale ? (
+                      <p className="mt-1 text-xs text-stone-600 italic">{item.rationale}</p>
+                    ) : null}
                   </div>
                 );
               })}
@@ -140,25 +133,25 @@ export default function VotingSection({ scores, vote, onExportMarkdown }: Voting
 
           {/* Ranking display */}
           {vote && vote.ranking.length > 0 && (
-            <Card className="bg-[--muted] border-white/10">
+            <Card className="border border-stone-100">
               <CardHeader>
-                <CardTitle className="text-xl text-white">Final Ranking</CardTitle>
+                <CardTitle className="text-xl text-stone-900">Final Ranking</CardTitle>
               </CardHeader>
               <CardContent>
                 <ol className="space-y-2" aria-label="Final ranking of participants">
                   {vote.ranking.map((persona, index) => (
                     <li 
                       key={index}
-                      className="flex items-center gap-3 p-3 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                      className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50/70 p-3 text-sm text-stone-700"
                     >
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
                         index === 0 
-                          ? "bg-[--parl-gold] text-black" 
-                          : "bg-white/10 text-white/70"
+                          ? "bg-amber-500 text-white" 
+                          : "bg-white text-stone-600 border border-stone-200"
                       }`}>
                         {index + 1}
                       </div>
-                      <span className="text-white font-medium">{persona}</span>
+                      <span className="font-medium text-stone-900">{persona}</span>
                     </li>
                   ))}
                 </ol>

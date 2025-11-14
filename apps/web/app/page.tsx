@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import Hero from '@/components/parliament/Hero'
-import ParliamentChamber from '@/components/parliament/ParliamentChamber'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import LivePanel from '@/components/consultaion/consultaion/live-panel'
-import { startDebate, streamDebate, getMembers } from '@/lib/api'
-import type { Member } from '@/components/parliament/types'
+import ParliamentHome from '@/components/parliament/ParliamentHome'
+import SessionHUD from '@/components/parliament/SessionHUD'
+import type { Member, ScoreItem } from '@/components/parliament/types'
+import { getMembers, startDebate, streamDebate } from '@/lib/api'
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -29,8 +29,11 @@ export default function Page() {
   const [speakerTime, setSpeakerTime] = useState<number>(0)
   const [vote, setVote] = useState<VoteMeta | undefined>(undefined)
   const [members, setMembers] = useState<Member[]>(FALLBACK_MEMBERS)
-  const [membersLoading, setMembersLoading] = useState(true)
   const [eventsLoading, setEventsLoading] = useState(false)
+  const [currentDebateId, setCurrentDebateId] = useState<string | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [sessionStatus, setSessionStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle')
+  const [latestScores, setLatestScores] = useState<ScoreItem[]>([])
 
   const esRef = useRef<EventSource | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -38,6 +41,7 @@ export default function Page() {
   const reconnectAttemptRef = useRef(0)
   const currentDebateIdRef = useRef<string | null>(null)
   const runningRef = useRef(false)
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const reset = () => {
     setEvents([])
@@ -45,6 +49,7 @@ export default function Page() {
     setSpeakerTime(0)
     setVote(undefined)
     setEventsLoading(false)
+    setLatestScores([])
   }
 
   const clearTimers = () => {
@@ -52,13 +57,17 @@ export default function Page() {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
+    if (elapsedTimerRef.current) {
+      clearInterval(elapsedTimerRef.current)
+      elapsedTimerRef.current = null
+    }
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current)
       reconnectTimerRef.current = null
     }
   }
 
-  const stopStream = () => {
+  const stopStream = (nextStatus: 'idle' | 'completed' | 'error' = 'idle') => {
     esRef.current?.close()
     esRef.current = null
     clearTimers()
@@ -67,6 +76,18 @@ export default function Page() {
     setRunning(false)
     runningRef.current = false
     setEventsLoading(false)
+    setSessionStatus(nextStatus)
+    if (nextStatus === 'idle') {
+      setCurrentDebateId(null)
+    }
+  }
+
+  const startElapsed = () => {
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current)
+    setElapsedSeconds(0)
+    elapsedTimerRef.current = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1)
+    }, 1000)
   }
 
   const scheduleReconnect = () => {
@@ -100,6 +121,13 @@ export default function Page() {
         if (msg.type === 'score' && Array.isArray(msg.scores)) {
           const ranking = [...msg.scores].sort((a: any, b: any) => b.score - a.score).map((s: any) => s.persona)
           setVote({ method: 'borda', ranking })
+          setLatestScores(
+            msg.scores.map((score: any) => ({
+              persona: score.persona,
+              score: Number(score.score) || 0,
+              rationale: score.rationale,
+            })),
+          )
         }
         if (msg.type === 'final') {
           if (msg.meta?.ranking) {
@@ -108,7 +136,7 @@ export default function Page() {
               ranking: msg.meta.ranking,
             })
           }
-          stopStream()
+          stopStream('completed')
         }
       } catch (error) {
         console.error('Failed to parse event', error)
@@ -116,6 +144,7 @@ export default function Page() {
     }
     es.onerror = () => {
       es.close()
+      setSessionStatus('error')
       if (runningRef.current) {
         scheduleReconnect()
       }
@@ -124,18 +153,24 @@ export default function Page() {
 
   const onStart = async () => {
     if (!prompt.trim()) return
+    if (runningRef.current) {
+      stopStream('idle')
+    }
     reset()
     setRunning(true)
     runningRef.current = true
     try {
       const { id } = await startDebate({ prompt })
       currentDebateIdRef.current = id
+      setCurrentDebateId(id)
       reconnectAttemptRef.current = 0
+      setSessionStatus('running')
       openStream(id)
       timerRef.current = setInterval(() => setSpeakerTime((t) => t + 1), 1000)
+      startElapsed()
     } catch (error) {
       console.error(error)
-      stopStream()
+      stopStream('error')
     }
   }
 
@@ -163,10 +198,6 @@ export default function Page() {
           setMembers(FALLBACK_MEMBERS)
         }
       })
-      .finally(() => {
-        if (active) {
-          setMembersLoading(false)
-        }
       })
     return () => {
       active = false
@@ -174,22 +205,39 @@ export default function Page() {
     }
   }, [])
 
+  const sessionStats = useMemo(() => {
+    return {
+      rounds: events.filter((event) => event.type === 'round_started').length,
+      speeches: events.filter((event) => event.type === 'message').length,
+      votes: events.filter((event) => event.type === 'score').length,
+    }
+  }, [events])
+
+  const handleCopyId = () => {
+    if (!currentDebateId) return
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(currentDebateId).catch(() => null)
+    }
+  }
+
   return (
     <main id="main" className="space-y-6 p-4">
-      <Hero onStart={onStart} />
-      {membersLoading ? (
-        <section className="py-12">
-          <div className="container mx-auto px-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="h-32 animate-pulse rounded-xl bg-muted/40" />
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : (
-        <ParliamentChamber members={members} activeId={activePersona} speakerSeconds={speakerTime} />
-      )}
+      <ParliamentHome
+        members={members}
+        activeMemberId={members.find((member) => member.name === activePersona)?.id}
+        speakerSeconds={speakerTime}
+        stats={sessionStats}
+        voteResults={latestScores}
+        onStart={onStart}
+        running={running}
+      />
+      <SessionHUD
+        status={sessionStatus}
+        debateId={currentDebateId}
+        elapsedSeconds={elapsedSeconds}
+        activePersona={activePersona}
+        onCopy={handleCopyId}
+      />
       <LivePanel
         prompt={prompt}
         onPromptChange={setPrompt}

@@ -32,10 +32,10 @@ type EventRow = {
 }
 
 const roundColors = [
-  "bg-chart-1/10 text-chart-1 border-chart-1/20",
-  "bg-chart-2/10 text-chart-2 border-chart-2/20",
-  "bg-chart-3/10 text-chart-3 border-chart-3/20",
-  "bg-chart-4/10 text-chart-4 border-chart-4/20",
+  "bg-amber-50 text-amber-700 border-amber-100",
+  "bg-emerald-50 text-emerald-700 border-emerald-100",
+  "bg-blue-50 text-blue-700 border-blue-100",
+  "bg-rose-50 text-rose-700 border-rose-100",
 ]
 
 function toEventRow(event: any): EventRow {
@@ -102,7 +102,7 @@ export default function LivePanel({
   const mappedEvents = useMemo(() => events.map(toEventRow), [events])
 
   const getRoundBadgeColor = (round?: number) => {
-    if (!round) return "bg-muted text-muted-foreground border-border"
+    if (!round) return "bg-stone-100 text-stone-500 border-stone-200"
     return roundColors[(round - 1) % roundColors.length]
   }
 
@@ -110,27 +110,31 @@ export default function LivePanel({
 
   return (
     <div className="space-y-6">
-      <Card className="border-border">
+      <Card className="border border-stone-200 bg-white">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold">Start New Debate</CardTitle>
+          <CardTitle className="text-lg font-semibold text-stone-900">Start New Debate</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <Textarea
             placeholder="Enter your debate prompt or question..."
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
-            className="min-h-32 resize-none bg-background"
+            className="min-h-32 resize-none border-stone-200 focus-visible:ring-amber-500"
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-muted-foreground font-mono">{prompt.length} characters</div>
+            <div className="font-mono text-sm text-stone-500">{prompt.length} characters</div>
             <div className="flex items-center gap-2">
               {running && (
-                <Button variant="ghost" className="gap-2" onClick={onStop}>
+                <Button variant="ghost" className="gap-2 text-amber-700" onClick={onStop}>
                   <StopCircle className="h-4 w-4" />
                   Stop
                 </Button>
               )}
-              <Button onClick={onStart} disabled={disabled} className="gap-2">
+              <Button
+                onClick={onStart}
+                disabled={disabled}
+                className="gap-2 rounded-full bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-50"
+              >
                 {running ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -151,16 +155,16 @@ export default function LivePanel({
       {(activePersona || vote?.ranking?.length) && (
         <div className="grid gap-4 sm:grid-cols-2">
           {activePersona && (
-            <Card className="border-border">
+            <Card className="border border-stone-200 bg-white">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-stone-800">
                   <UsersRound className="h-4 w-4" />
                   Active Speaker
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex items-baseline justify-between">
-                <div className="text-lg font-semibold">{activePersona}</div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="text-lg font-semibold text-stone-900">{activePersona}</div>
+                <div className="flex items-center gap-2 text-sm text-stone-500">
                   <Timer className="h-4 w-4" />
                   {speakerTime}s
                 </div>
@@ -168,13 +172,17 @@ export default function LivePanel({
             </Card>
           )}
           {vote?.ranking?.length ? (
-            <Card className="border-border">
+            <Card className="border border-stone-200 bg-white">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Current Ranking</CardTitle>
+                <CardTitle className="text-sm font-semibold text-stone-800">Current Ranking</CardTitle>
               </CardHeader>
               <CardContent className="flex gap-2">
                 {vote.ranking.slice(0, 3).map((persona, idx) => (
-                  <Badge key={persona} variant="outline" className="font-mono text-xs">
+                  <Badge
+                    key={persona}
+                    variant="outline"
+                    className="font-mono text-xs border-amber-200 bg-amber-50 text-amber-700"
+                  >
                     #{idx + 1} {persona}
                   </Badge>
                 ))}
@@ -185,9 +193,9 @@ export default function LivePanel({
       )}
 
       {(mappedEvents.length > 0 || loading) && (
-        <Card className="border-border">
+        <Card className="border border-stone-200 bg-white">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Live Stream</CardTitle>
+            <CardTitle className="text-lg font-semibold text-stone-900">Live Stream</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-96">
@@ -201,22 +209,22 @@ export default function LivePanel({
                   ? Array.from({ length: 3 }).map((_, idx) => (
                       <div
                         key={`skeleton-${idx}`}
-                        className="flex animate-pulse items-start gap-3 rounded-lg border border-border bg-muted/30 p-4"
+                        className="flex animate-pulse items-start gap-3 rounded-lg border border-stone-100 bg-stone-50 p-4"
                       >
-                        <div className="h-6 w-12 rounded-full bg-muted" />
+                        <div className="h-6 w-12 rounded-full bg-stone-100" />
                         <div className="flex-1 space-y-2">
-                          <div className="h-4 w-1/2 rounded bg-muted" />
-                          <div className="h-3 w-3/4 rounded bg-muted" />
-                          <div className="h-3 w-1/3 rounded bg-muted" />
+                          <div className="h-4 w-1/2 rounded bg-stone-100" />
+                          <div className="h-3 w-3/4 rounded bg-stone-100" />
+                          <div className="h-3 w-1/3 rounded bg-stone-100" />
                         </div>
-                        <div className="h-8 w-8 rounded-full bg-muted" />
+                        <div className="h-8 w-8 rounded-full bg-stone-100" />
                       </div>
                     ))
                   : null}
                 {mappedEvents.map((event, index) => (
                   <div
                     key={`${event.type}-${index}`}
-                    className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 hover:bg-muted/50 transition-colors"
+                    className="flex items-start gap-3 rounded-lg border border-stone-100 bg-stone-50/70 p-4 transition-colors hover:bg-white"
                   >
                     {event.round && (
                       <Badge variant="outline" className={`${getRoundBadgeColor(event.round)} font-mono text-xs`}>
@@ -243,8 +251,8 @@ export default function LivePanel({
                           <SheetTitle>Event Data</SheetTitle>
                           <SheetDescription>Raw payload from the orchestrator</SheetDescription>
                         </SheetHeader>
-                        <ScrollArea className="h-full mt-6">
-                          <pre className="text-xs font-mono bg-muted p-4 rounded-lg overflow-x-auto">
+                    <ScrollArea className="mt-6 h-full">
+                      <pre className="overflow-x-auto rounded-lg bg-stone-900 p-4 font-mono text-xs text-amber-200">
                             {JSON.stringify(event.data, null, 2)}
                           </pre>
                         </ScrollArea>

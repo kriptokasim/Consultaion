@@ -2,7 +2,9 @@ import VotingSection from "@/components/parliament/VotingSection";
 import DebateView from "@/components/parliament/DebateView";
 import ExportButton from "@/components/parliament/ExportButton";
 import ExportCSVButton from "@/components/parliament/ExportCSVButton";
-import ParliamentChamber from "@/components/parliament/ParliamentChamber";
+import HansardTranscript from "@/components/parliament/HansardTranscript";
+import SummaryCard from "@/components/parliament/SummaryCard";
+import ScoreboardCard from "@/components/parliament/ScoreboardCard";
 import type { ScoreItem, VotePayload, DebateEvent, JudgeScoreEvent, Member } from "@/components/parliament/types";
 import { fetchWithAuth } from "@/lib/auth";
 
@@ -106,19 +108,45 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
 
   return (
     <main id="main" className="space-y-6 p-4">
-      {memberList.length ? (
-        <ParliamentChamber members={memberList} layout="benches" />
-      ) : null}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex-1">
-          <VotingSection scores={scores} vote={vote} />
-        </div>
-        <div className="flex w-full flex-col gap-4 items-center lg:w-64 lg:self-center">
+      <SummaryCard title="Debate Summary" description="High-level run metadata">
+        <dl className="grid gap-4 text-sm text-stone-600 md:grid-cols-2">
+          <div>
+            <dt className="uppercase tracking-wide text-xs text-stone-400">Prompt</dt>
+            <dd className="mt-1 text-stone-900">{debate?.prompt ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="uppercase tracking-wide text-xs text-stone-400">Status</dt>
+            <dd className="mt-1 font-semibold text-stone-900">{debate?.status ?? "unknown"}</dd>
+          </div>
+          <div>
+            <dt className="uppercase tracking-wide text-xs text-stone-400">Created</dt>
+            <dd className="mt-1 text-stone-900">
+              {debate?.created_at ? new Date(debate.created_at).toLocaleString() : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="uppercase tracking-wide text-xs text-stone-400">Updated</dt>
+            <dd className="mt-1 text-stone-900">
+              {debate?.updated_at ? new Date(debate.updated_at).toLocaleString() : "—"}
+            </dd>
+          </div>
+        </dl>
+      </SummaryCard>
+
+      <SummaryCard title="Aggregate Scores" description="Judge tallies from the latest division">
+        <ScoreboardCard scores={scores} method={vote?.method} />
+        <div className="mt-4 flex flex-wrap gap-3">
           <ExportButton debateId={id} apiBase={apiBase} />
           <ExportCSVButton debateId={id} apiBase={apiBase} />
         </div>
-      </div>
-      <DebateView events={events} />
+      </SummaryCard>
+
+      <VotingSection scores={scores} vote={vote} />
+      <HansardTranscript events={events} members={memberList} />
+
+      <SummaryCard title="Live timeline" description="Raw events emitted during the run">
+        <DebateView events={events} />
+      </SummaryCard>
     </main>
   );
 }
