@@ -19,12 +19,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("debate", sa.Column("user_id", sa.String(), nullable=True))
-    op.create_index(op.f("ix_debate_user_id"), "debate", ["user_id"], unique=False)
-    op.create_foreign_key("fk_debate_user_id_user", "debate", "user", ["user_id"], ["id"], ondelete="SET NULL")
+    with op.batch_alter_table("debate", schema=None) as batch_op:
+        batch_op.add_column(sa.Column("user_id", sa.String(), nullable=True))
+        batch_op.create_index("ix_debate_user_id", ["user_id"], unique=False)
+        batch_op.create_foreign_key(
+            "fk_debate_user_id_user",
+            referent_table="user",
+            local_cols=["user_id"],
+            remote_cols=["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_debate_user_id_user", "debate", type_="foreignkey")
-    op.drop_index(op.f("ix_debate_user_id"), table_name="debate")
-    op.drop_column("debate", "user_id")
+    with op.batch_alter_table("debate", schema=None) as batch_op:
+        batch_op.drop_constraint("fk_debate_user_id_user", type_="foreignkey")
+        batch_op.drop_index("ix_debate_user_id")
+        batch_op.drop_column("user_id")

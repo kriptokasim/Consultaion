@@ -19,19 +19,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("debate", sa.Column("team_id", sa.String(), nullable=True))
-    op.create_index(op.f("ix_debate_team_id"), "debate", ["team_id"], unique=False)
-    op.create_foreign_key(
-        "fk_debate_team_id_team",
-        "debate",
-        "team",
-        ["team_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    with op.batch_alter_table("debate", schema=None) as batch_op:
+        batch_op.add_column(sa.Column("team_id", sa.String(), nullable=True))
+        batch_op.create_index("ix_debate_team_id", ["team_id"], unique=False)
+        batch_op.create_foreign_key(
+            "fk_debate_team_id_team",
+            referent_table="team",
+            local_cols=["team_id"],
+            remote_cols=["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_debate_team_id_team", "debate", type_="foreignkey")
-    op.drop_index(op.f("ix_debate_team_id"), table_name="debate")
-    op.drop_column("debate", "team_id")
+    with op.batch_alter_table("debate", schema=None) as batch_op:
+        batch_op.drop_constraint("fk_debate_team_id_team", type_="foreignkey")
+        batch_op.drop_index("ix_debate_team_id")
+        batch_op.drop_column("team_id")
