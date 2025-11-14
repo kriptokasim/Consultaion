@@ -17,7 +17,7 @@ export default function ExportCSVButton({ debateId, apiBase }: ExportCSVButtonPr
     setError(null);
     try {
       const url = `${base}/debates/${debateId}/scores.csv`;
-      const response = await fetch(url, { method: "GET" });
+      const response = await fetch(url, { method: "GET", credentials: "include" });
       if (!response.ok) {
         throw new Error("CSV export failed");
       }

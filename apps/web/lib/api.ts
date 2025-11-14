@@ -76,7 +76,7 @@ export async function startDebate(payload: { prompt: string; config?: any }) {
 }
 
 export function streamDebate(id: string) {
-  return new EventSource(`${API}/debates/${id}/stream`);
+  return new EventSource(`${API}/debates/${id}/stream`, { withCredentials: true });
 }
 
 export async function getEvents(id: string) {

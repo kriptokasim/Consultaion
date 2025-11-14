@@ -10,7 +10,9 @@ from typing import Any, Dict
 from fastapi import Response
 
 COOKIE_NAME = "consultaion_token"
-JWT_SECRET = os.getenv("JWT_SECRET") or secrets.token_hex(32)
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET must be set")
 JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "4320"))
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_ITERATIONS", "20000"))

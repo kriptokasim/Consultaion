@@ -30,6 +30,7 @@ os.environ.setdefault("DISABLE_AUTORUN", "1")
 os.environ.setdefault("DISABLE_RATINGS", "1")
 os.environ.setdefault("FAST_DEBATE", "1")
 os.environ.setdefault("RL_MAX_CALLS", "1000")
+os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("DEFAULT_MAX_RUNS_PER_HOUR", "50")
 os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
 

@@ -18,6 +18,7 @@ export default function ExportButton({ debateId, apiBase }: ExportButtonProps) {
     try {
       const response = await fetch(`${base}/debates/${debateId}/export`, {
         method: "POST",
+        credentials: "include",
       });
       if (!response.ok) {
         throw new Error("Export failed");

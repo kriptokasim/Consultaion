@@ -1,5 +1,6 @@
 import AnalyticsDashboard, { AnalyticsActivityItem, AnalyticsData, AnalyticsWinRate } from "@/components/parliament/AnalyticsDashboard";
 import { getMyDebates } from "@/lib/api";
+import { getMe } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,19 @@ type DebateRecord = {
 };
 
 export default async function AnalyticsPage() {
+  const profile = await getMe();
+  if (!profile) {
+    return (
+      <main id="main" className="flex h-full items-center justify-center py-6">
+        <div className="rounded-lg border border-border bg-card p-6 text-center">
+          <p className="text-sm text-muted-foreground">Sign in to view analytics.</p>
+          <a href="/login" className="mt-3 inline-flex items-center rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+            Go to Login
+          </a>
+        </div>
+      </main>
+    );
+  }
   const data = await getMyDebates({ limit: 100 });
   const analytics = buildAnalytics(Array.isArray(data) ? data : data?.items ?? []);
   return (

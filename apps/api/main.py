@@ -486,8 +486,11 @@ async def create_debate(
 
     q: asyncio.Queue = asyncio.Queue()
     CHANNELS[debate_id] = q
+    cleanup_cb = lambda: CHANNELS.pop(debate_id, None)
     if os.getenv("DISABLE_AUTORUN", "0") != "1":
-        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump())
+        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump(), cleanup_cb)
+    else:
+        cleanup_cb()
     record_audit(
         "debate_created",
         user_id=current_user.id if current_user else None,
