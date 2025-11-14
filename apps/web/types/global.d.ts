@@ -1,5 +1,11 @@
-declare const process: {
-  env: Record<string, string | undefined>;
-};
+declare namespace NodeJS {
+  interface ProcessEnv {
+    [key: string]: string | undefined;
+  }
 
-export {};
+  interface Process {
+    env: ProcessEnv;
+  }
+}
+
+declare var process: NodeJS.Process;
