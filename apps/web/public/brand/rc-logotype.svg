@@ -1,0 +1,5 @@
+<svg width="260" height="60" viewBox="0 0 260 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="260" height="60" rx="12" fill="#0F172A"/>
+  <text x="60" y="38" fill="#FDE68A" font-family="'Inter', 'Segoe UI', sans-serif" font-size="28" font-weight="600">Rosetta Chamber</text>
+  <path d="M20 14h16c7.732 0 14 6.268 14 14v4c0 7.732-6.268 14-14 14H20V14Z" stroke="#FBBF24" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

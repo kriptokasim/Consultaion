@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 import uuid
 
-from sqlalchemy import Column, DateTime, Index, JSON, Text, String
-from sqlmodel import Field, SQLModel, Relationship
+from sqlalchemy import Column, DateTime, Index, JSON, Text
+from sqlmodel import Field, SQLModel
 
 
 def utcnow() -> datetime:
@@ -39,6 +39,7 @@ class Debate(SQLModel, table=True):
     final_content: Optional[str] = Field(default=None, sa_column=Column(Text))
     final_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
+    team_id: Optional[str] = Field(foreign_key="team.id", default=None, index=True, nullable=True)
 
 
 class DebateRound(SQLModel, table=True):
@@ -83,6 +84,73 @@ class Vote(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class Team(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    name: str = Field(nullable=False)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class TeamMember(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    team_id: str = Field(foreign_key="team.id", nullable=False, index=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    role: str = Field(default="viewer", nullable=False)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class UsageQuota(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    period: str = Field(nullable=False, index=True)
+    max_runs: Optional[int] = Field(default=None)
+    max_tokens: Optional[int] = Field(default=None)
+    reset_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class UsageCounter(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    period: str = Field(nullable=False, index=True)
+    runs_used: int = Field(default=0, nullable=False)
+    tokens_used: int = Field(default=0, nullable=False)
+    window_start: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class AuditLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
+    action: str = Field(nullable=False)
+    target_type: Optional[str] = Field(default=None)
+    target_id: Optional[str] = Field(default=None, index=True)
+    meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class PairwiseVote(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    category: Optional[str] = Field(default=None, index=True)
+    candidate_a: str = Field(nullable=False)
+    candidate_b: str = Field(nullable=False)
+    winner: str = Field(nullable=False, index=True)
+    judge_id: Optional[str] = Field(default=None, index=True)
+    user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class RatingPersona(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    persona: str = Field(nullable=False, index=True)
+    category: Optional[str] = Field(default=None, index=True)
+    elo: float = Field(default=1500.0, nullable=False)
+    stdev: float = Field(default=0.0, nullable=False)
+    n_matches: int = Field(default=0, nullable=False)
+    win_rate: float = Field(default=0.0, nullable=False)
+    ci_low: float = Field(default=0.0, nullable=False)
+    ci_high: float = Field(default=0.0, nullable=False)
+    last_updated: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 Index("ix_message_debate_round", Message.debate_id, Message.round_index)
 Index("ix_score_debate_persona", Score.debate_id, Score.persona)
 Index("ix_round_debate_index", DebateRound.debate_id, DebateRound.index)
@@ -93,3 +161,8 @@ Index("ix_debateround_ended_at", DebateRound.ended_at)
 Index("ix_message_created_at", Message.created_at)
 Index("ix_score_created_at", Score.created_at)
 Index("ix_vote_created_at", Vote.created_at)
+Index("ix_usage_counter_user_period", UsageCounter.user_id, UsageCounter.period, unique=True)
+Index("ix_usage_quota_user_period", UsageQuota.user_id, UsageQuota.period, unique=True)
+Index("ix_audit_log_created_at", AuditLog.created_at)
+Index("ix_pairwise_vote_candidates", PairwiseVote.candidate_a, PairwiseVote.candidate_b)
+Index("ix_rating_persona_unique", RatingPersona.persona, RatingPersona.category, unique=True)

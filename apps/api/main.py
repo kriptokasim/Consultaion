@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from io import StringIO
 from pathlib import Path
 from time import time
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,11 +18,14 @@ from sqlmodel import Session, select
 from pydantic import BaseModel
 
 from auth import clear_auth_cookie, create_access_token, hash_password, set_auth_cookie, verify_password
+from audit import record_audit
 from deps import get_current_user, get_optional_user, get_session, require_admin
 from database import engine, init_db
-from models import Debate, DebateRound, Message, Score, User
+from models import AuditLog, Debate, DebateRound, Message, PairwiseVote, RatingPersona, Score, Team, TeamMember, User
 from orchestrator import run_debate
+from ratings import update_ratings_for_debate
 from schemas import DebateCreate, DebateConfig, default_debate_config
+from usage_limits import RateLimitError, reserve_run_slot
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,6 +64,18 @@ class UserProfile(BaseModel):
     id: str
     email: str
     role: str
+
+class TeamCreate(BaseModel):
+    name: str
+
+
+class TeamMemberCreate(BaseModel):
+    email: str
+    role: Literal["owner", "editor", "viewer"] = "viewer"
+
+
+class DebateUpdate(BaseModel):
+    team_id: Optional[str] = None
 
 
 def serialize_user(user: User) -> dict[str, Any]:
@@ -108,18 +123,82 @@ def _members_from_config(config: DebateConfig) -> list[dict[str, str]]:
     return members
 
 
-def _can_access_debate(debate: Debate, user: Optional[User]) -> bool:
+def _serialize_team(team: Team, role: Optional[str] = None) -> dict[str, Any]:
+    return {
+        "id": team.id,
+        "name": team.name,
+        "created_at": team.created_at,
+        "role": role,
+    }
+
+
+def _serialize_rating_persona(row: RatingPersona) -> dict[str, Any]:
+    badge = "NEW" if row.n_matches < 15 else None
+    return {
+        "persona": row.persona,
+        "category": row.category,
+        "elo": row.elo,
+        "stdev": row.stdev,
+        "n_matches": row.n_matches,
+        "win_rate": row.win_rate,
+        "ci": {"low": row.ci_low, "high": row.ci_high},
+        "last_updated": row.last_updated.isoformat() if row.last_updated else None,
+        "label": f"{row.persona}{f' ({row.category})' if row.category else ''}",
+        "badge": badge,
+    }
+
+
+def _user_team_role(session: Session, user_id: Optional[str], team_id: Optional[str]) -> Optional[str]:
+    if not user_id or not team_id:
+        return None
+    return session.exec(
+        select(TeamMember.role).where(TeamMember.user_id == user_id, TeamMember.team_id == team_id)
+    ).first()
+
+
+def _user_is_team_member(session: Session, user: Optional[User], team_id: Optional[str]) -> bool:
+    if not user or not team_id:
+        return False
+    if user.role == "admin":
+        return True
+    role = _user_team_role(session, user.id, team_id)
+    return role is not None
+
+
+def _user_can_edit_team(session: Session, user: User, team_id: Optional[str]) -> bool:
+    if not team_id:
+        return False
+    if user.role == "admin":
+        return True
+    role = _user_team_role(session, user.id, team_id)
+    return role in {"owner", "editor"}
+
+
+def _user_team_ids(session: Session, user_id: str) -> list[str]:
+    rows = session.exec(select(TeamMember.team_id).where(TeamMember.user_id == user_id)).all()
+    return [row[0] if isinstance(row, tuple) else row for row in rows]
+
+
+def _is_debate_owner_or_admin(debate: Debate, user: User) -> bool:
+    return user.role == "admin" or debate.user_id == user.id
+
+
+def _can_access_debate(debate: Debate, user: Optional[User], session: Session) -> bool:
     if debate.user_id is None:
         return True
     if not user:
         return False
     if user.role == "admin":
         return True
-    return debate.user_id == user.id
+    if debate.user_id == user.id:
+        return True
+    if debate.team_id:
+        return _user_is_team_member(session, user, debate.team_id)
+    return False
 
 
-def _require_debate_access(debate: Optional[Debate], user: Optional[User]) -> Debate:
-    if not debate or not _can_access_debate(debate, user):
+def _require_debate_access(debate: Optional[Debate], user: Optional[User], session: Session) -> Debate:
+    if not debate or not _can_access_debate(debate, user, session):
         raise HTTPException(status_code=404, detail="debate not found")
     return debate
 
@@ -127,6 +206,42 @@ def _require_debate_access(debate: Optional[Debate], user: Optional[User]) -> De
 @app.get("/config/default")
 async def get_default_config():
     return default_debate_config()
+
+
+@app.get("/leaderboard")
+async def get_leaderboard(
+    category: Optional[str] = Query(default=None),
+    min_matches: int = Query(0, ge=0, le=1000),
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
+    stmt = select(RatingPersona).order_by(RatingPersona.elo.desc())
+    if category == "":
+        stmt = stmt.where(RatingPersona.category.is_(None))
+    elif category:
+        stmt = stmt.where(RatingPersona.category == category)
+    if min_matches:
+        stmt = stmt.where(RatingPersona.n_matches >= min_matches)
+    stmt = stmt.limit(limit)
+    rows = session.exec(stmt).all()
+    return {"items": [_serialize_rating_persona(row) for row in rows]}
+
+
+@app.get("/leaderboard/persona/{persona}")
+async def get_leaderboard_persona(
+    persona: str,
+    category: Optional[str] = Query(default=None),
+    session: Session = Depends(get_session),
+):
+    stmt = select(RatingPersona).where(RatingPersona.persona == persona)
+    if category == "":
+        stmt = stmt.where(RatingPersona.category.is_(None))
+    elif category:
+        stmt = stmt.where(RatingPersona.category == category)
+    row = session.exec(stmt).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="persona not found")
+    return _serialize_rating_persona(row)
 
 
 @app.get("/config/members")
@@ -141,7 +256,7 @@ async def get_debate_members(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    debate = _require_debate_access(session.get(Debate, debate_id), current_user)
+    debate = _require_debate_access(session.get(Debate, debate_id), current_user, session)
     config_data = debate.config or {}
     try:
         config = DebateConfig.model_validate(config_data)
@@ -164,6 +279,13 @@ async def register_user(body: AuthRequest, response: Response, session: Session 
     session.refresh(user)
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
+    record_audit(
+        "register",
+        user_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        meta={"email": user.email},
+    )
     return serialize_user(user)
 
 
@@ -175,6 +297,13 @@ async def login_user(body: AuthRequest, response: Response, session: Session = D
         raise HTTPException(status_code=401, detail="invalid credentials")
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
+    record_audit(
+        "login",
+        user_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        meta={"email": user.email},
+    )
     return serialize_user(user)
 
 
@@ -187,6 +316,126 @@ async def logout_user(response: Response):
 @app.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     return serialize_user(current_user)
+
+
+def _get_team_or_404(session: Session, team_id: str) -> Team:
+    team = session.get(Team, team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="team not found")
+    return team
+
+
+@app.post("/teams")
+async def create_team(
+    body: TeamCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="team name required")
+    team = Team(name=name)
+    session.add(team)
+    session.commit()
+    session.refresh(team)
+    session.add(TeamMember(team_id=team.id, user_id=current_user.id, role="owner"))
+    session.commit()
+    record_audit(
+        "team_created",
+        user_id=current_user.id,
+        target_type="team",
+        target_id=team.id,
+        meta={"name": team.name},
+    )
+    return _serialize_team(team, "owner")
+
+
+@app.get("/teams")
+async def list_teams(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    rows = session.exec(
+        select(Team, TeamMember.role)
+        .join(TeamMember, TeamMember.team_id == Team.id)
+        .where(TeamMember.user_id == current_user.id)
+        .order_by(Team.created_at.desc())
+    ).all()
+    items = [
+        _serialize_team(team, role)
+        for team, role in rows
+    ]
+    return {"items": items}
+
+
+@app.get("/teams/{team_id}/members")
+async def list_team_members(
+    team_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    team = _get_team_or_404(session, team_id)
+    if not _user_is_team_member(session, current_user, team.id):
+        raise HTTPException(status_code=403, detail="not a team member")
+    rows = session.exec(
+        select(TeamMember, User)
+        .join(User, User.id == TeamMember.user_id)
+        .where(TeamMember.team_id == team.id)
+        .order_by(TeamMember.created_at.asc())
+    ).all()
+    return {
+        "team": _serialize_team(team),
+        "members": [
+            {
+                "id": member.id,
+                "user_id": user.id,
+                "email": user.email,
+                "role": member.role,
+                "created_at": member.created_at,
+            }
+            for member, user in rows
+        ],
+    }
+
+
+@app.post("/teams/{team_id}/members")
+async def add_team_member(
+    team_id: str,
+    body: TeamMemberCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    team = _get_team_or_404(session, team_id)
+    current_role = _user_team_role(session, current_user.id, team.id)
+    if current_user.role != "admin" and current_role != "owner":
+        raise HTTPException(status_code=403, detail="only owners can manage members")
+    email = body.email.strip().lower()
+    user = session.exec(select(User).where(User.email == email)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    member = session.exec(
+        select(TeamMember).where(TeamMember.team_id == team.id, TeamMember.user_id == user.id)
+    ).first()
+    if member:
+        member.role = body.role
+        session.add(member)
+    else:
+        member = TeamMember(team_id=team.id, user_id=user.id, role=body.role)
+        session.add(member)
+    session.commit()
+    record_audit(
+        "team_member_added",
+        user_id=current_user.id,
+        target_type="team",
+        target_id=team.id,
+        meta={"member_id": member.user_id, "role": member.role},
+    )
+    return {
+        "id": member.id,
+        "team_id": member.team_id,
+        "user_id": member.user_id,
+        "role": member.role,
+    }
 
 
 @app.post("/debates")
@@ -204,6 +453,24 @@ async def create_debate(
         raise HTTPException(status_code=429, detail="rate limit exceeded")
     bucket.append(now)
     RATE_BUCKET[ip] = bucket
+    if current_user:
+        try:
+            reserve_run_slot(session, current_user.id)
+        except RateLimitError as exc:
+            payload = {
+                "code": "rate_limit",
+                "reason": exc.code,
+                "detail": exc.detail,
+                "reset_at": exc.reset_at,
+            }
+            record_audit(
+                "rate_limit_block",
+                user_id=current_user.id,
+                target_type="debate",
+                target_id=None,
+                meta=payload,
+            )
+            raise HTTPException(status_code=429, detail=payload) from exc
 
     config = body.config or default_debate_config()
     debate_id = str(uuid.uuid4())
@@ -221,6 +488,13 @@ async def create_debate(
     CHANNELS[debate_id] = q
     if os.getenv("DISABLE_AUTORUN", "0") != "1":
         background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump())
+    record_audit(
+        "debate_created",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+        meta={"prompt": body.prompt},
+    )
     return {"id": debate_id}
 
 
@@ -234,7 +508,13 @@ async def list_debates(
 ):
     statement = select(Debate).order_by(Debate.created_at.desc())
     if current_user.role != "admin":
-        statement = statement.where(Debate.user_id == current_user.id)
+        team_ids = _user_team_ids(session, current_user.id)
+        if team_ids:
+            statement = statement.where(
+                (Debate.user_id == current_user.id) | (Debate.team_id.in_(team_ids))
+            )
+        else:
+            statement = statement.where(Debate.user_id == current_user.id)
     elif status == "all":
         status = None
     if status:
@@ -251,11 +531,11 @@ async def get_debate(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     debate = session.get(Debate, debate_id)
-    return _require_debate_access(debate, current_user)
+    return _require_debate_access(debate, current_user, session)
 
 
 def _build_report(session: Session, debate_id: str, current_user: Optional[User]):
-    debate = _require_debate_access(session.get(Debate, debate_id), current_user)
+    debate = _require_debate_access(session.get(Debate, debate_id), current_user, session)
 
     rounds = session.exec(
         select(DebateRound).where(DebateRound.debate_id == debate_id).order_by(DebateRound.index)
@@ -326,6 +606,12 @@ async def export_debate_report(
     data = _build_report(session, debate_id, current_user)
     filepath = EXPORT_DIR / f"{debate_id}.md"
     filepath.write_text(_report_to_markdown(data), encoding="utf-8")
+    record_audit(
+        "export_markdown",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+    )
     return {"uri": f"/exports/{filepath.name}"}
 
 
@@ -335,13 +621,18 @@ async def get_debate_events(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    debate = _require_debate_access(session.get(Debate, debate_id), current_user)
+    debate = _require_debate_access(session.get(Debate, debate_id), current_user, session)
 
     messages = session.exec(
         select(Message).where(Message.debate_id == debate_id).order_by(Message.created_at.asc())
     ).all()
     scores = session.exec(
         select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())
+    ).all()
+    pairwise_votes = session.exec(
+        select(PairwiseVote)
+        .where(PairwiseVote.debate_id == debate_id)
+        .order_by(PairwiseVote.created_at.asc())
     ).all()
 
     events: list[dict[str, Any]] = []
@@ -370,6 +661,20 @@ async def get_debate_events(
                 "at": score.created_at.isoformat(),
             }
         )
+    for vote in pairwise_votes:
+        winner = vote.candidate_a if vote.winner == "A" else vote.candidate_b
+        loser = vote.candidate_b if vote.winner == "A" else vote.candidate_a
+        events.append(
+            {
+                "type": "pairwise",
+                "winner": winner,
+                "loser": loser,
+                "judge": vote.judge_id,
+                "user_id": vote.user_id,
+                "category": vote.category,
+                "at": vote.created_at.isoformat() if vote.created_at else None,
+            }
+        )
 
     events.sort(key=lambda event: event.get("at", ""))
     return {"items": events}
@@ -381,7 +686,7 @@ async def get_debate_judges(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    _require_debate_access(session.get(Debate, debate_id), current_user)
+    _require_debate_access(session.get(Debate, debate_id), current_user, session)
     rows = session.exec(
         select(Score.judge)
         .where(Score.debate_id == debate_id)
@@ -402,7 +707,7 @@ async def export_scores_csv(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    _require_debate_access(session.get(Debate, debate_id), current_user)
+    _require_debate_access(session.get(Debate, debate_id), current_user, session)
 
     scores = session.exec(
         select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())
@@ -424,6 +729,12 @@ async def export_scores_csv(
 
     csv_bytes = buffer.getvalue()
     headers = {"Content-Disposition": f'attachment; filename="{debate_id}.csv"'}
+    record_audit(
+        "export_csv",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+    )
     return Response(content=csv_bytes, media_type="text/csv", headers=headers)
 
 
@@ -433,7 +744,7 @@ async def stream_events(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    _require_debate_access(session.get(Debate, debate_id), current_user)
+    _require_debate_access(session.get(Debate, debate_id), current_user, session)
     if debate_id not in CHANNELS:
         return JSONResponse({"error": "not found"}, status_code=404)
     q = CHANNELS[debate_id]
@@ -478,3 +789,75 @@ async def admin_users(
             }
         )
     return {"items": items}
+
+
+@app.get("/admin/logs")
+async def admin_logs(
+    limit: int = Query(100, ge=1, le=500),
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+):
+    rows = session.exec(
+        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+    ).all()
+    return {
+        "items": [
+            {
+                "id": log.id,
+                "action": log.action,
+                "user_id": log.user_id,
+                "target_type": log.target_type,
+                "target_id": log.target_id,
+                "meta": log.meta,
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in rows
+        ]
+    }
+
+
+@app.post("/ratings/update/{debate_id}")
+async def update_ratings_endpoint(
+    debate_id: str,
+    _: User = Depends(require_admin),
+):
+    await asyncio.to_thread(update_ratings_for_debate, debate_id)
+    return {"ok": True}
+@app.patch("/debates/{debate_id}")
+async def update_debate(
+    debate_id: str,
+    body: DebateUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise HTTPException(status_code=404, detail="debate not found")
+    if not _is_debate_owner_or_admin(debate, current_user):
+        raise HTTPException(status_code=403, detail="insufficient permissions")
+
+    previous_team = debate.team_id
+    if body.team_id is not None:
+        if body.team_id == "":
+            debate.team_id = None
+        else:
+            team = _get_team_or_404(session, body.team_id)
+            if not _user_can_edit_team(session, current_user, team.id):
+                raise HTTPException(status_code=403, detail="cannot assign to this team")
+            debate.team_id = team.id
+
+    session.add(debate)
+    session.commit()
+    session.refresh(debate)
+    if previous_team != debate.team_id:
+        record_audit(
+            "debate_team_updated",
+            user_id=current_user.id,
+            target_type="debate",
+            target_id=debate.id,
+            meta={"team_id": debate.team_id},
+        )
+    return {
+        "id": debate.id,
+        "team_id": debate.team_id,
+    }

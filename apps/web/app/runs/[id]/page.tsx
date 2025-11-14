@@ -5,7 +5,16 @@ import ExportCSVButton from "@/components/parliament/ExportCSVButton";
 import HansardTranscript from "@/components/parliament/HansardTranscript";
 import SummaryCard from "@/components/parliament/SummaryCard";
 import ScoreboardCard from "@/components/parliament/ScoreboardCard";
-import type { ScoreItem, VotePayload, DebateEvent, JudgeScoreEvent, Member } from "@/components/parliament/types";
+import VotingChamber from "@/components/parliament/VotingChamber";
+import type {
+  ScoreItem,
+  VotePayload,
+  DebateEvent,
+  JudgeScoreEvent,
+  Member,
+  JudgeVoteFlow,
+  PairwiseEvent,
+} from "@/components/parliament/types";
 import { fetchWithAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +114,29 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
     : [];
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const threshold = Number(process.env.NEXT_PUBLIC_VOTE_THRESHOLD ?? "7");
+
+  const pairwiseEvents = events.filter((event): event is PairwiseEvent => event.type === "pairwise");
+  let voteBasis: "pairwise" | "threshold" = "threshold";
+  let judgeVotes: JudgeVoteFlow[] = [];
+  if (pairwiseEvents.length > 0) {
+    voteBasis = "pairwise";
+    judgeVotes = pairwiseEvents.map((entry) => ({
+      persona: entry.winner,
+      judge: entry.judge ?? "division",
+      score: 1,
+      at: entry.at,
+      vote: "aye",
+    }));
+  } else {
+    judgeVotes = eventScores.map((entry) => ({
+      persona: entry.persona,
+      judge: entry.judge,
+      score: entry.score,
+      at: entry.at,
+      vote: entry.score >= threshold ? ("aye" as const) : ("nay" as const),
+    }));
+  }
 
   return (
     <main id="main" className="space-y-6 p-4">
@@ -141,6 +173,7 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
         </div>
       </SummaryCard>
 
+      <VotingChamber scores={scores} members={memberList} threshold={threshold} flows={judgeVotes} basis={voteBasis} />
       <VotingSection scores={scores} vote={vote} />
       <HansardTranscript events={events} members={memberList} />
 

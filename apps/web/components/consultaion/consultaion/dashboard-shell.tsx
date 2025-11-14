@@ -4,18 +4,21 @@ import type React from "react"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, PlayCircle, Settings, Search, Moon, Sun, User, Shield, Scale, BarChart3 } from "lucide-react"
+import { FileText, PlayCircle, Settings, Search, Moon, Sun, User, Shield, Scale, BarChart3, Trophy, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { logout } from "@/lib/auth"
+import Brand from "@/components/parliament/Brand"
 
 const navigation = [
   { name: "Live", href: "/", icon: PlayCircle },
   { name: "Runs", href: "/runs", icon: FileText },
   { name: "Chamber", href: "/chamber", icon: Scale },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
+  { name: "Leaderboard", href: "/leaderboard", icon: Trophy },
+  { name: "Methodology", href: "/methodology", icon: BookOpen },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
@@ -83,11 +86,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
-        <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-mono text-sm font-bold">
-            C
-          </div>
-          <span className="font-semibold text-sidebar-foreground">Consultaion</span>
+        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
+          <Brand height={32} className="drop-shadow" />
+          <span className="font-semibold text-sidebar-foreground">Rosetta Chamber</span>
         </div>
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => {
@@ -136,7 +137,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* Header */}
         <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
           <div className="flex items-center gap-4">
-            <div className="relative w-80">
+            <div className="hidden items-center gap-2 md:flex">
+              <Brand variant="mark" height={28} className="drop-shadow-md" />
+              <span className="text-sm font-semibold text-stone-600 dark:text-stone-300">Consultaion</span>
+            </div>
+            <div className="relative w-64 lg:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input type="search" placeholder="Search runs, prompts, results..." className="pl-10 bg-background" />
             </div>

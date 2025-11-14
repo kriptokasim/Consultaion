@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import LivePanel from '@/components/consultaion/consultaion/live-panel'
-import ParliamentHome from '@/components/parliament/ParliamentHome'
-import SessionHUD from '@/components/parliament/SessionHUD'
-import type { Member, ScoreItem } from '@/components/parliament/types'
-import { getMembers, startDebate, streamDebate } from '@/lib/api'
+import { useEffect, useMemo, useRef, useState } from "react";
+import LivePanel from "@/components/consultaion/consultaion/live-panel";
+import ParliamentHome from "@/components/parliament/ParliamentHome";
+import SessionHUD from "@/components/parliament/SessionHUD";
+import type { Member, ScoreItem } from "@/components/parliament/types";
+import { ApiError, getMembers, startDebate, streamDebate } from "@/lib/api";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -34,6 +34,7 @@ export default function Page() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [sessionStatus, setSessionStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle')
   const [latestScores, setLatestScores] = useState<ScoreItem[]>([])
+  const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
 
   const esRef = useRef<EventSource | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -157,6 +158,7 @@ export default function Page() {
       stopStream('idle')
     }
     reset()
+    setRateLimitNotice(null)
     setRunning(true)
     runningRef.current = true
     try {
@@ -169,7 +171,15 @@ export default function Page() {
       timerRef.current = setInterval(() => setSpeakerTime((t) => t + 1), 1000)
       startElapsed()
     } catch (error) {
-      console.error(error)
+      if (error instanceof ApiError && error.status === 429) {
+        const detail =
+          (typeof error.body === 'object' && error.body?.detail) || 'Rate limit exceeded. Please wait before summoning another session.'
+        const resetAt =
+          typeof error.body === 'object' && typeof error.body?.reset_at === 'string' ? error.body.reset_at : undefined
+        setRateLimitNotice({ detail, resetAt })
+      } else {
+        console.error(error)
+      }
       stopStream('error')
     }
   }
@@ -198,7 +208,6 @@ export default function Page() {
           setMembers(FALLBACK_MEMBERS)
         }
       })
-      })
     return () => {
       active = false
       stopStream()
@@ -222,6 +231,29 @@ export default function Page() {
 
   return (
     <main id="main" className="space-y-6 p-4">
+      {rateLimitNotice ? (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="flex items-start justify-between gap-4 rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-900 shadow-sm"
+        >
+          <div>
+            <p className="font-semibold">Rate limit reached</p>
+            <p className="mt-1 text-rose-800">{rateLimitNotice.detail}</p>
+            {rateLimitNotice.resetAt ? (
+              <p className="mt-1 text-xs uppercase tracking-wide text-rose-700">
+                Resets around {new Date(rateLimitNotice.resetAt).toLocaleTimeString()}
+              </p>
+            ) : null}
+          </div>
+          <button
+            className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-700 transition hover:bg-white"
+            onClick={() => setRateLimitNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       <ParliamentHome
         members={members}
         activeMemberId={members.find((member) => member.name === activePersona)?.id}

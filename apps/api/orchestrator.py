@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Sequence
 
@@ -13,7 +14,9 @@ from agents import (
 )
 from database import session_scope
 from models import Debate, DebateRound, Message, Score, Vote
+from ratings import update_ratings_for_debate
 from schemas import DebateConfig, default_agents, default_judges
+from usage_limits import record_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +125,34 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
     selected_override: List[str] | None = None
     budget_notice_sent = False
 
+    usage_snapshot: Dict[str, Any] = {}
     reset_usage()
     try:
+        logger.debug("Debate %s: starting orchestration", debate_id)
+        if os.getenv("FAST_DEBATE", "0") == "1":
+            mock_scores = [
+                {"persona": agent.name, "score": 8.0, "rationale": "fast-track"}
+                for agent in agent_configs
+            ]
+            await q.put({"type": "message", "round": 0, "candidates": []})
+            await q.put(
+                {
+                    "type": "score",
+                    "scores": mock_scores,
+                    "judges": [
+                        {"persona": score["persona"], "judge": "FastJudge", "score": score["score"], "rationale": score["rationale"]}
+                        for score in mock_scores
+                    ],
+                }
+            )
+            await q.put(
+                {
+                    "type": "final",
+                    "content": "Fast debate completed.",
+                    "meta": {"scores": mock_scores, "ranking": [entry["persona"] for entry in mock_scores], "usage": {}},
+                }
+            )
+            return
         with session_scope() as session:
             debate = session.get(Debate, debate_id)
             if not debate:
@@ -141,6 +170,7 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
             _persist_messages(session, debate_id, 1, candidates, role="candidate")
             _end_round(session, draft_round)
             await q.put({"type": "message", "round": 1, "candidates": candidates})
+            logger.debug("Debate %s: produced %d candidates", debate_id, len(candidates))
             budget_reason = _check_budget(budget) or budget_reason
             if budget_reason and not budget_notice_sent:
                 await q.put({"type": "notice", "message": budget_reason})
@@ -154,6 +184,7 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
                 _persist_messages(session, debate_id, 2, revised, role="revised")
                 _end_round(session, critique_round)
                 await q.put({"type": "message", "round": 2, "revised": revised})
+                logger.debug("Debate %s: critique round completed", debate_id)
                 budget_reason = _check_budget(budget) or budget_reason
                 if budget_reason and not budget_notice_sent:
                     await q.put({"type": "notice", "message": budget_reason})
@@ -177,6 +208,7 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
                 _end_round(session, judge_round)
                 await q.put({"type": "score", "round": 3, "scores": aggregate_scores, "judges": judge_details})
                 ranking, vote_details = _compute_rankings(aggregate_scores)
+                logger.debug("Debate %s: judges completed with %d entries", debate_id, len(judge_details))
                 session.add(
                     Vote(
                         debate_id=debate_id,
@@ -217,12 +249,14 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
                 selected_scores = aggregate_scores
 
             final_answer = await synthesize(prompt, selected_candidates, selected_scores)
+            usage_snapshot = get_usage()
+            tokens_total = float(usage_snapshot.get("tokens", {}).get("total", 0) or 0)
             debate.final_content = final_answer
             debate.final_meta = {
                 "prompt": prompt,
                 "scores": aggregate_scores,
                 "ranking": ranking,
-                "usage": get_usage(),
+                "usage": usage_snapshot,
                 "vote": vote_details,
                 "budget_reason": budget_reason,
                 "early_stop_reason": early_stop_reason,
@@ -230,6 +264,11 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
             debate.status = "completed" if not budget_reason else "completed_budget"
             debate.updated_at = datetime.now(timezone.utc)
             session.add(debate)
+            if debate.user_id:
+                try:
+                    record_token_usage(session, debate.user_id, tokens_total, commit=False)
+                except Exception:
+                    logger.exception("Failed to record token usage for debate %s", debate_id)
             session.commit()
 
         await q.put(
@@ -240,13 +279,23 @@ async def run_debate(debate_id: str, prompt: str, q, config_data: Dict[str, Any]
                     "prompt": prompt,
                     "scores": aggregate_scores,
                     "ranking": ranking,
-                    "usage": get_usage(),
+                    "usage": usage_snapshot or get_usage(),
                     "budget_reason": budget_reason,
                     "early_stop_reason": early_stop_reason,
                     "vote": vote_details,
                 },
             }
         )
+        logger.debug("Debate %s: finalized, triggering rating update", debate_id)
+        loop = asyncio.get_running_loop()
+        def _run_update():
+            try:
+                update_ratings_for_debate(debate_id)
+                logger.debug("Debate %s: rating update completed", debate_id)
+            except Exception:
+                logger.exception("Rating update failed for debate %s", debate_id)
+
+        loop.run_in_executor(None, _run_update)
     except Exception as exc:
         logger.exception("Debate %s failed: %s", debate_id, exc)
         with session_scope() as session:

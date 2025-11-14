@@ -1,4 +1,5 @@
 import { Sparkles, Clock, Users, Trophy } from "lucide-react";
+import Brand from "@/components/parliament/Brand";
 import type { Member, ScoreItem } from "./types";
 
 interface ParliamentHomeProps {
@@ -42,6 +43,7 @@ export default function ParliamentHome({
       <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 shadow-sm">
+            <Brand height={20} tone="amber" />
             <Sparkles className="h-4 w-4" />
             Sepia Parliament
           </div>

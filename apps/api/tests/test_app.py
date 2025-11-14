@@ -27,6 +27,11 @@ atexit.register(_cleanup)
 os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("DISABLE_AUTORUN", "1")
+os.environ.setdefault("DISABLE_RATINGS", "1")
+os.environ.setdefault("FAST_DEBATE", "1")
+os.environ.setdefault("RL_MAX_CALLS", "1000")
+os.environ.setdefault("DEFAULT_MAX_RUNS_PER_HOUR", "50")
+os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -34,15 +39,25 @@ from database import engine, init_db  # noqa: E402
 from main import (  # noqa: E402
     AuthRequest,
     DebateCreate,
+    DebateUpdate,
+    TeamCreate,
+    TeamMemberCreate,
+    add_team_member,
+    admin_logs,
     create_debate,
+    create_team,
     export_scores_csv,
     get_debate,
+    get_leaderboard,
     healthz,
     list_debates,
     register_user,
+    update_debate,
 )
-from models import Debate, Score, User  # noqa: E402
+from models import AuditLog, Debate, RatingPersona, Score, User  # noqa: E402
+import orchestrator as orchestrator_module  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
+from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
 
 init_db()
@@ -65,18 +80,12 @@ def dummy_request(path: str = "/debates") -> Request:
     return Request(scope)
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
 def test_health_endpoint_direct():
     result = healthz()
     assert result["ok"] is True
 
 
-@pytest.mark.anyio
-async def test_run_debate_emits_final_events():
+def test_run_debate_emits_final_events():
     debate_id = "pytest-debate"
     with Session(engine) as session:
         existing = session.get(Debate, debate_id)
@@ -94,11 +103,11 @@ async def test_run_debate_emits_final_events():
         session.commit()
 
     q: asyncio.Queue = asyncio.Queue()
-    await run_debate(debate_id, "Pytest prompt", q, default_debate_config().model_dump())
+    asyncio.run(run_debate(debate_id, "Pytest prompt", q, default_debate_config().model_dump()))
 
     events = []
     while not q.empty():
-        events.append(await q.get())
+        events.append(q.get_nowait())
 
     final_events = [event for event in events if event.get("type") == "final"]
     assert final_events, f"No final event emitted: {events}"
@@ -131,6 +140,25 @@ def _create_debate_for_user(user: User, prompt: str) -> str:
             )
         )
         return result["id"]
+
+
+def _create_team_for_user(owner: User, name: str = "Sepia Team") -> str:
+    with Session(engine) as session:
+        payload = TeamCreate(name=name)
+        team_info = asyncio.run(create_team(payload, session=session, current_user=owner))
+        return team_info["id"]
+
+
+def _add_user_to_team(inviter: User, team_id: str, email: str, role: str = "viewer") -> None:
+    with Session(engine) as session:
+        payload = TeamMemberCreate(email=email, role=role)
+        asyncio.run(add_team_member(team_id, payload, session=session, current_user=inviter))
+
+
+def _assign_debate_to_team(actor: User, debate_id: str, team_id: str | None) -> None:
+    with Session(engine) as session:
+        payload = DebateUpdate(team_id=team_id)
+        asyncio.run(update_debate(debate_id, payload, session=session, current_user=actor))
 
 
 def test_export_scores_csv_endpoint():
@@ -191,3 +219,78 @@ def test_user_scoped_debates_and_admin_access():
             list_debates(None, 20, 0, session=session, current_user=admin_user)
         )
         assert any(item.id == debate_id for item in admin_runs)
+
+
+def test_rate_limit_blocks_after_threshold():
+    previous = os.environ.get("DEFAULT_MAX_RUNS_PER_HOUR", "50")
+    os.environ["DEFAULT_MAX_RUNS_PER_HOUR"] = "1"
+    user = _register_user("ratelimit@example.com", "securepass")
+    _create_debate_for_user(user, "First allowed run")
+    with pytest.raises(HTTPException) as exc_info:
+        _create_debate_for_user(user, "Second run should fail")
+    detail = exc_info.value.detail
+    assert isinstance(detail, dict)
+    assert detail["code"] == "rate_limit"
+    with Session(engine) as session:
+        logs = session.exec(
+            select(AuditLog).where(AuditLog.action == "rate_limit_block", AuditLog.user_id == user.id)
+        ).all()
+        assert logs
+    os.environ["DEFAULT_MAX_RUNS_PER_HOUR"] = previous
+
+
+def test_admin_logs_endpoint_lists_entries():
+    owner = _register_user("auditor@example.com", "ownerpass")
+    _create_debate_for_user(owner, "Audit trail run")
+    with Session(engine) as session:
+        admin = session.get(User, owner.id)
+        admin.role = "admin"
+        session.add(admin)
+        session.commit()
+    with Session(engine) as session:
+        admin_user = session.get(User, owner.id)
+        payload = asyncio.run(admin_logs(50, session, admin_user))
+    assert payload["items"]
+    assert any(entry["action"] == "debate_created" for entry in payload["items"])
+
+
+def test_wilson_interval_bounds():
+    low, high = wilson_interval(8, 10)
+    assert 0.4 < low < high < 1.0
+
+
+def test_leaderboard_updates_after_score_entries():
+    user = _register_user("elo@example.com", "elo-pass")
+    debate_id = _create_debate_for_user(user, "Leaderboard prompt")
+    with Session(engine) as session:
+        debate = session.get(Debate, debate_id)
+        debate.final_meta = {"category": "policy"}
+        session.add(debate)
+        session.add(
+            Score(
+                debate_id=debate_id,
+                persona="Analyst",
+                judge="JudgeOne",
+                score=9.0,
+                rationale="Great",
+            )
+        )
+        session.add(
+            Score(
+                debate_id=debate_id,
+                persona="Builder",
+                judge="JudgeOne",
+                score=7.0,
+                rationale="Solid",
+            )
+        )
+        session.commit()
+    previous = os.environ.get("DISABLE_RATINGS", "1")
+    os.environ["DISABLE_RATINGS"] = "0"
+    update_ratings_for_debate(debate_id)
+    os.environ["DISABLE_RATINGS"] = previous
+    with Session(engine) as session:
+        ratings = session.exec(select(RatingPersona).where(RatingPersona.persona == "Analyst")).all()
+        assert ratings
+        leaderboard = asyncio.run(get_leaderboard(None, 0, 10, session))
+    assert any(entry["persona"] == "Analyst" for entry in leaderboard["items"])

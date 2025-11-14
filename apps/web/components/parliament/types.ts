@@ -28,6 +28,24 @@ export interface JudgeScoreEvent {
   role?: Role;
 }
 
+export type JudgeVoteFlow = {
+  persona: string;
+  judge: string;
+  score: number;
+  vote: "aye" | "nay";
+  at?: string;
+};
+
+export interface PairwiseEvent {
+  type: "pairwise";
+  winner: string;
+  loser: string;
+  judge?: string;
+  user_id?: string;
+  category?: string | null;
+  at?: string;
+}
+
 export type DebateEvent =
   | {
       type: "message";
@@ -38,6 +56,7 @@ export type DebateEvent =
       at?: string;
     }
   | JudgeScoreEvent
+  | PairwiseEvent
   | {
       type: "final";
       actor?: string;

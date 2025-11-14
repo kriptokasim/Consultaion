@@ -78,7 +78,9 @@ export default function DebateView({ events, className = "" }: DebateViewProps) 
             events.map((event, index) => (
               <Card
                 key={index}
-                className={`border border-stone-100 bg-white/90 p-5 shadow-sm transition hover:shadow-lg ${getRoleColor(event.role)}`}
+                className={`border border-stone-100 bg-white/90 p-5 shadow-sm transition hover:shadow-lg ${getRoleColor(
+                  event.type === "pairwise" ? "judge" : (event as any).role,
+                )}`}
                 role="article"
               >
                   <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
