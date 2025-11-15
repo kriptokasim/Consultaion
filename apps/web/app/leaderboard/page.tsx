@@ -1,6 +1,8 @@
 import LeaderboardTable from "@/components/parliament/LeaderboardTable";
 import Brand from "@/components/parliament/Brand";
-import { getLeaderboard } from "@/lib/api";
+import RateLimitBanner from "@/components/parliament/RateLimitBanner";
+import { ApiError, getLeaderboard, getRateLimitInfo, isAuthError } from "@/lib/api";
+import { redirect } from "next/navigation";
 
 type LeaderboardPageProps = {
   searchParams: Promise<{ category?: string; min_matches?: string }>;
@@ -14,14 +16,26 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
   const minMatches = params.min_matches ? parseInt(params.min_matches, 10) || 0 : 0;
 
   let items: Awaited<ReturnType<typeof getLeaderboard>> = [];
+  let rateLimitNotice: { detail: string; resetAt?: string } | null = null;
   try {
     items = await getLeaderboard({
       category: category === "all" ? undefined : category,
       minMatches: minMatches || undefined,
       limit: 100,
     });
-  } catch {
-    items = [];
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const info = getRateLimitInfo(error);
+      if (info) {
+        rateLimitNotice = info;
+      } else if (isAuthError(error)) {
+        redirect("/login");
+      } else {
+        throw error;
+      }
+    } else {
+      throw error;
+    }
   }
 
   const categories = Array.from(new Set(items.map((entry) => entry.category).filter(Boolean))) as string[];
@@ -41,6 +55,9 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           a persona logs sufficient matches.
         </p>
       </header>
+      {rateLimitNotice ? (
+        <RateLimitBanner detail={rateLimitNotice.detail} resetAt={rateLimitNotice.resetAt} />
+      ) : null}
       <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
         <form className="flex flex-wrap items-center gap-4 text-sm text-stone-600" method="get">
           <label className="flex items-center gap-2">

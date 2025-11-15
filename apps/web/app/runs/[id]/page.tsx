@@ -148,7 +148,9 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
           </div>
           <div>
             <dt className="uppercase tracking-wide text-xs text-stone-400">Status</dt>
-            <dd className="mt-1 font-semibold text-stone-900">{debate?.status ?? "unknown"}</dd>
+            <dd className="mt-1">
+              <StatusBadge status={debate?.status} />
+            </dd>
           </div>
           <div>
             <dt className="uppercase tracking-wide text-xs text-stone-400">Created</dt>
@@ -183,3 +185,4 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
     </main>
   );
 }
+import StatusBadge from "@/components/parliament/StatusBadge";

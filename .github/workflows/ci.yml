@@ -8,40 +8,40 @@ on:
 jobs:
   api:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
       - name: Install dependencies
         run: |
+          cd apps/api
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Run migrations
-        run: |
-          DATABASE_URL=sqlite:///./ci.db alembic upgrade head
       - name: Run tests
         env:
           DATABASE_URL: sqlite:///./ci.db
           USE_MOCK: '1'
-        run: pytest
+        run: |
+          cd apps/api
+          DATABASE_URL=sqlite:///./ci.db alembic upgrade head
+          pytest -q
 
   web:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - name: Install deps
-        run: npm install
+        run: |
+          cd apps/web
+          npm ci || npm install
       - name: Build
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
-        run: npm run build
+          NEXT_PUBLIC_API_URL: /api
+        run: |
+          cd apps/web
+          npm run build
+          node -e "const fs=require('fs'); const size=fs.statSync('.next/react-loadable-manifest.json').size; if(size>450000){console.error('react-loadable-manifest too large:', size); process.exit(1);} console.log('react-loadable-manifest size:', size);"

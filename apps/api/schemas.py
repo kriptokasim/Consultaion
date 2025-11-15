@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class BudgetConfig(BaseModel):
@@ -35,6 +35,16 @@ class DebateConfig(BaseModel):
 class DebateCreate(BaseModel):
     prompt: str
     config: Optional[DebateConfig] = None
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value: str) -> str:
+        text = (value or "").strip()
+        if len(text) < 10:
+            raise ValueError("Prompt must be at least 10 characters")
+        if len(text) > 5000:
+            raise ValueError("Prompt must be less than 5000 characters")
+        return text
 
 
 def default_agents() -> List[AgentConfig]:

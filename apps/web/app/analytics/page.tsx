@@ -31,7 +31,7 @@ export default async function AnalyticsPage() {
     );
   }
   const data = await getMyDebates({ limit: 100 });
-  const analytics = buildAnalytics(Array.isArray(data) ? data : data?.items ?? []);
+  const analytics = buildAnalytics(data?.items ?? []);
   return (
     <main id="main" className="space-y-6 p-4">
       <AnalyticsDashboard data={analytics} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useToast } from "@/components/ui/toast";
 
 type ExportButtonProps = {
   debateId: string;
@@ -11,6 +12,7 @@ export default function ExportButton({ debateId, apiBase }: ExportButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base = apiBase || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const { pushToast } = useToast();
 
   const handleExport = async () => {
     setBusy(true);
@@ -26,8 +28,10 @@ export default function ExportButton({ debateId, apiBase }: ExportButtonProps) {
       const data = await response.json();
       const url = `${base}${data.uri}`;
       window.open(url, "_blank", "noopener,noreferrer");
+      pushToast({ title: "Markdown export ready", variant: "success" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to export");
+      pushToast({ title: "Export failed", description: "We could not prepare the markdown file.", variant: "error" });
     } finally {
       setBusy(false);
     }

@@ -3,7 +3,7 @@ import csv
 import json
 import os
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from io import StringIO
 from pathlib import Path
 from time import time
@@ -13,6 +13,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Req
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import Session, select
 from pydantic import BaseModel
@@ -30,7 +31,18 @@ from usage_limits import RateLimitError, reserve_run_slot
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    sweeper_task: asyncio.Task | None = None
+    try:
+        sweeper_task = asyncio.create_task(_channel_sweeper_loop())
+    except RuntimeError:
+        sweeper_task = None
+    try:
+        yield
+    finally:
+        if sweeper_task:
+            sweeper_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await sweeper_task
 
 
 app = FastAPI(title="Consultaion API", version="0.1.0", lifespan=lifespan)
@@ -46,6 +58,44 @@ app.add_middleware(
 
 
 CHANNELS: dict[str, asyncio.Queue] = {}
+CHANNEL_META: dict[str, float] = {}
+CHANNEL_TTL_SECS = int(os.getenv("CHANNEL_TTL_SECS", "7200"))
+CHANNEL_SWEEP_INTERVAL = int(os.getenv("CHANNEL_SWEEP_INTERVAL", "60"))
+
+
+def _mark_channel(debate_id: str) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+        CHANNEL_META[debate_id] = loop.time()
+    except RuntimeError:
+        CHANNEL_META[debate_id] = time()
+
+
+def sweep_stale_channels(now: float | None = None) -> list[str]:
+    if now is None:
+        try:
+            now = asyncio.get_running_loop().time()
+        except RuntimeError:
+            now = time()
+    stale = [key for key, created in CHANNEL_META.items() if now - created > CHANNEL_TTL_SECS]
+    for debate_id in stale:
+        CHANNELS.pop(debate_id, None)
+        CHANNEL_META.pop(debate_id, None)
+    return stale
+
+
+async def _channel_sweeper_loop() -> None:
+    try:
+        while True:
+            sweep_stale_channels()
+            await asyncio.sleep(CHANNEL_SWEEP_INTERVAL)
+    except asyncio.CancelledError:
+        raise
+
+
+def _cleanup_channel(debate_id: str) -> None:
+    CHANNELS.pop(debate_id, None)
+    CHANNEL_META.pop(debate_id, None)
 RATE_BUCKET: dict[str, list[float]] = {}
 MAX_CALLS = int(os.getenv("RL_MAX_CALLS", "5"))
 WINDOW = int(os.getenv("RL_WINDOW", "60"))
@@ -84,12 +134,13 @@ def serialize_user(user: User) -> dict[str, Any]:
 
 @app.get("/healthz")
 def healthz():
-    try:
-        with engine.connect() as conn:
-            conn.exec_driver_sql("SELECT 1")
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
     return {"ok": True}
+
+
+@app.get("/readyz")
+def readyz(session: Session = Depends(get_session)):
+    session.exec(sa.text("SELECT 1"))
+    return {"db": "ok"}
 
 
 @app.get("/version")
@@ -486,11 +537,9 @@ async def create_debate(
 
     q: asyncio.Queue = asyncio.Queue()
     CHANNELS[debate_id] = q
-    cleanup_cb = lambda: CHANNELS.pop(debate_id, None)
+    _mark_channel(debate_id)
     if os.getenv("DISABLE_AUTORUN", "0") != "1":
-        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump(), cleanup_cb)
-    else:
-        cleanup_cb()
+        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump(), _cleanup_channel)
     record_audit(
         "debate_created",
         user_id=current_user.id if current_user else None,
@@ -501,6 +550,35 @@ async def create_debate(
     return {"id": debate_id}
 
 
+@app.post("/debates/{debate_id}/start")
+async def start_debate_run(
+    debate_id: str,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    if os.getenv("DISABLE_AUTORUN", "0") != "1":
+        raise HTTPException(status_code=400, detail="Manual start is disabled")
+    debate = session.get(Debate, debate_id)
+    debate = _require_debate_access(debate, current_user, session)
+    if debate.status not in {"queued", "failed"}:
+        raise HTTPException(status_code=400, detail="Debate already started")
+    q = CHANNELS.get(debate_id)
+    if not q:
+        q = asyncio.Queue()
+        CHANNELS[debate_id] = q
+    _mark_channel(debate_id)
+    config_payload = debate.config or default_debate_config().model_dump()
+    background_tasks.add_task(run_debate, debate_id, debate.prompt, q, config_payload, _cleanup_channel)
+    record_audit(
+        "debate_manual_start",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+    )
+    return {"status": "scheduled"}
+
+
 @app.get("/debates")
 async def list_debates(
     status: str | None = None,
@@ -509,22 +587,38 @@ async def list_debates(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    statement = select(Debate).order_by(Debate.created_at.desc())
+    filters = []
     if current_user.role != "admin":
         team_ids = _user_team_ids(session, current_user.id)
         if team_ids:
-            statement = statement.where(
-                (Debate.user_id == current_user.id) | (Debate.team_id.in_(team_ids))
-            )
+            filters.append((Debate.user_id == current_user.id) | (Debate.team_id.in_(team_ids)))
         else:
-            statement = statement.where(Debate.user_id == current_user.id)
+            filters.append(Debate.user_id == current_user.id)
     elif status == "all":
         status = None
     if status:
-        statement = statement.where(Debate.status == status)
-    statement = statement.offset(offset).limit(limit)
-    debates = session.exec(statement).all()
-    return debates
+        filters.append(Debate.status == status)
+
+    base_query = select(Debate)
+    if filters:
+        base_query = base_query.where(*filters)
+
+    total_stmt = select(func.count()).select_from(base_query.subquery())
+    total = session.exec(total_stmt).one()
+    if isinstance(total, tuple):
+        total = total[0]
+    total = int(total or 0)
+
+    items_stmt = base_query.order_by(Debate.created_at.desc()).offset(offset).limit(limit)
+    debates = session.exec(items_stmt).all()
+    has_more = offset + len(debates) < total
+    return {
+        "items": debates,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+    }
 
 
 @app.get("/debates/{debate_id}")

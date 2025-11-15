@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { ApiError, assignDebateTeam, TeamSummary } from "@/lib/api"
+import SearchFilter from "@/components/ui/search-filter"
+import EmptyState from "@/components/ui/empty-state"
+import { useDebounce } from "@/hooks/use-debounce"
+import { useToast } from "@/components/ui/toast"
+import StatusBadge from "@/components/parliament/StatusBadge"
 
 type Run = {
   id: string
@@ -59,6 +64,10 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () =
 export default function RunsTable({ items, teams, profile }: RunsTableProps) {
   const [scope, setScope] = useState<Scope>(profile.role === "admin" ? "all" : "mine")
   const [rows, setRows] = useState(items)
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const debouncedSearch = useDebounce(search, 300)
+  const { pushToast } = useToast()
 
   useEffect(() => {
     setRows(items)
@@ -69,14 +78,15 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
   const availableScopes: Scope[] = profile.role === "admin" ? ["mine", "team", "all"] : ["mine", "team"]
 
   const filteredRuns = useMemo(() => {
+    const lowerQuery = debouncedSearch.trim().toLowerCase()
     return rows.filter((run) => {
-      if (scope === "all") return true
-      if (scope === "mine") {
-        return run.user_id === profile.id || !run.user_id
-      }
-      return Boolean(run.team_id)
+      if (scope === "mine" && run.user_id !== profile.id && run.user_id) return false
+      if (scope === "team" && !run.team_id) return false
+      if (statusFilter && run.status !== statusFilter) return false
+      if (lowerQuery && !`${run.id} ${run.prompt}`.toLowerCase().includes(lowerQuery)) return false
+      return true
     })
-  }, [rows, scope, profile.id])
+  }, [rows, scope, profile.id, debouncedSearch, statusFilter])
 
   const paginatedRuns = filteredRuns
 
@@ -85,19 +95,28 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
       try {
         await assignDebateTeam(runId, teamId)
         setRows((prev) => prev.map((run) => (run.id === runId ? { ...run, team_id: teamId ?? null } : run)))
+        pushToast({
+          title: teamId ? "Run shared with team" : "Run is now private",
+          variant: "success",
+        })
       } catch (error) {
         if (error instanceof ApiError) {
           const detail = typeof error.body === "object" && error.body?.detail ? error.body.detail : error.message
+          pushToast({ title: "Unable to update sharing", description: detail, variant: "error" })
           throw new Error(detail)
         }
+        pushToast({ title: "Unable to update sharing", variant: "error" })
         throw new Error("Unable to update sharing settings")
       }
     },
-    [setRows],
+    [setRows, pushToast],
   )
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard?.writeText(text).catch(() => null)
+    navigator.clipboard
+      ?.writeText(text)
+      .then(() => pushToast({ title: "Run ID copied", variant: "success" }))
+      .catch(() => pushToast({ title: "Unable to copy", variant: "error" }))
   }
 
   const truncate = (str: string, length: number) => {
@@ -116,15 +135,25 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
                 scope === option ? "bg-amber-600 text-white shadow" : "text-stone-600 hover:text-stone-900",
               )}
               onClick={() => setScope(option)}
-            >
+              >
               {SCOPE_LABELS[option]}
             </button>
           ))}
         </div>
-        <p className="text-xs text-stone-500">
-          Share a run with a team to make it visible to collaborators.
-        </p>
+        <p className="text-xs text-stone-500">Share a run with a team to make it visible to collaborators.</p>
       </div>
+      <SearchFilter
+        value={search}
+        onValueChange={setSearch}
+        status={statusFilter}
+        onStatusChange={setStatusFilter}
+        statuses={[
+          { value: "completed", label: "Completed" },
+          { value: "running", label: "Running" },
+          { value: "queued", label: "Queued" },
+          { value: "failed", label: "Failed" },
+        ]}
+      />
 
       <div className="rounded-3xl border border-stone-200 bg-white shadow-sm">
         <Table>
@@ -158,15 +187,7 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
                 </TableCell>
                 <TableCell className="text-sm text-stone-900">{truncate(run.prompt, 80)}</TableCell>
                 <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "font-mono text-xs capitalize",
-                      statusVariants[normalizeStatus(run.status)],
-                    )}
-                  >
-                    {normalizeStatus(run.status)}
-                  </Badge>
+                  <StatusBadge status={normalizeStatus(run.status)} />
                 </TableCell>
                 <TableCell>
                   {run.team_id ? (
@@ -211,6 +232,12 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
           </TableBody>
         </Table>
       </div>
+      {paginatedRuns.length === 0 ? (
+        <EmptyState
+          title="No runs match this filter"
+          description="Adjust the search text or clear the status filter to view all debates."
+        />
+      ) : null}
     </div>
   )
 }

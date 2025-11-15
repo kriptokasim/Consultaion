@@ -1,6 +1,8 @@
 import RunsTable from "@/components/consultaion/consultaion/runs-table";
+import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import { getMe } from "@/lib/auth";
-import { getMyDebates, getTeams } from "@/lib/api";
+import { ApiError, getMyDebates, getRateLimitInfo, getTeams, isAuthError } from "@/lib/api";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +21,31 @@ export default async function RunsPage() {
     );
   }
 
-  const [debateResponse, teamList] = await Promise.all([
-    getMyDebates({ limit: 100, offset: 0 }).catch(() => []),
-    getTeams().catch(() => []),
-  ]);
-  const items = Array.isArray(debateResponse) ? debateResponse : Array.isArray(debateResponse?.items) ? debateResponse.items : [];
+  let rateLimitNotice: { detail: string; resetAt?: string } | null = null;
+  let debateResponse: Awaited<ReturnType<typeof getMyDebates>> | null = null;
+  try {
+    debateResponse = await getMyDebates({ limit: 100, offset: 0 });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const info = getRateLimitInfo(error);
+      if (info) {
+        rateLimitNotice = info;
+      } else if (isAuthError(error)) {
+        redirect("/login");
+      } else {
+        throw error;
+      }
+    } else {
+      throw error;
+    }
+  }
+  const teamList = await getTeams().catch((error) => {
+    if (error instanceof ApiError && isAuthError(error)) {
+      redirect("/login");
+    }
+    return [];
+  });
+  const items = rateLimitNotice ? [] : debateResponse?.items ?? [];
 
   return (
     <main id="main" className="h-full space-y-6 py-6">
@@ -32,6 +54,9 @@ export default async function RunsPage() {
         <h1 className="mt-1 text-3xl font-semibold text-stone-900">Saved runs</h1>
         <p className="text-sm text-stone-600">Filter personal, shared, or global (admin) debates and share new runs with a team.</p>
       </header>
+      {rateLimitNotice ? (
+        <RateLimitBanner detail={rateLimitNotice.detail} resetAt={rateLimitNotice.resetAt} />
+      ) : null}
       <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
         <RunsTable items={items} teams={teamList} profile={profile} />
       </section>

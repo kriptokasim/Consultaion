@@ -117,7 +117,7 @@ async def run_debate(
     prompt: str,
     q,
     config_data: Dict[str, Any],
-    cleanup: Callable[[], None] | None = None,
+    cleanup_cb: Callable[[str], None] | None = None,
 ):
     config = DebateConfig.model_validate(config_data or {})
     agent_configs = config.agents or default_agents()
@@ -170,15 +170,15 @@ async def run_debate(
                 final_meta={"scores": mock_scores, "ranking": [entry["persona"] for entry in mock_scores], "usage": {}},
                 status="completed",
             )
-            if cleanup:
-                cleanup()
+            if cleanup_cb:
+                cleanup_cb(debate_id)
             return
         with session_scope() as session:
             debate = session.get(Debate, debate_id)
             if not debate:
                 await q.put({"type": "error", "message": "debate not found"})
-                if cleanup:
-                    cleanup()
+                if cleanup_cb:
+                    cleanup_cb(debate_id)
                 return
             debate_user_id = debate.user_id
             debate.status = "running"
@@ -330,8 +330,8 @@ async def run_debate(
                 session.commit()
         await q.put({"type": "error", "message": str(exc)})
     finally:
-        if cleanup:
-            cleanup()
+        if cleanup_cb:
+            cleanup_cb(debate_id)
 def _complete_debate_record(
     debate_id: str,
     *,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Info, Scale, ThumbsDown, ThumbsUp, Users, Trophy } from "lucide-react";
 import type { JudgeVoteFlow, Member, ScoreItem } from "./types";
 import { cn } from "@/lib/utils";
@@ -24,18 +24,20 @@ export default function VotingChamber({
   basis = "threshold",
   onComplete,
 }: VotingChamberProps) {
-  const roster =
-    members?.length && members.length >= scores.length
-      ? members.map((member, index) => ({
-          name: member.name,
-          vote: (scores[index]?.score ?? 0) >= threshold ? "aye" : "nay",
-          color: fallbackColors[index % fallbackColors.length],
-        }))
-      : scores.map((score, index) => ({
-          name: score.persona,
-          vote: score.score >= threshold ? "aye" : "nay",
-          color: fallbackColors[index % fallbackColors.length],
-        }));
+  const roster = useMemo(() => {
+    if (members?.length && members.length >= scores.length) {
+      return members.map((member, index) => ({
+        name: member.name,
+        vote: (scores[index]?.score ?? 0) >= threshold ? "aye" : "nay",
+        color: fallbackColors[index % fallbackColors.length],
+      }));
+    }
+    return scores.map((score, index) => ({
+      name: score.persona,
+      vote: score.score >= threshold ? "aye" : "nay",
+      color: fallbackColors[index % fallbackColors.length],
+    }));
+  }, [members, scores, threshold]);
 
   const [phase, setPhase] = useState<"intro" | "voting" | "results">("intro");
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -73,7 +75,9 @@ export default function VotingChamber({
   const ayePct = totalVotes ? (ayeVotes.length / totalVotes) * 100 : 0;
   const nayPct = totalVotes ? (nayVotes.length / totalVotes) * 100 : 0;
   const winner = ayeVotes.length >= nayVotes.length ? "aye" : "nay";
-  const flowPreview = flows?.slice(0, 6) ?? [];
+  const flowPreview = useMemo(() => flows?.slice(0, 6) ?? [], [flows]);
+  const [showDetails, setShowDetails] = useState(false);
+  const margin = Math.abs(ayeVotes.length - nayVotes.length);
 
   return (
     <section className="space-y-8 rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-50 via-white to-amber-50 p-6 shadow-[0_35px_65px_rgba(120,113,108,0.15)]">
@@ -99,105 +103,128 @@ export default function VotingChamber({
         ) : null}
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <VotePanel
-          title="Aye lobby"
-          icon={<ThumbsUp className="h-6 w-6 text-green-600" />}
-          count={ayeVotes.length}
-          percentage={ayePct}
-          accent="from-green-500 to-green-300"
-          description={`${ayeVotes.length} members marched through the Aye lobby`}
-        />
-        <VotePanel
-          title="Nay lobby"
-          icon={<ThumbsDown className="h-6 w-6 text-red-600" />}
-          count={nayVotes.length}
-          percentage={nayPct}
-          accent="from-red-500 to-red-300"
-          description={`${nayVotes.length} members marched through the Nay lobby`}
-        />
+      <div className="rounded-2xl border border-stone-200 bg-white/80 p-6 shadow-inner">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Current majority</p>
+            <p className="text-2xl font-semibold text-stone-900">
+              {winner === "aye" ? "The Ayes have it" : "The Nays have it"}
+            </p>
+            <p className="text-sm text-stone-600">
+              Margin: {margin} vote{margin === 1 ? "" : "s"}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-stone-700 shadow-sm hover:border-amber-200 hover:text-amber-700"
+            onClick={() => setShowDetails((value) => !value)}
+            aria-pressed={showDetails}
+          >
+            {showDetails ? "Hide breakdown" : "Show detailed breakdown"}
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-6 rounded-2xl border border-stone-200 bg-white/80 p-6 shadow-inner lg:grid-cols-2">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-            <Users className="h-4 w-4 text-amber-500" />
-            Members marching
+      {showDetails ? (
+        <>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <VotePanel
+              title="Aye lobby"
+              icon={<ThumbsUp className="h-6 w-6 text-green-600" />}
+              count={ayeVotes.length}
+              percentage={ayePct}
+              accent="from-green-500 to-green-300"
+              description={`${ayeVotes.length} members marched through the Aye lobby`}
+            />
+            <VotePanel
+              title="Nay lobby"
+              icon={<ThumbsDown className="h-6 w-6 text-red-600" />}
+              count={nayVotes.length}
+              percentage={nayPct}
+              accent="from-red-500 to-red-300"
+              description={`${nayVotes.length} members marched through the Nay lobby`}
+            />
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            {roster.map((member, index) => (
-              <AvatarCard
-                key={member.name}
-                member={member}
-                animate={phase === "voting" && currentIndex === index}
-                index={index}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-6 shadow-inner">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-              <Trophy className="h-4 w-4" />
-              Division outcome
-            </div>
-            <div className="mt-4 space-y-3">
-              {phase === "results" ? (
-                <>
-                  <p className="text-2xl font-semibold text-stone-900">
-                    {winner === "aye" ? "The Ayes have it" : "The Nays have it"}
-                  </p>
-                  <p className="text-sm text-stone-600">
-                    Margin: {Math.abs(ayeVotes.length - nayVotes.length)} vote
-                    {Math.abs(ayeVotes.length - nayVotes.length) === 1 ? "" : "s"}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-stone-600">
-                  {phase === "intro"
-                    ? "Division bell sounding..."
-                    : "Members are still positioning inside the lobbies."}
-                </p>
-              )}
-            </div>
-          </div>
-          {flowPreview.length ? (
-            <div className="rounded-2xl border border-stone-200 bg-white/80 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Judge ledger
-              </p>
-              <div className="mt-2 space-y-2 text-sm text-stone-700">
-                {flowPreview.map((flow) => (
-                  <div key={`${flow.judge}-${flow.persona}`} className="flex items-center justify-between">
-                    <span>
-                      {flow.judge} → <span className="font-semibold">{flow.persona}</span>
-                    </span>
-                    <span
-                      className={cn(
-                        "text-xs font-semibold",
-                        flow.vote === "aye" ? "text-emerald-700" : "text-rose-700",
-                      )}
-                    >
-                      {flow.vote === "aye" ? "Aye" : "Nay"} ({flow.score.toFixed(1)})
-                    </span>
-                  </div>
+
+          <div className="grid gap-6 rounded-2xl border border-stone-200 bg-white/80 p-6 shadow-inner lg:grid-cols-2">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                <Users className="h-4 w-4 text-amber-500" />
+                Members marching
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                {roster.map((member, index) => (
+                  <AvatarCard
+                    key={`${member.name}-${index}`}
+                    member={member}
+                    animate={phase === "voting"}
+                    index={index}
+                  />
                 ))}
               </div>
-              {flows && flows.length > flowPreview.length ? (
-                <p className="mt-2 text-xs text-stone-500">
-                  +{flows.length - flowPreview.length} more judge
-                  {flows.length - flowPreview.length === 1 ? "" : "s"} recorded
-                </p>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-6 shadow-inner">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  <Trophy className="h-4 w-4" />
+                  Division outcome
+                </div>
+                <div className="mt-4 space-y-3">
+                  {phase === "results" ? (
+                    <>
+                      <p className="text-2xl font-semibold text-stone-900">
+                        {winner === "aye" ? "The Ayes have it" : "The Nays have it"}
+                      </p>
+                      <p className="text-sm text-stone-600">
+                        Margin: {margin} vote{margin === 1 ? "" : "s"}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-stone-600">
+                      {phase === "intro"
+                        ? "Division bell sounding..."
+                        : "Members are still positioning inside the lobbies."}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {flowPreview.length ? (
+                <div className="rounded-2xl border border-stone-200 bg-white/80 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Judge ledger</p>
+                  <div className="mt-2 space-y-2 text-sm text-stone-700">
+                    {flowPreview.map((flow) => (
+                      <div key={`${flow.judge}-${flow.persona}`} className="flex items-center justify-between">
+                        <span>
+                          {flow.judge} → <span className="font-semibold">{flow.persona}</span>
+                        </span>
+                        <span
+                          className={cn(
+                            "text-xs font-semibold",
+                            flow.vote === "aye" ? "text-emerald-700" : "text-rose-700",
+                          )}
+                        >
+                          {flow.vote === "aye" ? "Aye" : "Nay"} ({flow.score.toFixed(1)})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {flows && flows.length > flowPreview.length ? (
+                    <p className="mt-2 text-xs text-stone-500">
+                      +{flows.length - flowPreview.length} more judge
+                      {flows.length - flowPreview.length === 1 ? "" : "s"} recorded
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
-          ) : null}
-        </div>
-      </div>
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }
 
-function VotePanel({
+const VotePanel = memo(function VotePanel({
   title,
   icon,
   count,
@@ -235,9 +262,9 @@ function VotePanel({
       </div>
     </div>
   );
-}
+});
 
-function AvatarCard({
+const AvatarCard = memo(function AvatarCard({
   member,
   animate,
   index,
@@ -282,4 +309,4 @@ function AvatarCard({
       <p className="text-xs uppercase tracking-wide text-stone-400">{member.vote}</p>
     </div>
   );
-}
+});

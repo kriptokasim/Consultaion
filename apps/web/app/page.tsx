@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import LivePanel from "@/components/consultaion/consultaion/live-panel";
 import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
+import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import type { Member, ScoreItem } from "@/components/parliament/types";
-import { ApiError, getMembers, startDebate, streamDebate } from "@/lib/api";
+import { ApiError, getMembers, getRateLimitInfo, startDebate, startDebateRun, streamDebate } from "@/lib/api";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -43,6 +44,8 @@ export default function Page() {
   const currentDebateIdRef = useRef<string | null>(null)
   const runningRef = useRef(false)
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const manualStartAttemptedRef = useRef(false)
+  const manualStartMode = (process.env.NEXT_PUBLIC_AUTORUN_HINT ?? "on") === "off"
 
   const reset = () => {
     setEvents([])
@@ -51,6 +54,7 @@ export default function Page() {
     setVote(undefined)
     setEventsLoading(false)
     setLatestScores([])
+    manualStartAttemptedRef.current = false
   }
 
   const clearTimers = () => {
@@ -81,6 +85,7 @@ export default function Page() {
     if (nextStatus === 'idle') {
       setCurrentDebateId(null)
     }
+    manualStartAttemptedRef.current = false
   }
 
   const startElapsed = () => {
@@ -110,6 +115,9 @@ export default function Page() {
     const es = streamDebate(debateId)
     esRef.current = es
     setEventsLoading(true)
+    es.onopen = () => {
+      setEventsLoading(false)
+    }
     es.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
@@ -145,6 +153,19 @@ export default function Page() {
     }
     es.onerror = () => {
       es.close()
+      if (manualStartMode && !manualStartAttemptedRef.current) {
+        manualStartAttemptedRef.current = true
+        startDebateRun(debateId)
+          .then(() => {
+            setSessionStatus('running')
+            openStream(debateId)
+          })
+          .catch((error) => {
+            console.error('Manual start failed', error)
+            setSessionStatus('error')
+          })
+        return
+      }
       setSessionStatus('error')
       if (runningRef.current) {
         scheduleReconnect()
@@ -161,6 +182,7 @@ export default function Page() {
     setRateLimitNotice(null)
     setRunning(true)
     runningRef.current = true
+    manualStartAttemptedRef.current = false
     try {
       const { id } = await startDebate({ prompt })
       currentDebateIdRef.current = id
@@ -171,12 +193,13 @@ export default function Page() {
       timerRef.current = setInterval(() => setSpeakerTime((t) => t + 1), 1000)
       startElapsed()
     } catch (error) {
-      if (error instanceof ApiError && error.status === 429) {
-        const detail =
-          (typeof error.body === 'object' && error.body?.detail) || 'Rate limit exceeded. Please wait before summoning another session.'
-        const resetAt =
-          typeof error.body === 'object' && typeof error.body?.reset_at === 'string' ? error.body.reset_at : undefined
-        setRateLimitNotice({ detail, resetAt })
+      if (error instanceof ApiError) {
+        const info = getRateLimitInfo(error)
+        if (info) {
+          setRateLimitNotice(info)
+        } else {
+          console.error(error)
+        }
       } else {
         console.error(error)
       }
@@ -232,27 +255,18 @@ export default function Page() {
   return (
     <main id="main" className="space-y-6 p-4">
       {rateLimitNotice ? (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="flex items-start justify-between gap-4 rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-900 shadow-sm"
-        >
-          <div>
-            <p className="font-semibold">Rate limit reached</p>
-            <p className="mt-1 text-rose-800">{rateLimitNotice.detail}</p>
-            {rateLimitNotice.resetAt ? (
-              <p className="mt-1 text-xs uppercase tracking-wide text-rose-700">
-                Resets around {new Date(rateLimitNotice.resetAt).toLocaleTimeString()}
-              </p>
-            ) : null}
-          </div>
-          <button
-            className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-700 transition hover:bg-white"
-            onClick={() => setRateLimitNotice(null)}
-          >
-            Dismiss
-          </button>
-        </div>
+        <RateLimitBanner
+          detail={rateLimitNotice.detail}
+          resetAt={rateLimitNotice.resetAt}
+          actions={
+            <button
+              className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-700 transition hover:bg-white"
+              onClick={() => setRateLimitNotice(null)}
+            >
+              Dismiss
+            </button>
+          }
+        />
       ) : null}
       <ParliamentHome
         members={members}

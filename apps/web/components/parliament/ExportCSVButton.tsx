@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useToast } from "@/components/ui/toast";
 
 type ExportCSVButtonProps = {
   debateId: string;
@@ -11,6 +12,7 @@ export default function ExportCSVButton({ debateId, apiBase }: ExportCSVButtonPr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base = apiBase || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const { pushToast } = useToast();
 
   const handleClick = async () => {
     setBusy(true);
@@ -25,8 +27,10 @@ export default function ExportCSVButton({ debateId, apiBase }: ExportCSVButtonPr
       const blobUrl = window.URL.createObjectURL(blob);
       window.open(blobUrl, "_blank", "noopener,noreferrer");
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+      pushToast({ title: "CSV export ready", variant: "success" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to export CSV");
+      pushToast({ title: "CSV export failed", description: "Please try again shortly.", variant: "error" });
     } finally {
       setBusy(false);
     }

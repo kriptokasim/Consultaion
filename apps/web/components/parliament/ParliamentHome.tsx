@@ -40,7 +40,7 @@ export default function ParliamentHome({
         <div className="absolute left-1/4 top-0 h-64 w-64 rounded-full bg-amber-100 blur-3xl" />
         <div className="absolute right-1/3 bottom-0 h-72 w-72 rounded-full bg-stone-200 blur-[110px]" />
       </div>
-      <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="relative grid gap-8 md:grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 shadow-sm">
             <Brand height={20} tone="amber" />
@@ -64,16 +64,20 @@ export default function ParliamentHome({
               type="button"
               disabled={running}
               onClick={onStart}
+              aria-pressed={running}
+              aria-label="Summon a debate session"
               className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-amber-600/30 transition hover:bg-amber-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-70"
             >
               Summon a Session
             </button>
             <div className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white/80 px-4 py-2 text-sm font-medium text-stone-600 shadow-sm">
               <Clock className="h-4 w-4 text-amber-500" />
-              {running ? "Session in progress" : "Standing by"}
+              <span aria-live="polite" aria-busy={running}>
+                {running ? "Session in progress" : "Standing by"}
+              </span>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <MetricCard
               label="Active rounds"
               value={stats?.rounds ?? 0}

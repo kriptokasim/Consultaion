@@ -8,32 +8,58 @@ type ListParams = {
   offset?: number;
 };
 
+export type ErrorBody = {
+  detail?: string;
+  code?: string;
+  message?: string;
+  reset_at?: string;
+  [key: string]: any;
+};
+
+export type ListResponse<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 const baseFetcher = async (url: string, init?: RequestInit) =>
   fetch(`${API}${url}`, { cache: "no-store", credentials: "include", ...init });
 
-export class ApiError extends Error {
-  status: number;
-  body: any;
+const AUTH_STATUSES = new Set([401, 403]);
 
-  constructor(message: string, status: number, body?: any) {
+export class ApiError extends Error {
+  status?: number;
+  body: ErrorBody | string | null;
+
+  constructor(message: string, status?: number, body?: ErrorBody | string | null) {
     super(message);
     this.status = status;
-    this.body = body;
+    this.body = body ?? null;
   }
 }
+
+const handleClientAuthRedirect = (status: number | undefined) => {
+  if (typeof window !== "undefined" && status && AUTH_STATUSES.has(status)) {
+    window.location.href = "/login";
+  }
+};
 
 async function request<T>(path: string, init?: RequestInit, opts?: { auth?: boolean }) {
   const fetcher = opts?.auth && typeof fetchWithAuth === "function" ? fetchWithAuth : baseFetcher;
   const res = await fetcher(path, init);
   if (!res.ok) {
-    let body: any = null;
+    let body: ErrorBody | string | null = null;
     const contentType = res.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
-      body = await res.json().catch(() => null);
+      body = (await res.json().catch(() => null)) as ErrorBody | null;
     } else {
       body = await res.text().catch(() => null);
     }
-    throw new ApiError(`Request failed: ${res.status}`, res.status, body);
+    const error = new ApiError(`Request failed: ${res.status}`, res.status, body);
+    handleClientAuthRedirect(error.status);
+    throw error;
   }
   if (res.status === 204) {
     return undefined as T;
@@ -52,7 +78,7 @@ export async function getDebates(params: ListParams = {}) {
       .map(([key, value]) => [key, String(value)]),
   );
   const suffix = query.size ? `?${query.toString()}` : "";
-  return request<any>(`/debates${suffix}`, undefined, { auth: true });
+  return request<ListResponse<any>>(`/debates${suffix}`, undefined, { auth: true });
 }
 
 export async function getDebate(id: string) {
@@ -79,6 +105,14 @@ export function streamDebate(id: string) {
   return new EventSource(`${API}/debates/${id}/stream`, { withCredentials: true });
 }
 
+export async function startDebateRun(debateId: string) {
+  return request<{ status: string }>(
+    `/debates/${debateId}/start`,
+    { method: "POST" },
+    { auth: true },
+  );
+}
+
 export async function getEvents(id: string) {
   return request<any>(`/debates/${id}/events`, undefined, { auth: true });
 }
@@ -98,7 +132,7 @@ export async function getMyDebates(params: ListParams = {}) {
       .map(([key, value]) => [key, String(value)]),
   );
   const suffix = query.size ? `?${query.toString()}` : "";
-  return request<any>(`/debates${suffix}`, undefined, { auth: true });
+  return request<ListResponse<any>>(`/debates${suffix}`, undefined, { auth: true });
 }
 
 export type TeamSummary = {
@@ -176,4 +210,22 @@ export async function getLeaderboardPersona(persona: string, category?: string) 
   const suffix =
     category !== undefined ? `?category=${encodeURIComponent(category ?? "")}` : "";
   return request<LeaderboardEntry>(`/leaderboard/persona/${encodeURIComponent(persona)}${suffix}`);
+}
+
+export function isAuthError(error: unknown): error is ApiError {
+  return error instanceof ApiError && !!error.status && AUTH_STATUSES.has(error.status);
+}
+
+export function getRateLimitInfo(error: unknown): { detail: string; resetAt?: string } | null {
+  if (!(error instanceof ApiError) || error.status !== 429) return null;
+  const body = error.body;
+  const detail =
+    body && typeof body === "object" && typeof body.detail === "string"
+      ? body.detail
+      : typeof body === "string"
+        ? body
+        : "Rate limit exceeded. Please wait and try again.";
+  const resetAt =
+    body && typeof body === "object" && typeof body.reset_at === "string" ? body.reset_at : undefined;
+  return { detail, resetAt };
 }

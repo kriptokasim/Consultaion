@@ -9,13 +9,20 @@ from typing import Any, Dict
 
 from fastapi import Response
 
-COOKIE_NAME = "consultaion_token"
+COOKIE_NAME = os.getenv("COOKIE_NAME", "consultaion_token")
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET must be set")
+if JWT_SECRET == "change_me_in_prod":
+    raise RuntimeError("JWT_SECRET must be changed from default value")
 JWT_EXPIRES_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "4320"))
-COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_ITERATIONS", "20000"))
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "1").strip().lower() not in {"0", "false", "no"}
+_SAMESITE_VALUE = os.getenv("COOKIE_SAMESITE", "lax").strip().lower()
+if _SAMESITE_VALUE not in {"lax", "strict", "none"}:
+    _SAMESITE_VALUE = "lax"
+COOKIE_SAMESITE = "None" if _SAMESITE_VALUE == "none" else _SAMESITE_VALUE.capitalize()
+COOKIE_PATH = os.getenv("COOKIE_PATH", "/")
 
 
 def _b64encode(data: bytes) -> str:
@@ -78,15 +85,15 @@ def decode_access_token(token: str) -> Dict[str, Any]:
 
 def set_auth_cookie(response: Response, token: str) -> None:
     response.set_cookie(
-        COOKIE_NAME,
-        token,
+        key=COOKIE_NAME,
+        value=token,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=COOKIE_SAMESITE,
         max_age=JWT_EXPIRES_MINUTES * 60,
-        path="/",
+        path=COOKIE_PATH,
     )
 
 
 def clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH)

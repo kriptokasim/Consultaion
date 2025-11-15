@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { logout } from "@/lib/auth"
 import Brand from "@/components/parliament/Brand"
+import { ToastProvider } from "@/components/ui/toast"
 
 const navigation = [
   { name: "Live", href: "/", icon: PlayCircle },
@@ -83,8 +84,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar */}
+    <ToastProvider>
+      <div className="flex h-screen overflow-hidden bg-background">
+        {/* Sidebar */}
       <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
           <Brand height={32} className="drop-shadow" />
@@ -168,5 +170,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <main className="flex-1 overflow-auto bg-background">{children}</main>
       </div>
     </div>
+    </ToastProvider>
   )
 }

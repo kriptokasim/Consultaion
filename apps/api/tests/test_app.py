@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import os
 import sys
 import tempfile
@@ -39,6 +40,9 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from database import engine, init_db  # noqa: E402
 from main import (  # noqa: E402
     AuthRequest,
+    CHANNELS,
+    CHANNEL_META,
+    CHANNEL_TTL_SECS,
     DebateCreate,
     DebateUpdate,
     TeamCreate,
@@ -53,6 +57,8 @@ from main import (  # noqa: E402
     healthz,
     list_debates,
     register_user,
+    start_debate_run,
+    sweep_stale_channels,
     update_debate,
 )
 from models import AuditLog, Debate, RatingPersona, Score, User  # noqa: E402
@@ -62,6 +68,25 @@ from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
 
 init_db()
+
+
+def test_debate_create_prompt_validation():
+    with pytest.raises(ValueError):
+        DebateCreate(prompt=" too short ")
+    with pytest.raises(ValueError):
+        DebateCreate(prompt="x" * 6001)
+    result = DebateCreate(prompt=" " * 2 + "valid prompt text" + " ")
+    assert result.prompt == "valid prompt text"
+
+
+def test_jwt_secret_default_rejected(monkeypatch):
+    import auth as auth_module
+
+    monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
+    with pytest.raises(RuntimeError):
+        importlib.reload(auth_module)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    importlib.reload(auth_module)
 
 
 def dummy_request(path: str = "/debates") -> Request:
@@ -198,13 +223,13 @@ def test_user_scoped_debates_and_admin_access():
         owner_runs = asyncio.run(
             list_debates(None, 20, 0, session=session, current_user=owner)
         )
-        assert any(item.id == debate_id for item in owner_runs)
+        assert any(item.id == debate_id for item in owner_runs["items"])
 
     with Session(engine) as session:
         stranger_runs = asyncio.run(
             list_debates(None, 20, 0, session=session, current_user=reviewer)
         )
-        assert all(item.id != debate_id for item in stranger_runs)
+        assert all(item.id != debate_id for item in stranger_runs["items"])
         with pytest.raises(HTTPException):
             asyncio.run(get_debate(debate_id, session=session, current_user=reviewer))
 
@@ -219,7 +244,23 @@ def test_user_scoped_debates_and_admin_access():
         admin_runs = asyncio.run(
             list_debates(None, 20, 0, session=session, current_user=admin_user)
         )
-        assert any(item.id == debate_id for item in admin_runs)
+        assert any(item.id == debate_id for item in admin_runs["items"])
+
+
+def test_list_debates_returns_metadata():
+    user = _register_user("pagination@example.com", "paginate")
+    first = _create_debate_for_user(user, "Pagination prompt alpha")
+    second = _create_debate_for_user(user, "Pagination prompt beta")
+    assert first != second
+    with Session(engine) as session:
+        payload = asyncio.run(
+            list_debates(None, 1, 0, session=session, current_user=user)
+        )
+    assert "items" in payload and "total" in payload
+    assert payload["total"] >= 2
+    assert payload["limit"] == 1
+    assert payload["offset"] == 0
+    assert isinstance(payload["has_more"], bool)
 
 
 def test_rate_limit_blocks_after_threshold():
@@ -295,3 +336,54 @@ def test_leaderboard_updates_after_score_entries():
         assert ratings
         leaderboard = asyncio.run(get_leaderboard(None, 0, 10, session))
     assert any(entry["persona"] == "Analyst" for entry in leaderboard["items"])
+
+
+def test_manual_start_requires_flag():
+    previous = os.environ.get("DISABLE_AUTORUN", "1")
+    os.environ["DISABLE_AUTORUN"] = "0"
+    user = _register_user("manual-guard@example.com", "manualpass")
+    debate_id = _create_debate_for_user(user, "Manual guard prompt")
+    with Session(engine) as session:
+        background_tasks = BackgroundTasks()
+        with pytest.raises(HTTPException):
+            asyncio.run(
+                start_debate_run(
+                    debate_id,
+                    background_tasks,
+                    session=session,
+                    current_user=user,
+                )
+            )
+    os.environ["DISABLE_AUTORUN"] = previous
+
+
+def test_manual_start_succeeds_when_disabled():
+    previous = os.environ.get("DISABLE_AUTORUN", "1")
+    os.environ["DISABLE_AUTORUN"] = "1"
+    user = _register_user("manual-ok@example.com", "manualpass")
+    debate_id = _create_debate_for_user(user, "Manual start run prompt")
+    with Session(engine) as session:
+        background_tasks = BackgroundTasks()
+        result = asyncio.run(
+            start_debate_run(
+                debate_id,
+                background_tasks,
+                session=session,
+                current_user=user,
+            )
+        )
+    assert result["status"] == "scheduled"
+    assert debate_id in CHANNELS
+    os.environ["DISABLE_AUTORUN"] = previous
+    CHANNELS.pop(debate_id, None)
+    CHANNEL_META.pop(debate_id, None)
+
+
+def test_channel_sweeper_removes_stale_entries():
+    CHANNELS["stale-test"] = asyncio.Queue()
+    CHANNEL_META["stale-test"] = 0.0
+    removed = sweep_stale_channels(now=CHANNEL_TTL_SECS + 5)
+    assert "stale-test" in removed
+    assert "stale-test" not in CHANNELS
+    start_debate_run,
+    sweep_stale_channels,

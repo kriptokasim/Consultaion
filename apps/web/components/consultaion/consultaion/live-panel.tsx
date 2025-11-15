@@ -3,11 +3,12 @@
 import { useMemo } from "react"
 import { PlayCircle, Loader2, FileJson, StopCircle, Timer, UsersRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import ValidatedTextarea from "@/components/ui/validated-textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
 type LivePanelProps = {
   prompt: string
@@ -108,6 +109,21 @@ export default function LivePanel({
 
   const disabled = !prompt.trim() || running
 
+  useKeyboardShortcuts(
+    [
+      {
+        combo: "ctrl+enter",
+        handler: () => {
+          if (!disabled) {
+            onStart()
+          }
+        },
+        enabled: !running,
+      },
+    ],
+    [disabled, running, onStart],
+  )
+
   return (
     <div className="space-y-6">
       <Card className="border border-stone-200 bg-white">
@@ -115,11 +131,13 @@ export default function LivePanel({
           <CardTitle className="text-lg font-semibold text-stone-900">Start New Debate</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea
+          <ValidatedTextarea
             placeholder="Enter your debate prompt or question..."
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
-            className="min-h-32 resize-none border-stone-200 focus-visible:ring-amber-500"
+            minLength={10}
+            maxLength={5000}
+            aria-label="Debate prompt"
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="font-mono text-sm text-stone-500">{prompt.length} characters</div>
@@ -133,7 +151,9 @@ export default function LivePanel({
               <Button
                 onClick={onStart}
                 disabled={disabled}
-                className="gap-2 rounded-full bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-50"
+                aria-busy={running}
+                aria-disabled={disabled}
+                className="gap-2 rounded-full bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"
               >
                 {running ? (
                   <>
