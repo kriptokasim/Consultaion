@@ -57,6 +57,35 @@ export default function MethodologyPage() {
           </p>
         </article>
       </section>
+      <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-stone-900">Brand usage</h2>
+        <p className="mt-2 text-sm text-stone-600">
+          The Rosetta Chamber mark comes in stone (default) and amber (for dark or stone backdrops). Keep padding at least
+          16px and avoid recoloring the vector directly.
+        </p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <BrandCell label="Mark — stone" tone="stone" />
+          <BrandCell label="Mark — amber" tone="amber" />
+          <BrandCell label="Wordmark" tone="stone" variant="logotype" />
+        </div>
+      </section>
     </main>
+  );
+}
+
+function BrandCell({
+  label,
+  tone,
+  variant = "mark",
+}: {
+  label: string;
+  tone: "stone" | "amber";
+  variant?: "mark" | "logotype";
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-stone-100 bg-stone-50/60 p-4 text-center">
+      <Brand variant={variant} tone={tone} height={variant === "mark" ? 48 : 32} />
+      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{label}</p>
+    </div>
   );
 }

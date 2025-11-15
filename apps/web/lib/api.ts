@@ -6,6 +6,7 @@ type ListParams = {
   status?: string;
   limit?: number;
   offset?: number;
+  q?: string;
 };
 
 export type ErrorBody = {
@@ -71,14 +72,14 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
   return undefined as T;
 }
 
-export async function getDebates(params: ListParams = {}) {
+export async function getDebates(params: ListParams = {}, opts?: { auth?: boolean }) {
   const query = new URLSearchParams(
     Object.entries(params)
       .filter(([, value]) => value !== undefined && value !== null)
       .map(([key, value]) => [key, String(value)]),
   );
   const suffix = query.size ? `?${query.toString()}` : "";
-  return request<ListResponse<any>>(`/debates${suffix}`, undefined, { auth: true });
+  return request<ListResponse<any>>(`/debates${suffix}`, undefined, opts ?? { auth: true });
 }
 
 export async function getDebate(id: string) {
@@ -126,13 +127,7 @@ export async function getDebateMembers(id: string) {
 }
 
 export async function getMyDebates(params: ListParams = {}) {
-  const query = new URLSearchParams(
-    Object.entries(params)
-      .filter(([, value]) => value !== undefined && value !== null)
-      .map(([key, value]) => [key, String(value)]),
-  );
-  const suffix = query.size ? `?${query.toString()}` : "";
-  return request<ListResponse<any>>(`/debates${suffix}`, undefined, { auth: true });
+  return getDebates(params, { auth: true });
 }
 
 export type TeamSummary = {

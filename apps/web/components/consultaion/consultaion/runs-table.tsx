@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Copy, Eye, Loader2, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { ApiError, assignDebateTeam, TeamSummary } from "@/lib/api"
+import { ApiError, assignDebateTeam, TeamSummary, getDebates } from "@/lib/api"
 import SearchFilter from "@/components/ui/search-filter"
 import EmptyState from "@/components/ui/empty-state"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -30,13 +31,8 @@ type RunsTableProps = {
   items: Run[]
   teams: TeamSummary[]
   profile: { id: string; role: string }
-}
-
-const statusVariants: Record<string, string> = {
-  completed: "bg-emerald-50 text-emerald-900 border-emerald-200",
-  running: "bg-amber-50 text-amber-900 border-amber-200",
-  failed: "bg-rose-50 text-rose-900 border-rose-200",
-  queued: "bg-stone-50 text-stone-900 border-stone-200",
+  initialQuery?: string
+  initialStatus?: string | null
 }
 
 const SCOPE_LABELS: Record<Scope, string> = {
@@ -47,7 +43,7 @@ const SCOPE_LABELS: Record<Scope, string> = {
 
 function normalizeStatus(status?: string) {
   if (!status) return "queued"
-  return statusVariants[status] ? status : "queued"
+  return status
 }
 
 function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
@@ -61,17 +57,23 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () =
   }, [handler, ref])
 }
 
-export default function RunsTable({ items, teams, profile }: RunsTableProps) {
+export default function RunsTable({ items, teams, profile, initialQuery = "", initialStatus = null }: RunsTableProps) {
   const [scope, setScope] = useState<Scope>(profile.role === "admin" ? "all" : "mine")
   const [rows, setRows] = useState(items)
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [search, setSearch] = useState(initialQuery)
+  const [statusFilter, setStatusFilter] = useState<string | null>(initialStatus)
   const debouncedSearch = useDebounce(search, 300)
   const { pushToast } = useToast()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const searchParamsString = searchParams?.toString() || ""
+  const [searchLoading, setSearchLoading] = useState(false)
 
   useEffect(() => {
+    if (debouncedSearch || statusFilter) return
     setRows(items)
-  }, [items])
+  }, [items, debouncedSearch, statusFilter])
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map((team) => [team.id, team.name])), [teams])
 
@@ -123,6 +125,56 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
     return str.length > length ? `${str.slice(0, length)}…` : str
   }
 
+  useEffect(() => {
+    const params = new URLSearchParams(searchParamsString)
+    if (debouncedSearch) {
+      params.set("q", debouncedSearch)
+    } else {
+      params.delete("q")
+    }
+    if (statusFilter) {
+      params.set("status", statusFilter)
+    } else {
+      params.delete("status")
+    }
+    const next = params.toString()
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
+  }, [debouncedSearch, statusFilter, pathname, router, searchParamsString])
+
+  useEffect(() => {
+    if (!debouncedSearch && !statusFilter) {
+      return
+    }
+    let active = true
+    setSearchLoading(true)
+    getDebates(
+      {
+        limit: 100,
+        offset: 0,
+        q: debouncedSearch || undefined,
+        status: statusFilter || undefined,
+      },
+      { auth: false },
+    )
+      .then((response) => {
+        if (!active) return
+        setRows(response.items ?? [])
+      })
+      .catch((error) => {
+        pushToast({
+          title: "Unable to fetch runs",
+          description: error instanceof Error ? error.message : "Search failed",
+          variant: "error",
+        })
+      })
+      .finally(() => {
+        if (active) setSearchLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [debouncedSearch, statusFilter, pushToast])
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-gradient-to-r from-white via-amber-50 to-white p-4">
@@ -154,6 +206,7 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
           { value: "failed", label: "Failed" },
         ]}
       />
+      {searchLoading ? <p className="text-xs text-stone-500">Searching…</p> : null}
 
       <div className="rounded-3xl border border-stone-200 bg-white shadow-sm">
         <Table>
@@ -222,13 +275,6 @@ export default function RunsTable({ items, teams, profile }: RunsTableProps) {
                 </TableCell>
               </TableRow>
             ))}
-            {paginatedRuns.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-sm text-stone-500">
-                  No runs match this filter yet.
-                </TableCell>
-              </TableRow>
-            ) : null}
           </TableBody>
         </Table>
       </div>

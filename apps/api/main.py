@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import json
+import logging.config
 import os
 import uuid
 from contextlib import asynccontextmanager, suppress
@@ -17,16 +18,34 @@ import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import Session, select
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth import clear_auth_cookie, create_access_token, hash_password, set_auth_cookie, verify_password
 from audit import record_audit
 from deps import get_current_user, get_optional_user, get_session, require_admin
 from database import engine, init_db
+from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
+from metrics import get_metrics_snapshot, increment_metric
 from models import AuditLog, Debate, DebateRound, Message, PairwiseVote, RatingPersona, Score, Team, TeamMember, User
 from orchestrator import run_debate
 from ratings import update_ratings_for_debate
 from schemas import DebateCreate, DebateConfig, default_debate_config
 from usage_limits import RateLimitError, reserve_run_slot
+
+logging.config.dictConfig(LOGGING_CONFIG)
+
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=os.getenv("SENTRY_ENV", "local"),
+        traces_sample_rate=float(os.getenv("SENTRY_SAMPLE_RATE", "0.1")),
+        integrations=[FastApiIntegration(), SqlalchemyIntegration()],
+    )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,7 +66,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Consultaion API", version="0.1.0", lifespan=lifespan)
 
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        token = set_request_id(request_id)
+        try:
+            response = await call_next(request)
+        finally:
+            reset_request_id(token)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
 origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -61,6 +93,7 @@ CHANNELS: dict[str, asyncio.Queue] = {}
 CHANNEL_META: dict[str, float] = {}
 CHANNEL_TTL_SECS = int(os.getenv("CHANNEL_TTL_SECS", "7200"))
 CHANNEL_SWEEP_INTERVAL = int(os.getenv("CHANNEL_SWEEP_INTERVAL", "60"))
+ENABLE_METRICS = os.getenv("ENABLE_METRICS", "1").lower() not in {"0", "false", "no"}
 
 
 def _mark_channel(debate_id: str) -> None:
@@ -96,6 +129,11 @@ async def _channel_sweeper_loop() -> None:
 def _cleanup_channel(debate_id: str) -> None:
     CHANNELS.pop(debate_id, None)
     CHANNEL_META.pop(debate_id, None)
+
+
+def _track_metric(name: str, value: int = 1) -> None:
+    if ENABLE_METRICS:
+        increment_metric(name, value)
 RATE_BUCKET: dict[str, list[float]] = {}
 MAX_CALLS = int(os.getenv("RL_MAX_CALLS", "5"))
 WINDOW = int(os.getenv("RL_WINDOW", "60"))
@@ -134,13 +172,20 @@ def serialize_user(user: User) -> dict[str, Any]:
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True}
+    return {"status": "ok"}
 
 
 @app.get("/readyz")
 def readyz(session: Session = Depends(get_session)):
     session.exec(sa.text("SELECT 1"))
     return {"db": "ok"}
+
+
+if ENABLE_METRICS:
+
+    @app.get("/metrics")
+    def metrics():
+        return get_metrics_snapshot()
 
 
 @app.get("/version")
@@ -261,6 +306,7 @@ async def get_default_config():
 
 @app.get("/leaderboard")
 async def get_leaderboard(
+    response: Response,
     category: Optional[str] = Query(default=None),
     min_matches: int = Query(0, ge=0, le=1000),
     limit: int = Query(50, ge=1, le=200),
@@ -275,11 +321,14 @@ async def get_leaderboard(
         stmt = stmt.where(RatingPersona.n_matches >= min_matches)
     stmt = stmt.limit(limit)
     rows = session.exec(stmt).all()
-    return {"items": [_serialize_rating_persona(row) for row in rows]}
+    payload = {"items": [_serialize_rating_persona(row) for row in rows]}
+    response.headers["Cache-Control"] = "private, max-age=30"
+    return payload
 
 
 @app.get("/leaderboard/persona/{persona}")
 async def get_leaderboard_persona(
+    response: Response,
     persona: str,
     category: Optional[str] = Query(default=None),
     session: Session = Depends(get_session),
@@ -292,13 +341,17 @@ async def get_leaderboard_persona(
     row = session.exec(stmt).first()
     if not row:
         raise HTTPException(status_code=404, detail="persona not found")
-    return _serialize_rating_persona(row)
+    payload = _serialize_rating_persona(row)
+    response.headers["Cache-Control"] = "private, max-age=30"
+    return payload
 
 
 @app.get("/config/members")
-async def get_members():
+async def get_members(response: Response):
     config: DebateConfig = default_debate_config()
-    return {"members": _members_from_config(config)}
+    payload = {"members": _members_from_config(config)}
+    response.headers["Cache-Control"] = "private, max-age=30"
+    return payload
 
 
 @app.get("/debates/{debate_id}/members")
@@ -547,6 +600,7 @@ async def create_debate(
         target_id=debate_id,
         meta={"prompt": body.prompt},
     )
+    _track_metric("debates_created")
     return {"id": debate_id}
 
 
@@ -584,6 +638,7 @@ async def list_debates(
     status: str | None = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    q: str | None = Query(default=None, description="Prompt substring filter"),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -598,16 +653,20 @@ async def list_debates(
         status = None
     if status:
         filters.append(Debate.status == status)
+    if isinstance(q, str):
+        query_text = q.strip()
+        if query_text:
+            filters.append(sa.func.lower(Debate.prompt).contains(query_text.lower()))
 
     base_query = select(Debate)
     if filters:
         base_query = base_query.where(*filters)
 
     total_stmt = select(func.count()).select_from(base_query.subquery())
-    total = session.exec(total_stmt).one()
-    if isinstance(total, tuple):
-        total = total[0]
-    total = int(total or 0)
+    total_result = session.exec(total_stmt).one()
+    if isinstance(total_result, tuple):
+        total_result = total_result[0]
+    total = int(total_result or 0)
 
     items_stmt = base_query.order_by(Debate.created_at.desc()).offset(offset).limit(limit)
     debates = session.exec(items_stmt).all()
@@ -703,6 +762,7 @@ async def export_debate_report(
     data = _build_report(session, debate_id, current_user)
     filepath = EXPORT_DIR / f"{debate_id}.md"
     filepath.write_text(_report_to_markdown(data), encoding="utf-8")
+    _track_metric("exports_generated")
     record_audit(
         "export_markdown",
         user_id=current_user.id if current_user else None,
@@ -826,6 +886,7 @@ async def export_scores_csv(
 
     csv_bytes = buffer.getvalue()
     headers = {"Content-Disposition": f'attachment; filename="{debate_id}.csv"'}
+    _track_metric("exports_generated")
     record_audit(
         "export_csv",
         user_id=current_user.id if current_user else None,
@@ -845,6 +906,7 @@ async def stream_events(
     if debate_id not in CHANNELS:
         return JSONResponse({"error": "not found"}, status_code=404)
     q = CHANNELS[debate_id]
+    _track_metric("sse_stream_open")
 
     async def eventgen():
         while True:
@@ -854,7 +916,11 @@ async def stream_events(
                 await asyncio.sleep(0.2)
                 break
 
-    return StreamingResponse(eventgen(), media_type="text/event-stream")
+    return StreamingResponse(
+        eventgen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/admin/users")

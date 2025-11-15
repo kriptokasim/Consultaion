@@ -9,6 +9,30 @@ A platform that produces the best answer via multi-agent debate/voting.
 5. `cd infra && docker compose up --build` (starts FastAPI, Next.js, Postgres).
 6. Optional for local smoketests: set `FAST_DEBATE=1` to bypass the full LLM loop and return mock events instantly.
 
+### Environment Flags
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Required Postgres connection string in production. |
+| `JWT_SECRET` | Required unique signing secret; app now refuses to boot if unchanged. |
+| `USE_MOCK` / `FAST_DEBATE` / `DISABLE_AUTORUN` | Control LiteLLM mocks, instant runs, and manual-start mode. |
+| `DEFAULT_MAX_RUNS_PER_HOUR` / `DEFAULT_MAX_TOKENS_PER_DAY` | Per-user quotas. |
+| `SENTRY_DSN` / `SENTRY_ENV` / `SENTRY_SAMPLE_RATE` | Optional backend error/trace reporting. |
+| `NEXT_PUBLIC_SENTRY_DSN` | Optional web error capture (guards CDN script). |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` / `DB_POOL_RECYCLE` | Postgres pooling (ignored on SQLite). |
+| `ENABLE_METRICS` | Toggle `/metrics` counters for debates/SSE/exports. |
+| `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_VOTE_THRESHOLD` | Client API origin & Aye threshold. |
+
+### Production Checklist
+
+- [ ] Set unique `JWT_SECRET`, `DATABASE_URL`, `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`.
+- [ ] Serve behind HTTPS and update `CORS_ORIGINS`.
+- [ ] Run `alembic upgrade head` before first deploy.
+- [ ] Configure rate/usage limits (`RL_MAX_CALLS`, quotas) and monitor `/metrics`.
+- [ ] Keep `FAST_DEBATE=0`, `USE_MOCK=0` for real LLMs.
+- [ ] Enable Sentry + structured JSON logs for observability and ensure `/healthz` passes.
+- [ ] Verify Nginx proxy buffering is disabled (SSE) and cookies forward correctly.
+
 ## Features
 - Multi-agent debate pipeline with configurable agents/judges/budget per run.
 - SSE runner UI plus `/runs` history, Hansard transcript, Voting Chamber, analytics, and downloadable reports.
@@ -22,7 +46,7 @@ A platform that produces the best answer via multi-agent debate/voting.
 
 ### Rate Limits & Quotas
 - API enforces IP-based burst limits plus per-user hourly run counts and daily token quotas (`DEFAULT_MAX_RUNS_PER_HOUR`, `DEFAULT_MAX_TOKENS_PER_DAY`).
-- When a limit is hit the UI surfaces a dismissible banner with the reset time, and audit logs capture the violation.
+- When a limit is hit the UI surfaces a dismissible banner with the reset ETA countdown, and audit logs capture the violation.
 
 ### Audit Log
 - Every critical action (register, login, share run, exports, rate-limit block) lands in `audit_log`.

@@ -9,8 +9,11 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
+useEffect(() => {
     console.error("Global error boundary", error);
+    if (typeof window !== "undefined" && window.Sentry) {
+      window.Sentry.captureException(error);
+    }
   }, [error]);
 
   return (

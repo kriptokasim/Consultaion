@@ -13,3 +13,10 @@ declare const __dirname: string;
 declare module 'fs';
 declare module 'path';
 declare module 'os';
+
+interface Window {
+  Sentry?: {
+    init: (config: Record<string, any>) => void;
+    captureException: (error: unknown) => void;
+  };
+}

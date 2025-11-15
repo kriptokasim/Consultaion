@@ -6,7 +6,14 @@ import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function RunsPage() {
+type RunsPageProps = {
+  searchParams: Promise<{ q?: string; status?: string }>;
+};
+
+export default async function RunsPage({ searchParams }: RunsPageProps) {
+  const params = await searchParams;
+  const query = params?.q ?? "";
+  const status = params?.status ?? "";
   const profile = await getMe();
   if (!profile) {
     return (
@@ -24,7 +31,12 @@ export default async function RunsPage() {
   let rateLimitNotice: { detail: string; resetAt?: string } | null = null;
   let debateResponse: Awaited<ReturnType<typeof getMyDebates>> | null = null;
   try {
-    debateResponse = await getMyDebates({ limit: 100, offset: 0 });
+    debateResponse = await getMyDebates({
+      limit: 100,
+      offset: 0,
+      q: query || undefined,
+      status: status || undefined,
+    });
   } catch (error) {
     if (error instanceof ApiError) {
       const info = getRateLimitInfo(error);
@@ -58,7 +70,13 @@ export default async function RunsPage() {
         <RateLimitBanner detail={rateLimitNotice.detail} resetAt={rateLimitNotice.resetAt} />
       ) : null}
       <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
-        <RunsTable items={items} teams={teamList} profile={profile} />
+        <RunsTable
+          items={items}
+          teams={teamList}
+          profile={profile}
+          initialQuery={query}
+          initialStatus={status || null}
+        />
       </section>
     </main>
   );

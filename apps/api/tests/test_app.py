@@ -108,7 +108,7 @@ def dummy_request(path: str = "/debates") -> Request:
 
 def test_health_endpoint_direct():
     result = healthz()
-    assert result["ok"] is True
+    assert result["status"] == "ok"
 
 
 def test_run_debate_emits_final_events():
@@ -263,6 +263,18 @@ def test_list_debates_returns_metadata():
     assert isinstance(payload["has_more"], bool)
 
 
+def test_list_debates_prompt_query_filters_results():
+    user = _register_user("searcher@example.com", "search-pass")
+    target = _create_debate_for_user(user, "Affordable housing now")
+    _create_debate_for_user(user, "Totally different topic")
+    with Session(engine) as session:
+        payload = asyncio.run(
+            list_debates(None, 20, 0, session=session, current_user=user, q="housing")
+        )
+    ids = [item.id for item in payload["items"]]
+    assert target in ids
+
+
 def test_rate_limit_blocks_after_threshold():
     previous = os.environ.get("DEFAULT_MAX_RUNS_PER_HOUR", "50")
     os.environ["DEFAULT_MAX_RUNS_PER_HOUR"] = "1"
@@ -334,7 +346,7 @@ def test_leaderboard_updates_after_score_entries():
     with Session(engine) as session:
         ratings = session.exec(select(RatingPersona).where(RatingPersona.persona == "Analyst")).all()
         assert ratings
-        leaderboard = asyncio.run(get_leaderboard(None, 0, 10, session))
+        leaderboard = asyncio.run(get_leaderboard(Response(), None, 0, 10, session))
     assert any(entry["persona"] == "Analyst" for entry in leaderboard["items"])
 
 
