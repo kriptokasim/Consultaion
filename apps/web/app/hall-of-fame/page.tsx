@@ -21,7 +21,7 @@ export default async function HallOfFamePage({
 }: {
   searchParams?: Promise<Record<string, string | string[]>>;
 }) {
-  const resolved = await Promise.resolve(searchParams ?? {});
+  const resolved = (await Promise.resolve(searchParams ?? {})) as Record<string, string | string[]>;
   const sort = typeof resolved?.sort === "string" ? resolved.sort : "top";
   const model = typeof resolved?.model === "string" ? resolved.model : undefined;
   const start = typeof resolved?.start === "string" ? resolved.start : undefined;
