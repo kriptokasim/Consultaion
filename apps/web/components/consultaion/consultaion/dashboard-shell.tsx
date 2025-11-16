@@ -4,7 +4,7 @@ import type React from "react"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, PlayCircle, Settings, Search, Moon, Sun, User, Shield, Scale, BarChart3, Trophy, BookOpen } from "lucide-react"
+import { FileText, PlayCircle, Settings, Search, Moon, Sun, User, Shield, Scale, BarChart3, Trophy, BookOpen, Award } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,7 @@ const navigation = [
   { name: "Chamber", href: "/chamber", icon: Scale },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Leaderboard", href: "/leaderboard", icon: Trophy },
+  { name: "Hall of Fame", href: "/hall-of-fame", icon: Award },
   { name: "Methodology", href: "/methodology", icon: BookOpen },
   { name: "Settings", href: "/settings", icon: Settings },
 ]

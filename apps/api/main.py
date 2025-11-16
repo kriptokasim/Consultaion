@@ -38,6 +38,7 @@ from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
 from metrics import get_metrics_snapshot, increment_metric
 from models import AuditLog, Debate, DebateRound, Message, PairwiseVote, RatingPersona, Score, Team, TeamMember, User
 from orchestrator import run_debate
+from ratelimit import increment_ip_bucket
 from ratings import update_ratings_for_debate
 from schemas import DebateCreate, DebateConfig, default_debate_config
 from usage_limits import RateLimitError, reserve_run_slot
@@ -59,6 +60,7 @@ if SENTRY_DSN:
     )
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
+ENABLE_SEC_HEADERS = os.getenv("ENABLE_SEC_HEADERS", "1").strip().lower() not in {"0", "false", "no"}
 
 
 async def csrf_protect(request: Request) -> None:
@@ -99,6 +101,17 @@ app = FastAPI(
     lifespan=lifespan,
     dependencies=[Depends(csrf_protect)],
 )
+
+if ENABLE_SEC_HEADERS:
+
+    @app.middleware("http")
+    async def security_headers_middleware(request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("X-XSS-Protection", "0")
+        return response
 
 
 def _warn_on_multi_worker() -> None:
@@ -183,7 +196,7 @@ def _cleanup_channel(debate_id: str) -> None:
 def _track_metric(name: str, value: int = 1) -> None:
     if ENABLE_METRICS:
         increment_metric(name, value)
-RATE_BUCKET: dict[str, list[float]] = {}
+
 MAX_CALLS = int(os.getenv("RL_MAX_CALLS", "5"))
 WINDOW = int(os.getenv("RL_WINDOW", "60"))
 EXPORT_DIR = Path(os.getenv("EXPORT_DIR", "exports"))
@@ -604,12 +617,9 @@ async def create_debate(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     ip = request.client.host if request.client else "anonymous"
-    now = time()
-    bucket = [stamp for stamp in RATE_BUCKET.get(ip, []) if now - stamp < WINDOW]
-    if len(bucket) >= MAX_CALLS:
+    allowed = increment_ip_bucket(ip, WINDOW, MAX_CALLS)
+    if not allowed:
         raise HTTPException(status_code=429, detail="rate limit exceeded")
-    bucket.append(now)
-    RATE_BUCKET[ip] = bucket
     if current_user:
         try:
             reserve_run_slot(session, current_user.id)
