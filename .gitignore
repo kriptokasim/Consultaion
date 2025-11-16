@@ -1,8 +1,15 @@
 # dependencies
 node_modules/
 apps/web/.next/
+apps/web/test-results/
+apps/api/node_modules/
 *.log
 *.db
+*.sqlite3
+*.deb
+*.tar
+*.tar.gz
+*.zip
 exports/
 .env.local
 .pytest_cache/
@@ -10,3 +17,14 @@ exports/
 .venv/
 __pycache__/
 .DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+.coverage
+coverage/
+apps/api/dev.db
+apps/api/ci_migrate.db
+apps/web/.playwright-browsers/
+.playwright-browsers/
+apps/web/*.deb

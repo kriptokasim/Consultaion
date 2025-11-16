@@ -1,3 +1,5 @@
+import { apiRequest } from "@/lib/apiClient";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function buildHeaders(init?: HeadersInit): Promise<Headers> {
@@ -36,23 +38,17 @@ export async function getMe() {
 }
 
 export async function login(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  return apiRequest({
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, password }),
+    path: "/auth/login",
+    body: { email, password },
   });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error?.detail || "Login failed");
-  }
-  return res.json();
 }
 
 export async function logout() {
-  await fetch(`${API_BASE}/auth/logout`, {
+  await apiRequest({
     method: "POST",
-    credentials: "include",
+    path: "/auth/logout",
   });
 }
 

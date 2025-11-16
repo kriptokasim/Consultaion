@@ -23,14 +23,26 @@ export default function ExportButton({ debateId, apiBase }: ExportButtonProps) {
         credentials: "include",
       });
       if (!response.ok) {
-        throw new Error("Export failed");
+        const text = (await response.text()) || response.statusText;
+        throw new Error(text || "Export failed");
       }
-      const data = await response.json();
-      const url = `${base}${data.uri}`;
-      window.open(url, "_blank", "noopener,noreferrer");
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get("content-disposition");
+      const fallbackName = `${debateId}.md`;
+      const filename =
+        contentDisposition?.split("filename=")[1]?.replace(/"/g, "") || fallbackName;
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
       pushToast({ title: "Markdown export ready", variant: "success" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to export");
+      console.error("Export failed", err);
       pushToast({ title: "Export failed", description: "We could not prepare the markdown file.", variant: "error" });
     } finally {
       setBusy(false);

@@ -1,3 +1,4 @@
+import { apiRequest } from "@/lib/apiClient";
 import { fetchWithAuth } from "@/lib/auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -91,15 +92,11 @@ export async function getReport(id: string) {
 }
 
 export async function startDebate(payload: { prompt: string; config?: any }) {
-  return request<{ id: string }>(
-    `/debates`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    },
-    { auth: true },
-  );
+  return apiRequest<{ id: string }>({
+    method: "POST",
+    path: "/debates",
+    body: payload,
+  });
 }
 
 export function streamDebate(id: string) {
@@ -107,11 +104,10 @@ export function streamDebate(id: string) {
 }
 
 export async function startDebateRun(debateId: string) {
-  return request<{ status: string }>(
-    `/debates/${debateId}/start`,
-    { method: "POST" },
-    { auth: true },
-  );
+  return apiRequest<{ status: string }>({
+    method: "POST",
+    path: `/debates/${debateId}/start`,
+  });
 }
 
 export async function getEvents(id: string) {
@@ -143,15 +139,11 @@ export async function getTeams() {
 }
 
 export async function assignDebateTeam(debateId: string, teamId: string | null) {
-  return request(
-    `/debates/${debateId}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ team_id: teamId ?? "" }),
-    },
-    { auth: true },
-  );
+  return apiRequest({
+    method: "PATCH",
+    path: `/debates/${debateId}`,
+    body: { team_id: teamId ?? "" },
+  });
 }
 
 export type AuditLogEntry = {

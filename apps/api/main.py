@@ -13,14 +13,24 @@ from typing import Any, Optional, Literal
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import Session, select
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from auth import clear_auth_cookie, create_access_token, hash_password, set_auth_cookie, verify_password
+from auth import (
+    CSRF_COOKIE_NAME,
+    ENABLE_CSRF,
+    clear_auth_cookie,
+    clear_csrf_cookie,
+    create_access_token,
+    generate_csrf_token,
+    hash_password,
+    set_auth_cookie,
+    set_csrf_cookie,
+    verify_password,
+)
 from audit import record_audit
 from deps import get_current_user, get_optional_user, get_session, require_admin
 from database import engine, init_db
@@ -33,6 +43,7 @@ from schemas import DebateCreate, DebateConfig, default_debate_config
 from usage_limits import RateLimitError, reserve_run_slot
 
 logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger(__name__)
 
 SENTRY_DSN = os.getenv("SENTRY_DSN")
 if SENTRY_DSN:
@@ -47,9 +58,27 @@ if SENTRY_DSN:
         integrations=[FastApiIntegration(), SqlalchemyIntegration()],
     )
 
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
+
+
+async def csrf_protect(request: Request) -> None:
+    """Optional double-submit CSRF guard for cookie auth."""
+    if request.method in SAFE_METHODS or not ENABLE_CSRF:
+        return
+    if request.url.path in {"/auth/login", "/auth/register"}:
+        return
+    csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+    csrf_header = request.headers.get("x-csrf-token") or request.headers.get("X-CSRF-Token")
+    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token missing or invalid",
+        )
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _warn_on_multi_worker()
     sweeper_task: asyncio.Task | None = None
     try:
         sweeper_task = asyncio.create_task(_channel_sweeper_loop())
@@ -64,7 +93,27 @@ async def lifespan(app: FastAPI):
                 await sweeper_task
 
 
-app = FastAPI(title="Consultaion API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Consultaion API",
+    version="0.1.0",
+    lifespan=lifespan,
+    dependencies=[Depends(csrf_protect)],
+)
+
+
+def _warn_on_multi_worker() -> None:
+    """Warn if multiple workers are in use while SSE queues are process-local."""
+    worker_env = os.getenv("WEB_CONCURRENCY") or os.getenv("GUNICORN_WORKERS")
+    try:
+        if worker_env and int(worker_env) > 1:
+            logger.warning(
+                "SSE queues are process-local; running with %s workers may cause /debates/{id}/stream to miss events. "
+                "Use a single worker or move SSE to a shared backend.",
+                worker_env,
+            )
+    except ValueError:
+        # Ignore non-integer worker hints
+        return
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -139,8 +188,6 @@ MAX_CALLS = int(os.getenv("RL_MAX_CALLS", "5"))
 WINDOW = int(os.getenv("RL_WINDOW", "60"))
 EXPORT_DIR = Path(os.getenv("EXPORT_DIR", "exports"))
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-
-app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
 
 
 class AuthRequest(BaseModel):
@@ -383,6 +430,8 @@ async def register_user(body: AuthRequest, response: Response, session: Session 
     session.refresh(user)
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
+    if ENABLE_CSRF:
+        set_csrf_cookie(response, generate_csrf_token())
     record_audit(
         "register",
         user_id=user.id,
@@ -401,6 +450,8 @@ async def login_user(body: AuthRequest, response: Response, session: Session = D
         raise HTTPException(status_code=401, detail="invalid credentials")
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
+    if ENABLE_CSRF:
+        set_csrf_cookie(response, generate_csrf_token())
     record_audit(
         "login",
         user_id=user.id,
@@ -414,6 +465,8 @@ async def login_user(body: AuthRequest, response: Response, session: Session = D
 @app.post("/auth/logout")
 async def logout_user(response: Response):
     clear_auth_cookie(response)
+    if ENABLE_CSRF:
+        clear_csrf_cookie(response)
     return {"ok": True}
 
 
@@ -757,7 +810,7 @@ async def get_debate_report(
 async def export_debate_report(
     debate_id: str,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     data = _build_report(session, debate_id, current_user)
     filepath = EXPORT_DIR / f"{debate_id}.md"
@@ -769,7 +822,12 @@ async def export_debate_report(
         target_type="debate",
         target_id=debate_id,
     )
-    return {"uri": f"/exports/{filepath.name}"}
+    content = filepath.read_text(encoding="utf-8")
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filepath.name}"'},
+    )
 
 
 @app.get("/debates/{debate_id}/events")
