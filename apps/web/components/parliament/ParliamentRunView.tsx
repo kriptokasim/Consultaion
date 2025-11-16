@@ -273,11 +273,7 @@ export default function ParliamentRunView({
       </section>
 
       {/* All model answers ("show more" style) */}
-      <SummaryCard
-        id="answers"
-        title="Model answers"
-        description="Each model’s own answer to the prompt, ordered by their final score."
-      >
+      <SummaryCard title="Model answers" description="Each model’s own answer to the prompt, ordered by their final score.">
         {modelAnswers.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500">
             No agent messages were recorded for this run.
