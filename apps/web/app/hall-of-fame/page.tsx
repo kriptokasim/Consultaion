@@ -16,11 +16,16 @@ function toDate(value: string | undefined): string | undefined {
   return value;
 }
 
-export default async function HallOfFamePage({ searchParams }: { searchParams?: Record<string, string | string[]> }) {
-  const sort = typeof searchParams?.sort === "string" ? searchParams?.sort : "top";
-  const model = typeof searchParams?.model === "string" ? searchParams?.model : undefined;
-  const start = typeof searchParams?.start === "string" ? searchParams?.start : undefined;
-  const end = typeof searchParams?.end === "string" ? searchParams?.end : undefined;
+export default async function HallOfFamePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[]>>;
+}) {
+  const resolved = await Promise.resolve(searchParams ?? {});
+  const sort = typeof resolved?.sort === "string" ? resolved.sort : "top";
+  const model = typeof resolved?.model === "string" ? resolved.model : undefined;
+  const start = typeof resolved?.start === "string" ? resolved.start : undefined;
+  const end = typeof resolved?.end === "string" ? resolved.end : undefined;
 
   const [{ items }, membersPayload] = await Promise.all([
     getHallOfFame({ sort, model, start_date: start, end_date: end }).catch(() => ({ items: [] })),
