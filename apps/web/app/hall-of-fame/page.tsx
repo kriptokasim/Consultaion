@@ -36,6 +36,34 @@ export default async function HallOfFamePage({
   const members = Array.isArray((membersPayload as any)?.members) ? (membersPayload as any).members : [];
   const modelOptions = [{ id: "", name: "All models" }, ...members.map((m: any) => ({ id: m.name ?? m.id, name: m.name ?? m.id }))];
 
+  if (!items || items.length === 0) {
+    return (
+      <main id="main" className="space-y-8 p-6">
+        <div className="flex items-center gap-3">
+          <RosettaChamberLogo size={40} />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Hall of Fame</p>
+            <h1 className="text-3xl font-semibold text-stone-900">Distinguished Debates of the House of AI</h1>
+          </div>
+        </div>
+        <div className="rounded-3xl border border-dashed border-stone-200 bg-white/80 p-6 text-center shadow-sm">
+          <p className="text-base font-semibold text-stone-900">No Hall of Fame debates yet</p>
+          <p className="mt-2 text-sm text-stone-600">
+            Once you’ve had a few debates where a model wins clearly, they’ll appear here as Rosetta chamber champions.
+          </p>
+          <div className="mt-4">
+            <Link
+              href="/"
+              className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-500"
+            >
+              Run your first debate
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main id="main" className="space-y-8 p-6">
       <header className="space-y-2">
@@ -131,17 +159,23 @@ export default async function HallOfFamePage({
                   ) : null}
                 </div>
                 <p className="mt-1 text-sm font-semibold text-stone-900">
-                  {card.champion ?? "Unknown model"}
+                  {card.champion ?? "Champion unavailable"}
                   {typeof card.runner_up_score === "number" && typeof card.champion_score === "number" ? (
                     <span className="ml-2 text-xs font-normal text-amber-700">
                       Won by {(card.champion_score - card.runner_up_score).toFixed(2)}
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[0.7rem] text-amber-800">
+                      Mock run
+                    </span>
+                  )}
                 </p>
                 {card.champion_excerpt ? (
                   <p className="mt-2 line-clamp-3 text-sm text-stone-800">{card.champion_excerpt}</p>
                 ) : (
-                  <p className="mt-2 text-sm text-stone-600">Champion answer unavailable.</p>
+                  <p className="mt-2 text-sm text-stone-600">
+                    Champion answer unavailable. This debate may have been generated in mock or test mode.
+                  </p>
                 )}
               </div>
               <div className="flex-1" />

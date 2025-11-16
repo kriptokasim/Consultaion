@@ -49,14 +49,15 @@ export default function ParliamentHome({
           </div>
           <div className="space-y-4">
             <h1 className="text-4xl font-semibold leading-tight text-stone-900 sm:text-5xl">
-              Coordinating <span className="text-amber-600">AI delegates</span>{" "}
-              under parliamentary discipline.
+              One question. <span className="text-amber-600">Many AI models.</span> One champion answer.
             </h1>
             <p className="max-w-2xl text-base text-stone-600">
-              The chamber pairs amber-lit ceremony with rigorous analytics so you
-              can watch every intervention, transcript line, and score unfold in
-              real time. Bring your own prompt and the parliament convenes in
-              seconds.
+              Ask a single question and let multiple AI models draft their answers. Judges cross-examine them, score every
+              speech, and the Rosetta chamber returns one champion answer back to you.
+            </p>
+            <p className="max-w-2xl text-sm text-stone-600">
+              Start by entering a question below, then <strong>Summon a Session</strong>. You can watch the full debate,
+              scores, and final ruling in real time.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -70,7 +71,7 @@ export default function ParliamentHome({
             >
               Summon a Session
             </button>
-            <div className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white/80 px-4 py-2 text-sm font-medium text-stone-600 shadow-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white/40 px-4 py-2 text-sm font-medium text-stone-600">
               <Clock className="h-4 w-4 text-amber-500" />
               <span aria-live="polite" aria-busy={running}>
                 {running ? "Session in progress" : "Standing by"}

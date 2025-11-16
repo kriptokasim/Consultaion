@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { logout } from "@/lib/auth"
-import Brand from "@/components/parliament/Brand"
 import { ToastProvider } from "@/components/ui/toast"
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
 import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini"
@@ -29,10 +28,17 @@ const navigation = [
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [theme, setTheme] = useState<"light" | "dark">("dark")
+  const [theme, setTheme] = useState<"light" | "dark">("light")
   const [profile, setProfile] = useState<{ email: string; role: string } | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? localStorage.getItem("consultaion-theme") : null
+    if (stored === "light" || stored === "dark") {
+      setTheme(stored)
+    }
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -40,6 +46,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       root.classList.add("dark")
     } else {
       root.classList.remove("dark")
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem("consultaion-theme", theme)
     }
   }, [theme])
 
@@ -104,6 +113,21 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               <Link
                 key={item.name}
                 href={item.href}
+                title={
+                  {
+                    Live: "Run a new live debate and watch the chamber in real time.",
+                    Runs: "Browse the full history of past debates and results.",
+                    Chamber: "Visualize how votes and champions move through the Rosetta chamber.",
+                    Analytics: "Aggregate stats across debates, models, and judges.",
+                    Leaderboard: "Top-performing prompts and debates.",
+                    "Hall of Fame": "Debates where one model’s answer became a Rosetta champion.",
+                    Models: "Performance statistics for each AI model.",
+                    Methodology: "How the chamber debates, scores, and selects champions.",
+                    Settings: "Account and chamber configuration (coming soon).",
+                    Admin: "Admin controls",
+                    Ops: "Operational health and rate limits.",
+                  }[item.name] || undefined
+                }
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   isActive
@@ -148,14 +172,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* Header */}
         <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
           <div className="flex items-center gap-4">
-            <div className="hidden items-center gap-3 md:flex">
-              <RosettaChamberLogo size={28} className="drop-shadow-md" />
-              <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">Consultaion</span>
-                <span className="text-[0.65rem] font-medium text-amber-700/90 dark:text-amber-200/90">
-                  Rosetta Chamber
-                </span>
-              </div>
+            <div className="hidden items-center gap-2 md:flex">
+              <RosettaGlyphMini className="h-5 w-5 text-amber-700" />
+              <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+                Consultaion · Rosetta Chamber
+              </span>
             </div>
             <div className="relative w-64 lg:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -171,10 +192,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 Logout
               </Button>
             ) : (
-              <Button variant="ghost" size="icon" asChild className="h-9 w-9" aria-label="Login">
-                <Link href="/login">
-                  <User className="h-4 w-4" />
-                </Link>
+              <Button variant="outline" size="sm" asChild aria-label="Sign in">
+                <Link href="/login">Sign in</Link>
               </Button>
             )}
           </div>

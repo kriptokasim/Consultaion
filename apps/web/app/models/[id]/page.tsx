@@ -84,7 +84,10 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
           {Array.isArray(data.champion_samples) && data.champion_samples.length ? (
             data.champion_samples.map((sample: any) => (
               <article key={sample.debate_id} className="flex h-full flex-col rounded-2xl border border-amber-100 bg-amber-50/60 p-4 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Prompt</p>
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  <RosettaGlyphMini className="h-4 w-4" />
+                  Prompt
+                </p>
                 <p className="mb-2 text-sm font-semibold text-stone-900">{sample.prompt}</p>
                 {sample.excerpt ? (
                   <p className="flex-1 text-sm text-stone-800">{sample.excerpt}</p>

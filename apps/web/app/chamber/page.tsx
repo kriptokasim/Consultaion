@@ -22,6 +22,19 @@ const demoMembers: Member[] = [
 export default function ChamberPage() {
   return (
     <main id="main" className="space-y-6 p-4">
+      <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-sm">
+        <div className="flex flex-col gap-3">
+          <h1 className="text-2xl font-semibold text-stone-900">Rosetta chamber visualization</h1>
+          <p className="text-sm text-stone-700">
+            This chamber view shows how Aye and Nay votes flow for the latest debates. When a model wins clearly, its
+            seat glows as the Rosetta champion. Load a debate to see live flows, or explore the demo below.
+          </p>
+        </div>
+        <div className="mt-4 rounded-2xl border border-amber-100 bg-white/80 px-3 py-2 text-sm text-stone-600">
+          Latest debate on deck: Bring a prompt to the <a className="text-amber-700 underline" href="/">live page</a>{" "}
+          and summon a session to watch the chamber animate in real time.
+        </div>
+      </section>
       <VotingChamber scores={demoScores} members={demoMembers} />
     </main>
   );

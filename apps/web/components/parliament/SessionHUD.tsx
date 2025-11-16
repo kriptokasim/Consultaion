@@ -49,6 +49,11 @@ export default function SessionHUD({
           </div>
         </div>
       </div>
+      {status === "idle" ? (
+        <p className="mt-3 text-xs text-stone-600">
+          Session is idle. Enter a prompt and <strong>Summon a Session</strong> to convene the chamber.
+        </p>
+      ) : null}
     </section>
   );
 }
