@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getModelLeaderboard } from "@/lib/api";
+import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +9,14 @@ export default async function ModelsPage() {
   return (
     <main id="main" className="space-y-6 p-6">
       <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Model stats</p>
-        <h1 className="text-3xl font-semibold text-stone-900">Performance across debates</h1>
-        <p className="max-w-3xl text-sm text-stone-700">
-          Win rates and participation metrics for each persona/model based on judge scores.
-        </p>
+        <div className="flex items-center gap-3">
+          <RosettaChamberLogo size={36} />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Model stats</p>
+            <h1 className="text-3xl font-semibold text-stone-900">Performance across debates</h1>
+          </div>
+        </div>
+        <p className="max-w-3xl text-sm text-stone-700">How each model fares in the Rosetta chamber debates.</p>
       </header>
 
       <div className="overflow-hidden rounded-2xl border border-amber-100 bg-amber-50/70 shadow-sm">

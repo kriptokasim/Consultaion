@@ -1,4 +1,5 @@
 import { getDebateStats, getHealthStats, getRateLimitStats } from "@/lib/api";
+import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +21,14 @@ export default async function OpsDashboardPage() {
   return (
     <main id="main" className="space-y-6 p-6">
       <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Admin Ops</p>
-        <h1 className="text-3xl font-semibold text-stone-900">Operational overview</h1>
-        <p className="text-sm text-stone-700">Rate limits, health signals, and recent debate activity.</p>
+        <div className="flex items-center gap-3">
+          <RosettaChamberLogo size={32} />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Admin Ops</p>
+            <h1 className="text-3xl font-semibold text-stone-900">Operational overview</h1>
+            <p className="text-sm text-stone-700">Rate limits, health signals, and recent debate activity.</p>
+          </div>
+        </div>
       </header>
 
       <section className="grid gap-4 md:grid-cols-3">

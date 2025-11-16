@@ -12,6 +12,8 @@ import { useState, useEffect } from "react"
 import { logout } from "@/lib/auth"
 import Brand from "@/components/parliament/Brand"
 import { ToastProvider } from "@/components/ui/toast"
+import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
+import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini"
 
 const navigation = [
   { name: "Live", href: "/", icon: PlayCircle },
@@ -92,7 +94,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* Sidebar */}
       <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          <Brand height={32} className="drop-shadow" />
+          <RosettaChamberLogo size={32} className="drop-shadow" />
           <span className="font-semibold text-sidebar-foreground">Rosetta Chamber</span>
         </div>
         <nav className="flex-1 space-y-1 p-4">
@@ -109,7 +111,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )}
               >
-                <item.icon className="h-4 w-4" />
+                {["Hall of Fame", "Models"].includes(item.name) ? (
+                  <RosettaGlyphMini className="h-4 w-4 text-amber-700" />
+                ) : (
+                  <item.icon className="h-4 w-4" />
+                )}
                 {item.name}
               </Link>
             )
@@ -142,9 +148,14 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* Header */}
         <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
           <div className="flex items-center gap-4">
-            <div className="hidden items-center gap-2 md:flex">
-              <Brand variant="mark" height={28} className="drop-shadow-md" />
-              <span className="text-sm font-semibold text-stone-600 dark:text-stone-300">Consultaion</span>
+            <div className="hidden items-center gap-3 md:flex">
+              <RosettaChamberLogo size={28} className="drop-shadow-md" />
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">Consultaion</span>
+                <span className="text-[0.65rem] font-medium text-amber-700/90 dark:text-amber-200/90">
+                  Rosetta Chamber
+                </span>
+              </div>
             </div>
             <div className="relative w-64 lg:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

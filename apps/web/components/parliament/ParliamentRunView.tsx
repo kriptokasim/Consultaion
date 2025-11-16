@@ -10,6 +10,7 @@ import SummaryCard from "./SummaryCard";
 import ScoreboardCard from "./ScoreboardCard";
 import VotingChamber from "./VotingChamber";
 import StatusBadge from "./StatusBadge";
+import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
 
 import type {
   ScoreItem,
@@ -469,6 +470,7 @@ function ChampionSummary({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
+        <RosettaGlyphMini className="h-4 w-4 text-amber-700" />
         <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
           Winning answer
         </span>

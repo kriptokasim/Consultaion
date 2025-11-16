@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getModelDetail } from "@/lib/api";
+import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
+import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +20,24 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
   return (
     <main id="main" className="space-y-6 p-6">
       <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Model analytics</p>
-        <h1 className="text-3xl font-semibold text-stone-900">{data.model}</h1>
-        <p className="text-sm text-stone-700">
-          Win rate, participation, and recent debates involving this model/persona.
-        </p>
+        <div className="flex items-center gap-3">
+          <RosettaChamberLogo size={32} />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Model analytics</p>
+            <h1 className="text-3xl font-semibold text-stone-900">{data.model}</h1>
+            <p className="text-sm text-stone-700">
+              Win rate, participation, and recent debates involving this model/persona.
+            </p>
+          </div>
+        </div>
       </header>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Win rate" value={`${(data.win_rate * 100).toFixed(1)}%`} />
+        <StatCard
+          label="Win rate"
+          value={`${(data.win_rate * 100).toFixed(1)}%`}
+          icon={<RosettaGlyphMini className="h-4 w-4 text-amber-700" />}
+        />
         <StatCard label="Total debates" value={data.total_debates} />
         <StatCard
           label="Avg score"
@@ -97,10 +108,13 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function StatCard({ label, value, icon }: { label: string; value: string | number; icon?: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{label}</p>
+      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
+        {icon ? icon : null}
+        {label}
+      </p>
       <p className="mt-1 text-xl font-semibold text-stone-900">{value}</p>
     </div>
   );
