@@ -4,6 +4,7 @@ import json
 import logging.config
 import os
 import uuid
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager, suppress
 from io import StringIO
 from pathlib import Path
@@ -38,7 +39,7 @@ from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
 from metrics import get_metrics_snapshot, increment_metric
 from models import AuditLog, Debate, DebateRound, Message, PairwiseVote, RatingPersona, Score, Team, TeamMember, User
 from orchestrator import run_debate
-from ratelimit import increment_ip_bucket
+from ratelimit import get_recent_429_events, increment_ip_bucket, record_429
 from ratings import update_ratings_for_debate
 from schemas import DebateCreate, DebateConfig, default_debate_config
 from usage_limits import RateLimitError, reserve_run_slot
@@ -226,6 +227,64 @@ class DebateUpdate(BaseModel):
     team_id: Optional[str] = None
 
 
+class HallOfFameItem(BaseModel):
+    id: str
+    prompt: str
+    champion: Optional[str] = None
+    champion_score: Optional[float] = None
+    runner_up_score: Optional[float] = None
+    margin: Optional[float] = None
+    created_at: Optional[str] = None
+    champion_excerpt: Optional[str] = None
+
+
+class HallOfFameResponse(BaseModel):
+    items: list[HallOfFameItem]
+
+
+class ModelStatsSummary(BaseModel):
+    model: str
+    total_debates: int
+    wins: int
+    win_rate: float
+    avg_champion_score: Optional[float] = None
+    avg_score_overall: Optional[float] = None
+
+
+class ModelStatsDetail(BaseModel):
+    model: str
+    total_debates: int
+    wins: int
+    win_rate: float
+    avg_champion_score: Optional[float] = None
+    avg_score_overall: Optional[float] = None
+    recent_debates: list[dict]
+    champion_samples: list[dict]
+
+
+class HealthSnapshot(BaseModel):
+    db_ok: bool
+    rate_limit_backend: str
+    redis_ok: Optional[bool] = None
+    enable_csrf: bool
+    enable_sec_headers: bool
+    mock_mode: bool
+
+
+class RateLimitSnapshot(BaseModel):
+    backend: str
+    window: int
+    max_calls: int
+    recent_429s: list[dict]
+
+
+class DebateSummary(BaseModel):
+    total: int
+    last_24h: int
+    last_7d: int
+    fast_debate: int
+
+
 def serialize_user(user: User) -> dict[str, Any]:
     return {"id": user.id, "email": user.email, "role": user.role}
 
@@ -339,6 +398,65 @@ def _is_debate_owner_or_admin(debate: Debate, user: User) -> bool:
     return user.role == "admin" or debate.user_id == user.id
 
 
+def _avg_scores_for_debate(session: Session, debate_id: str) -> list[tuple[str, float]]:
+    rows = session.exec(select(Score.persona, func.avg(Score.score)).where(Score.debate_id == debate_id).group_by(Score.persona)).all()
+    result: list[tuple[str, float]] = []
+    for row in rows:
+        if isinstance(row, tuple):
+            result.append((row[0], float(row[1])))
+        else:
+            result.append((row.persona, float(row.avg)))
+    result.sort(key=lambda x: x[1], reverse=True)
+    return result
+
+
+def _champion_for_debate(session: Session, debate_id: str) -> tuple[Optional[str], Optional[float], Optional[float]]:
+    scores = _avg_scores_for_debate(session, debate_id)
+    if not scores:
+        return None, None, None
+    champion_persona, champion_score = scores[0]
+    runner_up = scores[1][1] if len(scores) > 1 else None
+    return champion_persona, champion_score, runner_up
+
+
+def _excerpt(text: Optional[str], limit: int = 220) -> Optional[str]:
+    if not text:
+        return None
+    clean = text.strip()
+    if len(clean) <= limit:
+        return clean
+    return clean[:limit].rstrip() + "…"
+
+
+def _build_hof_items(
+    session: Session,
+    debates: list[Debate],
+    champion_filter: Optional[str],
+) -> list[HallOfFameItem]:
+    items: list[HallOfFameItem] = []
+    for debate in debates:
+        champion, champion_score, runner_up = _champion_for_debate(session, debate.id)
+        if champion_filter and champion and champion_filter.lower() not in champion.lower():
+            continue
+        margin = None
+        if champion_score is not None and runner_up is not None:
+            margin = round(champion_score - runner_up, 4)
+        excerpt = _excerpt(debate.final_content)
+        items.append(
+            HallOfFameItem(
+                id=debate.id,
+                prompt=debate.prompt or "",
+                champion=champion,
+                champion_score=champion_score,
+                runner_up_score=runner_up,
+                margin=margin,
+                created_at=debate.created_at.isoformat() if debate.created_at else None,
+                champion_excerpt=excerpt,
+            )
+        )
+    return items
+
+
 def _can_access_debate(debate: Debate, user: Optional[User], session: Session) -> bool:
     if debate.user_id is None:
         return True
@@ -406,12 +524,141 @@ async def get_leaderboard_persona(
     return payload
 
 
+@app.get("/stats/models", response_model=list[ModelStatsSummary])
+async def get_model_leaderboard_stats(session: Session = Depends(get_session)):
+    rows = session.exec(select(Score.persona, func.count(Score.id), func.avg(Score.score)).group_by(Score.persona)).all()
+    summaries: list[ModelStatsSummary] = []
+    for row in rows:
+        if isinstance(row, tuple):
+            persona, total, avg = row[0], int(row[1] or 0), float(row[2] or 0)
+        else:
+            persona = row.persona
+            total = int(row.count)
+            avg = float(row.avg)
+        wins = 0
+        debates_with_persona = session.exec(select(Score.debate_id).where(Score.persona == persona).distinct()).all()
+        for debate_id_tuple in debates_with_persona:
+            debate_id = debate_id_tuple[0] if isinstance(debate_id_tuple, tuple) else debate_id_tuple
+            champ, _, _ = _champion_for_debate(session, debate_id)
+            if champ == persona:
+                wins += 1
+        win_rate = wins / total if total else 0.0
+        summaries.append(
+            ModelStatsSummary(
+                model=persona,
+                total_debates=total,
+                wins=wins,
+                win_rate=win_rate,
+                avg_champion_score=avg,
+                avg_score_overall=avg,
+            )
+        )
+    summaries.sort(key=lambda x: x.win_rate, reverse=True)
+    return summaries
+
+
+@app.get("/stats/models/{model_id}", response_model=ModelStatsDetail)
+async def get_model_detail(
+    model_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
+    rows = session.exec(select(Debate).order_by(Debate.created_at.desc()).limit(limit)).all()
+    total_debates = 0
+    wins = 0
+    scores_sum = 0.0
+    scores_count = 0
+    recent_debates: list[dict] = []
+    champion_samples: list[dict] = []
+
+    for debate in rows:
+        scores = _avg_scores_for_debate(session, debate.id)
+        if not scores:
+            continue
+        total_debates += 1
+        persona_score = next((s for s in scores if s[0] == model_id), None)
+        if persona_score:
+            scores_sum += persona_score[1]
+            scores_count += 1
+        champion_persona, champion_score = scores[0]
+        if champion_persona == model_id:
+            wins += 1
+            champion_samples.append(
+                {
+                    "debate_id": debate.id,
+                    "prompt": debate.prompt,
+                    "score": champion_score,
+                    "excerpt": _excerpt(debate.final_content),
+                }
+            )
+        recent_debates.append(
+            {
+                "debate_id": debate.id,
+                "prompt": debate.prompt,
+                "champion": champion_persona,
+                "champion_score": champion_score,
+                "was_champion": champion_persona == model_id,
+                "created_at": debate.created_at.isoformat() if debate.created_at else None,
+            }
+        )
+
+    win_rate = wins / total_debates if total_debates else 0.0
+    avg_score_overall = scores_sum / scores_count if scores_count else None
+    avg_champion_score = (
+        sum(item["score"] for item in champion_samples) / len(champion_samples) if champion_samples else None
+    )
+    return ModelStatsDetail(
+        model=model_id,
+        total_debates=total_debates,
+        wins=wins,
+        win_rate=win_rate,
+        avg_champion_score=avg_champion_score,
+        avg_score_overall=avg_score_overall,
+        recent_debates=recent_debates,
+        champion_samples=champion_samples[:5],
+    )
+
+
 @app.get("/config/members")
 async def get_members(response: Response):
     config: DebateConfig = default_debate_config()
     payload = {"members": _members_from_config(config)}
     response.headers["Cache-Control"] = "private, max-age=30"
     return payload
+
+
+@app.get("/stats/hall-of-fame", response_model=HallOfFameResponse)
+async def get_hall_of_fame_stats(
+    limit: int = Query(50, ge=1, le=200),
+    sort: str = Query("top", pattern="^(top|recent|closest)$"),
+    model: Optional[str] = Query(default=None),
+    start_date: Optional[str] = Query(default=None),
+    end_date: Optional[str] = Query(default=None),
+    session: Session = Depends(get_session),
+    _: Optional[User] = Depends(get_optional_user),
+):
+    base_query = select(Debate)
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date)
+            base_query = base_query.where(Debate.created_at >= start_dt)
+        except Exception:
+            pass
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date)
+            base_query = base_query.where(Debate.created_at <= end_dt)
+        except Exception:
+            pass
+    rows = session.exec(base_query).all()
+    items = _build_hof_items(session, rows, model)
+    if sort == "recent":
+        items.sort(key=lambda x: x.created_at or "", reverse=True)
+    elif sort == "closest":
+        items.sort(key=lambda x: abs(x.margin or 0), reverse=True)
+    else:
+        items.sort(key=lambda x: x.champion_score or 0, reverse=True)
+    return HallOfFameResponse(items=items[:limit])
 
 
 @app.get("/debates/{debate_id}/members")
@@ -619,6 +866,7 @@ async def create_debate(
     ip = request.client.host if request.client else "anonymous"
     allowed = increment_ip_bucket(ip, WINDOW, MAX_CALLS)
     if not allowed:
+        record_429(ip, request.url.path)
         raise HTTPException(status_code=429, detail="rate limit exceeded")
     if current_user:
         try:
@@ -770,6 +1018,79 @@ def _build_report(session: Session, debate_id: str, current_user: Optional[User]
         "scores": scores,
         "messages_count": messages_count,
     }
+
+
+@app.get("/stats/health", response_model=HealthSnapshot)
+async def get_system_health(
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+):
+    db_ok = True
+    try:
+        session.exec(sa.text("SELECT 1"))
+    except Exception:
+        db_ok = False
+    redis_ok = None
+    if os.getenv("RATE_LIMIT_BACKEND", "memory").lower() == "redis":
+        try:
+            client = None
+            from ratelimit import _get_redis_client  # type: ignore
+
+            client = _get_redis_client()
+            if client:
+                redis_ok = bool(client.ping())
+        except Exception:
+            redis_ok = False
+
+    return HealthSnapshot(
+        db_ok=db_ok,
+        rate_limit_backend=os.getenv("RATE_LIMIT_BACKEND", "memory"),
+        redis_ok=redis_ok,
+        enable_csrf=ENABLE_CSRF,
+        enable_sec_headers=ENABLE_SEC_HEADERS,
+        mock_mode=os.getenv("USE_MOCK", "1") != "0" and os.getenv("REQUIRE_REAL_LLM", "0") != "1",
+    )
+
+
+@app.get("/stats/rate-limit", response_model=RateLimitSnapshot)
+async def get_rate_limit_snapshot(_: User = Depends(require_admin)):
+    return RateLimitSnapshot(
+        backend=os.getenv("RATE_LIMIT_BACKEND", "memory"),
+        window=WINDOW,
+        max_calls=MAX_CALLS,
+        recent_429s=get_recent_429_events(),
+    )
+
+
+@app.get("/stats/debates", response_model=DebateSummary)
+async def get_debate_summary(_: User = Depends(require_admin), session: Session = Depends(get_session)):
+    now = datetime.utcnow()
+    total = session.exec(select(func.count()).select_from(Debate)).one()
+    last_24h = session.exec(
+        select(func.count()).select_from(Debate).where(Debate.created_at >= now - timedelta(days=1))
+    ).one()
+    last_7d = session.exec(
+        select(func.count()).select_from(Debate).where(Debate.created_at >= now - timedelta(days=7))
+    ).one()
+    # fast_debate is stored in config; fall back to python counting
+    fast_count = 0
+    configs = session.exec(select(Debate.config)).all()
+    for cfg in configs:
+        payload = cfg[0] if isinstance(cfg, tuple) else cfg
+        if isinstance(payload, dict) and payload.get("fast_debate"):
+            fast_count += 1
+
+    def _num(value):
+        if isinstance(value, tuple):
+            return int(value[0] or 0)
+        return int(value or 0)
+
+    return DebateSummary(
+        total=_num(total),
+        last_24h=_num(last_24h),
+        last_7d=_num(last_7d),
+        fast_debate=fast_count,
+    )
 
 
 def _report_to_markdown(payload: dict) -> str:

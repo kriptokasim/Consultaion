@@ -146,6 +146,36 @@ export async function assignDebateTeam(debateId: string, teamId: string | null) 
   });
 }
 
+export async function getHallOfFame(params: { sort?: string; model?: string; start_date?: string; end_date?: string } = {}) {
+  const search = new URLSearchParams();
+  if (params.sort) search.set("sort", params.sort);
+  if (params.model) search.set("model", params.model);
+  if (params.start_date) search.set("start_date", params.start_date);
+  if (params.end_date) search.set("end_date", params.end_date);
+  const suffix = search.size ? `?${search.toString()}` : "";
+  return request<{ items: any[] }>(`/stats/hall-of-fame${suffix}`);
+}
+
+export async function getModelLeaderboard() {
+  return request<any>(`/stats/models`);
+}
+
+export async function getModelDetail(id: string) {
+  return request<any>(`/stats/models/${id}`);
+}
+
+export async function getHealthStats() {
+  return request<any>(`/stats/health`, undefined, { auth: true });
+}
+
+export async function getRateLimitStats() {
+  return request<any>(`/stats/rate-limit`, undefined, { auth: true });
+}
+
+export async function getDebateStats() {
+  return request<any>(`/stats/debates`, undefined, { auth: true });
+}
+
 export type AuditLogEntry = {
   id: number;
   action: string;

@@ -1,11 +1,14 @@
 import os
 import time
+from collections import deque
+from datetime import datetime
 
 RATE_LIMIT_BACKEND = os.getenv("RATE_LIMIT_BACKEND", "memory").lower()
 REDIS_URL = os.getenv("REDIS_URL")
 
 _redis_client = None
 _ip_buckets: dict[str, dict[str, float]] = {}
+_recent_429_events: deque[dict] = deque(maxlen=200)
 
 
 def _get_redis_client():
@@ -49,3 +52,20 @@ def increment_ip_bucket(ip: str, window_seconds: int, max_requests: int) -> bool
                 # fall through to memory fallback
                 pass
     return _increment_ip_bucket_memory(ip, window_seconds, max_requests)
+
+
+def record_429(ip: str, path: str) -> None:
+    try:
+        _recent_429_events.append(
+            {
+                "ip": ip,
+                "path": path,
+                "ts": datetime.utcnow().isoformat() + "Z",
+            }
+        )
+    except Exception:
+        return
+
+
+def get_recent_429_events() -> list[dict]:
+    return list(_recent_429_events)

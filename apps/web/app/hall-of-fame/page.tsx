@@ -1,52 +1,33 @@
 import Link from "next/link";
-import { getDebates, getReport } from "@/lib/api";
+import { getHallOfFame, getMembers } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-type HallCard = {
-  id: string;
-  prompt: string;
-  champion?: string;
-  championText?: string;
-  score?: number;
-  totalModels?: number;
-};
+import { Suspense } from "react";
 
-const CARD_LIMIT = 12;
+const sortOptions = [
+  { value: "top", label: "Top" },
+  { value: "recent", label: "Most recent" },
+  { value: "closest", label: "Closest debates" },
+];
 
-export default async function HallOfFamePage() {
-  let debates: any[] = [];
-  try {
-    const payload = await getDebates({ limit: CARD_LIMIT });
-    debates = Array.isArray(payload?.items) ? payload.items : [];
-  } catch {
-    debates = [];
-  }
+function toDate(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return value;
+}
 
-  const cards: HallCard[] = await Promise.all(
-    debates.map(async (debate) => {
-      let report: any = null;
-      try {
-        report = await getReport(debate.id);
-      } catch {
-        report = null;
-      }
-      const scores = Array.isArray(report?.scores) ? report.scores : [];
-      const sortedScores = scores
-        .filter((entry: any) => entry?.persona)
-        .sort((a: any, b: any) => (typeof b.score === "number" && typeof a.score === "number" ? b.score - a.score : 0));
-      const championEntry = sortedScores[0];
-      const championText = typeof report?.final === "string" && report.final ? report.final : debate?.final_content;
-      return {
-        id: debate.id,
-        prompt: debate.prompt ?? "Untitled debate",
-        champion: championEntry?.persona,
-        championText,
-        score: typeof championEntry?.score === "number" ? championEntry.score : undefined,
-        totalModels: sortedScores.length || undefined,
-      };
-    }),
-  );
+export default async function HallOfFamePage({ searchParams }: { searchParams?: Record<string, string | string[]> }) {
+  const sort = typeof searchParams?.sort === "string" ? searchParams?.sort : "top";
+  const model = typeof searchParams?.model === "string" ? searchParams?.model : undefined;
+  const start = typeof searchParams?.start === "string" ? searchParams?.start : undefined;
+  const end = typeof searchParams?.end === "string" ? searchParams?.end : undefined;
+
+  const [{ items }, membersPayload] = await Promise.all([
+    getHallOfFame({ sort, model, start_date: start, end_date: end }).catch(() => ({ items: [] })),
+    getMembers().catch(() => ({ members: [] })),
+  ]);
+  const members = Array.isArray((membersPayload as any)?.members) ? (membersPayload as any).members : [];
+  const modelOptions = [{ id: "", name: "All models" }, ...members.map((m: any) => ({ id: m.name ?? m.id, name: m.name ?? m.id }))];
 
   return (
     <main id="main" className="space-y-8 p-6">
@@ -59,13 +40,64 @@ export default async function HallOfFamePage() {
         </p>
       </header>
 
-      {cards.length === 0 ? (
+      <form className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 shadow-sm" method="get">
+        <div className="grid gap-4 md:grid-cols-3">
+          <label className="flex flex-col text-sm text-stone-700">
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">Model</span>
+            <select name="model" defaultValue={model ?? ""} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900">
+              {modelOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col text-sm text-stone-700">
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">Start date</span>
+            <input
+              type="date"
+              name="start"
+              defaultValue={toDate(start)}
+              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900"
+            />
+          </label>
+          <label className="flex flex-col text-sm text-stone-700">
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">End date</span>
+            <input
+              type="date"
+              name="end"
+              defaultValue={toDate(end)}
+              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900"
+            />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-amber-800">Sort</span>
+            <select name="sort" defaultValue={sort} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900">
+              {sortOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700"
+          >
+            Apply
+          </button>
+        </div>
+      </form>
+
+      {items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-6 text-sm text-stone-600">
           No debates available yet. Run a new session to populate the Hall of Fame.
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {cards.map((card) => (
+          {items.map((card: any) => (
             <article
               key={card.id}
               className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm"
@@ -77,20 +109,22 @@ export default async function HallOfFamePage() {
               <div className="mb-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
                 <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-amber-800">
                   <span>Champion</span>
-                  {typeof card.score === "number" ? (
+                  {typeof card.champion_score === "number" ? (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 font-mono text-amber-800">
-                      {card.score.toFixed(2)}
+                      {card.champion_score.toFixed(2)}
                     </span>
                   ) : null}
                 </div>
                 <p className="mt-1 text-sm font-semibold text-stone-900">
                   {card.champion ?? "Unknown model"}
-                  {card.totalModels ? (
-                    <span className="ml-2 text-xs font-normal text-amber-700">(1 of {card.totalModels})</span>
+                  {typeof card.runner_up_score === "number" && typeof card.champion_score === "number" ? (
+                    <span className="ml-2 text-xs font-normal text-amber-700">
+                      Won by {(card.champion_score - card.runner_up_score).toFixed(2)}
+                    </span>
                   ) : null}
                 </p>
-                {card.championText ? (
-                  <p className="mt-2 line-clamp-3 text-sm text-stone-800">{card.championText}</p>
+                {card.champion_excerpt ? (
+                  <p className="mt-2 line-clamp-3 text-sm text-stone-800">{card.champion_excerpt}</p>
                 ) : (
                   <p className="mt-2 text-sm text-stone-600">Champion answer unavailable.</p>
                 )}

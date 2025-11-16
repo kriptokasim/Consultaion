@@ -20,6 +20,7 @@ const navigation = [
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Leaderboard", href: "/leaderboard", icon: Trophy },
   { name: "Hall of Fame", href: "/hall-of-fame", icon: Award },
+  { name: "Models", href: "/models", icon: Award },
   { name: "Methodology", href: "/methodology", icon: BookOpen },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
@@ -82,6 +83,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const navItems = [...navigation]
   if (profile?.role === "admin") {
     navItems.push({ name: "Admin", href: "/admin", icon: Shield })
+    navItems.push({ name: "Ops", href: "/admin/ops", icon: Shield })
   }
 
   return (
