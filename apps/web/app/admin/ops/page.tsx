@@ -29,7 +29,7 @@ export default async function OpsDashboardPage() {
         <HealthCard title="Database" ok={health.db_ok} />
         <HealthCard
           title="Redis backend"
-          ok={health.redis_ok !== False}
+          ok={health.redis_ok !== false}
           meta={health.rate_limit_backend}
         />
         <HealthCard title="Rate limiter" ok={true} meta={health.rate_limit_backend} />
