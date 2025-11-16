@@ -13,11 +13,11 @@ import { fetchWithAuth } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 type RunDetailProps = {
-  params: { id: string } | Promise<{ id: string }>;
+  params?: Promise<{ id: string }> | { id: string };
 };
 
 export default async function RunDetailPage({ params }: RunDetailProps) {
-  const { id } = await params;
+  const { id } = await Promise.resolve(params ?? { id: "" });
 
   let debate: any;
   let report: any;
