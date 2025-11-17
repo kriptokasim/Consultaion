@@ -12,7 +12,6 @@ import { useState, useEffect } from "react"
 import { logout } from "@/lib/auth"
 import { ToastProvider } from "@/components/ui/toast"
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
-import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini"
 import { RosettaClock } from "@/components/branding/RosettaClock"
 
 const navigation = [
@@ -136,11 +135,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )}
               >
-                {["Hall of Fame", "Models"].includes(item.name) ? (
-                  <RosettaGlyphMini className="h-4 w-4 text-amber-700" />
-                ) : (
-                  <item.icon className="h-4 w-4" />
-                )}
+                <item.icon className="h-4 w-4" />
                 {item.name}
               </Link>
             )
