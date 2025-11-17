@@ -25,11 +25,11 @@ A platform that produces the best answer via multi-agent debate/voting.
 
 ### Production Checklist
 
-- [ ] Set unique `JWT_SECRET`, `DATABASE_URL`, `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`.
-- [ ] Serve behind HTTPS and update `CORS_ORIGINS`.
+- [ ] Set unique `JWT_SECRET`, `DATABASE_URL`, `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`; avoid default DB creds.
+- [ ] Serve behind HTTPS and update `CORS_ORIGINS`; keep `ENABLE_CSRF=1`.
 - [ ] Run `alembic upgrade head` before first deploy.
-- [ ] Configure rate/usage limits (`RL_MAX_CALLS`, quotas) and monitor `/metrics`.
-- [ ] Keep `FAST_DEBATE=0`, `USE_MOCK=0` for real LLMs.
+- [ ] Configure rate/usage limits (`RL_MAX_CALLS`, quotas) and use Redis-backed IP rate limiting in prod (`RATE_LIMIT_BACKEND=redis`, `REDIS_URL` set); monitor `/metrics`.
+- [ ] Keep `FAST_DEBATE=0`, `USE_MOCK=0`, and set `REQUIRE_REAL_LLM=1` when using real LLMs.
 - [ ] Enable Sentry + structured JSON logs for observability and ensure `/healthz` passes.
 - [ ] Verify Nginx proxy buffering is disabled (SSE) and cookies forward correctly.
 

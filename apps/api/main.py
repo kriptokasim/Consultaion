@@ -39,7 +39,7 @@ from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
 from metrics import get_metrics_snapshot, increment_metric
 from models import AuditLog, Debate, DebateRound, Message, PairwiseVote, RatingPersona, Score, Team, TeamMember, User
 from orchestrator import run_debate
-from ratelimit import get_recent_429_events, increment_ip_bucket, record_429
+from ratelimit import ensure_rate_limiter_ready, get_recent_429_events, increment_ip_bucket, record_429
 from ratings import update_ratings_for_debate
 from schemas import DebateCreate, DebateConfig, default_debate_config
 from usage_limits import RateLimitError, reserve_run_slot
@@ -82,6 +82,10 @@ async def csrf_protect(request: Request) -> None:
 async def lifespan(app: FastAPI):
     init_db()
     _warn_on_multi_worker()
+    try:
+        ensure_rate_limiter_ready(raise_on_failure=os.getenv("RATE_LIMIT_BACKEND", "memory") == "redis")
+    except Exception as exc:
+        logger.error("Rate limiter backend check failed: %s", exc)
     sweeper_task: asyncio.Task | None = None
     try:
         sweeper_task = asyncio.create_task(_channel_sweeper_loop())
@@ -278,6 +282,7 @@ class RateLimitSnapshot(BaseModel):
     window: int
     max_calls: int
     recent_429s: list[dict]
+    total_429s: int | None = None
 
 
 class DebateSummary(BaseModel):
@@ -1072,6 +1077,7 @@ async def get_rate_limit_snapshot(_: User = Depends(require_admin)):
         window=WINDOW,
         max_calls=MAX_CALLS,
         recent_429s=get_recent_429_events(),
+        total_429s=len(get_recent_429_events()),
     )
 
 

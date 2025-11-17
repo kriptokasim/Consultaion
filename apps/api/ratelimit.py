@@ -3,6 +3,7 @@ import os
 import time
 from collections import deque
 from datetime import datetime
+from typing import Optional
 
 RATE_LIMIT_BACKEND = os.getenv("RATE_LIMIT_BACKEND", "memory").lower()
 REDIS_URL = os.getenv("REDIS_URL")
@@ -72,3 +73,21 @@ def record_429(ip: str, path: str) -> None:
 
 def get_recent_429_events() -> list[dict]:
     return list(_recent_429_events)
+
+
+def ensure_rate_limiter_ready(raise_on_failure: bool = False) -> tuple[str, Optional[bool]]:
+    """
+    Verify the configured rate limit backend is reachable.
+    Returns (backend, redis_ok) and optionally raises if misconfigured.
+    """
+    redis_ok = None
+    if RATE_LIMIT_BACKEND == "redis":
+        client = _get_redis_client()
+        try:
+            redis_ok = bool(client.ping()) if client else False
+        except Exception as exc:
+            logger.error("Redis rate limit backend unreachable: %s", exc)
+            redis_ok = False
+        if raise_on_failure and not redis_ok:
+            raise RuntimeError("RATE_LIMIT_BACKEND=redis but Redis is unreachable or REDIS_URL unset")
+    return RATE_LIMIT_BACKEND, redis_ok
