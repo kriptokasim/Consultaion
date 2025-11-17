@@ -109,7 +109,7 @@ export const RosettaClock: React.FC = () => {
         <circle cx="20" cy="20" r="1.2" fill="currentColor" />
       </svg>
       <span className="hidden text-xs font-serif uppercase tracking-wide text-amber-700 dark:text-amber-200 sm:inline">
-        Rosetta Chamber
+        Consultaion
       </span>
     </div>
   );

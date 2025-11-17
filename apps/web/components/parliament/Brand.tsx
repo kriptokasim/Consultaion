@@ -18,7 +18,7 @@ export default function Brand({ variant = "mark", tone = "stone", className, hei
   return (
     <Image
       src={src}
-      alt={variant === "logotype" ? "Rosetta Chamber" : "Rosetta Chamber mark"}
+      alt={variant === "logotype" ? "Consultaion" : "Consultaion mark"}
       priority={variant === "mark"}
       width={height}
       height={height}

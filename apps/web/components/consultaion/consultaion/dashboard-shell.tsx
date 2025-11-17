@@ -103,7 +103,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
           <RosettaChamberLogo size={32} className="drop-shadow" />
-          <span className="font-semibold text-sidebar-foreground">Rosetta Chamber</span>
+          <span className="font-semibold text-sidebar-foreground">Consultaion</span>
         </div>
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => {
@@ -169,7 +169,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <div className="flex items-center gap-4">
             <div className="hidden items-center gap-2 md:flex">
               <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-                Consultaion · Rosetta Chamber
+                Consultaion
               </span>
             </div>
             <div className="relative w-64 lg:w-80">

@@ -9,7 +9,7 @@ export default function MethodologyPage() {
         <div className="flex items-center gap-3">
           <Brand variant="mark" height={28} />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Rosetta Chamber</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Consultaion</p>
             <h1 className="text-3xl font-semibold text-stone-900">Methodology</h1>
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function MethodologyPage() {
       <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-stone-900">Brand usage</h2>
         <p className="mt-2 text-sm text-stone-600">
-          The Rosetta Chamber mark comes in stone (default) and amber (for dark or stone backdrops). Keep padding at least
+          The Consultaion mark comes in stone (default) and amber (for dark or stone backdrops). Keep padding at least
           16px and avoid recoloring the vector directly.
         </p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

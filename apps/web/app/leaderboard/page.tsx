@@ -47,7 +47,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         <div className="flex items-center gap-3">
           <Brand height={32} tone="amber" />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Rosetta Chamber</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Consultaion</p>
             <h1 className="text-3xl font-semibold text-stone-900">Leaderboard</h1>
           </div>
         </div>
