@@ -21,7 +21,11 @@ export default function ScoreboardCard({ scores, method }: ScoreboardCardProps) 
       ) : (
         <div className="space-y-2">
           {sorted.map((item, index) => (
-            <div key={item.persona} className="rounded-2xl border border-stone-100 bg-stone-50/60 p-3">
+            <div
+              key={item.persona}
+              id={`score-pill-${item.persona}`}
+              className="rounded-2xl border border-stone-100 bg-stone-50/60 p-3"
+            >
               <div className="flex items-center justify-between text-sm font-medium text-stone-800">
                 <span>
                   {index + 1}. {item.persona}

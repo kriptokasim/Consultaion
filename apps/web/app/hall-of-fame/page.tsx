@@ -138,54 +138,53 @@ export default async function HallOfFamePage({
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {items.map((card: any) => (
-            <article
-              key={card.id}
-              className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm"
-            >
-              <div className="mb-3 space-y-2">
-                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">Prompt</p>
-                <p className="line-clamp-3 text-sm leading-relaxed text-stone-900">{card.prompt}</p>
-              </div>
-              <div className="mb-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-amber-800">
-                  <span className="inline-flex items-center gap-2">
-                    <RosettaGlyphMini className="h-4 w-4" />
-                    Champion
-                  </span>
-                  {typeof card.champion_score === "number" ? (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 font-mono text-amber-800">
-                      {card.champion_score.toFixed(2)}
-                    </span>
-                  ) : null}
+            <ChampionGlow key={card.id} active={true}>
+              <article className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm">
+                <div className="mb-3 space-y-2">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">Prompt</p>
+                  <p className="line-clamp-3 text-sm leading-relaxed text-stone-900">{card.prompt}</p>
                 </div>
-                <p className="mt-1 text-sm font-semibold text-stone-900">
-                  {card.champion ?? "Champion unavailable"}
-                  {typeof card.runner_up_score === "number" && typeof card.champion_score === "number" ? (
-                    <span className="ml-2 text-xs font-normal text-amber-700">
-                      Won by {(card.champion_score - card.runner_up_score).toFixed(2)}
+                <div className="mb-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
+                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-amber-800">
+                    <span className="inline-flex items-center gap-2">
+                      <RosettaGlyphMini className="h-4 w-4" />
+                      Champion
                     </span>
-                  ) : (
-                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[0.7rem] text-amber-800">
-                      Mock run
-                    </span>
-                  )}
-                </p>
-                {card.champion_excerpt ? (
-                  <p className="mt-2 line-clamp-3 text-sm text-stone-800">{card.champion_excerpt}</p>
-                ) : (
-                  <p className="mt-2 text-sm text-stone-600">
-                    Champion answer unavailable. This debate may have been generated in mock or test mode.
+                    {typeof card.champion_score === "number" ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 font-mono text-amber-800">
+                        {card.champion_score.toFixed(2)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-sm font-semibold text-stone-900">
+                    {card.champion ?? "Champion unavailable"}
+                    {typeof card.runner_up_score === "number" && typeof card.champion_score === "number" ? (
+                      <span className="ml-2 text-xs font-normal text-amber-700">
+                        Won by {(card.champion_score - card.runner_up_score).toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[0.7rem] text-amber-800">
+                        Mock run
+                      </span>
+                    )}
                   </p>
-                )}
-              </div>
-              <div className="flex-1" />
-              <Link
-                href={`/runs/${card.id}`}
-                className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:border-amber-400 hover:text-amber-900"
-              >
-                View debate →
-              </Link>
-            </article>
+                  {card.champion_excerpt ? (
+                    <p className="mt-2 line-clamp-3 text-sm text-stone-800">{card.champion_excerpt}</p>
+                  ) : (
+                    <p className="mt-2 text-sm text-stone-600">
+                      Champion answer unavailable. This debate may have been generated in mock or test mode.
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1" />
+                <Link
+                  href={`/runs/${card.id}`}
+                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:border-amber-400 hover:text-amber-900"
+                >
+                  View debate →
+                </Link>
+              </article>
+            </ChampionGlow>
           ))}
         </div>
       )}

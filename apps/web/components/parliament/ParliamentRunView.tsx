@@ -10,6 +10,9 @@ import SummaryCard from "./SummaryCard";
 import ScoreboardCard from "./ScoreboardCard";
 import VotingChamber from "./VotingChamber";
 import StatusBadge from "./StatusBadge";
+import { DebateTimerRing } from "./DebateTimerRing";
+import { ChampionGlow } from "./ChampionGlow";
+import { VoteWave } from "./VoteWave";
 import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
 
 import type {
@@ -150,7 +153,7 @@ export default function ParliamentRunView({
     <div className="space-y-6">
       {/* Hero header: amber / sepia theme */}
       <section className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-4 border-b border-amber-200/60 pb-4 dark:border-amber-900/60 md:flex-row md:items-center md:justify-between">
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
               AI Parliament Session
@@ -187,6 +190,7 @@ export default function ParliamentRunView({
                 <dd className="mt-1">{updatedAt}</dd>
               </div>
             </dl>
+            <DebateTimerRing durationMs={60000} running={debate?.status === "running"} label="Rosetta clock" />
           </div>
         </div>
       </section>
@@ -242,32 +246,35 @@ export default function ParliamentRunView({
           title="Winning Answer"
           description="Ranked #1 by AI judges in this session."
         >
-          <div className="space-y-4">
-            <ChampionSummary
-              persona={winnerPersona}
-              score={winnerScore}
-              hasTie={hasTie}
-              actor={championActor}
-              text={championText}
-              reasons={championReasons}
-            />
+          <ChampionGlow active={Boolean(winnerPersona)}>
+            <div className="space-y-4">
+              <ChampionSummary
+                persona={winnerPersona}
+                score={winnerScore}
+                hasTie={hasTie}
+                actor={championActor}
+                text={championText}
+                reasons={championReasons}
+              />
 
-            <a
-              href="#answers"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-amber-800 hover:text-amber-700"
-            >
-              View full debate details ↴
-            </a>
-          </div>
+              <a
+                href="#answers"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-amber-800 hover:text-amber-700"
+              >
+                View full debate details ↴
+              </a>
+            </div>
+          </ChampionGlow>
         </SummaryCard>
 
-        <SummaryCard
-          title="Judge’s Scoreboard"
-          description="How each persona performed across the debate."
-        >
-          <ScoreboardCard scores={scores} method={vote?.method} />
-          <div className="mt-4 flex flex-wrap gap-3">
-            <ExportButton debateId={id} apiBase={apiBase} />
+      <SummaryCard
+        title="Judge’s Scoreboard"
+        description="How each persona performed across the debate."
+      >
+        <ScoreboardCard scores={scores} method={vote?.method} />
+        <VoteWave ids={scores.map((s) => `score-pill-${s.persona}`)} triggerKey={id} />
+        <div className="mt-4 flex flex-wrap gap-3">
+          <ExportButton debateId={id} apiBase={apiBase} />
             <ExportCSVButton debateId={id} apiBase={apiBase} />
           </div>
         </SummaryCard>

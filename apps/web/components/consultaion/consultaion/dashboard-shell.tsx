@@ -13,6 +13,7 @@ import { logout } from "@/lib/auth"
 import { ToastProvider } from "@/components/ui/toast"
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
 import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini"
+import { RosettaClock } from "@/components/branding/RosettaClock"
 
 const navigation = [
   { name: "Live", href: "/", icon: PlayCircle },
@@ -173,10 +174,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
           <div className="flex items-center gap-4">
             <div className="hidden items-center gap-2 md:flex">
-              <RosettaGlyphMini className="h-5 w-5 text-amber-700" />
-              <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-                Consultaion · Rosetta Chamber
-              </span>
+              <RosettaClock />
             </div>
             <div className="relative w-64 lg:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
