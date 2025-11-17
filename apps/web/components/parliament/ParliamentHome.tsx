@@ -181,7 +181,7 @@ function MetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white/80 p-4 shadow-inner">
+    <div className="card-elevated transition-transform duration-200 hover:-translate-y-1">
       <div className="flex items-center justify-between text-stone-500">
         <span className="text-xs font-semibold uppercase tracking-wide">
           {label}

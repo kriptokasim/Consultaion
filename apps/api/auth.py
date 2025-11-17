@@ -24,7 +24,7 @@ if _SAMESITE_VALUE not in {"lax", "strict", "none"}:
     _SAMESITE_VALUE = "lax"
 COOKIE_SAMESITE = "None" if _SAMESITE_VALUE == "none" else _SAMESITE_VALUE.capitalize()
 COOKIE_PATH = os.getenv("COOKIE_PATH", "/")
-ENABLE_CSRF = os.getenv("ENABLE_CSRF", "0").strip().lower() in {"1", "true", "yes"}
+ENABLE_CSRF = os.getenv("ENABLE_CSRF", "1").strip().lower() in {"1", "true", "yes"}
 CSRF_COOKIE_NAME = os.getenv("CSRF_COOKIE_NAME", "csrf_token")
 
 

@@ -20,11 +20,24 @@ PROVIDER_KEYS = (
 )
 _has_llm_key = any(os.getenv(key) for key in PROVIDER_KEYS)
 _use_mock_env = os.getenv("USE_MOCK", "1")
+REQUIRE_REAL_LLM = os.getenv("REQUIRE_REAL_LLM", "0") == "1"
 USE_MOCK = not (_use_mock_env == "0" and _has_llm_key)
 LITELLM_MODEL = os.getenv("LITELLM_MODEL", "gpt-4o-mini")
 LITELLM_API_BASE = os.getenv("LITELLM_API_BASE")
 if LITELLM_API_BASE:
     os.environ["LITELLM_API_BASE"] = LITELLM_API_BASE
+
+
+def assert_llm_configuration() -> None:
+    """Guard against accidentally serving mock responses in production."""
+    if REQUIRE_REAL_LLM and USE_MOCK:
+        raise RuntimeError(
+            "REQUIRE_REAL_LLM=1 but USE_MOCK=1. Disable mock mode or configure real LLM keys."
+        )
+    if USE_MOCK and not REQUIRE_REAL_LLM:
+        logger.warning(
+            "Running with USE_MOCK=1. This is intended for development only; set REQUIRE_REAL_LLM=1 in production."
+        )
 
 USAGE_TRACKER: Dict[str, Any] = {
     "tokens": {"prompt": 0.0, "completion": 0.0, "total": 0.0},
@@ -33,6 +46,8 @@ USAGE_TRACKER: Dict[str, Any] = {
     "model": LITELLM_MODEL,
     "calls": [],
 }
+
+assert_llm_configuration()
 
 
 def reset_usage() -> None:

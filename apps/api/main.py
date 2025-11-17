@@ -200,6 +200,8 @@ def _track_metric(name: str, value: int = 1) -> None:
 
 MAX_CALLS = int(os.getenv("RL_MAX_CALLS", "5"))
 WINDOW = int(os.getenv("RL_WINDOW", "60"))
+AUTH_MAX_CALLS = int(os.getenv("AUTH_RL_MAX_CALLS", "10"))
+AUTH_WINDOW = int(os.getenv("AUTH_RL_WINDOW", "300"))
 EXPORT_DIR = Path(os.getenv("EXPORT_DIR", "exports"))
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -677,13 +679,19 @@ async def get_debate_members(
 
 
 @app.post("/auth/register")
-async def register_user(body: AuthRequest, response: Response, session: Session = Depends(get_session)):
+async def register_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
+    ip = request.client.host if request and request.client else "anonymous"
+    if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
+        record_429(ip, request.url.path)
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
     email = body.email.strip().lower()
     if "@" not in email:
         raise HTTPException(status_code=400, detail="invalid email")
     existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
         raise HTTPException(status_code=400, detail="email already registered")
+    if len(body.password or "") < 8:
+        raise HTTPException(status_code=400, detail="password too short; minimum 8 characters")
     user = User(email=email, password_hash=hash_password(body.password))
     session.add(user)
     session.commit()
@@ -703,7 +711,11 @@ async def register_user(body: AuthRequest, response: Response, session: Session 
 
 
 @app.post("/auth/login")
-async def login_user(body: AuthRequest, response: Response, session: Session = Depends(get_session)):
+async def login_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
+    ip = request.client.host if request and request.client else "anonymous"
+    if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
+        record_429(ip, request.url.path)
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
     if not user or not verify_password(body.password, user.password_hash):
@@ -863,6 +875,7 @@ async def create_debate(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    # Note: unauthenticated debate creation with small per-IP buckets can be abused; consider tightening in future.
     ip = request.client.host if request.client else "anonymous"
     allowed = increment_ip_bucket(ip, WINDOW, MAX_CALLS)
     if not allowed:

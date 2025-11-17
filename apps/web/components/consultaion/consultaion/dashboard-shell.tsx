@@ -100,7 +100,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     <ToastProvider>
       <div className="flex h-screen overflow-hidden bg-background">
         {/* Sidebar */}
-      <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
+      <aside className="sidebar-surface hidden w-64 flex-col border-r border-border md:flex">
         <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
           <RosettaChamberLogo size={32} className="drop-shadow" />
           <span className="font-semibold text-sidebar-foreground">Consultaion</span>
@@ -128,10 +128,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   }[item.name] || undefined
                 }
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-inner shadow-amber-200/60 border-l-2 border-amber-400"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:-translate-y-[1px] hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500",
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -163,9 +163,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden app-surface">
         {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
+        <header className="flex h-16 items-center justify-between border-b border-border bg-card/80 px-6 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-amber-900/5">
           <div className="flex items-center gap-4">
             <div className="hidden items-center gap-2 md:flex">
               <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">
@@ -174,7 +174,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             </div>
             <div className="relative w-64 lg:w-80">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input type="search" placeholder="Search runs, prompts, results..." className="pl-10 bg-background" />
+              <Input type="search" placeholder="Search runs, prompts, results..." className="search-elevated pl-10 bg-background" />
             </div>
           </div>
           <div className="flex items-center gap-2">

@@ -58,7 +58,7 @@ export default async function ModelsPage() {
             <Link
               key={item.model}
               href={`/models/${encodeURIComponent(item.model)}`}
-              className="grid grid-cols-4 items-center gap-3 px-4 py-3 text-sm transition hover:bg-amber-50"
+              className="grid grid-cols-4 items-center gap-3 px-4 py-3 text-sm transition-all duration-200 hover:-translate-y-[1px] hover:bg-amber-50 hover:shadow-sm"
             >
               <span className="font-semibold text-stone-900">{item.model}</span>
               <span className="text-amber-800">{(item.win_rate * 100).toFixed(1)}%</span>

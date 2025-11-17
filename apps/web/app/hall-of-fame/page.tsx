@@ -140,7 +140,7 @@ export default async function HallOfFamePage({
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {items.map((card: any) => (
             <ChampionGlow key={card.id} active={true}>
-              <article className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm">
+              <article className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
                 <div className="mb-3 space-y-2">
                   <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">Prompt</p>
                   <p className="line-clamp-3 text-sm leading-relaxed text-stone-900">{card.prompt}</p>
