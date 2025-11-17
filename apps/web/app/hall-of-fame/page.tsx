@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getHallOfFame, getMembers } from "@/lib/api";
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
 import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
+import { ChampionGlow } from "@/components/parliament/ChampionGlow";
 
 export const dynamic = "force-dynamic";
 
