@@ -17,6 +17,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
 
   let items: Awaited<ReturnType<typeof getLeaderboard>> = [];
   let rateLimitNotice: { detail: string; resetAt?: string } | null = null;
+  let errorMessage: string | null = null;
   try {
     items = await getLeaderboard({
       category: category === "all" ? undefined : category,
@@ -31,10 +32,10 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
       } else if (isAuthError(error)) {
         redirect("/login");
       } else {
-        throw error;
+        errorMessage = "Leaderboard is temporarily unavailable. Please try again shortly.";
       }
     } else {
-      throw error;
+      errorMessage = "Leaderboard is temporarily unavailable. Please try again later.";
     }
   }
 
@@ -59,6 +60,11 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         <RateLimitBanner detail={rateLimitNotice.detail} resetAt={rateLimitNotice.resetAt} />
       ) : null}
       <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
+        {errorMessage ? (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {errorMessage}
+          </div>
+        ) : null}
         <form className="flex flex-wrap items-center gap-4 text-sm text-stone-600" method="get">
           <label className="flex items-center gap-2">
             Category
