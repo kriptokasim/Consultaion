@@ -15,9 +15,9 @@ if not JWT_SECRET:
 if JWT_SECRET == "change_me_in_prod":
     raise RuntimeError("JWT_SECRET must be changed from default value")
 JWT_ALGORITHM = "HS256"
-_expire_minutes_default = int(os.getenv("JWT_EXPIRE_MINUTES", "4320"))
+_expire_minutes_default = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", str(_expire_minutes_default * 60)))
-PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_ITERATIONS", "20000"))
+PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_ITERATIONS", "150000"))
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "1").strip().lower() not in {"0", "false", "no"}
 _SAMESITE_VALUE = os.getenv("COOKIE_SAMESITE", "lax").strip().lower()
 if _SAMESITE_VALUE not in {"lax", "strict", "none"}:

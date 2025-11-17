@@ -4,7 +4,7 @@ services:
     build: ../apps/api
     env_file: ../.env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/consultaion}
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       - db
     ports: ["8000:8000"]
@@ -18,8 +18,8 @@ services:
     image: postgres:16
     environment:
       POSTGRES_DB: consultaion
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-consultaion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_dev}
     volumes:
       - pg_data:/var/lib/postgresql/data
     ports:

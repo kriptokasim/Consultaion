@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from collections import deque
@@ -9,6 +10,7 @@ REDIS_URL = os.getenv("REDIS_URL")
 _redis_client = None
 _ip_buckets: dict[str, dict[str, float]] = {}
 _recent_429_events: deque[dict] = deque(maxlen=200)
+logger = logging.getLogger(__name__)
 
 
 def _get_redis_client():
@@ -63,7 +65,8 @@ def record_429(ip: str, path: str) -> None:
                 "ts": datetime.utcnow().isoformat() + "Z",
             }
         )
-    except Exception:
+    except Exception as exc:
+        logger.error("Failed to record 429 for ip=%s path=%s: %s", ip, path, exc)
         return
 
 

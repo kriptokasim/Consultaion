@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import traceback
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from litellm import acompletion
@@ -165,8 +166,10 @@ async def _call_llm(
         )
         return content.strip()
     except Exception as exc:
-        logger.warning("LLM call failed, falling back to mock: %s", exc)
-        return await _fake_llm(messages[-1]["content"], role=role)
+        logger.error("LLM call failed for role %s: %s\n%s", role, exc, traceback.format_exc())
+        if REQUIRE_REAL_LLM:
+            raise
+        return await _fake_llm(messages[-1]["content"], role=role + " [mock]")
 
 
 async def produce_candidate(prompt: str, agent: AgentConfig) -> Dict[str, Any]:
