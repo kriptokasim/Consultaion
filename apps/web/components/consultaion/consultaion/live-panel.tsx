@@ -126,9 +126,9 @@ export default function LivePanel({
 
   return (
     <div className="space-y-6">
-      <Card className="border border-stone-200 bg-white">
+      <Card className="border border-amber-200/70 bg-gradient-to-br from-amber-50/90 via-white to-amber-50/70 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:from-stone-900 dark:via-stone-900 dark:to-amber-950/20">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-stone-900">Start New Debate</CardTitle>
+          <CardTitle className="heading-serif text-2xl font-semibold text-amber-900 dark:text-amber-50">Start New Debate</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <ValidatedTextarea
@@ -140,10 +140,10 @@ export default function LivePanel({
             aria-label="Debate prompt"
           />
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="font-mono text-sm text-stone-500">{prompt.length} characters</div>
+            <div className="font-mono text-sm text-amber-800 dark:text-amber-200">{prompt.length} characters</div>
             <div className="flex items-center gap-2">
               {running && (
-                <Button variant="ghost" className="gap-2 text-amber-700" onClick={onStop}>
+                <Button variant="ghost" className="gap-2 text-amber-800 dark:text-amber-100" onClick={onStop}>
                   <StopCircle className="h-4 w-4" />
                   Stop
                 </Button>
@@ -153,7 +153,7 @@ export default function LivePanel({
                 disabled={disabled}
                 aria-busy={running}
                 aria-disabled={disabled}
-                className="gap-2 rounded-full bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"
+                className="gap-2 rounded-full shadow-[0_16px_30px_rgba(255,190,92,0.35)]"
               >
                 {running ? (
                   <>
@@ -175,26 +175,26 @@ export default function LivePanel({
       {(activePersona || vote?.ranking?.length) && (
         <div className="grid gap-4 sm:grid-cols-2">
           {activePersona && (
-            <Card className="border border-stone-200 bg-white">
+            <Card className="border border-amber-200/70 bg-white/90 shadow-[0_12px_24px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-semibold text-stone-800">
-                  <UsersRound className="h-4 w-4" />
+                  <UsersRound className="h-4 w-4 text-amber-700" />
                   Active Speaker
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex items-baseline justify-between">
-                <div className="text-lg font-semibold text-stone-900">{activePersona}</div>
-                <div className="flex items-center gap-2 text-sm text-stone-500">
-                  <Timer className="h-4 w-4" />
+                <div className="text-lg font-semibold text-amber-900 dark:text-amber-50">{activePersona}</div>
+                <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-100">
+                  <Timer className="h-4 w-4 text-amber-600" />
                   {speakerTime}s
                 </div>
               </CardContent>
             </Card>
           )}
           {vote?.ranking?.length ? (
-            <Card className="border border-stone-200 bg-white">
+            <Card className="border border-amber-200/70 bg-white/90 shadow-[0_12px_24px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-stone-800">Current Ranking</CardTitle>
+                <CardTitle className="text-sm font-semibold text-amber-900 dark:text-amber-50">Current Ranking</CardTitle>
               </CardHeader>
               <CardContent className="flex gap-2">
                 {vote.ranking.slice(0, 3).map((persona, idx) => (
@@ -213,9 +213,9 @@ export default function LivePanel({
       )}
 
       {(mappedEvents.length > 0 || loading) && (
-        <Card className="border border-stone-200 bg-white">
+        <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-stone-900">Live Stream</CardTitle>
+            <CardTitle className="heading-serif text-lg font-semibold text-amber-900 dark:text-amber-50">Live Stream</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-96">
@@ -229,22 +229,22 @@ export default function LivePanel({
                   ? Array.from({ length: 3 }).map((_, idx) => (
                       <div
                         key={`skeleton-${idx}`}
-                        className="flex animate-pulse items-start gap-3 rounded-lg border border-stone-100 bg-stone-50 p-4"
+                        className="flex animate-pulse items-start gap-3 rounded-lg border border-amber-100 bg-amber-50/70 p-4"
                       >
-                        <div className="h-6 w-12 rounded-full bg-stone-100" />
+                        <div className="h-6 w-12 rounded-full bg-amber-100/80" />
                         <div className="flex-1 space-y-2">
-                          <div className="h-4 w-1/2 rounded bg-stone-100" />
-                          <div className="h-3 w-3/4 rounded bg-stone-100" />
-                          <div className="h-3 w-1/3 rounded bg-stone-100" />
+                          <div className="h-4 w-1/2 rounded bg-amber-100/80" />
+                          <div className="h-3 w-3/4 rounded bg-amber-100/80" />
+                          <div className="h-3 w-1/3 rounded bg-amber-100/80" />
                         </div>
-                        <div className="h-8 w-8 rounded-full bg-stone-100" />
+                        <div className="h-8 w-8 rounded-full bg-amber-100/80" />
                       </div>
                     ))
                   : null}
                 {mappedEvents.map((event, index) => (
                   <div
                     key={`${event.type}-${index}`}
-                    className="flex items-start gap-3 rounded-lg border border-stone-100 bg-stone-50/70 p-4 transition-colors hover:bg-white"
+                    className="flex items-start gap-3 rounded-lg border border-amber-100 bg-amber-50/70 p-4 transition-colors hover:bg-white hover:shadow-md dark:border-amber-900/40 dark:bg-amber-950/20"
                   >
                     {event.round && (
                       <Badge variant="outline" className={`${getRoundBadgeColor(event.round)} font-mono text-xs`}>
@@ -252,10 +252,10 @@ export default function LivePanel({
                       </Badge>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm mb-1">{event.title}</div>
-                      <p className="text-sm text-muted-foreground line-clamp-2">{event.text}</p>
+                      <div className="mb-1 text-sm font-semibold text-amber-900 dark:text-amber-50">{event.title}</div>
+                      <p className="text-sm text-amber-900/80 dark:text-amber-50/70 line-clamp-2">{event.text}</p>
                       {event.ts && (
-                        <div className="text-xs text-muted-foreground font-mono mt-2">
+                        <div className="mt-2 font-mono text-xs text-amber-700 dark:text-amber-100/70">
                           {new Date(event.ts).toLocaleTimeString()}
                         </div>
                       )}

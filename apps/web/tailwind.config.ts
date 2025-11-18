@@ -5,12 +5,24 @@ const config: Config = {
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        heading: ['var(--font-heading)', 'Playfair Display', 'Merriweather', 'serif'],
+        body: ['var(--font-body)', 'Inter', 'Open Sans', 'system-ui', 'sans-serif'],
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        amberParliament: {
+          amber: '#FFBF00',
+          accent: '#FF9E0F',
+          sepiaDark: '#3C2309',
+          sepia: '#704214',
+          sepiaLight: '#A17B4D',
+          softYellow: '#FFFBE6',
+        },
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',

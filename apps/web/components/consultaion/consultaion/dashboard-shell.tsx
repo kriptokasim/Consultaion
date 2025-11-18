@@ -4,7 +4,7 @@ import type React from "react"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, PlayCircle, Settings, Search, Moon, Sun, User, Shield, Scale, BarChart3, Trophy, BookOpen, Award } from "lucide-react"
+import { FileText, PlayCircle, Settings, Search, Moon, Sun, Shield, Scale, BarChart3, Trophy, BookOpen, Award, Menu, X, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -30,6 +30,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [theme, setTheme] = useState<"light" | "dark">("light")
   const [profile, setProfile] = useState<{ email: string; role: string } | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
   useEffect(() => {
@@ -98,105 +99,150 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <ToastProvider>
-      <div className="flex h-screen overflow-hidden bg-background">
+      <div className="flex min-h-screen overflow-hidden bg-background text-foreground">
         {/* Sidebar */}
-      <aside className="sidebar-surface hidden w-64 flex-col border-r border-border md:flex">
-        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-6">
-          <RosettaChamberLogo size={32} className="drop-shadow" />
-          <span className="font-semibold text-sidebar-foreground">Consultaion</span>
-        </div>
-        <nav className="flex-1 space-y-1 p-4">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                title={
-                  {
-                    Live: "Run a new live debate and watch the chamber in real time.",
-                    Runs: "Browse the full history of past debates and results.",
-                    Chamber: "Visualize how votes and champions move through the Rosetta chamber.",
-                    Analytics: "Aggregate stats across debates, models, and judges.",
-                    Leaderboard: "Top-performing prompts and debates.",
-                    "Hall of Fame": "Debates where one model’s answer became a Rosetta champion.",
-                    Models: "Performance statistics for each AI model.",
-                    Methodology: "How the chamber debates, scores, and selects champions.",
-                    Settings: "Account and chamber configuration (coming soon).",
-                    Admin: "Admin controls",
-                    Ops: "Operational health and rate limits.",
-                  }[item.name] || undefined
-                }
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-inner shadow-amber-200/60 border-l-2 border-amber-400"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:-translate-y-[1px] hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500",
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.name}
-              </Link>
-            )
-          })}
-        </nav>
-        <div className="border-t border-sidebar-border p-4">
-          {profile ? (
-            <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent px-3 py-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
-                {profile.email.charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 text-sm">
-                <div className="font-medium text-sidebar-foreground">{profile.email}</div>
-                <div className="text-xs text-muted-foreground capitalize">{profile.role}</div>
-              </div>
-            </div>
-          ) : (
-            <Link
-              href="/login"
-              className="flex items-center justify-center rounded-lg bg-sidebar-accent px-3 py-2 text-sm font-medium text-sidebar-accent-foreground"
-            >
-              Sign In
-            </Link>
+        <aside
+          className={cn(
+            "sidebar-surface fixed inset-y-0 left-0 z-40 w-72 flex-col border-r border-border px-4 py-6 shadow-2xl transition-transform duration-200 md:relative md:flex md:translate-x-0",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
           )}
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden app-surface">
-        {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b border-border bg-card/80 px-6 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-amber-900/5">
-          <div className="flex items-center gap-4">
-            <div className="hidden items-center gap-2 md:flex">
-              <span className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-                Consultaion
-              </span>
-            </div>
-            <div className="relative w-64 lg:w-80">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input type="search" placeholder="Search runs, prompts, results..." className="search-elevated pl-10 bg-background" />
+          aria-label="Primary navigation"
+        >
+          <div className="flex items-center gap-3 border-b border-sidebar-border pb-4">
+            <RosettaChamberLogo size={32} className="drop-shadow" />
+            <div className="leading-tight">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700">Consultaion</p>
+              <p className="heading-serif text-lg font-semibold text-amber-900">Parliament</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9">
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
+          <nav className="mt-4 flex-1 space-y-1" role="navigation">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  aria-current={isActive ? "page" : undefined}
+                  title={
+                    {
+                      Live: "Run a new live debate and watch the chamber in real time.",
+                      Runs: "Browse the full history of past debates and results.",
+                      Chamber: "Visualize how votes and champions move through Consultaion.",
+                      Analytics: "Aggregate stats across debates, models, and judges.",
+                      Leaderboard: "Top-performing prompts and debates.",
+                      "Hall of Fame": "Debates where one model’s answer became a Consultaion champion.",
+                      Models: "Performance statistics for each AI model.",
+                      Methodology: "How the chamber debates, scores, and selects champions.",
+                      Settings: "Account and chamber configuration (coming soon).",
+                      Admin: "Admin controls",
+                      Ops: "Operational health and rate limits.",
+                    }[item.name] || undefined
+                  }
+                  className={cn(
+                    "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
+                    isActive
+                      ? "bg-gradient-to-r from-amber-100/90 to-amber-50 text-amber-900 shadow-inner shadow-amber-200/60 border border-amber-200/70"
+                      : "text-sidebar-foreground hover:bg-amber-50/60 hover:text-amber-900 hover:-translate-y-[1px] hover:shadow-sm",
+                  )}
+                >
+                  <span className={cn("rounded-lg border border-transparent p-1 transition-colors", isActive && "border-amber-200 bg-white/80 text-amber-700")}>
+                    <item.icon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <span>{item.name}</span>
+                </Link>
+              )
+            })}
+          </nav>
+          <div className="mt-4 space-y-3 border-t border-sidebar-border pt-4">
+            <div className="rounded-xl border border-amber-100/70 bg-amber-50/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-800 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
+                Warm amber cockpit, WCAG friendly
+              </div>
+            </div>
             {profile ? (
-              <Button variant="ghost" size="sm" onClick={handleLogout} disabled={loadingProfile}>
-                Logout
-              </Button>
+              <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent/80 px-3 py-3 shadow-inner shadow-amber-900/5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
+                  {profile.email.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 text-sm">
+                  <div className="font-semibold text-sidebar-foreground">{profile.email}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{profile.role}</div>
+                </div>
+              </div>
             ) : (
-              <Button variant="outline" size="sm" asChild aria-label="Sign in">
-                <Link href="/login">Sign in</Link>
+              <Button variant="outline" asChild className="w-full justify-center">
+                <Link href="/login">Sign In</Link>
               </Button>
             )}
           </div>
-        </header>
+          <button
+            type="button"
+            className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full p-1 text-amber-800 transition hover:bg-amber-100 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </aside>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-auto bg-background">{children}</main>
+        {/* Main content */}
+        <div className="flex flex-1 flex-col overflow-hidden app-surface">
+          {/* Header */}
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-amber-100/70 bg-card/90 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-amber-900/5 md:px-6">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-lg border border-amber-200/80 bg-white/70 p-2 text-amber-800 shadow-sm transition hover:-translate-y-[1px] hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-amber-500 md:hidden"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Open navigation"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+              <div className="hidden items-center gap-2 md:flex">
+                <RosettaChamberLogo size={32} className="drop-shadow-sm" />
+                <span className="heading-serif text-lg font-semibold text-amber-900">
+                  Consultaion
+                </span>
+              </div>
+              <div className="relative w-64 lg:w-80">
+                <label className="sr-only" htmlFor="global-search">
+                  Search runs, prompts, or results
+                </label>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input
+                  id="global-search"
+                  type="search"
+                  placeholder="Search runs, prompts, results..."
+                  className="search-elevated w-full rounded-xl border-amber-200/70 bg-white/80 pl-10 text-sm shadow-inner shadow-amber-900/5 focus-visible:ring-amber-500 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 rounded-full border border-transparent hover:border-amber-200">
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              {profile ? (
+                <Button variant="outline" size="sm" onClick={handleLogout} disabled={loadingProfile} className="hidden sm:inline-flex">
+                  Logout
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" asChild aria-label="Sign in" className="hidden sm:inline-flex">
+                  <Link href="/login">Sign in</Link>
+                </Button>
+              )}
+              {profile ? (
+                <div className="ml-1 flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5">
+                  {profile.email.charAt(0).toUpperCase()}
+                </div>
+              ) : null}
+            </div>
+          </header>
+
+          {/* Page content */}
+          <main className="flex-1 overflow-auto bg-background/60 px-4 pb-8 pt-4 md:px-8">{children}</main>
+        </div>
       </div>
-    </div>
     </ToastProvider>
   )
 }

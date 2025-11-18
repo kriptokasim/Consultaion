@@ -40,6 +40,13 @@ A platform that produces the best answer via multi-agent debate/voting.
 - Alembic migrations, Postgres persistence, health/version endpoints, usage quotas, and structured rate limits.
 - Pairwise vote tracking → Elo & Wilson confidence intervals powering a public leaderboard and Methodology brief.
 
+### API Router Layout
+- `apps/api/routes/auth.py`: login/register/session endpoints.
+- `apps/api/routes/stats.py`: health/ready/metrics plus model/hall-of-fame stats.
+- `apps/api/routes/debates.py`: debate/run lifecycle, exports, and streams.
+- `apps/api/routes/teams.py`: team creation and membership/sharing.
+- `apps/api/routes/admin.py`: admin-only listings and rating maintenance.
+
 ### Teams & Sharing
 - Create teams, invite collaborators, and assign debates to a team via the `/runs` “Share” control.
 - User-scoped `/runs` filters (Mine / Team / All for admins) ensure the archive stays organized.

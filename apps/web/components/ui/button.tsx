@@ -5,20 +5,23 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive hover:-translate-y-[1px] hover:shadow-md active:translate-y-0 active:shadow-sm",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-500 focus-visible:ring-offset-background hover:-translate-y-[1px] hover:shadow-lg active:translate-y-0 active:shadow-sm",
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        default:
+          'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-300 text-amber-900 shadow-[0_14px_30px_rgba(255,190,92,0.3)] hover:brightness-[1.02] active:brightness-95',
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
         outline:
-          'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
+          'border border-amber-300/80 bg-background text-amber-900 shadow-[0_8px_24px_rgba(112,73,28,0.12)] hover:bg-amber-50/70 hover:text-amber-900 dark:border-amber-800 dark:text-amber-50 dark:hover:bg-amber-900/30',
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+          'border border-amber-200/60 bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 dark:border-amber-900/40 dark:bg-stone-900/60 dark:text-amber-50',
         ghost:
-          'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
-        link: 'text-primary underline-offset-4 hover:underline',
+          'text-amber-800 hover:bg-amber-100/70 hover:text-amber-900 dark:text-amber-100 dark:hover:bg-amber-900/30',
+        muted:
+          'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        link: 'text-amber-800 underline-offset-4 hover:underline dark:text-amber-200',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

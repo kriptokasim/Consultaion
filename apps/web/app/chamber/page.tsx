@@ -24,10 +24,10 @@ export default function ChamberPage() {
     <main id="main" className="space-y-6 p-4">
       <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-sm">
         <div className="flex flex-col gap-3">
-          <h1 className="text-2xl font-semibold text-stone-900">Rosetta chamber visualization</h1>
+          <h1 className="text-2xl font-semibold text-stone-900">Consultaion visualization</h1>
           <p className="text-sm text-stone-700">
             This chamber view shows how Aye and Nay votes flow for the latest debates. When a model wins clearly, its
-            seat glows as the Rosetta champion. Load a debate to see live flows, or explore the demo below.
+            seat glows as the Consultaion champion. Load a debate to see live flows, or explore the demo below.
           </p>
         </div>
         <div className="mt-4 rounded-2xl border border-amber-100 bg-white/80 px-3 py-2 text-sm text-stone-600">

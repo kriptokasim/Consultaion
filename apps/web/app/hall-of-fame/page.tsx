@@ -50,7 +50,7 @@ export default async function HallOfFamePage({
         <div className="rounded-3xl border border-dashed border-stone-200 bg-white/80 p-6 text-center shadow-sm">
           <p className="text-base font-semibold text-stone-900">No Hall of Fame debates yet</p>
           <p className="mt-2 text-sm text-stone-600">
-            Once you’ve had a few debates where a model wins clearly, they’ll appear here as Rosetta chamber champions.
+            Once you’ve had a few debates where a model wins clearly, they’ll appear here as Consultaion champions.
           </p>
           <div className="mt-4">
             <Link
@@ -76,8 +76,8 @@ export default async function HallOfFamePage({
           </div>
         </div>
         <p className="max-w-3xl text-sm text-stone-700">
-          Debates where one model’s answer became the Rosetta chamber champion. Browse prompts, winning personas, and
-          jump into the full debate transcript.
+          Debates where one model’s answer became the Consultaion champion. Browse prompts, winning personas, and jump
+          into the full debate transcript.
         </p>
       </header>
 

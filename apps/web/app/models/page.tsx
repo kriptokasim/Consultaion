@@ -43,7 +43,7 @@ export default async function ModelsPage() {
             <h1 className="text-3xl font-semibold text-stone-900">Performance across debates</h1>
           </div>
         </div>
-        <p className="max-w-3xl text-sm text-stone-700">How each model fares in the Rosetta chamber debates.</p>
+        <p className="max-w-3xl text-sm text-stone-700">How each model fares in Consultaion debates.</p>
       </header>
 
       <div className="overflow-hidden rounded-2xl border border-amber-100 bg-amber-50/70 shadow-sm">

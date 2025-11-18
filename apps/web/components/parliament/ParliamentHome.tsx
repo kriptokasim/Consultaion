@@ -53,7 +53,7 @@ export default function ParliamentHome({
             </h1>
             <p className="max-w-2xl text-base text-stone-600">
               Ask a single question and let multiple AI models draft their answers. Judges cross-examine them, score every
-              speech, and the Rosetta chamber returns one champion answer back to you.
+              speech, and Consultaion returns one champion answer back to you.
             </p>
             <p className="max-w-2xl text-sm text-stone-600">
               Start by entering a question below, then <strong>Summon a Session</strong>. You can watch the full debate,

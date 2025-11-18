@@ -5,6 +5,7 @@ import LivePanel from "@/components/consultaion/consultaion/live-panel";
 import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
+import PromptSuggestions from "@/components/parliament/PromptSuggestions";
 import type { Member, ScoreItem } from "@/components/parliament/types";
 import { ApiError, getMembers, getRateLimitInfo, startDebate, startDebateRun, streamDebate } from "@/lib/api";
 
@@ -253,7 +254,7 @@ export default function Page() {
   }
 
   return (
-    <main id="main" className="space-y-6 p-4">
+    <main id="main" className="space-y-6 p-4 lg:p-6">
       {rateLimitNotice ? (
         <RateLimitBanner
           detail={rateLimitNotice.detail}
@@ -284,18 +285,21 @@ export default function Page() {
         activePersona={activePersona}
         onCopy={handleCopyId}
       />
-      <LivePanel
-        prompt={prompt}
-        onPromptChange={setPrompt}
-        onStart={onStart}
-        onStop={stopStream}
-        running={running}
-        events={events}
-        activePersona={activePersona}
-        speakerTime={speakerTime}
-        vote={vote}
-        loading={eventsLoading}
-      />
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
+        <LivePanel
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onStart={onStart}
+          onStop={stopStream}
+          running={running}
+          events={events}
+          activePersona={activePersona}
+          speakerTime={speakerTime}
+          vote={vote}
+          loading={eventsLoading}
+        />
+        <PromptSuggestions onSelect={setPrompt} />
+      </div>
     </main>
   )
 }

@@ -155,8 +155,31 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
     }));
   }
 
+  const status = debate?.status ?? "queued";
+  const createdAt =
+    debate?.created_at && typeof debate.created_at === "string"
+      ? new Date(debate.created_at).toLocaleString()
+      : undefined;
+  const updatedAt =
+    debate?.updated_at && typeof debate.updated_at === "string"
+      ? new Date(debate.updated_at).toLocaleString()
+      : undefined;
+
   return (
-    <main id="main" className="space-y-6 p-4">
+    <main id="main" className="space-y-6 p-4 lg:p-6">
+      <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-amber-50/70 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:from-stone-900 dark:via-stone-900 dark:to-amber-950/20">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-700">Run detail</p>
+        <h1 className="heading-serif text-2xl font-semibold text-amber-900 dark:text-amber-50">
+          {debate?.prompt ?? "Parliament session"}
+        </h1>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-amber-900/80 dark:text-amber-100/80">
+          <span className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 shadow-inner shadow-amber-900/5 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+            Status: {status}
+          </span>
+          {createdAt ? <span>Created {createdAt}</span> : null}
+          {updatedAt ? <span>Updated {updatedAt}</span> : null}
+        </div>
+      </section>
       <ParliamentRunView
         id={id}
         debate={debate}

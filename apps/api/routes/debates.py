@@ -1,0 +1,570 @@
+import asyncio
+import json
+import os
+import uuid
+from datetime import datetime, timedelta
+from io import StringIO
+from pathlib import Path
+from typing import Any, Optional
+
+import sqlalchemy as sa
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy import func
+from sqlmodel import Session, select
+
+from pydantic import BaseModel
+
+from audit import record_audit
+from deps import get_current_user, get_optional_user, get_session
+from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
+from orchestrator import run_debate
+from routes.common import (
+    CHANNELS,
+    CHANNEL_SWEEP_INTERVAL,
+    CHANNEL_TTL_SECS,
+    CHANNEL_META,
+    EXPORT_DIR,
+    _mark_channel,
+    avg_scores_for_debate,
+    can_access_debate,
+    cleanup_channel,
+    champion_for_debate,
+    members_from_config,
+    require_debate_access,
+    serialize_rating_persona,
+    sweep_stale_channels,
+    track_metric,
+    user_is_team_member,
+)
+from schemas import DebateConfig, DebateCreate, default_debate_config
+from usage_limits import RateLimitError, reserve_run_slot
+from ratelimit import increment_ip_bucket, record_429
+
+router = APIRouter(tags=["debates"])
+
+
+class DebateUpdate(BaseModel):
+    team_id: Optional[str] = None
+
+
+def _cleanup_channel(debate_id: str) -> None:
+    cleanup_channel(debate_id)
+
+
+def _champion_for_debate(session: Session, debate_id: str) -> tuple[Optional[str], Optional[float], Optional[float]]:
+    return champion_for_debate(session, debate_id)
+
+
+def _members_from_config(config: DebateConfig) -> list[dict[str, str]]:
+    return members_from_config(config)
+
+
+@router.get("/config/default")
+async def get_default_config():
+    return default_debate_config()
+
+
+@router.get("/leaderboard")
+async def get_leaderboard(
+    response: Response,
+    category: Optional[str] = Query(default=None),
+    min_matches: int = Query(0, ge=0, le=1000),
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
+    from models import RatingPersona
+
+    stmt = select(RatingPersona).order_by(RatingPersona.elo.desc())
+    if category == "":
+        stmt = stmt.where(RatingPersona.category.is_(None))
+    elif category:
+        stmt = stmt.where(RatingPersona.category == category)
+    if min_matches:
+        stmt = stmt.where(RatingPersona.n_matches >= min_matches)
+    stmt = stmt.limit(limit)
+    rows = session.exec(stmt).all()
+    payload = {"items": [serialize_rating_persona(row) for row in rows]}
+    response.headers["Cache-Control"] = "private, max-age=30"
+    return payload
+
+
+@router.get("/leaderboard/persona/{persona}")
+async def get_leaderboard_persona(
+    response: Response,
+    persona: str,
+    category: Optional[str] = Query(default=None),
+    session: Session = Depends(get_session),
+):
+    from models import RatingPersona
+
+    stmt = select(RatingPersona).where(RatingPersona.persona == persona)
+    if category == "":
+        stmt = stmt.where(RatingPersona.category.is_(None))
+    elif category:
+        stmt = stmt.where(RatingPersona.category == category)
+    row = session.exec(stmt).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="persona not found")
+    payload = serialize_rating_persona(row)
+    response.headers["Cache-Control"] = "private, max-age=30"
+    return payload
+
+
+@router.get("/debates/{debate_id}/members")
+async def get_debate_members(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    config_data = debate.config or {}
+    try:
+        config = DebateConfig.model_validate(config_data)
+    except Exception:
+        config = default_debate_config()
+    return {"members": _members_from_config(config)}
+
+
+@router.post("/debates")
+async def create_debate(
+    body: DebateCreate,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    ip = request.client.host if request.client else "anonymous"
+    allowed = increment_ip_bucket(ip, int(os.getenv("RL_WINDOW", "60")), int(os.getenv("RL_MAX_CALLS", "5")))
+    if not allowed:
+        record_429(ip, request.url.path)
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+    if current_user:
+        try:
+            reserve_run_slot(session, current_user.id)
+        except RateLimitError as exc:
+            payload = {
+                "code": "rate_limit",
+                "reason": exc.code,
+                "detail": exc.detail,
+                "reset_at": exc.reset_at,
+            }
+            record_audit(
+                "rate_limit_block",
+                user_id=current_user.id,
+                target_type="debate",
+                target_id=None,
+                meta=payload,
+            )
+            raise HTTPException(status_code=429, detail=payload) from exc
+
+    config = body.config or default_debate_config()
+    debate_id = str(uuid.uuid4())
+    debate = Debate(
+        id=debate_id,
+        prompt=body.prompt,
+        status="queued",
+        config=config.model_dump(),
+        user_id=current_user.id if current_user else None,
+    )
+    session.add(debate)
+    session.commit()
+
+    q: asyncio.Queue = asyncio.Queue()
+    CHANNELS[debate_id] = q
+    _mark_channel(debate_id)
+    if os.getenv("DISABLE_AUTORUN", "0") != "1":
+        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump(), _cleanup_channel)
+    record_audit(
+        "debate_created",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+        meta={"prompt": body.prompt},
+    )
+    track_metric("debates_created")
+    return {"id": debate_id}
+
+
+@router.post("/debates/{debate_id}/start")
+async def start_debate_run(
+    debate_id: str,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    if os.getenv("DISABLE_AUTORUN", "0") != "1":
+        raise HTTPException(status_code=400, detail="Manual start is disabled")
+    debate = session.get(Debate, debate_id)
+    debate = require_debate_access(debate, current_user, session)
+    if debate.status not in {"queued", "failed"}:
+        raise HTTPException(status_code=400, detail="debate already started")
+
+    q: asyncio.Queue = CHANNELS.get(debate_id) or asyncio.Queue()
+    CHANNELS[debate_id] = q
+    _mark_channel(debate_id)
+    background_tasks.add_task(run_debate, debate_id, debate.prompt, q, debate.config, _cleanup_channel)
+    debate.status = "scheduled"
+    session.add(debate)
+    session.commit()
+    record_audit(
+        "debate_manual_start",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+    )
+    return {"id": debate_id, "status": "scheduled"}
+
+
+@router.get("/debates")
+async def list_debates(
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=10000),
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user),
+    q: Optional[str] = Query(default=None),
+):
+    filters = []
+    if current_user.role != "admin":
+        from routes.common import user_team_ids
+
+        team_ids = user_team_ids(session, current_user.id)
+        if team_ids:
+            filters.append((Debate.user_id == current_user.id) | (Debate.team_id.in_(team_ids)))
+        else:
+            filters.append(Debate.user_id == current_user.id)
+    elif status == "all":
+        status = None
+    if status:
+        filters.append(Debate.status == status)
+    if isinstance(q, str):
+        query_text = q.strip()
+        if query_text:
+            filters.append(sa.func.lower(Debate.prompt).contains(query_text.lower()))
+
+    base_query = select(Debate)
+    if filters:
+        base_query = base_query.where(*filters)
+
+    total_stmt = select(func.count()).select_from(base_query.subquery())
+    total_result = session.exec(total_stmt).one()
+    if isinstance(total_result, tuple):
+        total_result = total_result[0]
+    total = int(total_result or 0)
+
+    items_stmt = base_query.order_by(Debate.created_at.desc()).offset(offset).limit(limit)
+    debates = session.exec(items_stmt).all()
+    has_more = offset + len(debates) < total
+    return {
+        "items": debates,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": has_more,
+    }
+
+
+@router.get("/debates/{debate_id}")
+async def get_debate(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    debate = session.get(Debate, debate_id)
+    return require_debate_access(debate, current_user, session)
+
+
+def _build_report(session: Session, debate_id: str, current_user: Optional[User]):
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+
+    rounds = session.exec(
+        select(DebateRound).where(DebateRound.debate_id == debate_id).order_by(DebateRound.index)
+    ).all()
+    scores = session.exec(select(Score).where(Score.debate_id == debate_id)).all()
+    messages_count = session.exec(select(func.count()).where(Message.debate_id == debate_id)).one()
+    if isinstance(messages_count, tuple):
+        messages_count = messages_count[0]
+
+    return {
+        "debate": debate,
+        "rounds": rounds,
+        "scores": scores,
+        "messages_count": messages_count,
+    }
+
+
+@router.get("/debates/{debate_id}/report")
+async def get_debate_report(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    data = _build_report(session, debate_id, current_user)
+    return {
+        "id": debate_id,
+        "prompt": data["debate"].prompt,
+        "status": data["debate"].status,
+        "final": data["debate"].final_content,
+        "scores": [score.model_dump() for score in data["scores"]],
+        "rounds": [round_.model_dump() for round_ in data["rounds"]],
+        "messages_count": data["messages_count"],
+        "created_at": data["debate"].created_at,
+        "updated_at": data["debate"].updated_at,
+    }
+
+
+def _report_to_markdown(payload: dict) -> str:
+    debate: Debate = payload["debate"]
+    rounds: list[DebateRound] = payload["rounds"]
+    scores: list[Score] = payload["scores"]
+    lines = [
+        f"# Debate {debate.id}",
+        "",
+        f"Prompt: {debate.prompt}",
+        f"Status: {debate.status}",
+        f"Final Answer:\n{debate.final_content or 'N/A'}",
+        "",
+        "## Rounds",
+    ]
+    for rnd in rounds:
+        lines.append(f"- Round {rnd.index} ({rnd.label}): {rnd.note or ''}")
+    lines.append("")
+    lines.append("## Scores")
+    for score in scores:
+        lines.append(f"- {score.persona} judged by {score.judge}: {score.score} — {score.rationale}")
+    lines.append("")
+    lines.append(f"Messages logged: {payload['messages_count']}")
+    return "\n".join(lines)
+
+
+@router.post("/debates/{debate_id}/export")
+async def export_debate_report(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    data = _build_report(session, debate_id, current_user)
+    filepath = EXPORT_DIR / f"{debate_id}.md"
+    filepath.write_text(_report_to_markdown(data), encoding="utf-8")
+    track_metric("exports_generated")
+    record_audit(
+        "export_markdown",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+    )
+    content = filepath.read_text(encoding="utf-8")
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filepath.name}"'},
+    )
+
+
+@router.get("/debates/{debate_id}/events")
+async def get_debate_events(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+
+    messages = session.exec(
+        select(Message).where(Message.debate_id == debate_id).order_by(Message.created_at.asc())
+    ).all()
+    scores = session.exec(
+        select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())
+    ).all()
+    pairwise_votes = session.exec(
+        select(PairwiseVote)
+        .where(PairwiseVote.debate_id == debate_id)
+        .order_by(PairwiseVote.created_at.asc())
+    ).all()
+
+    events: list[dict[str, Any]] = []
+    for message in messages:
+        if message.role in {"candidate", "revised"}:
+            events.append(
+                {
+                    "type": "message",
+                    "round": message.round_index,
+                    "actor": message.persona,
+                    "role": "agent",
+                    "text": message.content,
+                    "at": message.created_at.isoformat(),
+                }
+            )
+
+    for score in scores:
+        events.append(
+            {
+                "type": "score",
+                "persona": score.persona,
+                "judge": score.judge,
+                "score": float(score.score),
+                "rationale": score.rationale,
+                "role": "judge",
+                "at": score.created_at.isoformat(),
+            }
+        )
+
+    for vote in pairwise_votes:
+        events.append(
+            {
+                "type": "pairwise",
+                "judge": vote.judge,
+                "winner": vote.winner,
+                "loser": vote.loser,
+                "at": vote.created_at.isoformat(),
+            }
+        )
+
+    if debate.final_content:
+        events.append(
+            {
+                "type": "final",
+                "actor": "Synthesizer",
+                "role": "synthesizer",
+                "text": debate.final_content,
+                "at": debate.updated_at.isoformat() if debate.updated_at else None,
+            }
+        )
+
+    events.sort(key=lambda e: e.get("at") or "")
+    return {"items": events}
+
+
+@router.get("/debates/{debate_id}/judges")
+async def get_debate_judges(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    config_data = debate.config or {}
+    try:
+        config = DebateConfig.model_validate(config_data)
+    except Exception:
+        config = default_debate_config()
+    judges = [{"name": judge.name, "type": getattr(judge, "type", "judge")} for judge in config.judges]
+    return {"judges": judges}
+
+
+@router.get("/debates/{debate_id}/scores.csv")
+async def export_scores_csv(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())).all()
+    if not scores:
+        raise HTTPException(status_code=404, detail="no scores found")
+
+    header = ["persona", "judge", "score", "rationale", "timestamp"]
+    with StringIO() as output:
+        writer = csv_writer(output)
+        writer.writerow(header)
+        for score in scores:
+            writer.writerow(
+                [
+                    score.persona,
+                    score.judge,
+                    float(score.score),
+                    score.rationale or "",
+                    score.created_at.isoformat() if score.created_at else "",
+                ]
+            )
+        content = output.getvalue()
+    filename = f"scores_{debate_id}.csv"
+    record_audit(
+        "export_scores_csv",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+    )
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def csv_writer(buffer: StringIO):
+    import csv
+
+    return csv.writer(buffer)
+
+
+@router.get("/debates/{debate_id}/stream")
+async def stream_events(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    require_debate_access(session.get(Debate, debate_id), current_user, session)
+    if debate_id not in CHANNELS:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    q = CHANNELS[debate_id]
+    track_metric("sse_stream_open")
+
+    async def eventgen():
+        while True:
+            event = await q.get()
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            if event.get("type") == "final":
+                await asyncio.sleep(0.2)
+                break
+
+    return StreamingResponse(
+        eventgen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.patch("/debates/{debate_id}")
+async def update_debate(
+    debate_id: str,
+    body: DebateUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise HTTPException(status_code=404, detail="debate not found")
+    if not (current_user.role == "admin" or debate.user_id == current_user.id):
+        raise HTTPException(status_code=403, detail="insufficient permissions")
+
+    previous_team = debate.team_id
+    if body.team_id is not None:
+        if body.team_id == "":
+            debate.team_id = None
+        else:
+            team = session.get(Team, body.team_id)
+            if not team:
+                raise HTTPException(status_code=404, detail="team not found")
+            if not user_is_team_member(session, current_user, team.id):
+                raise HTTPException(status_code=403, detail="cannot assign to this team")
+            debate.team_id = team.id
+
+    session.add(debate)
+    session.commit()
+    session.refresh(debate)
+    if previous_team != debate.team_id:
+        record_audit(
+            "debate_team_updated",
+            user_id=current_user.id,
+            target_type="debate",
+            target_id=debate.id,
+            meta={"team_id": debate.team_id},
+        )
+    return {
+        "id": debate.id,
+        "team_id": debate.team_id,
+    }
+
+
+# Alias for router inclusion and compatibility
+debates_router = router

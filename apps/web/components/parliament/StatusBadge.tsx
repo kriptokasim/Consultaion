@@ -34,13 +34,14 @@ const STATUS_MAP: Record<
   },
 };
 
-export default function StatusBadge({ status }: { status?: string | null }) {
+export default function StatusBadge({ status, className }: { status?: string | null; className?: string }) {
   const variant = (status ? STATUS_MAP[status] : undefined) ?? STATUS_MAP.default;
   return (
     <span
       className={cn(
         "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide",
         variant.className,
+        className,
       )}
     >
       {variant.icon}
