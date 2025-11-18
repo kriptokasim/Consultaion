@@ -2,11 +2,11 @@ fastapi==0.115.6
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 python-dotenv==1.0.1
-litellm==1.60.3
+litellm==1.60.9
 sqlmodel==0.0.22
 psycopg[binary]==3.2.12
 alembic==1.13.2
 pytest==8.3.3
 PyJWT>=2.8.0
-sentry-sdk==1.56.0
+sentry-sdk==1.45.0
 redis==5.2.0
