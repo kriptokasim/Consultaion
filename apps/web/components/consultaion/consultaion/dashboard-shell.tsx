@@ -14,7 +14,8 @@ import { ToastProvider } from "@/components/ui/toast"
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
 
 const navigation = [
-  { name: "Live", href: "/", icon: PlayCircle },
+  { name: "Dashboard", href: "/dashboard", icon: BarChart3 },
+  { name: "Live", href: "/live", icon: PlayCircle },
   { name: "Runs", href: "/runs", icon: FileText },
   { name: "Chamber", href: "/chamber", icon: Scale },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -108,13 +109,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           )}
           aria-label="Primary navigation"
         >
-          <div className="flex items-center gap-3 border-b border-sidebar-border pb-4">
+          <Link href="/home" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
             <RosettaChamberLogo size={32} className="drop-shadow" />
             <div className="leading-tight">
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700">Consultaion</p>
               <p className="heading-serif text-lg font-semibold text-amber-900">Parliament</p>
             </div>
-          </div>
+          </Link>
           <nav className="mt-4 flex-1 space-y-1" role="navigation">
             {navItems.map((item) => {
               const isActive = pathname === item.href
@@ -157,7 +158,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <div className="rounded-xl border border-amber-100/80 bg-amber-50/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
-                Warm amber cockpit, WCAG friendly
+                Amber-Mocha cockpit, WCAG friendly
               </div>
             </div>
             {profile ? (
@@ -199,12 +200,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               >
                 <Menu className="h-4 w-4" />
               </button>
-              <div className="hidden items-center gap-2 md:flex">
+              <Link href="/home" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
                 <RosettaChamberLogo size={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-amber-900">
                   ConsultAI on
                 </span>
-              </div>
+              </Link>
               <div className="relative w-64 lg:w-80">
                 <label className="sr-only" htmlFor="global-search">
                   Search runs, prompts, or results
@@ -219,18 +220,23 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                className="h-9 w-9 rounded-full border border-amber-200/80 bg-amber-50/80 text-amber-800 shadow-sm hover:bg-amber-100 focus-visible:ring-amber-500 dark:border-amber-900/60 dark:bg-stone-900 dark:text-amber-100"
-              >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
               {profile ? (
-                <Button variant="outline" size="sm" onClick={handleLogout} disabled={loadingProfile} className="hidden sm:inline-flex">
-                  Logout
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="hidden sm:inline-flex border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
+                  >
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleLogout} disabled={loadingProfile} className="hidden sm:inline-flex">
+                    Logout
+                  </Button>
+                  <div className="ml-1 flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5">
+                    {profile.email.charAt(0).toUpperCase()}
+                  </div>
+                </>
               ) : (
                 <Button
                   variant="outline"
@@ -242,11 +248,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <Link href="/login">Sign in</Link>
                 </Button>
               )}
-              {profile ? (
-                <div className="ml-1 flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5">
-                  {profile.email.charAt(0).toUpperCase()}
-                </div>
-              ) : null}
             </div>
           </header>
 
