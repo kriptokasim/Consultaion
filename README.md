@@ -39,6 +39,7 @@ A platform that produces the best answer via multi-agent debate/voting.
 - Email/password auth with JWT cookies, per-user `/runs` visibility, team sharing controls, and an admin console with audit logs.
 - Alembic migrations, Postgres persistence, health/version endpoints, usage quotas, and structured rate limits.
 - Pairwise vote tracking → Elo & Wilson confidence intervals powering a public leaderboard and Methodology brief.
+- Web UI uses an “Amber-Mocha” cockpit theme (warm cream background with amber accents) across landing, dashboard, and live views.
 
 ### API Router Layout
 - `apps/api/routes/auth.py`: login/register/session endpoints.

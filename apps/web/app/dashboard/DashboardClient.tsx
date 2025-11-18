@@ -1,0 +1,199 @@
+"use client";
+
+import type { ReactNode } from "react";
+import { useState } from "react";
+import Link from "next/link";
+import { Play, BarChart3, Trophy, Plus, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { startDebate } from "@/lib/api";
+import type { DebateSummary } from "./types";
+
+function formatTimestamp(ts?: string | null) {
+  if (!ts) return "Just now";
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return "Just now";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function statusTone(status?: string | null) {
+  switch ((status || "").toLowerCase()) {
+    case "running":
+      return "bg-amber-100 text-amber-800 border-amber-200";
+    case "completed":
+    case "done":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "queued":
+    default:
+      return "bg-stone-100 text-stone-800 border-stone-200";
+  }
+}
+
+export default function DashboardClient({ initialDebates, email }: { initialDebates: DebateSummary[]; email?: string | null }) {
+  const [showModal, setShowModal] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [debates, setDebates] = useState<DebateSummary[]>(initialDebates);
+
+  const handleCreate = async () => {
+    if (!prompt.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { id } = await startDebate({ prompt: prompt.trim() });
+      const entry: DebateSummary = {
+        id,
+        prompt: prompt.trim(),
+        status: "queued",
+        created_at: new Date().toISOString(),
+      };
+      setDebates((prev) => [entry, ...prev].slice(0, 12));
+      setShowModal(false);
+      setPrompt("");
+      window.location.href = `/runs/${id}`;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create debate");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <main className="space-y-10">
+      <section className="rounded-3xl border border-amber-200/80 bg-gradient-to-br from-white via-[#fff7eb] to-[#f8e6c2] p-8 shadow-[0_24px_60px_rgba(112,73,28,0.12)]">
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">Welcome</p>
+            <h1 className="heading-serif text-4xl font-semibold text-[#3a2a1a]">Your Mocha-inspired cockpit</h1>
+            <p className="mt-2 max-w-2xl text-sm text-[#5a4a3a]">
+              Launch new debates, view quick stats, and jump to the leaderboard from a calm, cream-toned dashboard.
+            </p>
+          </div>
+          {email ? (
+            <div className="ml-auto flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-800">{email.charAt(0).toUpperCase()}</span>
+              <span>{email}</span>
+            </div>
+          ) : null}
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <PrimaryCard icon={<Plus className="h-5 w-5" />} title="New Debate" description="Start a fresh, multi-agent debate." onClick={() => setShowModal(true)} />
+          <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title="Analytics" description="Browse your runs and stats." />
+          <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title="Leaderboard" description="See who is winning the chamber." />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">Recent debates</p>
+            <h2 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">Latest activity</h2>
+          </div>
+          <Link href="/runs" className="text-sm font-semibold text-amber-800 hover:text-amber-700">
+            View all
+          </Link>
+        </div>
+        {debates.length === 0 ? (
+          <Card className="bg-white/90">
+            <div className="flex items-center gap-3 text-sm text-[#5a4a3a]">
+              <AlertCircle className="h-4 w-4 text-amber-700" />
+              <span>No debates yet. Start your first one with the amber button above.</span>
+            </div>
+          </Card>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white/90 shadow-[0_18px_40px_rgba(112,73,28,0.12)]">
+            <div className="divide-y divide-amber-100/80">
+              {debates.map((debate) => (
+                <Link
+                  key={debate.id}
+                  href={`/runs/${debate.id}`}
+                  className="flex items-center gap-4 px-5 py-4 transition hover:bg-amber-50/70"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 shadow-inner shadow-amber-900/10">
+                    <Play className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[#3a2a1a] line-clamp-1">{debate.prompt || "Untitled debate"}</p>
+                    <p className="text-xs text-[#5a4a3a]">Created {formatTimestamp(debate.created_at)}</p>
+                  </div>
+                  <Badge className={`border ${statusTone(debate.status)}`}>{debate.status ?? "queued"}</Badge>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {showModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-200/80 bg-white p-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)]">
+            <div className="space-y-2">
+              <h3 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">Start a New Debate</h3>
+              <p className="text-sm text-[#5a4a3a]">Ask a question and let the chamber deliberate for you.</p>
+            </div>
+            <div className="mt-4 space-y-2">
+              <label className="text-sm font-semibold text-[#3a2a1a]" htmlFor="prompt">
+                Your question
+              </label>
+              <Textarea
+                id="prompt"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="e.g., How should we balance energy security with rapid decarbonization?"
+                minLength={10}
+                maxLength={5000}
+                className="min-h-[140px] bg-white text-[#3a2a1a]"
+              />
+              <div className="flex items-center justify-between text-xs text-stone-600">
+                <span>{prompt.length} characters</span>
+              </div>
+            </div>
+            {error ? <p className="mt-2 text-sm font-medium text-red-600">{error}</p> : null}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreate} disabled={!prompt.trim() || saving} className="shadow-[0_14px_32px_rgba(255,190,92,0.35)]">
+                {saving ? "Creating…" : "Create Debate"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </main>
+  );
+}
+
+function PrimaryCard({ title, description, icon, onClick }: { title: string; description: string; icon: ReactNode; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex items-start gap-3 rounded-2xl border border-amber-300 bg-gradient-to-br from-amber-500 via-amber-400 to-amber-300 p-5 text-left shadow-[0_18px_36px_rgba(255,190,92,0.35)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+    >
+      <span className="rounded-xl bg-white/20 p-2 text-amber-950 shadow-inner shadow-amber-900/20">{icon}</span>
+      <div>
+        <p className="text-lg font-semibold text-amber-950">{title}</p>
+        <p className="text-sm text-amber-900/90">{description}</p>
+      </div>
+    </button>
+  );
+}
+
+function LinkCard({ title, description, icon, href }: { title: string; description: string; icon: ReactNode; href: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-start gap-3 rounded-2xl border border-amber-100/80 bg-white/90 p-5 text-left shadow-[0_18px_36px_rgba(112,73,28,0.12)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg"
+    >
+      <span className="rounded-xl bg-amber-50 p-2 text-amber-800">{icon}</span>
+      <div>
+        <p className="text-lg font-semibold text-[#3a2a1a]">{title}</p>
+        <p className="text-sm text-[#5a4a3a]">{description}</p>
+      </div>
+    </Link>
+  );
+}

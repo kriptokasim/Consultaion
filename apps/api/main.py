@@ -15,7 +15,16 @@ from database import engine, init_db
 from deps import get_current_user
 from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
 from ratelimit import ensure_rate_limiter_ready
-from routes.auth import auth_router, AuthRequest, get_me, login_user, logout_user, register_user
+from routes.auth import (
+    auth_router,
+    AuthRequest,
+    get_me,
+    login_user,
+    logout_user,
+    register_user,
+    google_login,
+    google_callback,
+)
 from routes.stats import (
     stats_router,
     DebateSummary,
@@ -201,6 +210,8 @@ __all__ = [
     "login_user",
     "logout_user",
     "register_user",
+    "google_login",
+    "google_callback",
     "healthz",
     "readyz",
     "get_model_leaderboard_stats",
