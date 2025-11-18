@@ -57,9 +57,9 @@ export default function MethodologyPage() {
           </p>
         </article>
       </section>
-      <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-stone-900">Brand usage</h2>
-        <p className="mt-2 text-sm text-stone-600">
+      <section className="mt-10 rounded-3xl border border-amber-100/70 bg-white p-6 shadow-[0_16px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/80">
+        <h2 className="text-xl font-semibold text-stone-900 dark:text-amber-50">Brand usage</h2>
+        <p className="mt-2 text-sm text-stone-600 dark:text-stone-200">
           The Consultaion mark comes in stone (default) and amber (for dark or stone backdrops). Keep padding at least
           16px and avoid recoloring the vector directly.
         </p>
@@ -83,9 +83,9 @@ function BrandCell({
   variant?: "mark" | "logotype";
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-stone-100 bg-stone-50/60 p-4 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-100/80 bg-white p-4 text-center shadow-sm dark:border-amber-900/40 dark:bg-stone-900">
       <Brand variant={variant} tone={tone} height={variant === "mark" ? 48 : 32} />
-      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-stone-600 dark:text-amber-100">{label}</p>
     </div>
   );
 }

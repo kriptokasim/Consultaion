@@ -181,14 +181,16 @@ function MetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="card-elevated transition-transform duration-200 hover:-translate-y-1">
-      <div className="flex items-center justify-between text-stone-500">
-        <span className="text-xs font-semibold uppercase tracking-wide">
+    <div className="rounded-2xl border border-amber-100/80 bg-white/90 p-4 shadow-[0_14px_30px_rgba(112,73,28,0.12)] transition-transform duration-200 hover:-translate-y-[2px] hover:shadow-[0_18px_36px_rgba(112,73,28,0.16)] dark:border-amber-900/40 dark:bg-stone-900/75">
+      <div className="flex items-center justify-between text-sm text-stone-600 dark:text-amber-100/80">
+        <span className="text-[11px] font-semibold uppercase tracking-wide">
           {label}
         </span>
-        {icon}
+        <span className="inline-flex items-center justify-center rounded-full bg-amber-50 px-2 py-1 text-amber-700 shadow-inner shadow-amber-900/5 dark:bg-amber-900/30 dark:text-amber-100">
+          {icon}
+        </span>
       </div>
-      <p className="mt-3 text-2xl font-semibold text-stone-900">{value}</p>
+      <p className="mt-3 text-2xl font-semibold text-stone-900 dark:text-amber-50">{value}</p>
     </div>
   );
 }

@@ -67,25 +67,25 @@ export default async function HallOfFamePage({
 
   return (
     <main id="main" className="space-y-8 p-6">
-      <header className="space-y-2">
+      <header className="space-y-3 rounded-3xl border border-amber-100/70 bg-gradient-to-r from-white via-amber-50 to-stone-50 p-5 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:from-stone-900 dark:via-stone-900/80 dark:to-stone-900">
         <div className="flex items-center gap-3">
-          <RosettaChamberLogo size={40} />
+          <RosettaChamberLogo size={40} className="drop-shadow-sm" />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Hall of Fame</p>
-            <h1 className="text-3xl font-semibold text-stone-900">Distinguished Debates of the House of AI</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-200">Hall of Fame</p>
+            <h1 className="text-3xl font-semibold text-stone-900 dark:text-amber-50">Distinguished Debates of the House of AI</h1>
           </div>
         </div>
-        <p className="max-w-3xl text-sm text-stone-700">
+        <p className="max-w-3xl text-sm text-stone-700 dark:text-stone-300">
           Debates where one model’s answer became the Consultaion champion. Browse prompts, winning personas, and jump
           into the full debate transcript.
         </p>
       </header>
 
-      <form className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 shadow-sm" method="get">
+      <form className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4 shadow-sm dark:border-amber-900/40 dark:bg-stone-900/70" method="get">
         <div className="grid gap-4 md:grid-cols-3">
-          <label className="flex flex-col text-sm text-stone-700">
-            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">Model</span>
-            <select name="model" defaultValue={model ?? ""} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900">
+          <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Model</span>
+            <select name="model" defaultValue={model ?? ""} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50">
               {modelOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>
                   {opt.name}
@@ -93,29 +93,29 @@ export default async function HallOfFamePage({
               ))}
             </select>
           </label>
-          <label className="flex flex-col text-sm text-stone-700">
-            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">Start date</span>
+          <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Start date</span>
             <input
               type="date"
               name="start"
               defaultValue={toDate(start)}
-              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900"
+              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50"
             />
           </label>
-          <label className="flex flex-col text-sm text-stone-700">
-            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800">End date</span>
+          <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">End date</span>
             <input
               type="date"
               name="end"
               defaultValue={toDate(end)}
-              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900"
+              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50"
             />
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-800">Sort</span>
-            <select name="sort" defaultValue={sort} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900">
+            <span className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Sort</span>
+            <select name="sort" defaultValue={sort} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50">
               {sortOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
@@ -125,7 +125,7 @@ export default async function HallOfFamePage({
           </div>
           <button
             type="submit"
-            className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700"
+            className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
           >
             Apply
           </button>

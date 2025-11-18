@@ -54,43 +54,43 @@
   }
 
   .dark {
-    --background: 28 26% 12%;
-    --foreground: 42 60% 94%;
+    --background: 26 30% 20%;
+    --foreground: 38 70% 94%;
 
-    --card: 30 26% 14%;
-    --card-foreground: 42 70% 95%;
+    --card: 26 28% 24%;
+    --card-foreground: 38 72% 95%;
 
-    --popover: 30 26% 14%;
-    --popover-foreground: 42 70% 95%;
+    --popover: 26 28% 24%;
+    --popover-foreground: 38 72% 95%;
 
-    --primary: 42 98% 56%;
-    --primary-foreground: 30 35% 12%;
+    --primary: 42 98% 60%;
+    --primary-foreground: 24 25% 16%;
 
-    --secondary: 28 20% 18%;
-    --secondary-foreground: 42 70% 92%;
+    --secondary: 24 22% 26%;
+    --secondary-foreground: 38 70% 92%;
 
-    --muted: 28 18% 22%;
-    --muted-foreground: 42 40% 78%;
+    --muted: 26 18% 30%;
+    --muted-foreground: 38 50% 85%;
 
-    --accent: 42 98% 56%;
-    --accent-foreground: 30 35% 12%;
+    --accent: 42 98% 60%;
+    --accent-foreground: 24 25% 16%;
 
-    --destructive: 4 72% 50%;
-    --destructive-foreground: 42 70% 95%;
+    --destructive: 4 72% 54%;
+    --destructive-foreground: 38 72% 95%;
 
-    --border: 28 18% 28%;
-    --input: 28 18% 30%;
-    --ring: 42 98% 56%;
+    --border: 26 22% 34%;
+    --input: 26 22% 36%;
+    --ring: 42 98% 60%;
 
-    --sidebar: 26 24% 12%;
-    --sidebar-foreground: 43 70% 94%;
-    --sidebar-border: 28 18% 28%;
-    --sidebar-primary: 42 98% 56%;
-    --sidebar-primary-foreground: 30 35% 12%;
-    --sidebar-accent: 28 18% 22%;
-    --sidebar-accent-foreground: 43 70% 94%;
+    --sidebar: 24 24% 22%;
+    --sidebar-foreground: 40 72% 94%;
+    --sidebar-border: 26 22% 32%;
+    --sidebar-primary: 42 98% 60%;
+    --sidebar-primary-foreground: 24 25% 16%;
+    --sidebar-accent: 24 24% 28%;
+    --sidebar-accent-foreground: 40 72% 94%;
 
-    --chart-1: 42 98% 56%;
+    --chart-1: 42 98% 60%;
     --chart-2: 27 45% 60%;
     --chart-3: 18 55% 50%;
     --chart-4: 46 89% 67%;
@@ -121,8 +121,8 @@
   }
 
   .dark .app-surface {
-    background: radial-gradient(circle at 20% 10%, rgba(255, 190, 92, 0.08), transparent 40%),
-      linear-gradient(180deg, #1a130d 0%, #120c08 100%);
+    background: radial-gradient(circle at 25% 12%, rgba(255, 190, 92, 0.14), transparent 45%),
+      linear-gradient(180deg, #261a12 0%, #1f150f 65%, #1a110d 100%);
   }
 
   .sidebar-surface {
@@ -130,7 +130,7 @@
   }
 
   .dark .sidebar-surface {
-    background: radial-gradient(circle at 30% 20%, rgba(255, 190, 92, 0.05), rgba(0, 0, 0, 0)) #120c08;
+    background: radial-gradient(circle at 30% 20%, rgba(255, 190, 92, 0.1), rgba(0, 0, 0, 0)) #231811;
   }
 
   .card-elevated {
@@ -138,9 +138,9 @@
   }
 
   .dark .card-elevated {
-    background: linear-gradient(180deg, rgba(26, 19, 13, 0.9), rgba(12, 8, 6, 0.96));
-    border-color: rgba(255, 190, 92, 0.25);
-    box-shadow: 0 22px 44px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, rgba(46, 32, 24, 0.92), rgba(30, 21, 16, 0.94));
+    border-color: rgba(255, 205, 135, 0.32);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.42);
   }
 
   @keyframes pulse-soft {

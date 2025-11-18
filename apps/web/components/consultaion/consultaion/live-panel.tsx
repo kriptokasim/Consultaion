@@ -126,7 +126,7 @@ export default function LivePanel({
 
   return (
     <div className="space-y-6">
-      <Card className="border border-amber-200/70 bg-gradient-to-br from-amber-50/90 via-white to-amber-50/70 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:from-stone-900 dark:via-stone-900 dark:to-amber-950/20">
+      <Card className="border border-amber-200/70 bg-gradient-to-br from-amber-50/90 via-white to-amber-50/70 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/60 dark:from-[#3f2a1c] dark:via-[#2f2118] dark:to-[#22160f]">
         <CardHeader>
           <CardTitle className="heading-serif text-2xl font-semibold text-amber-900 dark:text-amber-50">Start New Debate</CardTitle>
         </CardHeader>

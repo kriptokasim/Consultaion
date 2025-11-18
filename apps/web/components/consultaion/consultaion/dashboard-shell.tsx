@@ -154,7 +154,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             })}
           </nav>
           <div className="mt-4 space-y-3 border-t border-sidebar-border pt-4">
-            <div className="rounded-xl border border-amber-100/70 bg-amber-50/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-800 shadow-sm">
+            <div className="rounded-xl border border-amber-100/80 bg-amber-50/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
                 Warm amber cockpit, WCAG friendly
@@ -171,7 +171,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 </div>
               </div>
             ) : (
-              <Button variant="outline" asChild className="w-full justify-center">
+              <Button variant="outline" asChild className="w-full justify-center border-amber-200/90 text-amber-900 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-50 dark:hover:bg-amber-900/30">
                 <Link href="/login">Sign In</Link>
               </Button>
             )}
@@ -202,24 +202,29 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               <div className="hidden items-center gap-2 md:flex">
                 <RosettaChamberLogo size={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-amber-900">
-                  Consultaion
+                  ConsultAI on
                 </span>
               </div>
               <div className="relative w-64 lg:w-80">
                 <label className="sr-only" htmlFor="global-search">
                   Search runs, prompts, or results
                 </label>
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
                 <Input
                   id="global-search"
                   type="search"
                   placeholder="Search runs, prompts, results..."
-                  className="search-elevated w-full rounded-xl border-amber-200/70 bg-white/80 pl-10 text-sm shadow-inner shadow-amber-900/5 focus-visible:ring-amber-500 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  className="search-elevated w-full rounded-xl border-stone-200 bg-white pl-10 text-sm text-stone-800 placeholder:text-stone-500 shadow-inner shadow-amber-900/5 focus-visible:ring-amber-500 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card dark:border-amber-900/50 dark:bg-stone-900 dark:text-amber-50 dark:placeholder:text-amber-200/70"
                 />
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 rounded-full border border-transparent hover:border-amber-200">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className="h-9 w-9 rounded-full border border-amber-200/80 bg-amber-50/80 text-amber-800 shadow-sm hover:bg-amber-100 focus-visible:ring-amber-500 dark:border-amber-900/60 dark:bg-stone-900 dark:text-amber-100"
+              >
                 {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               {profile ? (
@@ -227,7 +232,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   Logout
                 </Button>
               ) : (
-                <Button variant="outline" size="sm" asChild aria-label="Sign in" className="hidden sm:inline-flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  aria-label="Sign in"
+                  className="hidden sm:inline-flex border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
+                >
                   <Link href="/login">Sign in</Link>
                 </Button>
               )}
