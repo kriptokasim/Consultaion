@@ -176,6 +176,11 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
           <span className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 shadow-inner shadow-amber-900/5 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
             Status: {status}
           </span>
+          {debate?.model_id ? (
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 shadow-inner shadow-amber-900/5 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+              Model: {debate.model_id}
+            </span>
+          ) : null}
           {createdAt ? <span>Created {createdAt}</span> : null}
           {updatedAt ? <span>Updated {updatedAt}</span> : null}
         </div>

@@ -23,6 +23,12 @@ A platform that produces the best answer via multi-agent debate/voting.
 | `ENABLE_METRICS` | Toggle `/metrics` counters for debates/SSE/exports. |
 | `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_VOTE_THRESHOLD` | Client API origin & Aye threshold. |
 
+### Model catalog & providers
+- Consultaion uses LiteLLM as an internal gateway and supports OpenRouter, OpenAI, Anthropic, and Gemini (server-side keys only; users do not supply their own).
+- Configure provider API keys in `.env` (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`); models auto-enable when keys are present.
+- A curated catalog is exposed via `GET /models`; the recommended model is set in the registry (`ModelConfig.recommended`) and used as the default when creating debates.
+
+
 ### Production Checklist
 
 - [ ] Set unique `JWT_SECRET`, `DATABASE_URL`, `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`; avoid default DB creds.

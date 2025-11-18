@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from audit import record_audit
 from deps import get_current_user, get_optional_user, get_session
 from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
+from model_registry import get_default_model, get_model, list_enabled_models
 from orchestrator import run_debate
 from routes.common import (
     CHANNELS,
@@ -159,6 +160,13 @@ async def create_debate(
             raise HTTPException(status_code=429, detail=payload) from exc
 
     config = body.config or default_debate_config()
+    enabled_models = {m.id: m for m in list_enabled_models()}
+    if not enabled_models:
+        raise HTTPException(status_code=503, detail="No models available; configure provider keys.")
+    chosen_model_id = body.model_id or get_default_model().id
+    if chosen_model_id not in enabled_models:
+        raise HTTPException(status_code=400, detail="Invalid or unavailable model_id")
+
     debate_id = str(uuid.uuid4())
     debate = Debate(
         id=debate_id,
@@ -166,6 +174,7 @@ async def create_debate(
         status="queued",
         config=config.model_dump(),
         user_id=current_user.id if current_user else None,
+        model_id=chosen_model_id,
     )
     session.add(debate)
     session.commit()
@@ -174,7 +183,7 @@ async def create_debate(
     CHANNELS[debate_id] = q
     _mark_channel(debate_id)
     if os.getenv("DISABLE_AUTORUN", "0") != "1":
-        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump(), _cleanup_channel)
+        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump(), chosen_model_id, _cleanup_channel)
     record_audit(
         "debate_created",
         user_id=current_user.id if current_user else None,
@@ -203,7 +212,7 @@ async def start_debate_run(
     q: asyncio.Queue = CHANNELS.get(debate_id) or asyncio.Queue()
     CHANNELS[debate_id] = q
     _mark_channel(debate_id)
-    background_tasks.add_task(run_debate, debate_id, debate.prompt, q, debate.config, _cleanup_channel)
+    background_tasks.add_task(run_debate, debate_id, debate.prompt, q, debate.config, debate.model_id, _cleanup_channel)
     debate.status = "scheduled"
     session.add(debate)
     session.commit()

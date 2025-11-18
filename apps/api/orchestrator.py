@@ -117,6 +117,7 @@ async def run_debate(
     prompt: str,
     q,
     config_data: Dict[str, Any],
+    model_id: str | None = None,
     cleanup_cb: Callable[[str], None] | None = None,
 ):
     config = DebateConfig.model_validate(config_data or {})
@@ -187,7 +188,7 @@ async def run_debate(
             session.commit()
 
         draft_round = _start_round(debate_id, 1, "draft", "candidate drafting")
-        candidates = await asyncio.gather(*[produce_candidate(prompt, agent) for agent in agent_configs])
+        candidates = await asyncio.gather(*[produce_candidate(prompt, agent, model_id=model_id, debate_id=debate_id) for agent in agent_configs])
         source_candidates = candidates
         _persist_messages(debate_id, 1, candidates, role="candidate")
         _end_round(draft_round)
@@ -201,7 +202,7 @@ async def run_debate(
         revised = candidates
         if not budget_reason:
             critique_round = _start_round(debate_id, 2, "critique", "cross-critique and revision")
-            revised = await criticize_and_revise(prompt, candidates)
+            revised = await criticize_and_revise(prompt, candidates, model_id=model_id, debate_id=debate_id)
             source_candidates = revised
             _persist_messages(debate_id, 2, revised, role="revised")
             _end_round(critique_round)
@@ -215,7 +216,7 @@ async def run_debate(
         judge_details: List[Dict[str, Any]] = []
         if not budget_reason:
             judge_round = _start_round(debate_id, 3, "judge", "rubric scoring")
-            aggregate_scores, judge_details = await judge_scores(prompt, revised, judge_configs)
+            aggregate_scores, judge_details = await judge_scores(prompt, revised, judge_configs, model_id=model_id, debate_id=debate_id)
             with session_scope() as session:
                 for detail in judge_details:
                     session.add(
@@ -272,7 +273,7 @@ async def run_debate(
         if not selected_scores:
             selected_scores = aggregate_scores
 
-        final_answer = await synthesize(prompt, selected_candidates, selected_scores)
+        final_answer = await synthesize(prompt, selected_candidates, selected_scores, model_id=model_id, debate_id=debate_id)
         usage_snapshot = get_usage()
         tokens_total = float(usage_snapshot.get("tokens", {}).get("total", 0) or 0)
         final_meta = {

@@ -15,6 +15,7 @@ from database import engine, init_db
 from deps import get_current_user
 from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
 from ratelimit import ensure_rate_limiter_ready
+from model_registry import list_enabled_models, get_default_model
 from routes.auth import (
     auth_router,
     AuthRequest,
@@ -25,6 +26,7 @@ from routes.auth import (
     google_login,
     google_callback,
 )
+from routes.models import models_router
 from routes.stats import (
     stats_router,
     DebateSummary,
@@ -110,6 +112,14 @@ async def lifespan(app: FastAPI):
         ensure_rate_limiter_ready(raise_on_failure=os.getenv("RATE_LIMIT_BACKEND", "memory") == "redis")
     except Exception as exc:
         logger.error("Rate limiter backend check failed: %s", exc)
+    try:
+        models = list_enabled_models()
+        if not models:
+            logger.error("No models enabled; configure provider API keys.")
+        else:
+            logger.info("Models enabled: %s (default=%s)", [m.id for m in models], get_default_model().id)
+    except Exception as exc:
+        logger.error("Model registry initialization failed: %s", exc)
     sweeper_task: asyncio.Task | None = None
     try:
         sweeper_task = asyncio.create_task(_channel_sweeper_loop())
@@ -182,6 +192,7 @@ app.add_middleware(
 # Domain routers live in apps/api/routes/*
 app.include_router(auth_router)
 app.include_router(stats_router)
+app.include_router(models_router)
 app.include_router(debates_router)
 app.include_router(teams_router)
 app.include_router(admin_router)
@@ -201,6 +212,7 @@ __all__ = [
     # routers (for compatibility/imports)
     "auth_router",
     "stats_router",
+    "models_router",
     "debates_router",
     "teams_router",
     "admin_router",

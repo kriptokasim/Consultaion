@@ -4,7 +4,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-
 class BudgetConfig(BaseModel):
     max_tokens: Optional[int] = None
     max_cost_usd: Optional[float] = None
@@ -35,6 +34,7 @@ class DebateConfig(BaseModel):
 class DebateCreate(BaseModel):
     prompt: str
     config: Optional[DebateConfig] = None
+    model_id: Optional[str] = None
 
     @field_validator("prompt")
     @classmethod
@@ -84,3 +84,12 @@ def default_debate_config() -> DebateConfig:
         judges=[judge.model_copy() for judge in default_judges()],
         budget=default_budget().model_copy(),
     )
+
+
+class ModelPublic(BaseModel):
+    id: str
+    display_name: str
+    provider: str
+    tags: List[str] = Field(default_factory=list)
+    max_context: Optional[int] = None
+    recommended: bool = False

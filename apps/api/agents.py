@@ -119,21 +119,30 @@ async def _call_llm(
     temperature: float = 0.3,
     max_tokens: int = 600,
     model_override: str | None = None,
+    model_id: str | None = None,
+    debate_id: str | None = None,
 ) -> str:
+    from model_registry import get_default_model, get_model
+
+    try:
+        model_cfg = get_model(model_id) if model_id else get_default_model()
+    except Exception:
+        model_cfg = get_default_model()
+    target_model = model_override or model_cfg.litellm_model
     if USE_MOCK:
         text = await _fake_llm(messages[-1]["content"], role=role)
         approx_tokens = max(50, len(messages[-1]["content"]) // 2)
         _record_usage(
             {"prompt": approx_tokens * 0.6, "completion": approx_tokens * 0.4, "total": approx_tokens},
             _estimate_cost(approx_tokens),
-            model=model_override or LITELLM_MODEL,
+            model=target_model,
             provider="mock",
         )
         return text
 
     try:
         response = await acompletion(
-            model=model_override or LITELLM_MODEL,
+            model=target_model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -158,12 +167,22 @@ async def _call_llm(
         provider = getattr(response, "provider", None)
         hidden = getattr(response, "_hidden_params", {}) or {}
         provider = hidden.get("api_provider") or hidden.get("provider") or provider
-        model_used = getattr(response, "model", None) or model_override or LITELLM_MODEL
+        model_used = getattr(response, "model", None) or target_model
         _record_usage(
             token_counts,
             cost if cost is not None else _estimate_cost(token_counts.get("total")),
             model=model_used,
             provider=provider,
+        )
+        logger.info(
+            "llm_usage",
+            extra={
+                "model_id": model_cfg.id,
+                "provider": model_cfg.provider.value,
+                "debate_id": debate_id,
+                "tokens_in": token_counts.get("prompt"),
+                "tokens_out": token_counts.get("completion"),
+            },
         )
         return content.strip()
     except Exception as exc:
@@ -204,7 +223,7 @@ def build_messages(
     ]
 
 
-async def produce_candidate(prompt: str, agent: AgentConfig) -> Dict[str, Any]:
+async def produce_candidate(prompt: str, agent: AgentConfig, model_id: str | None = None, debate_id: str | None = None) -> Dict[str, Any]:
     _log_injection_hints(prompt)
     system_prompt = (
         f"You are {agent.name}, a specialist contributing to a multi-agent deliberation. "
@@ -217,13 +236,15 @@ async def produce_candidate(prompt: str, agent: AgentConfig) -> Dict[str, Any]:
         prompt,
         extra_context="Write a self-contained draft response in under 250 words.",
     )
-    text = await _call_llm(messages, role=agent.name, temperature=0.5, model_override=agent.model)
+    text = await _call_llm(messages, role=agent.name, temperature=0.5, model_override=agent.model, model_id=model_id, debate_id=debate_id)
     return {"persona": agent.name, "persona_prompt": agent.persona, "text": text}
 
 
 async def criticize_and_revise(
     prompt: str,
     candidates: List[Dict[str, Any]],
+    model_id: str | None = None,
+    debate_id: str | None = None,
 ):
     if USE_MOCK:
         return [{**c, "text": c["text"] + " (revised)"} for c in candidates]
@@ -241,7 +262,7 @@ async def criticize_and_revise(
             prompt,
             extra_context=f"Your previous draft:\n{candidate['text']}\n\nPeer drafts:\n{peer_block}\n\nOutput the improved answer only.",
         )
-        revised_text = await _call_llm(messages, role=f"{candidate['persona']} Critic", temperature=0.4)
+        revised_text = await _call_llm(messages, role=f"{candidate['persona']} Critic", temperature=0.4, model_id=model_id, debate_id=debate_id)
         return {**candidate, "text": revised_text}
 
     return await asyncio.gather(*[_revise(c) for c in candidates])
@@ -256,6 +277,8 @@ async def judge_scores(
     prompt: str,
     revised: List[Dict[str, Any]],
     judges: Sequence[JudgeConfig],
+    model_id: str | None = None,
+    debate_id: str | None = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     _log_injection_hints(prompt)
     if not judges:
@@ -288,6 +311,8 @@ async def judge_scores(
             temperature=0.2,
             max_tokens=400,
             model_override=judge.model,
+            model_id=model_id,
+            debate_id=debate_id,
         )
         fragment = _extract_json_fragment(raw)
         try:
@@ -338,7 +363,7 @@ async def judge_scores(
     return summary, judge_details
 
 
-async def synthesize(prompt: str, revised: List[Dict[str, Any]], scores: List[Dict[str, Any]]):
+async def synthesize(prompt: str, revised: List[Dict[str, Any]], scores: List[Dict[str, Any]], model_id: str | None = None, debate_id: str | None = None):
     if USE_MOCK:
         best = max(zip(revised, scores), key=lambda rs: rs[1]["score"])[0]
         return f"Final Answer (Consultaion):\n\n{best['text']}\n\n— automatic synthesis"
@@ -363,4 +388,4 @@ async def synthesize(prompt: str, revised: List[Dict[str, Any]], scores: List[Di
         prompt,
         extra_context=f"Top candidates with judge scores:\n{candidate_block}\n\nProduce the final response. Include a short summary and numbered plan or bullet list.",
     )
-    return await _call_llm(messages, role="Synthesizer", temperature=0.35, max_tokens=700)
+    return await _call_llm(messages, role="Synthesizer", temperature=0.35, max_tokens=700, model_id=model_id, debate_id=debate_id)

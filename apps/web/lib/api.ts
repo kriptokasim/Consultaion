@@ -91,7 +91,7 @@ export async function getReport(id: string) {
   return request<any>(`/debates/${id}/report`, undefined, { auth: true });
 }
 
-export async function startDebate(payload: { prompt: string; config?: any }) {
+export async function startDebate(payload: { prompt: string; config?: any; model_id?: string | null }) {
   return apiRequest<{ id: string }>({
     method: "POST",
     path: "/debates",

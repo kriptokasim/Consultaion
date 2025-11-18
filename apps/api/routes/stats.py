@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from deps import get_optional_user, get_session, require_admin
 from metrics import get_metrics_snapshot
 from models import Debate, DebateRound, Message, RatingPersona, Score
+from model_registry import list_enabled_models
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from routes.common import (
     avg_scores_for_debate,
@@ -30,6 +31,8 @@ class HealthSnapshot(BaseModel):
     enable_csrf: bool
     enable_sec_headers: bool
     mock_mode: bool
+    models_available: bool | None = None
+    enabled_model_count: int | None = None
 
 
 class RateLimitSnapshot(BaseModel):
@@ -85,13 +88,23 @@ class HallOfFameResponse(BaseModel):
 @router.get("/healthz")
 def healthz():
     backend, redis_ok = ensure_rate_limiter_ready()
-    return {"status": "ok", "rate_limit_backend": backend, "redis_ok": redis_ok}
+    models_enabled = list_enabled_models()
+    return {
+        "status": "ok",
+        "rate_limit_backend": backend,
+        "redis_ok": redis_ok,
+        "models_available": bool(models_enabled),
+        "enabled_model_count": len(models_enabled),
+    }
 
 
 @router.get("/readyz")
 def readyz(session: Session = Depends(get_session)):
     session.exec(sa.text("SELECT 1"))
-    return {"db": "ok"}
+    models_enabled = list_enabled_models()
+    if not models_enabled:
+        raise HTTPException(status_code=503, detail="no models enabled")
+    return {"db": "ok", "models_available": True, "enabled_model_count": len(models_enabled)}
 
 
 if os.getenv("ENABLE_METRICS", "1").lower() not in {"0", "false", "no"}:

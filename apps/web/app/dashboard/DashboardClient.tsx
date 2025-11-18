@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Play, BarChart3, Trophy, Plus, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,15 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { startDebate } from "@/lib/api";
 import type { DebateSummary } from "./types";
+
+type ModelOption = {
+  id: string;
+  display_name: string;
+  provider: string;
+  tags: string[];
+  max_context?: number | null;
+  recommended: boolean;
+};
 
 function formatTimestamp(ts?: string | null) {
   if (!ts) return "Just now";
@@ -37,13 +46,44 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debates, setDebates] = useState<DebateSummary[]>(initialDebates);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    fetch(`${apiBase}/models`, { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        const items: ModelOption[] = Array.isArray(data?.models) ? data.models : [];
+        setModels(items);
+        const recommended = items.find((m) => m.recommended) || items[0];
+        setSelectedModel(recommended ? recommended.id : null);
+        if (!items.length) {
+          setModelError("No models available - please contact the admin.");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setModelError("Unable to load models");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCreate = async () => {
     if (!prompt.trim()) return;
+    if (!selectedModel) {
+      setError("No models available.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      const { id } = await startDebate({ prompt: prompt.trim() });
+      const { id } = await startDebate({ prompt: prompt.trim(), model_id: selectedModel });
       const entry: DebateSummary = {
         id,
         prompt: prompt.trim(),
@@ -151,12 +191,37 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
                 <span>{prompt.length} characters</span>
               </div>
             </div>
+            <div className="mt-4 space-y-2">
+              <label className="text-sm font-semibold text-[#3a2a1a]" htmlFor="model">
+                Model
+              </label>
+              {modelError ? (
+                <p className="text-sm font-medium text-red-600">{modelError}</p>
+              ) : models.length > 1 ? (
+                <select
+                  id="model"
+                  className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900 shadow-inner shadow-amber-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                  value={selectedModel ?? ""}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                >
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.display_name} {m.recommended ? "(Recommended)" : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : models.length === 1 ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+                  Model: {models[0].display_name}
+                </div>
+              ) : null}
+            </div>
             {error ? <p className="mt-2 text-sm font-medium text-red-600">{error}</p> : null}
             <div className="mt-6 flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={!prompt.trim() || saving} className="shadow-[0_14px_32px_rgba(255,190,92,0.35)]">
+              <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (!selectedModel && models.length > 0)} className="shadow-[0_14px_32px_rgba(255,190,92,0.35)]">
                 {saving ? "Creating…" : "Create Debate"}
               </Button>
             </div>
