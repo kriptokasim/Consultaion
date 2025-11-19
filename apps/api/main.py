@@ -11,6 +11,7 @@ from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
+from billing import billing_router
 from database import engine, init_db
 from deps import get_current_user
 from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
@@ -196,6 +197,7 @@ app.include_router(models_router)
 app.include_router(debates_router)
 app.include_router(teams_router)
 app.include_router(admin_router)
+app.include_router(billing_router)
 
 
 # Lifespan helpers
@@ -216,6 +218,7 @@ __all__ = [
     "debates_router",
     "teams_router",
     "admin_router",
+    "billing_router",
     # exported handlers for legacy imports/tests
     "AuthRequest",
     "get_me",
