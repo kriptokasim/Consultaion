@@ -30,6 +30,8 @@ class APIKey(SQLModel, table=True):
 
 
 class Debate(SQLModel, table=True):
+    model_config = SQLModel.model_config.copy()
+    model_config["protected_namespaces"] = ()
     id: str = Field(primary_key=True)
     prompt: str = Field(sa_column=Column(Text, nullable=False))
     status: str = Field(default="queued", nullable=False, index=True)

@@ -6,11 +6,10 @@ from typing import Any, Callable, Dict, List, Sequence
 
 from agents import (
     criticize_and_revise,
-    get_usage,
     judge_scores,
     produce_candidate,
-    reset_usage,
     synthesize,
+    UsageAccumulator,
 )
 from database import session_scope
 from models import Debate, DebateRound, Message, Score, Vote
@@ -55,12 +54,11 @@ def _persist_messages(debate_id: str, round_index: int, messages: List[Dict[str,
         session.commit()
 
 
-def _check_budget(budget) -> str | None:
+def _check_budget(budget, usage: UsageAccumulator) -> str | None:
     if not budget:
         return None
-    usage = get_usage()
-    tokens_total = float(usage.get("tokens", {}).get("total", 0))
-    cost_total = float(usage.get("cost_usd") or usage.get("cost", 0) or 0)
+    tokens_total = float(usage.total_tokens)
+    cost_total = float(usage.cost_usd)
     if budget.max_tokens and tokens_total > budget.max_tokens:
         return "token_budget_exceeded"
     if budget.max_cost_usd and cost_total > budget.max_cost_usd:
@@ -137,9 +135,8 @@ async def run_debate(
     selected_override: List[str] | None = None
     budget_notice_sent = False
 
-    usage_snapshot: Dict[str, Any] = {}
+    usage_tracker = UsageAccumulator()
     debate_user_id: str | None = None
-    reset_usage()
     try:
         logger.debug("Debate %s: starting orchestration", debate_id)
         if os.getenv("FAST_DEBATE", "0") == "1":
@@ -147,6 +144,7 @@ async def run_debate(
                 {"persona": agent.name, "score": 8.0, "rationale": "fast-track"}
                 for agent in agent_configs
             ]
+            usage_snapshot = usage_tracker.snapshot()
             await q.put({"type": "message", "round": 0, "candidates": []})
             await q.put(
                 {
@@ -162,14 +160,23 @@ async def run_debate(
                 {
                     "type": "final",
                     "content": "Fast debate completed.",
-                    "meta": {"scores": mock_scores, "ranking": [entry["persona"] for entry in mock_scores], "usage": {}},
+                    "meta": {
+                        "scores": mock_scores,
+                        "ranking": [entry["persona"] for entry in mock_scores],
+                        "usage": usage_snapshot,
+                    },
                 }
             )
             _complete_debate_record(
                 debate_id,
                 final_content="Fast debate completed.",
-                final_meta={"scores": mock_scores, "ranking": [entry["persona"] for entry in mock_scores], "usage": {}},
+                final_meta={
+                    "scores": mock_scores,
+                    "ranking": [entry["persona"] for entry in mock_scores],
+                    "usage": usage_snapshot,
+                },
                 status="completed",
+                tokens_total=usage_tracker.total_tokens,
             )
             if cleanup_cb:
                 cleanup_cb(debate_id)
@@ -188,13 +195,19 @@ async def run_debate(
             session.commit()
 
         draft_round = _start_round(debate_id, 1, "draft", "candidate drafting")
-        candidates = await asyncio.gather(*[produce_candidate(prompt, agent, model_id=model_id, debate_id=debate_id) for agent in agent_configs])
+        candidate_results = await asyncio.gather(
+            *[produce_candidate(prompt, agent, model_id=model_id, debate_id=debate_id) for agent in agent_configs]
+        )
+        candidates = []
+        for payload, candidate_usage in candidate_results:
+            candidates.append(payload)
+            usage_tracker.extend(candidate_usage)
         source_candidates = candidates
         _persist_messages(debate_id, 1, candidates, role="candidate")
         _end_round(draft_round)
         await q.put({"type": "message", "round": 1, "candidates": candidates})
         logger.debug("Debate %s: produced %d candidates", debate_id, len(candidates))
-        budget_reason = _check_budget(budget) or budget_reason
+        budget_reason = _check_budget(budget, usage_tracker) or budget_reason
         if budget_reason and not budget_notice_sent:
             await q.put({"type": "notice", "message": budget_reason})
             budget_notice_sent = True
@@ -202,13 +215,14 @@ async def run_debate(
         revised = candidates
         if not budget_reason:
             critique_round = _start_round(debate_id, 2, "critique", "cross-critique and revision")
-            revised = await criticize_and_revise(prompt, candidates, model_id=model_id, debate_id=debate_id)
+            revised, critique_usage = await criticize_and_revise(prompt, candidates, model_id=model_id, debate_id=debate_id)
+            usage_tracker.extend(critique_usage)
             source_candidates = revised
             _persist_messages(debate_id, 2, revised, role="revised")
             _end_round(critique_round)
             await q.put({"type": "message", "round": 2, "revised": revised})
             logger.debug("Debate %s: critique round completed", debate_id)
-            budget_reason = _check_budget(budget) or budget_reason
+            budget_reason = _check_budget(budget, usage_tracker) or budget_reason
             if budget_reason and not budget_notice_sent:
                 await q.put({"type": "notice", "message": budget_reason})
                 budget_notice_sent = True
@@ -216,7 +230,10 @@ async def run_debate(
         judge_details: List[Dict[str, Any]] = []
         if not budget_reason:
             judge_round = _start_round(debate_id, 3, "judge", "rubric scoring")
-            aggregate_scores, judge_details = await judge_scores(prompt, revised, judge_configs, model_id=model_id, debate_id=debate_id)
+            aggregate_scores, judge_details, judge_usage = await judge_scores(
+                prompt, revised, judge_configs, model_id=model_id, debate_id=debate_id
+            )
+            usage_tracker.extend(judge_usage)
             with session_scope() as session:
                 for detail in judge_details:
                     session.add(
@@ -273,9 +290,12 @@ async def run_debate(
         if not selected_scores:
             selected_scores = aggregate_scores
 
-        final_answer = await synthesize(prompt, selected_candidates, selected_scores, model_id=model_id, debate_id=debate_id)
-        usage_snapshot = get_usage()
-        tokens_total = float(usage_snapshot.get("tokens", {}).get("total", 0) or 0)
+        final_answer, synthesis_usage = await synthesize(
+            prompt, selected_candidates, selected_scores, model_id=model_id, debate_id=debate_id
+        )
+        usage_tracker.extend(synthesis_usage)
+        usage_snapshot = usage_tracker.snapshot()
+        tokens_total = float(usage_tracker.total_tokens)
         final_meta = {
             "prompt": prompt,
             "scores": aggregate_scores,
@@ -297,17 +317,17 @@ async def run_debate(
         await q.put(
             {
                 "type": "final",
-                "content": final_answer,
-                "meta": {
-                    "prompt": prompt,
-                    "scores": aggregate_scores,
-                    "ranking": ranking,
-                    "usage": usage_snapshot or get_usage(),
-                    "budget_reason": budget_reason,
-                    "early_stop_reason": early_stop_reason,
-                    "vote": vote_details,
-                },
-            }
+                    "content": final_answer,
+                    "meta": {
+                        "prompt": prompt,
+                        "scores": aggregate_scores,
+                        "ranking": ranking,
+                        "usage": usage_snapshot,
+                        "budget_reason": budget_reason,
+                        "early_stop_reason": early_stop_reason,
+                        "vote": vote_details,
+                    },
+                }
         )
         logger.debug("Debate %s: finalized, triggering rating update", debate_id)
         loop = asyncio.get_running_loop()

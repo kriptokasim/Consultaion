@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 class BudgetConfig(BaseModel):
     max_tokens: Optional[int] = None
@@ -32,6 +32,7 @@ class DebateConfig(BaseModel):
 
 
 class DebateCreate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     prompt: str
     config: Optional[DebateConfig] = None
     model_id: Optional[str] = None

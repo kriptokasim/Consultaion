@@ -1,7 +1,7 @@
 import os
 import secrets
 from typing import Any, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -21,6 +21,8 @@ from auth import (
     set_auth_cookie,
     set_csrf_cookie,
     verify_password,
+    COOKIE_SECURE,
+    COOKIE_SAMESITE,
 )
 from deps import get_current_user, get_session
 from models import TeamMember, User
@@ -46,6 +48,38 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 OAUTH_STATE_COOKIE = "google_oauth_state"
 OAUTH_NEXT_COOKIE = "google_oauth_next"
+SAFE_NEXT_DEFAULT = "/dashboard"
+SAFE_NEXT_PREFIXES = ("/dashboard", "/runs", "/live", "/leaderboard", "/")
+
+
+def sanitize_next_path(raw_next: Optional[str]) -> str:
+    candidate = (raw_next or "").strip()
+    if not candidate:
+        return SAFE_NEXT_DEFAULT
+    parsed = urlparse(candidate)
+    if parsed.scheme or parsed.netloc:
+        return SAFE_NEXT_DEFAULT
+    path = parsed.path or SAFE_NEXT_DEFAULT
+    if not path.startswith("/"):
+        path = f"/{path}"
+
+    def _allowed(p: str) -> bool:
+        allowed = False
+        for prefix in SAFE_NEXT_PREFIXES:
+            if prefix == "/":
+                if p == "/":
+                    allowed = True
+                    break
+            elif p.startswith(prefix):
+                allowed = True
+                break
+        return allowed
+
+    if not _allowed(path):
+        return SAFE_NEXT_DEFAULT
+    query = f"?{parsed.query}" if parsed.query else ""
+    fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+    return f"{path}{query}{fragment}"
 
 
 def _google_config() -> tuple[str, str, str]:
@@ -95,7 +129,7 @@ async def google_login(request: Request, response: Response) -> Response:
         raise HTTPException(status_code=429, detail="rate limit exceeded")
     client_id, _, redirect_url = _google_config()
     state = secrets.token_urlsafe(16)
-    next_param = request.query_params.get("next") or "/dashboard"
+    next_param = sanitize_next_path(request.query_params.get("next"))
     query = urlencode(
         {
             "client_id": client_id,
@@ -166,7 +200,7 @@ async def google_callback(
         session.refresh(user)
         audit_action = "register_google"
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
-    redirect_target = request.cookies.get(OAUTH_NEXT_COOKIE) or "/dashboard"
+    redirect_target = sanitize_next_path(request.cookies.get(OAUTH_NEXT_COOKIE))
     redirect_resp = RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
     set_auth_cookie(redirect_resp, token)
     if ENABLE_CSRF:

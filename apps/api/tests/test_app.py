@@ -53,7 +53,9 @@ from main import (  # noqa: E402
     create_team,
     export_scores_csv,
     get_debate,
+    get_debate_events,
     get_leaderboard,
+    get_model_leaderboard_stats,
     healthz,
     list_debates,
     register_user,
@@ -61,7 +63,7 @@ from main import (  # noqa: E402
     sweep_stale_channels,
     update_debate,
 )
-from models import AuditLog, Debate, RatingPersona, Score, User  # noqa: E402
+from models import AuditLog, Debate, PairwiseVote, RatingPersona, Score, User  # noqa: E402
 import orchestrator as orchestrator_module  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
@@ -214,6 +216,44 @@ def test_export_scores_csv_endpoint():
     assert "Analyst" in text
 
 
+def test_get_debate_events_includes_pairwise_votes():
+    debate_id = "pairwise-event-test"
+    with Session(engine) as session:
+        existing = session.get(Debate, debate_id)
+        if existing:
+            session.delete(existing)
+        session.add(
+            Debate(
+                id=debate_id,
+                prompt="Pairwise prompt",
+                status="completed",
+                config=default_debate_config().model_dump(),
+            )
+        )
+        session.add(
+            PairwiseVote(
+                debate_id=debate_id,
+                candidate_a="Alpha",
+                candidate_b="Beta",
+                winner="A",
+                judge_id="Judge-1",
+            )
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        payload = asyncio.run(get_debate_events(debate_id, session=session, current_user=None))
+
+    pairwise_events = [item for item in payload["items"] if item["type"] == "pairwise"]
+    assert pairwise_events, f"No pairwise events in {payload}"
+    event = pairwise_events[0]
+    assert event["candidate_a"] == "Alpha"
+    assert event["candidate_b"] == "Beta"
+    assert event["winner"] == "Alpha"
+    assert event["loser"] == "Beta"
+    assert event["judge_id"] == "Judge-1"
+
+
 def test_user_scoped_debates_and_admin_access():
     owner = _register_user("owner@example.com", "ownerpass")
     reviewer = _register_user("stranger@example.com", "strangepass")
@@ -348,6 +388,73 @@ def test_leaderboard_updates_after_score_entries():
         assert ratings
         leaderboard = asyncio.run(get_leaderboard(Response(), None, 0, 10, session))
     assert any(entry["persona"] == "Analyst" for entry in leaderboard["items"])
+
+
+def test_model_leaderboard_stats_counts_champions():
+    persona_a = "StatsModelA"
+    persona_b = "StatsModelB"
+    with Session(engine) as session:
+        for idx in range(4):
+            debate_id = f"stats-leaderboard-{idx}"
+            existing = session.get(Debate, debate_id)
+            if existing:
+                session.delete(existing)
+            session.add(
+                Debate(
+                    id=debate_id,
+                    prompt=f"Leaderboard prompt {idx}",
+                    status="completed",
+                    config=default_debate_config().model_dump(),
+                )
+            )
+            if idx < 3:
+                session.add(
+                    Score(
+                        debate_id=debate_id,
+                        persona=persona_a,
+                        judge=f"Judge-A-{idx}",
+                        score=9.0,
+                        rationale="A strong",
+                    )
+                )
+                session.add(
+                    Score(
+                        debate_id=debate_id,
+                        persona=persona_b,
+                        judge=f"Judge-B-{idx}",
+                        score=6.0,
+                        rationale="B weak",
+                    )
+                )
+            else:
+                session.add(
+                    Score(
+                        debate_id=debate_id,
+                        persona=persona_a,
+                        judge=f"Judge-A-{idx}",
+                        score=6.0,
+                        rationale="A weak",
+                    )
+                )
+                session.add(
+                    Score(
+                        debate_id=debate_id,
+                        persona=persona_b,
+                        judge=f"Judge-B-{idx}",
+                        score=9.5,
+                        rationale="B strong",
+                    )
+                )
+        session.commit()
+
+    with Session(engine) as session:
+        summaries = asyncio.run(get_model_leaderboard_stats(session=session))
+
+    entry_a = next(summary for summary in summaries if summary.model == persona_a)
+    entry_b = next(summary for summary in summaries if summary.model == persona_b)
+    assert entry_a.wins == 3
+    assert entry_b.wins == 1
+    assert entry_a.win_rate > entry_b.win_rate
 
 
 def test_manual_start_requires_flag():

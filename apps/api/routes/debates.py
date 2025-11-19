@@ -419,12 +419,23 @@ async def get_debate_events(
         )
 
     for vote in pairwise_votes:
+        if vote.winner == "A":
+            winner = vote.candidate_a
+            loser = vote.candidate_b
+        elif vote.winner == "B":
+            winner = vote.candidate_b
+            loser = vote.candidate_a
+        else:
+            winner = vote.winner
+            loser = vote.candidate_b if winner == vote.candidate_a else vote.candidate_a
         events.append(
             {
                 "type": "pairwise",
-                "judge": vote.judge,
-                "winner": vote.winner,
-                "loser": vote.loser,
+                "judge_id": vote.judge_id,
+                "candidate_a": vote.candidate_a,
+                "candidate_b": vote.candidate_b,
+                "winner": winner,
+                "loser": loser,
                 "at": vote.created_at.isoformat(),
             }
         )

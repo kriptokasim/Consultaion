@@ -92,7 +92,7 @@ def test_call_llm_uses_registry_model(monkeypatch):
         ),
     )
     messages = [{"role": "user", "content": "hi"}]
-    result = asyncio.run(
+    text, usage = asyncio.run(
         agents_module._call_llm(
             messages,
             role="Tester",
@@ -100,5 +100,7 @@ def test_call_llm_uses_registry_model(monkeypatch):
             debate_id="debate-1",
         )
     )
-    assert result == "hello"
+    assert text == "hello"
+    assert usage.total_tokens == 8.0
+    assert usage.provider == "test-provider"
     assert calls.get("model") == "openai/custom-model"

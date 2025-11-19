@@ -38,7 +38,7 @@ os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
 from main import app  # noqa: E402
 from models import User  # noqa: E402
 from database import engine, init_db  # noqa: E402
-from routes.auth import google_callback  # noqa: E402
+from routes.auth import google_callback, sanitize_next_path  # noqa: E402
 
 
 async def _fake_exchange_code_for_token(code: str, client_id: str, client_secret: str, redirect_url: str):
@@ -97,3 +97,11 @@ def test_google_callback_creates_user(monkeypatch):
     with Session(engine) as session:
         user = session.exec(select(User).where(User.email == "google-user@example.com")).first()
         assert user is not None
+
+
+def test_sanitize_next_path_allows_dashboard():
+    assert sanitize_next_path("/dashboard?view=team") == "/dashboard?view=team"
+
+
+def test_sanitize_next_path_rejects_absolute_urls():
+    assert sanitize_next_path("https://evil.tld/phish") == "/dashboard"

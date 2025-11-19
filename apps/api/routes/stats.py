@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -123,31 +124,53 @@ def version():
 
 @router.get("/stats/models", response_model=list[ModelStatsSummary])
 async def get_model_leaderboard_stats(session: Session = Depends(get_session)):
-    rows = session.exec(select(Score.persona, func.count(Score.id), func.avg(Score.score)).group_by(Score.persona)).all()
-    summaries: list[ModelStatsSummary] = []
+    rows = session.exec(select(Score.debate_id, Score.persona, Score.score)).all()
+    if not rows:
+        return []
+
+    persona_stats: dict[str, dict[str, Any]] = defaultdict(lambda: {"score_sum": 0.0, "score_count": 0, "debates": set()})
+    debate_persona_scores: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+
     for row in rows:
         if isinstance(row, tuple):
-            persona, total, avg = row[0], int(row[1] or 0), float(row[2] or 0)
+            debate_id, persona, score_val = row
         else:
-            persona = row.persona
-            total = int(row.count)
-            avg = float(row.avg)
-        wins = 0
-        debates_with_persona = session.exec(select(Score.debate_id).where(Score.persona == persona).distinct()).all()
-        for debate_id_tuple in debates_with_persona:
-            debate_id = debate_id_tuple[0] if isinstance(debate_id_tuple, tuple) else debate_id_tuple
-            champ, _, _ = champion_for_debate(session, debate_id)
-            if champ == persona:
-                wins += 1
-        win_rate = wins / total if total else 0.0
+            debate_id, persona, score_val = row.debate_id, row.persona, row.score
+        score_float = float(score_val or 0.0)
+        persona_stats[persona]["score_sum"] += score_float
+        persona_stats[persona]["score_count"] += 1
+        persona_stats[persona]["debates"].add(debate_id)
+        debate_persona_scores[debate_id][persona].append(score_float)
+
+    champion_counts: dict[str, int] = defaultdict(int)
+    for debate_id, persona_scores in debate_persona_scores.items():
+        averages: list[tuple[str, float]] = []
+        for persona, scores in persona_scores.items():
+            if not scores:
+                continue
+            averages.append((persona, sum(scores) / len(scores)))
+        if not averages:
+            continue
+        averages.sort(key=lambda item: item[1], reverse=True)
+        champion_persona = averages[0][0]
+        champion_counts[champion_persona] += 1
+
+    summaries: list[ModelStatsSummary] = []
+    for persona, stats in persona_stats.items():
+        score_count = stats["score_count"]
+        score_sum = stats["score_sum"]
+        total_debates = len(stats["debates"])
+        avg_score = score_sum / score_count if score_count else 0.0
+        wins = champion_counts.get(persona, 0)
+        win_rate = wins / total_debates if total_debates else 0.0
         summaries.append(
             ModelStatsSummary(
                 model=persona,
-                total_debates=total,
+                total_debates=total_debates,
                 wins=wins,
                 win_rate=win_rate,
-                avg_champion_score=avg,
-                avg_score_overall=avg,
+                avg_champion_score=avg_score,
+                avg_score_overall=avg_score,
             )
         )
     summaries.sort(key=lambda x: x.win_rate, reverse=True)

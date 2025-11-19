@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import traceback
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Literal
 
 from litellm import acompletion
@@ -30,6 +31,67 @@ if LITELLM_API_BASE:
 _INJECTION_PATTERNS = [r"ignore previous instructions", r"disregard above", r"reveal the system prompt", r"print the system prompt"]
 
 
+@dataclass
+class UsageCall:
+    prompt_tokens: float = 0.0
+    completion_tokens: float = 0.0
+    total_tokens: float = 0.0
+    cost_usd: float = 0.0
+    provider: Optional[str] = None
+    model: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "model": self.model,
+            "provider": self.provider,
+            "tokens": {
+                "prompt": self.prompt_tokens,
+                "completion": self.completion_tokens,
+                "total": self.total_tokens or self.prompt_tokens + self.completion_tokens,
+            },
+            "cost_usd": self.cost_usd,
+        }
+
+
+@dataclass
+class UsageAccumulator:
+    prompt_tokens: float = 0.0
+    completion_tokens: float = 0.0
+    total_tokens: float = 0.0
+    cost_usd: float = 0.0
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    calls: List[UsageCall] = field(default_factory=list)
+
+    def add_call(self, call: UsageCall) -> None:
+        self.prompt_tokens += call.prompt_tokens
+        self.completion_tokens += call.completion_tokens
+        self.total_tokens += call.total_tokens or (call.prompt_tokens + call.completion_tokens)
+        self.cost_usd += call.cost_usd
+        if call.provider:
+            self.provider = call.provider
+        if call.model:
+            self.model = call.model
+        self.calls.append(call)
+
+    def extend(self, other: "UsageAccumulator") -> None:
+        for call in other.calls:
+            self.add_call(call)
+
+    def snapshot(self) -> Dict[str, Any]:
+        return {
+            "tokens": {
+                "prompt": self.prompt_tokens,
+                "completion": self.completion_tokens,
+                "total": self.total_tokens,
+            },
+            "cost_usd": self.cost_usd,
+            "provider": self.provider,
+            "model": self.model or LITELLM_MODEL,
+            "calls": [call.to_dict() for call in self.calls],
+        }
+
+
 def assert_llm_configuration() -> None:
     """Guard against accidentally serving mock responses in production."""
     if REQUIRE_REAL_LLM and USE_MOCK:
@@ -41,62 +103,27 @@ def assert_llm_configuration() -> None:
             "Running with USE_MOCK=1. This is intended for development only; set REQUIRE_REAL_LLM=1 in production."
         )
 
-USAGE_TRACKER: Dict[str, Any] = {
-    "tokens": {"prompt": 0.0, "completion": 0.0, "total": 0.0},
-    "cost_usd": 0.0,
-    "provider": None,
-    "model": LITELLM_MODEL,
-    "calls": [],
-}
-
 assert_llm_configuration()
 
 
-def reset_usage() -> None:
-    USAGE_TRACKER["tokens"] = {"prompt": 0.0, "completion": 0.0, "total": 0.0}
-    USAGE_TRACKER["cost_usd"] = 0.0
-    USAGE_TRACKER["calls"] = []
-    USAGE_TRACKER["provider"] = None
-    USAGE_TRACKER["model"] = LITELLM_MODEL
-
-
-def get_usage() -> Dict[str, Any]:
-    return {
-        "tokens": {**USAGE_TRACKER["tokens"]},
-        "cost_usd": USAGE_TRACKER["cost_usd"],
-        "provider": USAGE_TRACKER["provider"],
-        "model": USAGE_TRACKER["model"],
-        "calls": [dict(call) for call in USAGE_TRACKER["calls"]],
-    }
-
-
-def _record_usage(
+def _usage_call_from_counts(
     token_counts: Dict[str, float] | None,
     cost: Optional[float],
     *,
     model: Optional[str],
     provider: Optional[str],
-) -> None:
+) -> UsageCall:
     tokens = token_counts or {}
     prompt = float(tokens.get("prompt", 0.0))
     completion = float(tokens.get("completion", 0.0))
-    total = float(tokens.get("total", prompt + completion))
-    USAGE_TRACKER["tokens"]["prompt"] += prompt
-    USAGE_TRACKER["tokens"]["completion"] += completion
-    USAGE_TRACKER["tokens"]["total"] += total or prompt + completion
-    if cost is not None:
-        USAGE_TRACKER["cost_usd"] += float(cost)
-    if model:
-        USAGE_TRACKER["model"] = model
-    if provider:
-        USAGE_TRACKER["provider"] = provider
-    USAGE_TRACKER["calls"].append(
-        {
-            "model": model,
-            "provider": provider,
-            "tokens": {"prompt": prompt, "completion": completion, "total": total or prompt + completion},
-            "cost_usd": float(cost or 0.0),
-        }
+    total = float(tokens.get("total", prompt + completion) or (prompt + completion))
+    return UsageCall(
+        prompt_tokens=prompt,
+        completion_tokens=completion,
+        total_tokens=total,
+        cost_usd=float(cost or 0.0),
+        provider=provider,
+        model=model,
     )
 
 
@@ -121,7 +148,7 @@ async def _call_llm(
     model_override: str | None = None,
     model_id: str | None = None,
     debate_id: str | None = None,
-) -> str:
+) -> Tuple[str, UsageCall]:
     from model_registry import get_default_model, get_model
 
     try:
@@ -132,13 +159,13 @@ async def _call_llm(
     if USE_MOCK:
         text = await _fake_llm(messages[-1]["content"], role=role)
         approx_tokens = max(50, len(messages[-1]["content"]) // 2)
-        _record_usage(
+        call_usage = _usage_call_from_counts(
             {"prompt": approx_tokens * 0.6, "completion": approx_tokens * 0.4, "total": approx_tokens},
             _estimate_cost(approx_tokens),
             model=target_model,
             provider="mock",
         )
-        return text
+        return text, call_usage
 
     try:
         response = await acompletion(
@@ -168,7 +195,7 @@ async def _call_llm(
         hidden = getattr(response, "_hidden_params", {}) or {}
         provider = hidden.get("api_provider") or hidden.get("provider") or provider
         model_used = getattr(response, "model", None) or target_model
-        _record_usage(
+        call_usage = _usage_call_from_counts(
             token_counts,
             cost if cost is not None else _estimate_cost(token_counts.get("total")),
             model=model_used,
@@ -184,12 +211,20 @@ async def _call_llm(
                 "tokens_out": token_counts.get("completion"),
             },
         )
-        return content.strip()
+        return content.strip(), call_usage
     except Exception as exc:
         logger.error("LLM call failed for role %s: %s\n%s", role, exc, traceback.format_exc())
         if REQUIRE_REAL_LLM:
             raise
-        return await _fake_llm(messages[-1]["content"], role=role + " [mock]")
+        fallback_text = await _fake_llm(messages[-1]["content"], role=role + " [mock]")
+        approx_tokens = max(50, len(messages[-1]["content"]) // 2)
+        fallback_usage = _usage_call_from_counts(
+            {"prompt": approx_tokens * 0.6, "completion": approx_tokens * 0.4, "total": approx_tokens},
+            _estimate_cost(approx_tokens),
+            model=target_model,
+            provider="mock",
+        )
+        return fallback_text, fallback_usage
 
 
 def _log_injection_hints(prompt: str, *, user_id: Optional[str] = None, debate_id: Optional[str] = None) -> None:
@@ -223,7 +258,12 @@ def build_messages(
     ]
 
 
-async def produce_candidate(prompt: str, agent: AgentConfig, model_id: str | None = None, debate_id: str | None = None) -> Dict[str, Any]:
+async def produce_candidate(
+    prompt: str,
+    agent: AgentConfig,
+    model_id: str | None = None,
+    debate_id: str | None = None,
+) -> Tuple[Dict[str, Any], UsageAccumulator]:
     _log_injection_hints(prompt)
     system_prompt = (
         f"You are {agent.name}, a specialist contributing to a multi-agent deliberation. "
@@ -236,8 +276,17 @@ async def produce_candidate(prompt: str, agent: AgentConfig, model_id: str | Non
         prompt,
         extra_context="Write a self-contained draft response in under 250 words.",
     )
-    text = await _call_llm(messages, role=agent.name, temperature=0.5, model_override=agent.model, model_id=model_id, debate_id=debate_id)
-    return {"persona": agent.name, "persona_prompt": agent.persona, "text": text}
+    text, call_usage = await _call_llm(
+        messages,
+        role=agent.name,
+        temperature=0.5,
+        model_override=agent.model,
+        model_id=model_id,
+        debate_id=debate_id,
+    )
+    usage = UsageAccumulator()
+    usage.add_call(call_usage)
+    return {"persona": agent.name, "persona_prompt": agent.persona, "text": text}, usage
 
 
 async def criticize_and_revise(
@@ -245,9 +294,9 @@ async def criticize_and_revise(
     candidates: List[Dict[str, Any]],
     model_id: str | None = None,
     debate_id: str | None = None,
-):
+) -> Tuple[List[Dict[str, Any]], UsageAccumulator]:
     if USE_MOCK:
-        return [{**c, "text": c["text"] + " (revised)"} for c in candidates]
+        return [{**c, "text": c["text"] + " (revised)"} for c in candidates], UsageAccumulator()
 
     async def _revise(candidate: Dict[str, Any]) -> Dict[str, Any]:
         peer_views = [
@@ -262,10 +311,22 @@ async def criticize_and_revise(
             prompt,
             extra_context=f"Your previous draft:\n{candidate['text']}\n\nPeer drafts:\n{peer_block}\n\nOutput the improved answer only.",
         )
-        revised_text = await _call_llm(messages, role=f"{candidate['persona']} Critic", temperature=0.4, model_id=model_id, debate_id=debate_id)
-        return {**candidate, "text": revised_text}
+        revised_text, call_usage = await _call_llm(
+            messages,
+            role=f"{candidate['persona']} Critic",
+            temperature=0.4,
+            model_id=model_id,
+            debate_id=debate_id,
+        )
+        return {**candidate, "text": revised_text}, call_usage
 
-    return await asyncio.gather(*[_revise(c) for c in candidates])
+    usage = UsageAccumulator()
+    revised_payloads = []
+    results = await asyncio.gather(*[_revise(c) for c in candidates])
+    for payload, call_usage in results:
+        revised_payloads.append(payload)
+        usage.add_call(call_usage)
+    return revised_payloads, usage
 
 
 def _extract_json_fragment(text: str) -> str | None:
@@ -279,7 +340,7 @@ async def judge_scores(
     judges: Sequence[JudgeConfig],
     model_id: str | None = None,
     debate_id: str | None = None,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], UsageAccumulator]:
     _log_injection_hints(prompt)
     if not judges:
         judges = [JudgeConfig(name="DefaultJudge")]
@@ -295,9 +356,9 @@ async def judge_scores(
             details.append(
                 {"persona": c["persona"], "judge": "MockJudge", "score": score, "rationale": rationale}
             )
-        return scores, details
+        return scores, details, UsageAccumulator()
 
-    async def _judge_candidate(candidate: Dict[str, Any], judge: JudgeConfig) -> Dict[str, Any]:
+    async def _judge_candidate(candidate: Dict[str, Any], judge: JudgeConfig) -> Tuple[Dict[str, Any], UsageCall]:
         rubric_text = ", ".join(judge.rubrics)
         messages = build_messages(
             "judge",
@@ -305,7 +366,7 @@ async def judge_scores(
             prompt,
             extra_context=f"Candidate ({candidate['persona']}):\n{candidate['text']}\n\nReturn strict JSON of the form {{\"score\": <0-10 number>, \"rationale\": \"...\"}}.",
         )
-        raw = await _call_llm(
+        raw, call_usage = await _call_llm(
             messages,
             role=f"Judge:{judge.name}",
             temperature=0.2,
@@ -328,12 +389,15 @@ async def judge_scores(
             "judge": judge.name,
             "score": score_val,
             "rationale": rationale,
-        }
+        }, call_usage
 
     judge_details = []
+    usage = UsageAccumulator()
     for judge in judges:
         judge_results = await asyncio.gather(*[_judge_candidate(c, judge) for c in revised])
-        judge_details.extend(judge_results)
+        for detail, call_usage in judge_results:
+            judge_details.append(detail)
+            usage.add_call(call_usage)
 
     aggregated: Dict[str, Dict[str, Any]] = {}
     for detail in judge_details:
@@ -360,13 +424,19 @@ async def judge_scores(
         )
     )
 
-    return summary, judge_details
+    return summary, judge_details, usage
 
 
-async def synthesize(prompt: str, revised: List[Dict[str, Any]], scores: List[Dict[str, Any]], model_id: str | None = None, debate_id: str | None = None):
+async def synthesize(
+    prompt: str,
+    revised: List[Dict[str, Any]],
+    scores: List[Dict[str, Any]],
+    model_id: str | None = None,
+    debate_id: str | None = None,
+) -> Tuple[str, UsageAccumulator]:
     if USE_MOCK:
         best = max(zip(revised, scores), key=lambda rs: rs[1]["score"])[0]
-        return f"Final Answer (Consultaion):\n\n{best['text']}\n\n— automatic synthesis"
+        return f"Final Answer (Consultaion):\n\n{best['text']}\n\n— automatic synthesis", UsageAccumulator()
     _log_injection_hints(prompt)
 
     by_persona = {s["persona"]: s for s in scores}
@@ -388,4 +458,14 @@ async def synthesize(prompt: str, revised: List[Dict[str, Any]], scores: List[Di
         prompt,
         extra_context=f"Top candidates with judge scores:\n{candidate_block}\n\nProduce the final response. Include a short summary and numbered plan or bullet list.",
     )
-    return await _call_llm(messages, role="Synthesizer", temperature=0.35, max_tokens=700, model_id=model_id, debate_id=debate_id)
+    text, call_usage = await _call_llm(
+        messages,
+        role="Synthesizer",
+        temperature=0.35,
+        max_tokens=700,
+        model_id=model_id,
+        debate_id=debate_id,
+    )
+    usage = UsageAccumulator()
+    usage.add_call(call_usage)
+    return text, usage
