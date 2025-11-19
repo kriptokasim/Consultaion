@@ -154,8 +154,7 @@ export default function ParliamentRunView({
   };
 
   return (
-    <>
-      <div className="space-y-6">
+    <div className="space-y-6">
       {/* Hero header: amber / sepia theme */}
       <section className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-sm">
         <div className="flex flex-col gap-4 border-b border-amber-200/60 pb-4 dark:border-amber-900/60 md:flex-row md:items-center md:justify-between">
@@ -405,6 +404,11 @@ export default function ParliamentRunView({
           <DebateView events={events} />
         </SummaryCard>
       </section>
+      <BillingLimitModal
+        open={limitModal.open}
+        code={limitModal.code}
+        onClose={() => setLimitModal({ open: false })}
+      />
     </div>
   );
 }
@@ -588,8 +592,7 @@ function MiniChamberMap({ winnerPersona }: { winnerPersona?: string }) {
           </div>
         </div>
       </div>
-      <BillingLimitModal open={limitModal.open} code={limitModal.code} onClose={() => setLimitModal({ open: false })} />
-    </>
+    </div>
   );
 }
 

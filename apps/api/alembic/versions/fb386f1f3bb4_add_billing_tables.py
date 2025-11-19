@@ -170,6 +170,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    dialect_name = bind.dialect.name
+    is_postgres = dialect_name == "postgresql"
     op.drop_index("ix_promotions_location_priority", table_name="promotions")
     op.drop_table("promotions")
     op.drop_index("ix_billing_usage_user_period", table_name="billing_usage")
