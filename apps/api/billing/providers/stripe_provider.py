@@ -11,6 +11,7 @@ except ImportError:  # pragma: no cover
     stripe = None
 
 from billing.models import BillingPlan
+from integrations.events import emit_event
 
 from .base import BillingProvider
 
@@ -55,5 +56,12 @@ class StripeBillingProvider(BillingProvider):
     def handle_webhook(self, payload: Dict, headers: Dict) -> None:
         event_type = payload.get("type")
         logger.info("Received Stripe webhook event=%s", event_type)
-        # TODO: Validate signature with self.webhook_secret and update BillingSubscription entries.
-        # For now we simply log the payload.
+        data = (payload.get("data") or {}).get("object") or {}
+        metadata = data.get("metadata") or {}
+        user_id = metadata.get("user_id")
+        plan_slug = metadata.get("plan_slug")
+        if event_type == "customer.subscription.created" and user_id and plan_slug:
+            emit_event(
+                "subscription_activated",
+                {"user_id": user_id, "plan_slug": plan_slug, "provider": "stripe"},
+            )

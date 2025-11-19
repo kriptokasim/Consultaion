@@ -1,5 +1,16 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export class ApiClientError extends Error {
+  status?: number;
+  body: any;
+
+  constructor(message: string, status?: number, body?: any) {
+    super(message);
+    this.status = status;
+    this.body = body ?? null;
+  }
+}
+
 function getCsrfTokenFromCookie(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie
@@ -55,12 +66,13 @@ export async function apiRequest<TResponse = unknown, TBody = unknown>(
   const isJson = contentType.includes("application/json");
 
   if (!res.ok) {
+    let detail = res.statusText;
+    let body: any = null;
     if (isJson) {
-      const errorBody = await res.json().catch(() => ({}));
-      const detail = (errorBody as any)?.detail || res.statusText;
-      throw new Error(`API ${res.status} ${res.statusText}: ${detail}`);
+      body = await res.json().catch(() => ({}));
+      detail = (body as any)?.detail || detail;
     }
-    throw new Error(`API ${res.status} ${res.statusText}`);
+    throw new ApiClientError(`API ${res.status} ${res.statusText}: ${detail}`, res.status, body);
   }
 
   if (!isJson) {

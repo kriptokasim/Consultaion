@@ -6,9 +6,10 @@ import { useToast } from "@/components/ui/toast";
 type ExportButtonProps = {
   debateId: string;
   apiBase?: string;
+  onBillingLimit?: (code?: string) => void;
 };
 
-export default function ExportButton({ debateId, apiBase }: ExportButtonProps) {
+export default function ExportButton({ debateId, apiBase, onBillingLimit }: ExportButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base = apiBase || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -23,7 +24,13 @@ export default function ExportButton({ debateId, apiBase }: ExportButtonProps) {
         credentials: "include",
       });
       if (!response.ok) {
-        const text = (await response.text()) || response.statusText;
+        if (response.status === 402 && onBillingLimit) {
+          const detail = (await response.json().catch(() => null)) as any;
+          onBillingLimit(detail?.detail?.code || detail?.code);
+          setBusy(false);
+          return;
+        }
+        const text = (await response.text().catch(() => "")) || response.statusText;
         throw new Error(text || "Export failed");
       }
       const blob = await response.blob();

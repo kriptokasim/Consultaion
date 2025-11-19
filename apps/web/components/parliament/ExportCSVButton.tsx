@@ -6,9 +6,10 @@ import { useToast } from "@/components/ui/toast";
 type ExportCSVButtonProps = {
   debateId: string;
   apiBase?: string;
+  onBillingLimit?: (code?: string) => void;
 };
 
-export default function ExportCSVButton({ debateId, apiBase }: ExportCSVButtonProps) {
+export default function ExportCSVButton({ debateId, apiBase, onBillingLimit }: ExportCSVButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base = apiBase || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -21,6 +22,12 @@ export default function ExportCSVButton({ debateId, apiBase }: ExportCSVButtonPr
       const url = `${base}/debates/${debateId}/scores.csv`;
       const response = await fetch(url, { method: "GET", credentials: "include" });
       if (!response.ok) {
+        if (response.status === 402 && onBillingLimit) {
+          const detail = (await response.json().catch(() => null)) as any;
+          onBillingLimit(detail?.detail?.code || detail?.code);
+          setBusy(false);
+          return;
+        }
         throw new Error("CSV export failed");
       }
       const blob = await response.blob();

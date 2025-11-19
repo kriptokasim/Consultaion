@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from .models import BillingPlan, BillingSubscription, BillingUsage
+from integrations.events import emit_event
 
 UserID = Union[str, uuid.UUID]
 
@@ -77,6 +78,10 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
 
     max_debates = _as_int(limits.get("max_debates_per_month"))
     if max_debates is not None and usage.debates_created > max_debates:
+        emit_event(
+            "usage_limit_exceeded",
+            {"user_id": _normalize_user_id(user_id), "metric": "debates", "limit": max_debates},
+        )
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={"code": "BILLING_LIMIT_DEBATES", "max": max_debates},
@@ -87,9 +92,24 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
         exports_flag in {False, "false", "False", "0", 0}
     )
     if not exports_allowed and usage.exports_count > 0:
+        emit_event(
+            "usage_limit_exceeded",
+            {"user_id": _normalize_user_id(user_id), "metric": "exports"},
+        )
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={"code": "BILLING_LIMIT_EXPORTS_DISABLED"},
+        )
+
+
+def _maybe_emit_nearing(user_id: UserID, metric: str, used: int, limit: Optional[int]) -> None:
+    if not limit or limit <= 0:
+        return
+    threshold = max(1, int(limit * 0.8))
+    if used == threshold:
+        emit_event(
+            "usage_limit_nearing",
+            {"user_id": _normalize_user_id(user_id), "metric": metric, "current": used, "limit": limit},
         )
 
 
@@ -98,6 +118,13 @@ def increment_debate_usage(db: Session, user_id: UserID) -> BillingUsage:
     usage.debates_created += 1
     usage.last_updated_at = _now()
     check_limits_and_raise(db, user_id, usage)
+    plan = get_active_plan(db, user_id)
+    max_debates = plan.limits.get("max_debates_per_month")
+    try:
+        limit_int = int(max_debates) if max_debates is not None else None
+    except (TypeError, ValueError):
+        limit_int = None
+    _maybe_emit_nearing(user_id, "debates", usage.debates_created, limit_int)
     return usage
 
 

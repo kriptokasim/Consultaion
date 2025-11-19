@@ -14,6 +14,7 @@ import { DebateTimerRing } from "./DebateTimerRing";
 import { ChampionGlow } from "./ChampionGlow";
 import { VoteWave } from "./VoteWave";
 import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
+import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
 
 import type {
   ScoreItem,
@@ -58,6 +59,7 @@ export default function ParliamentRunView({
   apiBase,
 }: ParliamentRunViewProps) {
   const [transcriptMode, setTranscriptMode] = useState<"highlights" | "full">("highlights");
+  const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
   const answerRefs = useRef<Record<string, HTMLDetailsElement | null>>({});
   const sortedScores = scores.slice().sort((a, b) => b.score - a.score);
 
@@ -141,6 +143,8 @@ export default function ParliamentRunView({
 
   const transcriptEvents = transcriptMode === "highlights" ? highlightEvents : events;
 
+  const handleBillingLimit = (code?: string) => setLimitModal({ open: true, code });
+
   const scrollToAnswer = (persona: string) => {
     const node = answerRefs.current[persona];
     if (node) {
@@ -150,7 +154,8 @@ export default function ParliamentRunView({
   };
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6">
       {/* Hero header: amber / sepia theme */}
       <section className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-sm">
         <div className="flex flex-col gap-4 border-b border-amber-200/60 pb-4 dark:border-amber-900/60 md:flex-row md:items-center md:justify-between">
@@ -274,8 +279,8 @@ export default function ParliamentRunView({
         <ScoreboardCard scores={scores} method={vote?.method} />
         <VoteWave ids={scores.map((s) => `score-pill-${s.persona}`)} triggerKey={id} />
         <div className="mt-4 flex flex-wrap gap-3">
-          <ExportButton debateId={id} apiBase={apiBase} />
-            <ExportCSVButton debateId={id} apiBase={apiBase} />
+            <ExportButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
+            <ExportCSVButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
           </div>
         </SummaryCard>
       </section>
@@ -583,7 +588,8 @@ function MiniChamberMap({ winnerPersona }: { winnerPersona?: string }) {
           </div>
         </div>
       </div>
-    </div>
+      <BillingLimitModal open={limitModal.open} code={limitModal.code} onClose={() => setLimitModal({ open: false })} />
+    </>
   );
 }
 

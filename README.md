@@ -24,6 +24,7 @@ A platform that produces the best answer via multi-agent debate/voting.
 | `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_VOTE_THRESHOLD` | Client API origin & Aye threshold. |
 | `WEB_APP_ORIGIN` | Frontend base used for OAuth redirects (default `http://localhost:3000`). |
 | `BILLING_PROVIDER` / `STRIPE_*` / `BILLING_CHECKOUT_*` | Billing provider selection, Stripe keys, and checkout redirect URLs. |
+| `N8N_WEBHOOK_URL` | Optional automation webhook target for subscription/usage events. |
 | `WEB_APP_ORIGIN` | Frontend base used for OAuth redirects (default `http://localhost:3000`). |
 
 ### Model catalog & providers

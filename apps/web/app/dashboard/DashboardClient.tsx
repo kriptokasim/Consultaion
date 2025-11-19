@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { startDebate } from "@/lib/api";
+import { PromotionArea } from "@/components/PromotionArea";
+import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
+import { ApiClientError } from "@/lib/apiClient";
 import type { DebateSummary } from "./types";
 
 type ModelOption = {
@@ -49,6 +52,7 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
   const [models, setModels] = useState<ModelOption[]>([]);
   const [modelError, setModelError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +99,11 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
       setPrompt("");
       window.location.href = `/runs/${id}`;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create debate");
+      if (err instanceof ApiClientError && err.status === 402) {
+        setLimitModal({ open: true, code: (err.body as any)?.code });
+      } else {
+        setError(err instanceof Error ? err.message : "Unable to create debate");
+      }
     } finally {
       setSaving(false);
     }
@@ -228,6 +236,12 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
           </div>
         </div>
       ) : null}
+
+      <section>
+        <PromotionArea location="dashboard_sidebar" />
+      </section>
+
+      <BillingLimitModal open={limitModal.open} code={limitModal.code} onClose={() => setLimitModal({ open: false })} />
     </main>
   );
 }

@@ -126,6 +126,53 @@ export async function getMyDebates(params: ListParams = {}) {
   return getDebates(params, { auth: true });
 }
 
+export type BillingPlanSummary = {
+  slug: string;
+  name: string;
+  price_monthly: number | null;
+  currency: string;
+  is_default_free: boolean;
+  limits: Record<string, any>;
+};
+
+export async function getBillingPlans() {
+  const payload = await request<{ items: BillingPlanSummary[] }>(`/billing/plans`);
+  return payload.items;
+}
+
+export type BillingUsageSummary = {
+  period: string;
+  debates_created: number;
+  exports_count: number;
+  tokens_used: number;
+};
+
+export type BillingMeResponse = {
+  plan: BillingPlanSummary;
+  usage: BillingUsageSummary;
+};
+
+export async function getBillingMe() {
+  return request<BillingMeResponse>(`/billing/me`, undefined, { auth: true });
+}
+
+export async function getModelUsage() {
+  const payload = await request<{ items: Array<{ model_id: string; display_name: string; tokens_used: number; approx_cost_usd: number | null }> }>(
+    `/billing/usage/models`,
+    undefined,
+    { auth: true },
+  );
+  return payload.items;
+}
+
+export async function createBillingCheckout(planSlug: string) {
+  return apiRequest<{ checkout_url: string }, { plan_slug: string }>({
+    method: "POST",
+    path: "/billing/checkout",
+    body: { plan_slug: planSlug },
+  });
+}
+
 export type TeamSummary = {
   id: string;
   name: string;
