@@ -74,6 +74,7 @@ def test_google_callback_creates_user(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-secret")
     monkeypatch.setenv("GOOGLE_REDIRECT_URL", "http://localhost:8000/auth/google/callback")
     monkeypatch.setenv("RATE_LIMIT_BACKEND", "memory")
+    monkeypatch.setenv("WEB_APP_ORIGIN", "http://localhost:3000")
 
     monkeypatch.setattr(auth_routes, "_exchange_code_for_token", _fake_exchange_code_for_token)
     monkeypatch.setattr(auth_routes, "_fetch_google_profile", _fake_fetch_google_profile)
@@ -92,7 +93,7 @@ def test_google_callback_creates_user(monkeypatch):
             )
         )
     assert redirect_response.status_code in (302, 307)
-    assert redirect_response.headers["location"] == "/dashboard"
+    assert redirect_response.headers["location"] == "http://localhost:3000/dashboard"
 
     with Session(engine) as session:
         user = session.exec(select(User).where(User.email == "google-user@example.com")).first()

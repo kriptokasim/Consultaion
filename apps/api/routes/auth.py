@@ -51,6 +51,22 @@ OAUTH_NEXT_COOKIE = "google_oauth_next"
 SAFE_NEXT_DEFAULT = "/dashboard"
 SAFE_NEXT_PREFIXES = ("/dashboard", "/runs", "/live", "/leaderboard", "/")
 
+_WEB_ORIGIN_ENV_KEYS = [
+    "WEB_APP_ORIGIN",
+    "NEXT_PUBLIC_WEB_URL",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_WEB_ORIGIN",
+    "NEXT_PUBLIC_APP_ORIGIN",
+    "NEXT_PUBLIC_SITE_URL",
+]
+for _env_key in _WEB_ORIGIN_ENV_KEYS:
+    _candidate = os.getenv(_env_key)
+    if _candidate:
+        WEB_APP_ORIGIN = _candidate.rstrip("/")
+        break
+else:
+    WEB_APP_ORIGIN = "http://localhost:3000"
+
 
 def sanitize_next_path(raw_next: Optional[str]) -> str:
     candidate = (raw_next or "").strip()
@@ -80,6 +96,11 @@ def sanitize_next_path(raw_next: Optional[str]) -> str:
     query = f"?{parsed.query}" if parsed.query else ""
     fragment = f"#{parsed.fragment}" if parsed.fragment else ""
     return f"{path}{query}{fragment}"
+
+
+def build_frontend_redirect(path: str) -> str:
+    cleaned = path if path.startswith("/") else f"/{path}"
+    return f"{WEB_APP_ORIGIN}{cleaned}"
 
 
 def _google_config() -> tuple[str, str, str]:
@@ -201,7 +222,7 @@ async def google_callback(
         audit_action = "register_google"
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     redirect_target = sanitize_next_path(request.cookies.get(OAUTH_NEXT_COOKIE))
-    redirect_resp = RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
+    redirect_resp = RedirectResponse(url=build_frontend_redirect(redirect_target), status_code=status.HTTP_302_FOUND)
     set_auth_cookie(redirect_resp, token)
     if ENABLE_CSRF:
         set_csrf_cookie(redirect_resp, generate_csrf_token())
