@@ -16,6 +16,7 @@ from models import Debate, DebateRound, Message, Score, Vote
 from ratings import update_ratings_for_debate
 from schemas import DebateConfig, default_agents, default_judges
 from usage_limits import record_token_usage
+from billing.service import add_tokens_usage
 
 logger = logging.getLogger(__name__)
 
@@ -317,18 +318,32 @@ async def run_debate(
         await q.put(
             {
                 "type": "final",
-                    "content": final_answer,
-                    "meta": {
-                        "prompt": prompt,
-                        "scores": aggregate_scores,
-                        "ranking": ranking,
-                        "usage": usage_snapshot,
-                        "budget_reason": budget_reason,
-                        "early_stop_reason": early_stop_reason,
-                        "vote": vote_details,
-                    },
-                }
+                "content": final_answer,
+                "meta": {
+                    "prompt": prompt,
+                    "scores": aggregate_scores,
+                    "ranking": ranking,
+                    "usage": usage_snapshot,
+                    "budget_reason": budget_reason,
+                    "early_stop_reason": early_stop_reason,
+                    "vote": vote_details,
+                },
+            }
         )
+        if debate_user_id:
+            token_totals: Dict[str, int] = {}
+            for call in usage_tracker.calls:
+                if not getattr(call, "model", None):
+                    continue
+                token_totals[call.model] = token_totals.get(call.model, 0) + int(call.total_tokens)
+            if token_totals:
+                try:
+                    with session_scope() as session:
+                        for model_name, total in token_totals.items():
+                            add_tokens_usage(session, debate_user_id, model_name, total)
+                        session.commit()
+                except Exception:
+                    logger.exception("Failed to record billing token usage for debate %s", debate_id)
         logger.debug("Debate %s: finalized, triggering rating update", debate_id)
         loop = asyncio.get_running_loop()
         def _run_update():

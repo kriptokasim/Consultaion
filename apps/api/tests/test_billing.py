@@ -1,5 +1,6 @@
 import atexit
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -18,6 +19,8 @@ os.environ.setdefault("DISABLE_RATINGS", "1")
 os.environ.setdefault("FAST_DEBATE", "1")
 os.environ.setdefault("RL_MAX_CALLS", "1000")
 os.environ.setdefault("JWT_SECRET", "test-secret")
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from billing.models import BillingPlan  # noqa: E402
 from billing.service import (  # noqa: E402
@@ -48,6 +51,10 @@ init_db()
 def _ensure_default_plan(session: Session) -> BillingPlan:
     plan = session.exec(select(BillingPlan).where(BillingPlan.slug == "free")).first()
     if plan:
+        plan.limits = {"max_debates_per_month": 1, "exports_enabled": False}
+        session.add(plan)
+        session.commit()
+        session.refresh(plan)
         return plan
     plan = BillingPlan(
         slug="free",
@@ -67,8 +74,9 @@ def test_billing_usage_helpers_enforce_limits():
         plan = _ensure_default_plan(session)
         active_plan = get_active_plan(session, user_id)
         assert active_plan.id == plan.id
+        assert active_plan.limits.get("max_debates_per_month") == 1
 
-        usage = get_or_create_usage(session, user_id, period="2025-11")
+        usage = get_or_create_usage(session, user_id)
         assert usage.debates_created == 0
 
         usage = increment_debate_usage(session, user_id)

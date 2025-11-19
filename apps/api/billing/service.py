@@ -65,14 +65,28 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
     plan = get_active_plan(db, user_id)
     limits: Dict[str, object] = plan.limits or {}
 
-    max_debates = limits.get("max_debates_per_month")
-    if isinstance(max_debates, int) and usage.debates_created > max_debates:
+    def _as_int(value: object) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    max_debates = _as_int(limits.get("max_debates_per_month"))
+    if max_debates is not None and usage.debates_created > max_debates:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={"code": "BILLING_LIMIT_DEBATES", "max": max_debates},
         )
 
-    if not limits.get("exports_enabled", True) and usage.exports_count > 0:
+    exports_flag = limits.get("exports_enabled", True)
+    exports_allowed = not (
+        exports_flag in {False, "false", "False", "0", 0}
+    )
+    if not exports_allowed and usage.exports_count > 0:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={"code": "BILLING_LIMIT_EXPORTS_DISABLED"},

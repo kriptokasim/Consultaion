@@ -1,18 +1,27 @@
 from __future__ import annotations
 
-from typing import Dict, List
+import logging
+import uuid
+from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from deps import get_current_user, get_session
 from model_registry import ALL_MODELS
 from models import User
 
-from .models import BillingUsage
-from .service import _current_period
+from .models import BillingPlan, BillingUsage
+from .providers import get_billing_provider
+from .service import (
+    _current_period,
+    get_active_plan,
+    get_or_create_usage,
+)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+logger = logging.getLogger(__name__)
 
 MODEL_COST_PER_1K = {
     "router-smart": 0.50,
@@ -60,6 +69,92 @@ def get_model_usage(
             }
         )
     return {"items": items}
+
+
+@router.get("/plans")
+def list_billing_plans(session: Session = Depends(get_session)):
+    plans = session.exec(select(BillingPlan)).all()
+
+    def sort_key(plan: BillingPlan):
+        price = plan.price_monthly if plan.price_monthly is not None else float("inf")
+        return (0 if plan.is_default_free else 1, float(price))
+
+    plans.sort(key=sort_key)
+    payload = [
+        {
+            "slug": plan.slug,
+            "name": plan.name,
+            "price_monthly": float(plan.price_monthly or 0.0) if plan.price_monthly is not None else None,
+            "currency": plan.currency,
+            "is_default_free": plan.is_default_free,
+            "limits": plan.limits or {},
+        }
+        for plan in plans
+    ]
+    return {"items": payload}
+
+
+class CheckoutRequest(BaseModel):
+    plan_slug: str
+
+
+@router.get("/me")
+def get_billing_me(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    plan = get_active_plan(session, current_user.id)
+    usage = get_or_create_usage(session, current_user.id)
+    return {
+        "plan": {
+            "slug": plan.slug,
+            "name": plan.name,
+            "price_monthly": float(plan.price_monthly or 0.0) if plan.price_monthly is not None else None,
+            "currency": plan.currency,
+            "is_default_free": plan.is_default_free,
+            "limits": plan.limits or {},
+        },
+        "usage": {
+            "period": usage.period,
+            "debates_created": usage.debates_created,
+            "exports_count": usage.exports_count,
+            "tokens_used": usage.tokens_used,
+        },
+    }
+
+
+@router.post("/checkout")
+def create_checkout(
+    body: CheckoutRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    plan = session.exec(select(BillingPlan).where(BillingPlan.slug == body.plan_slug)).first()
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="plan not found")
+    provider = get_billing_provider()
+    try:
+        user_uuid = uuid.UUID(current_user.id)
+    except ValueError:
+        user_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, current_user.id)
+    checkout_url = provider.create_checkout_session(user_uuid, plan)
+    return {"checkout_url": checkout_url}
+
+
+@router.post("/webhook/{provider}")
+async def billing_webhook(provider: str, request: Request):
+    payload: Optional[Dict] = None
+    try:
+        payload = await request.json()
+    except Exception:
+        logger.warning("billing webhook received non-JSON payload")
+        payload = None
+    headers = dict(request.headers)
+    provider_name = provider.lower()
+    if provider_name == "stripe":
+        get_billing_provider().handle_webhook(payload or {}, headers)
+        return {"status": "ok"}
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="provider not supported")
 
 
 billing_router = router

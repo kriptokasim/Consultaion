@@ -23,6 +23,8 @@ A platform that produces the best answer via multi-agent debate/voting.
 | `ENABLE_METRICS` | Toggle `/metrics` counters for debates/SSE/exports. |
 | `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_VOTE_THRESHOLD` | Client API origin & Aye threshold. |
 | `WEB_APP_ORIGIN` | Frontend base used for OAuth redirects (default `http://localhost:3000`). |
+| `BILLING_PROVIDER` / `STRIPE_*` / `BILLING_CHECKOUT_*` | Billing provider selection, Stripe keys, and checkout redirect URLs. |
+| `WEB_APP_ORIGIN` | Frontend base used for OAuth redirects (default `http://localhost:3000`). |
 
 ### Model catalog & providers
 - Consultaion uses LiteLLM as an internal gateway and supports OpenRouter, OpenAI, Anthropic, and Gemini (server-side keys only; users do not supply their own).

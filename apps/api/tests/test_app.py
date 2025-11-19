@@ -3,6 +3,7 @@ import importlib
 import os
 import sys
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 import atexit
 
@@ -37,6 +38,7 @@ os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from main import (  # noqa: E402
     AuthRequest,
@@ -70,6 +72,34 @@ from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
 
 init_db()
+
+
+def _seed_billing_plans():
+    with Session(engine) as session:
+        existing = session.exec(select(BillingPlan).where(BillingPlan.slug == "free")).first()
+        if existing:
+            return
+        session.add(
+            BillingPlan(
+                slug="free",
+                name="Free",
+                is_default_free=True,
+                limits={"max_debates_per_month": 5, "exports_enabled": True},
+            )
+        )
+        session.add(
+            BillingPlan(
+                slug="pro",
+                name="Pro",
+                price_monthly=Decimal("29.00"),
+                currency="USD",
+                limits={"max_debates_per_month": 100, "exports_enabled": True},
+            )
+        )
+        session.commit()
+
+
+_seed_billing_plans()
 
 
 def test_debate_create_prompt_validation():
@@ -214,6 +244,15 @@ def test_export_scores_csv_endpoint():
     text = csv_response.body.decode()
     assert "persona,judge,score,rationale,timestamp" in text
     assert "Analyst" in text
+
+
+def test_billing_usage_increments_on_debate_create():
+    user = _register_user("billing-check@example.com", "secret123")
+    _create_debate_for_user(user, "Billing usage prompt")
+    with Session(engine) as session:
+        usage = session.exec(select(BillingUsage).where(BillingUsage.user_id == user.id)).first()
+        assert usage is not None
+        assert usage.debates_created >= 1
 
 
 def test_get_debate_events_includes_pairwise_votes():

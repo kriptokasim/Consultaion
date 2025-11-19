@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 from pydantic import BaseModel
 
 from audit import record_audit
+from billing.service import increment_debate_usage, increment_export_usage
 from deps import get_current_user, get_optional_user, get_session
 from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
 from model_registry import get_default_model, get_model, list_enabled_models
@@ -143,6 +144,7 @@ async def create_debate(
     if current_user:
         try:
             reserve_run_slot(session, current_user.id)
+            increment_debate_usage(session, current_user.id)
         except RateLimitError as exc:
             payload = {
                 "code": "rate_limit",
@@ -353,6 +355,7 @@ async def export_debate_report(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
+    increment_export_usage(session, current_user.id)
     data = _build_report(session, debate_id, current_user)
     filepath = EXPORT_DIR / f"{debate_id}.md"
     filepath.write_text(_report_to_markdown(data), encoding="utf-8")
@@ -477,6 +480,7 @@ async def export_scores_csv(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
+    increment_export_usage(session, current_user.id)
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())).all()
     if not scores:
