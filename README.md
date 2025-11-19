@@ -9,6 +9,8 @@ A platform that produces the best answer via multi-agent debate/voting.
 5. `cd infra && docker compose up --build` (starts FastAPI, Next.js, Postgres).
 6. Optional for local smoketests: set `FAST_DEBATE=1` to bypass the full LLM loop and return mock events instantly.
 
+📚 Need endpoint details or diagrams? See `docs/API.md` and `docs/ARCHITECTURE.md`. Progress against the audit plan lives in `IMPROVEMENT_PLAN.md` / `IMPROVEMENTS_SUMMARY.md`.
+
 ### Environment Flags
 
 | Variable | Purpose |
@@ -50,6 +52,9 @@ A platform that produces the best answer via multi-agent debate/voting.
 - Alembic migrations, Postgres persistence, health/version endpoints, usage quotas, and structured rate limits.
 - Pairwise vote tracking → Elo & Wilson confidence intervals powering a public leaderboard and Methodology brief.
 - Web UI uses an “Amber-Mocha” cockpit theme (warm cream background with amber accents) across landing, dashboard, and live views.
+
+### Test coverage
+- `pytest -q` in `apps/api` now includes the audit-derived suites for orchestrator helpers, ratings, rate limits, SSE channel hygiene, and the multi-LLM registry (`apps/api/tests/test_*.py`). Run them locally after migrations to catch regressions early.
 
 ### API Router Layout
 - `apps/api/routes/auth.py`: login/register/session endpoints.

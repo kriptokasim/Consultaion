@@ -1,7 +1,7 @@
 import asyncio
 import os
-import asyncio
 import sys
+import uuid
 from pathlib import Path
 
 from fastapi import BackgroundTasks
@@ -11,9 +11,13 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("USE_MOCK", "1")
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from billing.models import BillingUsage  # noqa: E402
+from billing.routes import get_model_usage  # noqa: E402
+from billing.service import _current_period  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from main import app  # noqa: E402
 from model_registry import ModelConfig, ModelProvider, list_enabled_models  # noqa: E402
+from models import User  # noqa: E402
 from routes.debates import create_debate  # noqa: E402
 import agents as agents_module  # noqa: E402
 from schemas import DebateCreate  # noqa: E402
@@ -104,3 +108,28 @@ def test_call_llm_uses_registry_model(monkeypatch):
     assert usage.total_tokens == 8.0
     assert usage.provider == "test-provider"
     assert calls.get("model") == "openai/custom-model"
+
+
+def test_billing_model_usage_endpoint(monkeypatch):
+    monkeypatch.setenv("USE_MOCK", "1")
+    init_db()
+    with Session(engine) as session:
+        user = User(id=str(uuid.uuid4()), email="usage@example.com", password_hash="x", role="user")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        usage = BillingUsage(
+            user_id=user.id,
+            period=_current_period(),
+            model_tokens={"router-smart": 1500, "claude-sonnet": 250},
+        )
+        session.add(usage)
+        session.commit()
+
+        payload = get_model_usage(session=session, current_user=user)
+
+    assert payload["items"]
+    first_entry = payload["items"][0]
+    assert "model_id" in first_entry
+    assert first_entry["tokens_used"] > 0
