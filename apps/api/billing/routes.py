@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from deps import get_current_user, get_session
+from auth import get_current_user
+from deps import get_session
 from model_registry import ALL_MODELS
 from models import User
 

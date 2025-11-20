@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Sequence
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Optional
 
 from agents import (
     criticize_and_revise,
@@ -111,263 +111,6 @@ def _select_candidates(preferred: Sequence[str], candidates: List[Dict[str, Any]
     return candidates[:fallback_count] if candidates else []
 
 
-async def run_debate(
-    debate_id: str,
-    prompt: str,
-    q,
-    config_data: Dict[str, Any],
-    model_id: str | None = None,
-    cleanup_cb: Callable[[str], None] | None = None,
-):
-    config = DebateConfig.model_validate(config_data or {})
-    agent_configs = config.agents or default_agents()
-    judge_configs = config.judges or default_judges()
-    budget = config.budget
-
-    await q.put({"type": "round_started", "round": 0, "note": "plan"})
-
-    final_answer = ""
-    aggregate_scores: List[Dict[str, Any]] = []
-    ranking: List[str] = []
-    vote_details: Dict[str, Any] = {}
-    budget_reason: str | None = None
-    early_stop_reason: str | None = None
-    source_candidates: List[Dict[str, Any]] = []
-    selected_override: List[str] | None = None
-    budget_notice_sent = False
-
-    usage_tracker = UsageAccumulator()
-    debate_user_id: str | None = None
-    try:
-        logger.debug("Debate %s: starting orchestration", debate_id)
-        if os.getenv("FAST_DEBATE", "0") == "1":
-            mock_scores = [
-                {"persona": agent.name, "score": 8.0, "rationale": "fast-track"}
-                for agent in agent_configs
-            ]
-            usage_snapshot = usage_tracker.snapshot()
-            await q.put({"type": "message", "round": 0, "candidates": []})
-            await q.put(
-                {
-                    "type": "score",
-                    "scores": mock_scores,
-                    "judges": [
-                        {"persona": score["persona"], "judge": "FastJudge", "score": score["score"], "rationale": score["rationale"]}
-                        for score in mock_scores
-                    ],
-                }
-            )
-            await q.put(
-                {
-                    "type": "final",
-                    "content": "Fast debate completed.",
-                    "meta": {
-                        "scores": mock_scores,
-                        "ranking": [entry["persona"] for entry in mock_scores],
-                        "usage": usage_snapshot,
-                    },
-                }
-            )
-            _complete_debate_record(
-                debate_id,
-                final_content="Fast debate completed.",
-                final_meta={
-                    "scores": mock_scores,
-                    "ranking": [entry["persona"] for entry in mock_scores],
-                    "usage": usage_snapshot,
-                },
-                status="completed",
-                tokens_total=usage_tracker.total_tokens,
-            )
-            if cleanup_cb:
-                cleanup_cb(debate_id)
-            return
-        with session_scope() as session:
-            debate = session.get(Debate, debate_id)
-            if not debate:
-                await q.put({"type": "error", "message": "debate not found"})
-                if cleanup_cb:
-                    cleanup_cb(debate_id)
-                return
-            debate_user_id = debate.user_id
-            debate.status = "running"
-            debate.updated_at = datetime.now(timezone.utc)
-            session.add(debate)
-            session.commit()
-
-        draft_round = _start_round(debate_id, 1, "draft", "candidate drafting")
-        candidate_results = await asyncio.gather(
-            *[produce_candidate(prompt, agent, model_id=model_id, debate_id=debate_id) for agent in agent_configs]
-        )
-        candidates = []
-        for payload, candidate_usage in candidate_results:
-            candidates.append(payload)
-            usage_tracker.extend(candidate_usage)
-        source_candidates = candidates
-        _persist_messages(debate_id, 1, candidates, role="candidate")
-        _end_round(draft_round)
-        await q.put({"type": "message", "round": 1, "candidates": candidates})
-        logger.debug("Debate %s: produced %d candidates", debate_id, len(candidates))
-        budget_reason = _check_budget(budget, usage_tracker) or budget_reason
-        if budget_reason and not budget_notice_sent:
-            await q.put({"type": "notice", "message": budget_reason})
-            budget_notice_sent = True
-
-        revised = candidates
-        if not budget_reason:
-            critique_round = _start_round(debate_id, 2, "critique", "cross-critique and revision")
-            revised, critique_usage = await criticize_and_revise(prompt, candidates, model_id=model_id, debate_id=debate_id)
-            usage_tracker.extend(critique_usage)
-            source_candidates = revised
-            _persist_messages(debate_id, 2, revised, role="revised")
-            _end_round(critique_round)
-            await q.put({"type": "message", "round": 2, "revised": revised})
-            logger.debug("Debate %s: critique round completed", debate_id)
-            budget_reason = _check_budget(budget, usage_tracker) or budget_reason
-            if budget_reason and not budget_notice_sent:
-                await q.put({"type": "notice", "message": budget_reason})
-                budget_notice_sent = True
-
-        judge_details: List[Dict[str, Any]] = []
-        if not budget_reason:
-            judge_round = _start_round(debate_id, 3, "judge", "rubric scoring")
-            aggregate_scores, judge_details, judge_usage = await judge_scores(
-                prompt, revised, judge_configs, model_id=model_id, debate_id=debate_id
-            )
-            usage_tracker.extend(judge_usage)
-            with session_scope() as session:
-                for detail in judge_details:
-                    session.add(
-                        Score(
-                            debate_id=debate_id,
-                            persona=detail["persona"],
-                            judge=detail["judge"],
-                            score=detail["score"],
-                            rationale=detail["rationale"],
-                        )
-                    )
-                session.commit()
-            _end_round(judge_round)
-            await q.put({"type": "score", "round": 3, "scores": aggregate_scores, "judges": judge_details})
-            ranking, vote_details = _compute_rankings(aggregate_scores)
-            logger.debug("Debate %s: judges completed with %d entries", debate_id, len(judge_details))
-            with session_scope() as session:
-                session.add(
-                    Vote(
-                        debate_id=debate_id,
-                        method="borda+condorcet",
-                        rankings={"order": ranking},
-                        weights={"borda_weight": 1.0, "condorcet_weight": 1.0},
-                        result=vote_details,
-                    )
-                )
-                session.commit()
-
-            if aggregate_scores:
-                sorted_scores = sorted(aggregate_scores, key=lambda s: s["score"], reverse=True)
-                if (
-                    budget
-                    and budget.early_stop_delta is not None
-                    and len(sorted_scores) > 1
-                    and (sorted_scores[0]["score"] - sorted_scores[1]["score"]) > budget.early_stop_delta
-                ):
-                    early_stop_reason = f"score_gap_{sorted_scores[0]['score'] - sorted_scores[1]['score']:.2f}"
-                    selected_override = [sorted_scores[0]["persona"]]
-
-        if not aggregate_scores:
-            aggregate_scores = [
-                {"persona": c["persona"], "score": 0.0, "rationale": "No judges available"}
-                for c in (source_candidates or candidates)
-            ]
-            ranking = [c["persona"] for c in (source_candidates or candidates)]
-        elif not ranking:
-            ranking = [c["persona"] for c in aggregate_scores]
-
-        preferred = selected_override or ranking[:3]
-        selected_candidates = _select_candidates(preferred, source_candidates or candidates)
-        selected_scores = [s for s in aggregate_scores if s["persona"] in {c["persona"] for c in selected_candidates}]
-        if not selected_candidates:
-            selected_candidates = source_candidates or candidates
-        if not selected_scores:
-            selected_scores = aggregate_scores
-
-        final_answer, synthesis_usage = await synthesize(
-            prompt, selected_candidates, selected_scores, model_id=model_id, debate_id=debate_id
-        )
-        usage_tracker.extend(synthesis_usage)
-        usage_snapshot = usage_tracker.snapshot()
-        tokens_total = float(usage_tracker.total_tokens)
-        final_meta = {
-            "prompt": prompt,
-            "scores": aggregate_scores,
-            "ranking": ranking,
-            "usage": usage_snapshot,
-            "vote": vote_details,
-            "budget_reason": budget_reason,
-            "early_stop_reason": early_stop_reason,
-        }
-        _complete_debate_record(
-            debate_id,
-            final_content=final_answer,
-            final_meta=final_meta,
-            status="completed" if not budget_reason else "completed_budget",
-            tokens_total=tokens_total,
-            user_id=debate_user_id,
-        )
-
-        await q.put(
-            {
-                "type": "final",
-                "content": final_answer,
-                "meta": {
-                    "prompt": prompt,
-                    "scores": aggregate_scores,
-                    "ranking": ranking,
-                    "usage": usage_snapshot,
-                    "budget_reason": budget_reason,
-                    "early_stop_reason": early_stop_reason,
-                    "vote": vote_details,
-                },
-            }
-        )
-        if debate_user_id:
-            token_totals: Dict[str, int] = {}
-            for call in usage_tracker.calls:
-                if not getattr(call, "model", None):
-                    continue
-                token_totals[call.model] = token_totals.get(call.model, 0) + int(call.total_tokens)
-            if token_totals:
-                try:
-                    with session_scope() as session:
-                        for model_name, total in token_totals.items():
-                            add_tokens_usage(session, debate_user_id, model_name, total)
-                        session.commit()
-                except Exception:
-                    logger.exception("Failed to record billing token usage for debate %s", debate_id)
-        logger.debug("Debate %s: finalized, triggering rating update", debate_id)
-        loop = asyncio.get_running_loop()
-        def _run_update():
-            try:
-                update_ratings_for_debate(debate_id)
-                logger.debug("Debate %s: rating update completed", debate_id)
-            except Exception:
-                logger.exception("Rating update failed for debate %s", debate_id)
-
-        loop.run_in_executor(None, _run_update)
-    except Exception as exc:
-        logger.exception("Debate %s failed: %s", debate_id, exc)
-        with session_scope() as session:
-            debate = session.get(Debate, debate_id)
-            if debate:
-                debate.status = "failed"
-                debate.updated_at = datetime.now(timezone.utc)
-                debate.final_meta = {"error": str(exc)}
-                session.add(debate)
-                session.commit()
-        await q.put({"type": "error", "message": str(exc)})
-    finally:
-        if cleanup_cb:
-            cleanup_cb(debate_id)
 def _complete_debate_record(
     debate_id: str,
     *,
@@ -392,3 +135,333 @@ def _complete_debate_record(
             except Exception:
                 logger.exception("Failed to record token usage for debate %s", debate_id)
         session.commit()
+
+
+async def _run_mock_debate(
+    debate_id: str,
+    q: asyncio.Queue,
+    agent_configs: list,
+    usage_tracker: UsageAccumulator,
+    cleanup_cb: Callable[[str], None] | None,
+):
+    """Execute a fast mock debate for testing."""
+    mock_scores = [
+        {"persona": agent.name, "score": 8.0, "rationale": "fast-track"}
+        for agent in agent_configs
+    ]
+    usage_snapshot = usage_tracker.snapshot()
+    await q.put({"type": "message", "round": 0, "candidates": []})
+    await q.put(
+        {
+            "type": "score",
+            "scores": mock_scores,
+            "judges": [
+                {"persona": score["persona"], "judge": "FastJudge", "score": score["score"], "rationale": score["rationale"]}
+                for score in mock_scores
+            ],
+        }
+    )
+    await q.put(
+        {
+            "type": "final",
+            "content": "Fast debate completed.",
+            "meta": {
+                "scores": mock_scores,
+                "ranking": [entry["persona"] for entry in mock_scores],
+                "usage": usage_snapshot,
+            },
+        }
+    )
+    _complete_debate_record(
+        debate_id,
+        final_content="Fast debate completed.",
+        final_meta={
+            "scores": mock_scores,
+            "ranking": [entry["persona"] for entry in mock_scores],
+            "usage": usage_snapshot,
+        },
+        status="completed",
+        tokens_total=usage_tracker.total_tokens,
+    )
+    if cleanup_cb:
+        cleanup_cb(debate_id)
+
+
+async def _run_draft_round(
+    debate_id: str,
+    prompt: str,
+    agent_configs: list,
+    model_id: str | None,
+    usage_tracker: UsageAccumulator,
+    q: asyncio.Queue,
+) -> List[Dict[str, Any]]:
+    """Execute the draft round."""
+    draft_round = _start_round(debate_id, 1, "draft", "candidate drafting")
+    candidate_results = await asyncio.gather(
+        *[produce_candidate(prompt, agent, model_id=model_id, debate_id=debate_id) for agent in agent_configs]
+    )
+    candidates = []
+    for payload, candidate_usage in candidate_results:
+        candidates.append(payload)
+        usage_tracker.extend(candidate_usage)
+    
+    _persist_messages(debate_id, 1, candidates, role="candidate")
+    _end_round(draft_round)
+    await q.put({"type": "message", "round": 1, "candidates": candidates})
+    logger.debug("Debate %s: produced %d candidates", debate_id, len(candidates))
+    return candidates
+
+
+async def _run_critique_round(
+    debate_id: str,
+    prompt: str,
+    candidates: List[Dict[str, Any]],
+    model_id: str | None,
+    usage_tracker: UsageAccumulator,
+    q: asyncio.Queue,
+) -> List[Dict[str, Any]]:
+    """Execute the critique and revision round."""
+    critique_round = _start_round(debate_id, 2, "critique", "cross-critique and revision")
+    revised, critique_usage = await criticize_and_revise(prompt, candidates, model_id=model_id, debate_id=debate_id)
+    usage_tracker.extend(critique_usage)
+    
+    _persist_messages(debate_id, 2, revised, role="revised")
+    _end_round(critique_round)
+    await q.put({"type": "message", "round": 2, "revised": revised})
+    logger.debug("Debate %s: critique round completed", debate_id)
+    return revised
+
+
+async def _run_judge_round(
+    debate_id: str,
+    prompt: str,
+    candidates: List[Dict[str, Any]],
+    judge_configs: list,
+    model_id: str | None,
+    usage_tracker: UsageAccumulator,
+    q: asyncio.Queue,
+) -> Tuple[List[Dict[str, Any]], List[str], Dict[str, Any]]:
+    """Execute the judging round and return (aggregate_scores, ranking, vote_details)."""
+    judge_round = _start_round(debate_id, 3, "judge", "rubric scoring")
+    aggregate_scores, judge_details, judge_usage = await judge_scores(
+        prompt, candidates, judge_configs, model_id=model_id, debate_id=debate_id
+    )
+    usage_tracker.extend(judge_usage)
+    
+    with session_scope() as session:
+        for detail in judge_details:
+            session.add(
+                Score(
+                    debate_id=debate_id,
+                    persona=detail["persona"],
+                    judge=detail["judge"],
+                    score=detail["score"],
+                    rationale=detail["rationale"],
+                )
+            )
+        session.commit()
+    
+    _end_round(judge_round)
+    await q.put({"type": "score", "round": 3, "scores": aggregate_scores, "judges": judge_details})
+    ranking, vote_details = _compute_rankings(aggregate_scores)
+    logger.debug("Debate %s: judges completed with %d entries", debate_id, len(judge_details))
+    
+    with session_scope() as session:
+        session.add(
+            Vote(
+                debate_id=debate_id,
+                method="borda+condorcet",
+                rankings={"order": ranking},
+                weights={"borda_weight": 1.0, "condorcet_weight": 1.0},
+                result=vote_details,
+            )
+        )
+        session.commit()
+        
+    return aggregate_scores, ranking, vote_details
+
+
+async def run_debate(
+    debate_id: str,
+    prompt: str,
+    q,
+    config_data: Dict[str, Any],
+    model_id: str | None = None,
+    cleanup_cb: Callable[[str], None] | None = None,
+):
+    config = DebateConfig.model_validate(config_data or {})
+    agent_configs = config.agents or default_agents()
+    judge_configs = config.judges or default_judges()
+    budget = config.budget
+
+    await q.put({"type": "round_started", "round": 0, "note": "plan"})
+
+    usage_tracker = UsageAccumulator()
+    debate_user_id: str | None = None
+    
+    # State variables
+    aggregate_scores: List[Dict[str, Any]] = []
+    ranking: List[str] = []
+    vote_details: Dict[str, Any] = {}
+    source_candidates: List[Dict[str, Any]] = []
+    selected_override: List[str] | None = None
+    budget_reason: str | None = None
+    early_stop_reason: str | None = None
+    budget_notice_sent = False
+
+    try:
+        logger.debug("Debate %s: starting orchestration", debate_id)
+        
+        # 1. Mock Run check
+        if os.getenv("FAST_DEBATE", "0") == "1":
+            return await _run_mock_debate(debate_id, q, agent_configs, usage_tracker, cleanup_cb)
+
+        # 2. Initialization
+        with session_scope() as session:
+            debate = session.get(Debate, debate_id)
+            if not debate:
+                await q.put({"type": "error", "message": "debate not found"})
+                if cleanup_cb:
+                    cleanup_cb(debate_id)
+                return
+            debate_user_id = debate.user_id
+            debate.status = "running"
+            debate.updated_at = datetime.now(timezone.utc)
+            session.add(debate)
+            session.commit()
+
+        # 3. Draft Round
+        candidates = await _run_draft_round(debate_id, prompt, agent_configs, model_id, usage_tracker, q)
+        source_candidates = candidates
+        
+        budget_reason = _check_budget(budget, usage_tracker) or budget_reason
+        if budget_reason and not budget_notice_sent:
+            await q.put({"type": "notice", "message": budget_reason})
+            budget_notice_sent = True
+
+        # 4. Critique Round (if budget allows)
+        revised = candidates
+        if not budget_reason:
+            revised = await _run_critique_round(debate_id, prompt, candidates, model_id, usage_tracker, q)
+            source_candidates = revised
+            
+            budget_reason = _check_budget(budget, usage_tracker) or budget_reason
+            if budget_reason and not budget_notice_sent:
+                await q.put({"type": "notice", "message": budget_reason})
+                budget_notice_sent = True
+
+        # 5. Judge Round (if budget allows)
+        if not budget_reason:
+            aggregate_scores, ranking, vote_details = await _run_judge_round(
+                debate_id, prompt, revised, judge_configs, model_id, usage_tracker, q
+            )
+            
+            # Early stop check based on score gap
+            if aggregate_scores:
+                sorted_scores = sorted(aggregate_scores, key=lambda s: s["score"], reverse=True)
+                if (
+                    budget
+                    and budget.early_stop_delta is not None
+                    and len(sorted_scores) > 1
+                    and (sorted_scores[0]["score"] - sorted_scores[1]["score"]) > budget.early_stop_delta
+                ):
+                    early_stop_reason = f"score_gap_{sorted_scores[0]['score'] - sorted_scores[1]['score']:.2f}"
+                    selected_override = [sorted_scores[0]["persona"]]
+
+        # 6. Final Selection & Synthesis
+        # Fallback if no scores/ranking
+        if not aggregate_scores:
+            aggregate_scores = [
+                {"persona": c["persona"], "score": 0.0, "rationale": "No judges available"}
+                for c in (source_candidates or candidates)
+            ]
+            ranking = [c["persona"] for c in (source_candidates or candidates)]
+        elif not ranking:
+            ranking = [c["persona"] for c in aggregate_scores]
+
+        preferred = selected_override or ranking[:3]
+        selected_candidates = _select_candidates(preferred, source_candidates or candidates)
+        selected_scores = [s for s in aggregate_scores if s["persona"] in {c["persona"] for c in selected_candidates}]
+        
+        if not selected_candidates:
+            selected_candidates = source_candidates or candidates
+        if not selected_scores:
+            selected_scores = aggregate_scores
+
+        final_answer, synthesis_usage = await synthesize(
+            prompt, selected_candidates, selected_scores, model_id=model_id, debate_id=debate_id
+        )
+        usage_tracker.extend(synthesis_usage)
+        
+        # 7. Finalization & Billing
+        usage_snapshot = usage_tracker.snapshot()
+        tokens_total = float(usage_tracker.total_tokens)
+        final_meta = {
+            "prompt": prompt,
+            "scores": aggregate_scores,
+            "ranking": ranking,
+            "usage": usage_snapshot,
+            "vote": vote_details,
+            "budget_reason": budget_reason,
+            "early_stop_reason": early_stop_reason,
+        }
+        
+        _complete_debate_record(
+            debate_id,
+            final_content=final_answer,
+            final_meta=final_meta,
+            status="completed" if not budget_reason else "completed_budget",
+            tokens_total=tokens_total,
+            user_id=debate_user_id,
+        )
+
+        await q.put(
+            {
+                "type": "final",
+                "content": final_answer,
+                "meta": final_meta,
+            }
+        )
+
+        # Billing
+        if debate_user_id:
+            token_totals: Dict[str, int] = {}
+            for call in usage_tracker.calls:
+                if not getattr(call, "model", None):
+                    continue
+                token_totals[call.model] = token_totals.get(call.model, 0) + int(call.total_tokens)
+            if token_totals:
+                try:
+                    with session_scope() as session:
+                        for model_name, total in token_totals.items():
+                            add_tokens_usage(session, debate_user_id, model_name, total)
+                        session.commit()
+                except Exception:
+                    logger.exception("Failed to record billing token usage for debate %s", debate_id)
+
+        # Rating Updates (Async)
+        logger.debug("Debate %s: finalized, triggering rating update", debate_id)
+        loop = asyncio.get_running_loop()
+        def _run_update():
+            try:
+                update_ratings_for_debate(debate_id)
+                logger.debug("Debate %s: rating update completed", debate_id)
+            except Exception:
+                logger.exception("Rating update failed for debate %s", debate_id)
+
+        loop.run_in_executor(None, _run_update)
+
+    except Exception as exc:
+        logger.exception("Debate %s failed: %s", debate_id, exc)
+        with session_scope() as session:
+            debate = session.get(Debate, debate_id)
+            if debate:
+                debate.status = "failed"
+                debate.updated_at = datetime.now(timezone.utc)
+                debate.final_meta = {"error": str(exc)}
+                session.add(debate)
+                session.commit()
+        await q.put({"type": "error", "message": str(exc)})
+    finally:
+        if cleanup_cb:
+            cleanup_cb(debate_id)

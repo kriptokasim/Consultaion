@@ -94,3 +94,21 @@ class ModelPublic(BaseModel):
     tags: List[str] = Field(default_factory=list)
     max_context: Optional[int] = None
     recommended: bool = False
+
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    bio: Optional[str] = None
+    timezone: Optional[str] = None
+    is_admin: bool = False
+    created_at: str
+
+
+class UserProfileUpdate(BaseModel):
+    display_name: Optional[str] = Field(default=None, max_length=80)
+    avatar_url: Optional[str] = Field(default=None)
+    bio: Optional[str] = Field(default=None, max_length=1000)
+    timezone: Optional[str] = Field(default=None)

@@ -5,7 +5,8 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
-from deps import get_optional_user, get_session
+from auth import get_optional_user
+from deps import get_session
 from billing.service import get_active_plan
 from models import User
 

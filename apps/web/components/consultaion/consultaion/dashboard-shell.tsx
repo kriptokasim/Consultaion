@@ -26,10 +26,18 @@ const navigation = [
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
+type CurrentUserProfile = {
+  email: string
+  role: string
+  display_name?: string | null
+  avatar_url?: string | null
+  is_admin?: boolean
+}
+
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [theme, setTheme] = useState<"light" | "dark">("light")
-  const [profile, setProfile] = useState<{ email: string; role: string } | null>(null)
+  const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -93,7 +101,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }
 
   const navItems = [...navigation]
-  if (profile?.role === "admin") {
+  const isAdmin = Boolean(profile?.is_admin || profile?.role === "admin")
+  if (isAdmin) {
     navItems.push({ name: "Admin", href: "/admin", icon: Shield })
     navItems.push({ name: "Ops", href: "/admin/ops", icon: Shield })
   }
@@ -164,10 +173,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             {profile ? (
               <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent/80 px-3 py-3 shadow-inner shadow-amber-900/5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
-                  {profile.email.charAt(0).toUpperCase()}
+                  {(profile.display_name || profile.email).charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 text-sm">
-                  <div className="font-semibold text-sidebar-foreground">{profile.email}</div>
+                  <div className="font-semibold text-sidebar-foreground">{profile.display_name || profile.email}</div>
                   <div className="text-xs text-muted-foreground capitalize">{profile.role}</div>
                 </div>
               </div>
@@ -234,7 +243,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     Logout
                   </Button>
                   <div className="ml-1 flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5">
-                    {profile.email.charAt(0).toUpperCase()}
+                    {(profile.display_name || profile.email).charAt(0).toUpperCase()}
                   </div>
                 </>
               ) : (

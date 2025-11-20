@@ -18,6 +18,12 @@ class User(SQLModel, table=True):
     password_hash: str = Field(nullable=False)
     role: str = Field(default="user", nullable=False, index=True)
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    is_active: bool = Field(default=True, nullable=False)
+    is_admin: bool = Field(default=False, nullable=False)
+    display_name: Optional[str] = Field(default=None)
+    avatar_url: Optional[str] = Field(default=None)
+    bio: Optional[str] = Field(default=None, sa_column=Column(Text))
+    timezone: Optional[str] = Field(default=None)
 
 
 class APIKey(SQLModel, table=True):

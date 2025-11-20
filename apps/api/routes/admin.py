@@ -1,57 +1,264 @@
-from typing import Any
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from deps import get_session, require_admin
+from auth import get_current_admin
+from billing.models import BillingPlan, BillingSubscription, BillingUsage
+from billing.routes import MODEL_COST_PER_1K
+from billing.service import _current_period, get_active_plan
+from deps import get_session
+from model_registry import get_default_model, list_enabled_models
 from models import AuditLog, Debate, User
+from promotions.models import Promotion
 from ratings import update_ratings_for_debate
-from routes.common import serialize_team
+from routes.common import serialize_user
 
-router = APIRouter(tags=["admin"])
+router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.get("/admin/users")
-async def admin_users(
-    session: Session = Depends(get_session),
-    _: Any = Depends(require_admin),
-):
-    query = (
+def _latest_usage(session: Session, user_id: str) -> Optional[BillingUsage]:
+    return session.exec(
+        select(BillingUsage)
+        .where(BillingUsage.user_id == user_id)
+        .order_by(BillingUsage.period.desc())
+    ).first()
+
+
+def _plan_payload(plan: Optional[BillingPlan]) -> Optional[Dict[str, Any]]:
+    if not plan:
+        return None
+    return {
+        "slug": plan.slug,
+        "name": plan.name,
+        "price_monthly": float(plan.price_monthly or 0.0) if plan.price_monthly is not None else None,
+        "currency": plan.currency,
+        "is_default_free": plan.is_default_free,
+    }
+
+
+def _usage_payload(usage: Optional[BillingUsage]) -> Optional[Dict[str, Any]]:
+    if not usage:
+        return None
+    return {
+        "period": usage.period,
+        "debates_created": usage.debates_created,
+        "exports_count": usage.exports_count,
+        "tokens_used": usage.tokens_used,
+        "model_tokens": usage.model_tokens or {},
+        "last_updated_at": usage.last_updated_at.isoformat() if usage.last_updated_at else None,
+    }
+
+
+def _activity_snapshot(session: Session) -> Dict[str, Dict[str, Any]]:
+    rows = session.exec(
         select(
-            User,
-            func.count(Debate.id).label("debate_count"),
-            func.max(Debate.created_at).label("last_activity"),
-        )
-        .outerjoin(Debate, Debate.user_id == User.id)
-        .group_by(User.id)
-        .order_by(User.created_at.desc())
-    )
-    rows = session.exec(query).all()
-    items: list[dict[str, Any]] = []
-    for user, debate_count, last_activity in rows:
-        items.append(
+            Debate.user_id,
+            func.count(Debate.id),
+            func.max(Debate.created_at),
+        ).group_by(Debate.user_id)
+    ).all()
+    snapshot: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        if isinstance(row, tuple):
+            user_id, count_value, last_activity = row
+        else:
+            user_id = row[0]
+            count_value = row[1]
+            last_activity = row[2]
+        snapshot[str(user_id)] = {
+            "debate_count": int(count_value or 0),
+            "last_activity": last_activity.isoformat() if last_activity else None,
+        }
+    return snapshot
+
+
+@router.get("/users")
+def admin_users(
+    q: Optional[str] = Query(None, description="Search by email/display name."),
+    plan_slug: Optional[str] = Query(None, description="Filter users by active plan slug."),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    users = session.exec(select(User).order_by(User.created_at.desc())).all()
+    activity = _activity_snapshot(session)
+    filtered: List[Dict[str, Any]] = []
+    q_lower = q.lower() if q else None
+    for user in users:
+        if q_lower:
+            display = (user.display_name or "").lower()
+            email_match = q_lower in user.email.lower()
+            display_match = q_lower in display
+            if not email_match and not display_match:
+                continue
+        plan = None
+        try:
+            plan = get_active_plan(session, user.id)
+        except HTTPException:
+            plan = None
+        if plan_slug and (not plan or plan.slug != plan_slug):
+            continue
+        usage = _latest_usage(session, user.id)
+        row = {
+            **serialize_user(user),
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "plan": _plan_payload(plan),
+            "usage": _usage_payload(usage),
+        }
+        stats = activity.get(user.id, {"debate_count": 0, "last_activity": None})
+        row.update(
             {
-                "id": user.id,
-                "email": user.email,
-                "role": user.role,
-                "debate_count": int(debate_count or 0),
-                "last_activity": last_activity.isoformat() if last_activity else None,
-                "created_at": user.created_at.isoformat(),
+                "debate_count": stats.get("debate_count", 0),
+                "last_activity": stats.get("last_activity"),
             }
         )
+        filtered.append(row)
+    total = len(filtered)
+    items = filtered[offset : offset + limit]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/users/{user_id}")
+def admin_user_detail(
+    user_id: str,
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    plan = None
+    try:
+        plan = get_active_plan(session, user.id)
+    except HTTPException:
+        plan = None
+    usage = _latest_usage(session, user.id)
+    subscriptions = session.exec(
+        select(BillingSubscription).where(BillingSubscription.user_id == user.id).order_by(BillingSubscription.created_at.desc())
+    ).all()
+    subs_payload = [
+        {
+            "id": str(sub.id),
+            "plan_id": str(sub.plan_id),
+            "status": sub.status,
+            "current_period_start": sub.current_period_start.isoformat(),
+            "current_period_end": sub.current_period_end.isoformat(),
+            "provider": sub.provider,
+            "cancel_at_period_end": sub.cancel_at_period_end,
+        }
+        for sub in subscriptions
+    ]
+    return {
+        "user": serialize_user(user),
+        "plan": _plan_payload(plan),
+        "usage": _usage_payload(usage),
+        "subscriptions": subs_payload,
+    }
+
+
+@router.get("/users/{user_id}/billing")
+def admin_user_billing(
+    user_id: str,
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    plan = None
+    try:
+        plan = get_active_plan(session, user.id)
+    except HTTPException:
+        plan = None
+    current_period = _current_period()
+    usage = session.exec(
+        select(BillingUsage).where(BillingUsage.user_id == user.id, BillingUsage.period == current_period)
+    ).first()
+    return {
+        "plan": _plan_payload(plan),
+        "usage": _usage_payload(usage),
+    }
+
+
+@router.get("/models")
+def admin_models(
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    enabled_models = list_enabled_models()
+    totals: Dict[str, int] = defaultdict(int)
+    rows = session.exec(select(BillingUsage)).all()
+    for usage in rows:
+        for model_id, tokens in (usage.model_tokens or {}).items():
+            totals[model_id] += int(tokens or 0)
+
+    default_model = None
+    try:
+        default_model = get_default_model()
+    except Exception:
+        default_model = None
+
+    items = []
+    for cfg in enabled_models:
+        tokens_used = totals.get(cfg.id, 0)
+        approx_cost = None
+        cost_per_1k = MODEL_COST_PER_1K.get(cfg.id)
+        if cost_per_1k is not None:
+            approx_cost = round((tokens_used / 1000) * cost_per_1k, 4)
+        items.append(
+            {
+                "id": cfg.id,
+                "display_name": cfg.display_name,
+                "provider": cfg.provider.value,
+                "is_default": default_model.id == cfg.id if default_model else False,
+                "tokens_used": tokens_used,
+                "approx_cost_usd": approx_cost,
+                "tags": cfg.tags,
+            }
+        )
+    return {
+        "items": items,
+        "default_model": default_model.id if default_model else None,
+        "totals": {
+            "models": len(enabled_models),
+            "tokens_used": sum(totals.values()),
+        },
+    }
+
+
+@router.get("/promotions")
+def admin_promotions(
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    promos = session.exec(select(Promotion).order_by(Promotion.created_at.desc())).all()
+    items = [
+        {
+            "id": str(promo.id),
+            "location": promo.location,
+            "title": promo.title,
+            "target_plan_slug": promo.target_plan_slug,
+            "is_active": promo.is_active,
+            "priority": promo.priority,
+        }
+        for promo in promos
+    ]
     return {"items": items}
 
 
-@router.get("/admin/logs")
+@router.get("/logs")
 async def admin_logs(
     limit: int = Query(100, ge=1, le=500),
     session: Session = Depends(get_session),
-    _: Any = Depends(require_admin),
+    _: User = Depends(get_current_admin),
 ):
-    rows = session.exec(
-        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
-    ).all()
+    rows = session.exec(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
     return {
         "items": [
             {
@@ -71,7 +278,7 @@ async def admin_logs(
 @router.post("/ratings/update/{debate_id}")
 async def update_ratings_endpoint(
     debate_id: str,
-    _: Any = Depends(require_admin),
+    _: User = Depends(get_current_admin),
 ):
     await update_ratings_for_debate(debate_id)
     return {"ok": True}

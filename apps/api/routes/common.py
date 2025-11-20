@@ -68,7 +68,16 @@ def track_metric(name: str, value: int = 1) -> None:
 
 
 def serialize_user(user: User) -> dict[str, Any]:
-    return {"id": user.id, "email": user.email, "role": user.role}
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+        "display_name": getattr(user, "display_name", None),
+        "avatar_url": getattr(user, "avatar_url", None),
+        "timezone": getattr(user, "timezone", None),
+        "is_admin": bool(getattr(user, "is_admin", False) or user.role == "admin"),
+        "is_active": getattr(user, "is_active", True),
+    }
 
 
 def members_from_config(config: DebateConfig) -> list[dict[str, str]]:

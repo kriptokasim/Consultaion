@@ -9,6 +9,9 @@ from starlette.requests import Request
 
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("USE_MOCK", "1")
+os.environ.setdefault("COOKIE_SECURE", "0")
+os.environ["RL_MAX_CALLS"] = "1000"
+os.environ["AUTH_RL_MAX_CALLS"] = "1000"
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from billing.models import BillingUsage  # noqa: E402
@@ -22,10 +25,11 @@ from routes.debates import create_debate  # noqa: E402
 import agents as agents_module  # noqa: E402
 from schemas import DebateCreate  # noqa: E402
 from sqlmodel import Session  # noqa: E402
-from deps import get_optional_user  # noqa: E402
+from auth import get_optional_user  # noqa: E402
 
 
 def _dummy_request(path: str = "/debates") -> Request:
+    host = f"testclient-{uuid.uuid4().hex}"
     scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
@@ -35,7 +39,7 @@ def _dummy_request(path: str = "/debates") -> Request:
         "raw_path": path.encode(),
         "query_string": b"",
         "headers": [],
-        "client": ("testclient", 0),
+        "client": (host, 0),
         "server": ("testserver", 80),
         "scheme": "http",
     }

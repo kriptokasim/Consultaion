@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from audit import record_audit
-from deps import get_current_user, get_session
+from auth import get_current_user
+from deps import get_session
 from models import Team, TeamMember, User
 from routes.common import serialize_team, user_is_team_member, user_is_team_editor
 

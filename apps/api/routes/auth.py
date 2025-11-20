@@ -13,21 +13,23 @@ from pydantic import BaseModel
 from audit import record_audit
 from auth import (
     ENABLE_CSRF,
+    COOKIE_SAMESITE,
+    COOKIE_SECURE,
     clear_auth_cookie,
     clear_csrf_cookie,
     create_access_token,
     generate_csrf_token,
+    get_current_user,
     hash_password,
     set_auth_cookie,
     set_csrf_cookie,
     verify_password,
-    COOKIE_SECURE,
-    COOKIE_SAMESITE,
 )
-from deps import get_current_user, get_session
-from models import TeamMember, User
+from deps import get_session
+from models import TeamMember, User, utcnow
 from ratelimit import increment_ip_bucket, record_429
 from routes.common import AUTH_MAX_CALLS, AUTH_WINDOW, serialize_user, user_team_role
+from schemas import UserProfile as UserProfileSchema, UserProfileUpdate
 
 router = APIRouter(tags=["auth"])
 
@@ -35,12 +37,6 @@ router = APIRouter(tags=["auth"])
 class AuthRequest(BaseModel):
     email: str
     password: str
-
-
-class UserProfile(BaseModel):
-    id: str
-    email: str
-    role: str
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -101,6 +97,27 @@ def sanitize_next_path(raw_next: Optional[str]) -> str:
 def build_frontend_redirect(path: str) -> str:
     cleaned = path if path.startswith("/") else f"/{path}"
     return f"{WEB_APP_ORIGIN}{cleaned}"
+
+
+def _profile_payload(user: User) -> UserProfileSchema:
+    created = user.created_at.isoformat() if getattr(user, "created_at", None) else utcnow().isoformat()
+    return UserProfileSchema(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+        bio=user.bio,
+        timezone=user.timezone,
+        is_admin=bool(getattr(user, "is_admin", False) or user.role == "admin"),
+        created_at=created,
+    )
+
+
+def _clean_optional(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
 
 
 def _google_config() -> tuple[str, str, str]:
@@ -238,7 +255,7 @@ async def google_callback(
     return redirect_resp
 
 
-@router.post("/auth/register")
+@router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 async def register_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
     ip = request.client.host if request and request.client else "anonymous"
     if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
@@ -305,6 +322,40 @@ async def logout_user(response: Response):
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     return serialize_user(current_user)
+
+
+@router.get("/me/profile", response_model=UserProfileSchema)
+async def get_my_profile(current_user: User = Depends(get_current_user)):
+    return _profile_payload(current_user)
+
+
+@router.put("/me/profile", response_model=UserProfileSchema)
+async def update_my_profile(
+    body: UserProfileUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    updated = False
+
+    if body.display_name is not None:
+        current_user.display_name = _clean_optional(body.display_name)
+        updated = True
+    if body.avatar_url is not None:
+        current_user.avatar_url = _clean_optional(body.avatar_url)
+        updated = True
+    if body.bio is not None:
+        current_user.bio = _clean_optional(body.bio)
+        updated = True
+    if body.timezone is not None:
+        current_user.timezone = _clean_optional(body.timezone)
+        updated = True
+
+    if updated:
+        session.add(current_user)
+        session.commit()
+        session.refresh(current_user)
+
+    return _profile_payload(current_user)
 
 
 def _user_team_role(session: Session, user_id: str, team_id: str) -> Optional[str]:

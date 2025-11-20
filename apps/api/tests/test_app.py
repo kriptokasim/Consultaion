@@ -6,6 +6,7 @@ import tempfile
 from decimal import Decimal
 from pathlib import Path
 import atexit
+import uuid
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException, Response
@@ -31,10 +32,12 @@ os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("DISABLE_AUTORUN", "1")
 os.environ.setdefault("DISABLE_RATINGS", "1")
 os.environ.setdefault("FAST_DEBATE", "1")
-os.environ.setdefault("RL_MAX_CALLS", "1000")
+os.environ["RL_MAX_CALLS"] = "1000"
+os.environ["AUTH_RL_MAX_CALLS"] = "1000"
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("DEFAULT_MAX_RUNS_PER_HOUR", "50")
 os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
+os.environ.setdefault("COOKIE_SECURE", "0")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -122,6 +125,7 @@ def test_jwt_secret_default_rejected(monkeypatch):
 
 
 def dummy_request(path: str = "/debates") -> Request:
+    host = f"testclient-{uuid.uuid4().hex}"
     scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
@@ -131,7 +135,7 @@ def dummy_request(path: str = "/debates") -> Request:
         "raw_path": path.encode(),
         "query_string": b"",
         "headers": [],
-        "client": ("testclient", 0),
+        "client": (host, 0),
         "server": ("testserver", 80),
         "scheme": "http",
     }

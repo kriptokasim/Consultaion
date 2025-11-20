@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from deps import get_optional_user, get_session, require_admin
+from auth import get_current_admin, get_optional_user
+from deps import get_session
 from metrics import get_metrics_snapshot
 from models import Debate, DebateRound, Message, RatingPersona, Score
 from model_registry import list_enabled_models
@@ -304,7 +305,7 @@ async def get_hall_of_fame_stats(
 @router.get("/stats/health", response_model=HealthSnapshot)
 async def get_system_health(
     session: Session = Depends(get_session),
-    _: Any = Depends(require_admin),
+    _: Any = Depends(get_current_admin),
 ):
     db_ok = True
     try:
@@ -323,7 +324,7 @@ async def get_system_health(
 
 
 @router.get("/stats/rate-limit", response_model=RateLimitSnapshot)
-async def get_rate_limit_snapshot(_: Any = Depends(require_admin)):
+async def get_rate_limit_snapshot(_: Any = Depends(get_current_admin)):
     backend = os.getenv("RATE_LIMIT_BACKEND", "memory")
     return RateLimitSnapshot(
         backend=backend,
@@ -335,7 +336,7 @@ async def get_rate_limit_snapshot(_: Any = Depends(require_admin)):
 
 
 @router.get("/stats/debates", response_model=DebateSummary)
-async def get_debate_summary(_: Any = Depends(require_admin), session: Session = Depends(get_session)):
+async def get_debate_summary(_: Any = Depends(get_current_admin), session: Session = Depends(get_session)):
     now = datetime.utcnow()
     total = session.exec(select(func.count()).select_from(Debate)).one()
     last_24h = session.exec(

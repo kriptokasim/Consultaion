@@ -17,7 +17,8 @@ from pydantic import BaseModel
 
 from audit import record_audit
 from billing.service import increment_debate_usage, increment_export_usage
-from deps import get_current_user, get_optional_user, get_session
+from auth import get_current_user, get_optional_user
+from deps import get_session
 from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
 from model_registry import get_default_model, get_model, list_enabled_models
 from orchestrator import run_debate

@@ -3,10 +3,14 @@ import hmac
 import os
 import secrets
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import jwt
-from fastapi import HTTPException, Response, status
+from fastapi import Depends, HTTPException, Request, Response, status
+from sqlmodel import Session
+
+from deps import get_session
+from models import User
 
 COOKIE_NAME = os.getenv("COOKIE_NAME", "consultaion_token")
 JWT_SECRET = os.getenv("JWT_SECRET")
@@ -90,6 +94,46 @@ def decode_access_token(token: str) -> Dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         ) from exc
+
+
+def _resolve_user_from_token(token: Optional[str], session: Session) -> Optional[User]:
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+    except HTTPException:
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    return session.get(User, user_id)
+
+
+def get_optional_user(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> Optional[User]:
+    token = request.cookies.get(COOKIE_NAME)
+    return _resolve_user_from_token(token, session)
+
+
+def get_current_user(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> User:
+    user = get_optional_user(request=request, session=session)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    if hasattr(user, "is_active") and not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    return user
+
+
+def get_current_admin(user: User = Depends(get_current_user)) -> User:
+    is_admin = getattr(user, "is_admin", False) or user.role == "admin"
+    if not is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
 
 
 def set_auth_cookie(response: Response, token: str) -> None:
