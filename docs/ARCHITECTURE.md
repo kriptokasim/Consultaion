@@ -10,7 +10,7 @@ Browser ──▶ Next.js (Amber-Mocha UI)
         FastAPI (apps/api)
         │  ├─ auth, debates, stats, billing, promotions routers
         │  ├─ orchestrator (agents → judges → synthesis)
-        │  └─ SSE channels (routes/common.CHANNELS)
+        │  └─ SSE backend (memory or Redis via `sse_backend.py`)
         ▼
   Postgres + Alembic schema
         │      ├─ debates, rounds, messages, scores, votes
@@ -24,10 +24,10 @@ Browser ──▶ Next.js (Amber-Mocha UI)
 LLM access goes through LiteLLM, which can speak to OpenAI, Anthropic, OpenRouter, Gemini, etc. The registry (`model_registry.py`) loads configs from env vars, flags the recommended model, and powers `/models` as well as the orchestrator’s model selection.
 
 ## Debate pipeline
-1. User calls `POST /debates`. `routes/debates.py` persists the record, enforces quotas (`reserve_run_slot`), increments billing usage, and enqueues an SSE channel.
+1. User calls `POST /debates`. `routes/debates.py` persists the record, enforces quotas (`reserve_run_slot`), increments billing usage, and registers an SSE channel through `sse_backend.get_sse_backend()`.
 2. `orchestrator.run_debate` loads the `DebateConfig`, spawns agents (`produce_candidate`), runs cross critiques, judges, and synthesizer, then writes back to Postgres (rounds, messages, scores, votes, final meta).
 3. Token usage per model is aggregated through `UsageAccumulator` and recorded via `billing.service.add_tokens_usage`, feeding `/billing/usage/models` for the Amber billing UI.
-4. SSE consumers stream from `CHANNELS[debate_id]` and receive `round_started`, `message`, `score`, `notice`, and `final` events. Stale channels are swept using `CHANNEL_TTL_SECS`.
+4. SSE consumers subscribe to `/debates/{debate_id}/stream`, which forwards events from the configured backend (in-memory queues by default, Redis pub/sub in multi-worker mode).
 
 ## Billing subsystem
 - Tables: `billing_plans`, `billing_subscriptions`, `billing_usage`, `promotions`.

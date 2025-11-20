@@ -1,5 +1,10 @@
 import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
+import bundleAnalyzer from '@next/bundle-analyzer'
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+})
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
@@ -21,4 +26,6 @@ const sentryWebpackPluginOptions = {
   silent: true,
 }
 
-export default withSentryConfig(nextConfig, sentryWebpackPluginOptions)
+const configWithAnalyzer = withBundleAnalyzer(nextConfig)
+
+export default withSentryConfig(configWithAnalyzer, sentryWebpackPluginOptions)

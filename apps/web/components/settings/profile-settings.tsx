@@ -106,7 +106,7 @@ export default function ProfileSettings() {
 
   if (loading) {
     return (
-      <div className="rounded-3xl border border-amber-100 bg-white p-6 shadow-sm dark:border-stone-800 dark:bg-stone-900">
+      <div className="card-elevated p-6">
         <p className="text-sm text-stone-500">Loading profile…</p>
       </div>
     )
@@ -114,14 +114,14 @@ export default function ProfileSettings() {
 
   if (!profile) {
     return (
-      <div className="rounded-3xl border border-red-100 bg-white p-6 shadow-sm">
+      <div className="card-elevated border border-red-200/70 p-6">
         <p className="text-sm text-red-600">{error || "You must be signed in to edit your profile."}</p>
       </div>
     )
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-3xl border border-amber-100 bg-white p-6 shadow-[0_14px_30px_rgba(112,73,28,0.12)] dark:border-stone-800 dark:bg-stone-900">
+    <form onSubmit={handleSubmit} className="card-elevated p-6">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Account profile</p>
         <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">Amber-Mocha identity</h1>

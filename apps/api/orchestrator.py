@@ -17,6 +17,7 @@ from ratings import update_ratings_for_debate
 from schemas import DebateConfig, default_agents, default_judges
 from usage_limits import record_token_usage
 from billing.service import add_tokens_usage
+from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
 
@@ -139,10 +140,9 @@ def _complete_debate_record(
 
 async def _run_mock_debate(
     debate_id: str,
-    q: asyncio.Queue,
+    channel_id: str,
     agent_configs: list,
     usage_tracker: UsageAccumulator,
-    cleanup_cb: Callable[[str], None] | None,
 ):
     """Execute a fast mock debate for testing."""
     mock_scores = [
@@ -150,8 +150,9 @@ async def _run_mock_debate(
         for agent in agent_configs
     ]
     usage_snapshot = usage_tracker.snapshot()
-    await q.put({"type": "message", "round": 0, "candidates": []})
-    await q.put(
+    backend = get_sse_backend()
+    await backend.publish(channel_id, {"type": "message", "round": 0, "candidates": []})
+    await backend.publish(
         {
             "type": "score",
             "scores": mock_scores,
@@ -161,7 +162,7 @@ async def _run_mock_debate(
             ],
         }
     )
-    await q.put(
+    await backend.publish(
         {
             "type": "final",
             "content": "Fast debate completed.",
@@ -183,8 +184,6 @@ async def _run_mock_debate(
         status="completed",
         tokens_total=usage_tracker.total_tokens,
     )
-    if cleanup_cb:
-        cleanup_cb(debate_id)
 
 
 async def _run_draft_round(
@@ -193,7 +192,7 @@ async def _run_draft_round(
     agent_configs: list,
     model_id: str | None,
     usage_tracker: UsageAccumulator,
-    q: asyncio.Queue,
+    channel_id: str,
 ) -> List[Dict[str, Any]]:
     """Execute the draft round."""
     draft_round = _start_round(debate_id, 1, "draft", "candidate drafting")
@@ -207,7 +206,8 @@ async def _run_draft_round(
     
     _persist_messages(debate_id, 1, candidates, role="candidate")
     _end_round(draft_round)
-    await q.put({"type": "message", "round": 1, "candidates": candidates})
+    backend = get_sse_backend()
+    await backend.publish(channel_id, {"type": "message", "round": 1, "candidates": candidates})
     logger.debug("Debate %s: produced %d candidates", debate_id, len(candidates))
     return candidates
 
@@ -218,7 +218,7 @@ async def _run_critique_round(
     candidates: List[Dict[str, Any]],
     model_id: str | None,
     usage_tracker: UsageAccumulator,
-    q: asyncio.Queue,
+    channel_id: str,
 ) -> List[Dict[str, Any]]:
     """Execute the critique and revision round."""
     critique_round = _start_round(debate_id, 2, "critique", "cross-critique and revision")
@@ -227,7 +227,8 @@ async def _run_critique_round(
     
     _persist_messages(debate_id, 2, revised, role="revised")
     _end_round(critique_round)
-    await q.put({"type": "message", "round": 2, "revised": revised})
+    backend = get_sse_backend()
+    await backend.publish(channel_id, {"type": "message", "round": 2, "revised": revised})
     logger.debug("Debate %s: critique round completed", debate_id)
     return revised
 
@@ -239,7 +240,7 @@ async def _run_judge_round(
     judge_configs: list,
     model_id: str | None,
     usage_tracker: UsageAccumulator,
-    q: asyncio.Queue,
+    channel_id: str,
 ) -> Tuple[List[Dict[str, Any]], List[str], Dict[str, Any]]:
     """Execute the judging round and return (aggregate_scores, ranking, vote_details)."""
     judge_round = _start_round(debate_id, 3, "judge", "rubric scoring")
@@ -262,7 +263,8 @@ async def _run_judge_round(
         session.commit()
     
     _end_round(judge_round)
-    await q.put({"type": "score", "round": 3, "scores": aggregate_scores, "judges": judge_details})
+    backend = get_sse_backend()
+    await backend.publish(channel_id, {"type": "score", "round": 3, "scores": aggregate_scores, "judges": judge_details})
     ranking, vote_details = _compute_rankings(aggregate_scores)
     logger.debug("Debate %s: judges completed with %d entries", debate_id, len(judge_details))
     
@@ -284,17 +286,16 @@ async def _run_judge_round(
 async def run_debate(
     debate_id: str,
     prompt: str,
-    q,
+    channel_id: str,
     config_data: Dict[str, Any],
     model_id: str | None = None,
-    cleanup_cb: Callable[[str], None] | None = None,
 ):
     config = DebateConfig.model_validate(config_data or {})
     agent_configs = config.agents or default_agents()
     judge_configs = config.judges or default_judges()
     budget = config.budget
-
-    await q.put({"type": "round_started", "round": 0, "note": "plan"})
+    backend = get_sse_backend()
+    await backend.publish(channel_id, {"type": "round_started", "round": 0, "note": "plan"})
 
     usage_tracker = UsageAccumulator()
     debate_user_id: str | None = None
@@ -311,18 +312,14 @@ async def run_debate(
 
     try:
         logger.debug("Debate %s: starting orchestration", debate_id)
-        
-        # 1. Mock Run check
-        if os.getenv("FAST_DEBATE", "0") == "1":
-            return await _run_mock_debate(debate_id, q, agent_configs, usage_tracker, cleanup_cb)
 
-        # 2. Initialization
+        if os.getenv("FAST_DEBATE", "0") == "1":
+            return await _run_mock_debate(debate_id, channel_id, agent_configs, usage_tracker)
+
         with session_scope() as session:
             debate = session.get(Debate, debate_id)
             if not debate:
-                await q.put({"type": "error", "message": "debate not found"})
-                if cleanup_cb:
-                    cleanup_cb(debate_id)
+                await backend.publish(channel_id, {"type": "error", "message": "debate not found"})
                 return
             debate_user_id = debate.user_id
             debate.status = "running"
@@ -330,32 +327,29 @@ async def run_debate(
             session.add(debate)
             session.commit()
 
-        # 3. Draft Round
-        candidates = await _run_draft_round(debate_id, prompt, agent_configs, model_id, usage_tracker, q)
+        candidates = await _run_draft_round(debate_id, prompt, agent_configs, model_id, usage_tracker, channel_id)
         source_candidates = candidates
-        
+
         budget_reason = _check_budget(budget, usage_tracker) or budget_reason
         if budget_reason and not budget_notice_sent:
-            await q.put({"type": "notice", "message": budget_reason})
+            await backend.publish(channel_id, {"type": "notice", "message": budget_reason})
             budget_notice_sent = True
 
-        # 4. Critique Round (if budget allows)
         revised = candidates
         if not budget_reason:
-            revised = await _run_critique_round(debate_id, prompt, candidates, model_id, usage_tracker, q)
+            revised = await _run_critique_round(debate_id, prompt, candidates, model_id, usage_tracker, channel_id)
             source_candidates = revised
-            
+
             budget_reason = _check_budget(budget, usage_tracker) or budget_reason
             if budget_reason and not budget_notice_sent:
-                await q.put({"type": "notice", "message": budget_reason})
+                await backend.publish(channel_id, {"type": "notice", "message": budget_reason})
                 budget_notice_sent = True
 
-        # 5. Judge Round (if budget allows)
         if not budget_reason:
             aggregate_scores, ranking, vote_details = await _run_judge_round(
-                debate_id, prompt, revised, judge_configs, model_id, usage_tracker, q
+                debate_id, prompt, revised, judge_configs, model_id, usage_tracker, channel_id
             )
-            
+
             # Early stop check based on score gap
             if aggregate_scores:
                 sorted_scores = sorted(aggregate_scores, key=lambda s: s["score"], reverse=True)
@@ -415,7 +409,7 @@ async def run_debate(
             user_id=debate_user_id,
         )
 
-        await q.put(
+        await backend.publish(
             {
                 "type": "final",
                 "content": final_answer,
@@ -461,7 +455,4 @@ async def run_debate(
                 debate.final_meta = {"error": str(exc)}
                 session.add(debate)
                 session.commit()
-        await q.put({"type": "error", "message": str(exc)})
-    finally:
-        if cleanup_cb:
-            cleanup_cb(debate_id)
+        await backend.publish(channel_id, {"type": "error", "message": str(exc)})

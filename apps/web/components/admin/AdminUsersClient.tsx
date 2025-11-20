@@ -23,7 +23,7 @@ type AdminUserDetail = {
 
 type AdminUserBilling = {
   plan?: { slug: string | null }
-  usage?: { debates_created?: number; tokens_used?: number }
+  usage?: { debates_created?: number; tokens_used?: number; period?: string }
 }
 
 export default function AdminUsersClient({ initialItems }: { initialItems: AdminUser[] }) {
@@ -92,7 +92,7 @@ export default function AdminUsersClient({ initialItems }: { initialItems: Admin
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-950">
+      <div className="glass-card p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Users</p>
@@ -115,7 +115,7 @@ export default function AdminUsersClient({ initialItems }: { initialItems: Admin
           </form>
         </div>
         {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
-        <div className="mt-4 overflow-x-auto rounded-2xl border border-amber-100">
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-amber-100 bg-white/70 dark:border-amber-200/20 dark:bg-white/5">
           <table className="min-w-full divide-y divide-amber-100 text-sm">
             <thead className="bg-amber-50 text-left text-xs font-semibold uppercase tracking-wide text-amber-800">
               <tr>
@@ -161,7 +161,7 @@ export default function AdminUsersClient({ initialItems }: { initialItems: Admin
         </div>
       </div>
 
-      <div className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-950">
+      <div className="glass-card p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">User detail</p>
         {detailLoading ? <p className="text-sm text-stone-500">Loading detail…</p> : null}
         {!detail.profile && !detailLoading ? <p className="text-sm text-stone-500">Select a user to inspect billing.</p> : null}

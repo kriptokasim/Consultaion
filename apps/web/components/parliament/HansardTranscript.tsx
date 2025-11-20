@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { FixedSizeList, type ListChildComponentProps } from "react-window";
 import { Search, Filter, Download, Users } from "lucide-react";
 import type { DebateEvent, Member } from "./types";
 
@@ -106,6 +107,31 @@ export default function HansardTranscript({
     URL.revokeObjectURL(url);
   };
 
+  const listMetrics = useMemo(() => {
+    const itemSize = 148;
+    const baseHeight = Math.max(itemSize, filteredEvents.length * itemSize);
+    const height = Math.min(720, baseHeight);
+    return { itemSize, height };
+  }, [filteredEvents.length]);
+
+  const listData = useMemo(
+    () => ({ items: filteredEvents, members }),
+    [filteredEvents, members]
+  );
+
+  function renderRow({
+    index,
+    style,
+    data,
+  }: ListChildComponentProps<{ items: DebateEvent[]; members: Member[] }>) {
+    const event = data.items[index];
+    return (
+      <div style={style} className="px-0 py-2">
+        <TranscriptRow event={event} members={data.members} />
+      </div>
+    );
+  }
+
   return (
     <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_10px_30px_rgba(120,113,108,0.08)]">
       <header className="flex flex-col gap-4 border-b border-stone-100 pb-6 md:flex-row md:items-center md:justify-between">
@@ -160,15 +186,21 @@ export default function HansardTranscript({
         </label>
       </div>
 
-      <div className="mt-6 space-y-4" aria-live="polite">
+      <div className="mt-6" aria-live="polite" role="log">
         {filteredEvents.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/70 p-6 text-center text-sm text-stone-500">
             No entries match your filters.
           </div>
         ) : (
-          filteredEvents.map((event, index) => (
-            <TranscriptRow key={`${event.type}-${index}`} event={event} members={members} />
-          ))
+          <FixedSizeList
+            height={listMetrics.height}
+            itemCount={filteredEvents.length}
+            itemSize={listMetrics.itemSize}
+            width="100%"
+            itemData={listData}
+          >
+            {renderRow}
+          </FixedSizeList>
         )}
       </div>
     </section>

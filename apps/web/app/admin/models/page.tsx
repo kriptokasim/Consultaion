@@ -18,17 +18,17 @@ export default async function AdminModelsPage() {
   const models: AdminModelItem[] = payload.items || []
 
   return (
-    <main id="main" className="space-y-6">
+    <div className="space-y-6">
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Models</p>
-        <h1 className="text-3xl font-semibold text-stone-900 dark:text-stone-100">Model registry &amp; usage</h1>
+        <h1 className="heading-serif text-3xl font-semibold text-amber-950 dark:text-amber-50">Model registry &amp; usage</h1>
         <p className="text-sm text-stone-600 dark:text-stone-300">Inspect enabled providers and their recent token footprints.</p>
       </header>
       <div className="grid gap-4">
         {models.map((model) => (
           <div
             key={model.id}
-            className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-950"
+            className="glass-card p-5"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -65,6 +65,6 @@ export default async function AdminModelsPage() {
         ))}
         {!models.length ? <p className="text-sm text-stone-500">No models are enabled.</p> : null}
       </div>
-    </main>
+    </div>
   )
 }

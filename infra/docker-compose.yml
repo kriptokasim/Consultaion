@@ -5,8 +5,11 @@ services:
     env_file: ../.env
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SSE_REDIS_URL=${SSE_REDIS_URL:-redis://redis:6379/0}
     depends_on:
       - db
+      - redis
     ports: ["8000:8000"]
   web:
     build: ../apps/web
@@ -24,6 +27,12 @@ services:
       - pg_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
 
 volumes:
   pg_data:

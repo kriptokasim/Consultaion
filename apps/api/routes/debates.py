@@ -23,26 +23,20 @@ from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
 from model_registry import get_default_model, get_model, list_enabled_models
 from orchestrator import run_debate
 from routes.common import (
-    CHANNELS,
-    CHANNEL_SWEEP_INTERVAL,
-    CHANNEL_TTL_SECS,
-    CHANNEL_META,
     EXPORT_DIR,
-    _mark_channel,
     avg_scores_for_debate,
     can_access_debate,
-    cleanup_channel,
     champion_for_debate,
     members_from_config,
     require_debate_access,
     serialize_rating_persona,
-    sweep_stale_channels,
     track_metric,
     user_is_team_member,
 )
 from schemas import DebateConfig, DebateCreate, default_debate_config
 from usage_limits import RateLimitError, reserve_run_slot
 from ratelimit import increment_ip_bucket, record_429
+from sse_backend import get_sse_backend
 
 router = APIRouter(tags=["debates"])
 
@@ -51,8 +45,8 @@ class DebateUpdate(BaseModel):
     team_id: Optional[str] = None
 
 
-def _cleanup_channel(debate_id: str) -> None:
-    cleanup_channel(debate_id)
+def debate_channel_id(debate_id: str) -> str:
+    return f"debate:{debate_id}"
 
 
 def _champion_for_debate(session: Session, debate_id: str) -> tuple[Optional[str], Optional[float], Optional[float]]:
@@ -182,11 +176,19 @@ async def create_debate(
     session.add(debate)
     session.commit()
 
-    q: asyncio.Queue = asyncio.Queue()
-    CHANNELS[debate_id] = q
-    _mark_channel(debate_id)
+    backend = get_sse_backend()
+    channel_id = debate_channel_id(debate_id)
+    await backend.create_channel(channel_id)
+
     if os.getenv("DISABLE_AUTORUN", "0") != "1":
-        background_tasks.add_task(run_debate, debate_id, body.prompt, q, config.model_dump(), chosen_model_id, _cleanup_channel)
+        background_tasks.add_task(
+            run_debate,
+            debate_id,
+            body.prompt,
+            channel_id,
+            config.model_dump(),
+            chosen_model_id,
+        )
     record_audit(
         "debate_created",
         user_id=current_user.id if current_user else None,
@@ -212,10 +214,17 @@ async def start_debate_run(
     if debate.status not in {"queued", "failed"}:
         raise HTTPException(status_code=400, detail="debate already started")
 
-    q: asyncio.Queue = CHANNELS.get(debate_id) or asyncio.Queue()
-    CHANNELS[debate_id] = q
-    _mark_channel(debate_id)
-    background_tasks.add_task(run_debate, debate_id, debate.prompt, q, debate.config, debate.model_id, _cleanup_channel)
+    backend = get_sse_backend()
+    channel_id = debate_channel_id(debate_id)
+    await backend.create_channel(channel_id)
+    background_tasks.add_task(
+        run_debate,
+        debate_id,
+        debate.prompt,
+        channel_id,
+        debate.config,
+        debate.model_id,
+    )
     debate.status = "scheduled"
     session.add(debate)
     session.commit()
@@ -529,17 +538,15 @@ async def stream_events(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     require_debate_access(session.get(Debate, debate_id), current_user, session)
-    if debate_id not in CHANNELS:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    q = CHANNELS[debate_id]
+    backend = get_sse_backend()
+    channel_id = debate_channel_id(debate_id)
+    await backend.create_channel(channel_id)
     track_metric("sse_stream_open")
 
     async def eventgen():
-        while True:
-            event = await q.get()
+        async for event in backend.subscribe(channel_id):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             if event.get("type") == "final":
-                await asyncio.sleep(0.2)
                 break
 
     return StreamingResponse(

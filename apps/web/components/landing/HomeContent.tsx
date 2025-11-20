@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Brain, MessageSquare, Vote } from "lucide-react";
 
@@ -94,7 +95,7 @@ export default function HomeContent() {
 
         <section className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
-            <h1 className="text-5xl font-display font-bold leading-tight text-[#3a2a1a] sm:text-6xl">
+            <h1 className="text-5xl font-display font-bold tracking-tight text-[#3a2a1a] leading-[1.1] sm:text-6xl md:leading-[1.05]">
               Wisdom Through
               <span className="block bg-gradient-to-r from-amber-600 to-amber-400 bg-clip-text text-transparent">
                 Multi-Agent Debate
@@ -104,12 +105,7 @@ export default function HomeContent() {
               Harness the collective intelligence of multiple AI agents debating your questions. Get balanced, well-reasoned answers through structured deliberation and expert judgment.
             </p>
             <div className="flex flex-col gap-2">
-              <Button
-                size="lg"
-                className="w-fit rounded-full px-6 py-3 text-base font-semibold shadow-lg shadow-amber-300/50"
-                onClick={handleStartDebate}
-                disabled={loading}
-              >
+              <Button variant="amber" size="lg" className="w-fit px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
                 Start Your First Debate
               </Button>
               {!user ? (
@@ -154,10 +150,21 @@ export default function HomeContent() {
             </div>
           ))}
         </section>
+
+        <DynamicLLMSelector />
       </div>
     </main>
   );
 }
+
+const DynamicLLMSelector = dynamic(() => import("@/components/ui/LLMSelector"), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-3xl border border-amber-100/70 bg-white/60 p-12 text-center text-sm text-[#5a4a3a]">
+      Loading model selector…
+    </div>
+  ),
+});
 
 function HeroStat({ label, value }: { label: string; value: string }) {
   return (

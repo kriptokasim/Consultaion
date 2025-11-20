@@ -1,115 +1,153 @@
-import { getDebateStats, getHealthStats, getRateLimitStats } from "@/lib/api";
-import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
+import { fetchWithAuth } from "@/lib/auth"
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"
 
-export default async function OpsDashboardPage() {
-  const [health, rateLimit, debates] = await Promise.all([
-    getHealthStats().catch(() => null),
-    getRateLimitStats().catch(() => null),
-    getDebateStats().catch(() => null),
-  ]);
+type RateLimitSummary = {
+  backend?: string
+  redis_ok?: boolean | null
+  recent_429_count?: number
+}
 
-  if (!health) {
-    return (
-      <main className="p-6">
-        <p className="text-sm text-stone-600">Ops data unavailable. Ensure you are logged in as admin.</p>
-      </main>
-    );
-  }
+type SseSummary = {
+  backend?: string
+  redis_ok?: boolean | null
+}
+
+type OpsSummaryResponse = {
+  debates_24h?: number
+  debates_7d?: number
+  active_users_24h?: number
+  tokens_24h?: number
+  postgres_ok?: boolean
+  top_models?: Array<{ model_name: string; total_tokens: number }>
+  rate_limit?: RateLimitSummary
+  sse?: SseSummary
+  models?: { available?: boolean; enabled_count?: number }
+}
+
+export default async function AdminOpsPage() {
+  const response = await fetchWithAuth("/admin/ops/summary")
+  const payload = (await response.json().catch(() => ({}))) as OpsSummaryResponse
+
+  const metricCards = [
+    {
+      label: "Debates (24h)",
+      value: payload.debates_24h ?? 0,
+      description: `${payload.debates_7d ?? 0} over seven days`,
+    },
+    {
+      label: "Tokens (24h)",
+      value: Intl.NumberFormat().format(payload.tokens_24h ?? 0),
+      description: "Approximate usage across models",
+    },
+    {
+      label: "Active users",
+      value: payload.active_users_24h ?? 0,
+      description: "Unique debaters in the last day",
+    },
+  ]
+
+  const rateLimitHealthy =
+    payload.rate_limit?.backend === "redis" ? payload.rate_limit?.redis_ok !== false : true
+  const sseHealthy = payload.sse?.backend === "redis" ? payload.sse?.redis_ok !== false : true
+
+  const statusItems = [
+    { label: "Postgres", healthy: payload.postgres_ok !== false, description: "Primary database" },
+    {
+      label: `Rate limit (${payload.rate_limit?.backend ?? "memory"})`,
+      healthy: rateLimitHealthy,
+      description: `${payload.rate_limit?.recent_429_count ?? 0} recent 429s`,
+    },
+    {
+      label: `SSE (${payload.sse?.backend ?? "memory"})`,
+      healthy: sseHealthy,
+      description: payload.sse?.backend === "redis" ? (payload.sse?.redis_ok ? "Redis reachable" : "Redis unreachable") : "Memory backend",
+    },
+    {
+      label: "Models",
+      healthy: payload.models?.available ?? false,
+      description: `${payload.models?.enabled_count ?? 0} enabled`,
+    },
+  ]
+
+  const topModels = payload.top_models ?? []
 
   return (
-    <main id="main" className="space-y-6 p-6">
-      <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <RosettaChamberLogo size={32} />
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Admin Ops</p>
-            <h1 className="text-3xl font-semibold text-stone-900">Operational overview</h1>
-            <p className="text-sm text-stone-700">Rate limits, health signals, and recent debate activity.</p>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Ops & health</p>
+        <h1 className="heading-serif text-3xl font-semibold text-amber-950 dark:text-amber-50">Runtime telemetry</h1>
+        <p className="text-sm text-stone-600 dark:text-stone-300">Keep tabs on debates, tokens, and infrastructure touchpoints.</p>
       </header>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <HealthCard title="Database" ok={health.db_ok} />
-        <HealthCard
-          title="Redis backend"
-          ok={health.redis_ok !== false}
-          meta={health.rate_limit_backend}
-        />
-        <HealthCard title="Rate limiter" ok={true} meta={health.rate_limit_backend} />
-        <HealthCard title="CSRF" ok={health.enable_csrf} meta={health.enable_csrf ? "Enabled" : "Disabled"} />
-        <HealthCard title="Security headers" ok={health.enable_sec_headers} meta={health.enable_sec_headers ? "Enabled" : "Disabled"} />
-        <HealthCard title="Mock mode" ok={!health.mock_mode} meta={health.mock_mode ? "Mock" : "Real LLM"} />
+        {metricCards.map((card) => (
+          <MetricCard key={card.label} label={card.label} value={card.value} description={card.description} />
+        ))}
       </section>
 
-      {debates ? (
-        <section className="grid gap-4 md:grid-cols-4">
-          <StatCard label="Total debates" value={debates.total} />
-          <StatCard label="Last 24h" value={debates.last_24h} />
-          <StatCard label="Last 7d" value={debates.last_7d} />
-          <StatCard label="FAST_DEBATE" value={debates.fast_debate} />
-        </section>
-      ) : null}
-
-      {rateLimit ? (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-stone-900">Recent rate-limit events</h2>
-            <span className="text-xs text-stone-600">
-              Window {rateLimit.window}s • Max calls {rateLimit.max_calls} • Backend {rateLimit.backend}
-            </span>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="card-elevated p-5">
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Top models</h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400">Token-heavy models across all time.</p>
+          <div className="mt-4 space-y-2">
+            {topModels.length ? (
+              topModels.map((model) => (
+                <div
+                  key={model.model_name}
+                  className="flex items-center justify-between rounded-2xl bg-white/80 px-3 py-2 text-sm font-semibold text-stone-700 shadow-inner shadow-amber-100"
+                >
+                  <span>{model.model_name}</span>
+                  <span>{Intl.NumberFormat().format(model.total_tokens)}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-stone-500">No usage yet.</p>
+            )}
           </div>
-          <div className="overflow-hidden rounded-2xl border border-amber-100 bg-white shadow-sm">
-            <div className="grid grid-cols-3 gap-3 border-b border-amber-100 bg-amber-100/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
-              <span>IP</span>
-              <span>Path</span>
-              <span>Timestamp</span>
-            </div>
-            <div className="divide-y divide-amber-100">
-              {rateLimit.recent_429s && rateLimit.recent_429s.length ? (
-                rateLimit.recent_429s.map((event: any, idx: number) => (
-                  <div key={idx} className="grid grid-cols-3 gap-3 px-4 py-2 text-sm">
-                    <span className="font-mono text-stone-800">{event.ip}</span>
-                    <span className="text-stone-800">{event.path}</span>
-                    <span className="text-stone-600">{event.ts}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="px-4 py-3 text-sm text-stone-600">No recent 429 events.</p>
-              )}
-            </div>
+        </div>
+        <div className="card-elevated p-5">
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Runtime signals</h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400">Current backend readiness and provider stats.</p>
+          <div className="mt-4 space-y-3">
+            {statusItems.map((item) => (
+              <StatusRow key={item.label} label={item.label} healthy={item.healthy} description={item.description} />
+            ))}
           </div>
-        </section>
-      ) : null}
-    </main>
-  );
-}
-
-function HealthCard({ title, ok, meta }: { title: string; ok: boolean; meta?: string }) {
-  return (
-    <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{title}</p>
-      <div className="mt-2 flex items-center gap-2">
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-            ok ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"
-          }`}
-        >
-          {ok ? "OK" : "Issue"}
-        </span>
-        {meta ? <span className="text-xs text-stone-700">{meta}</span> : null}
-      </div>
+        </div>
+      </section>
     </div>
-  );
+  )
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function MetricCard({ label, value, description }: { label: string; value: number | string; description?: string }) {
   return (
-    <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-4 shadow-sm">
+    <div className="glass-card p-5">
       <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-stone-900">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-stone-900 dark:text-stone-100">{value}</p>
+      {description ? <p className="text-sm text-stone-500 dark:text-stone-400">{description}</p> : null}
     </div>
-  );
+  )
+}
+
+function StatusRow({ label, healthy, description }: { label: string; healthy?: boolean; description?: string }) {
+  const state = healthy === false ? "down" : healthy ? "ok" : "unknown"
+  const badgeClass =
+    state === "ok"
+      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+      : state === "down"
+        ? "bg-red-50 text-red-700 border-red-200"
+        : "bg-stone-50 text-stone-700 border-stone-200"
+
+  const badgeText = state === "ok" ? "Healthy" : state === "down" ? "Attention" : "Unknown"
+
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-amber-100/50 bg-white/70 px-4 py-3 shadow-sm dark:bg-stone-900">
+      <div>
+        <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">{label}</p>
+        {description ? <p className="text-xs text-stone-500 dark:text-stone-400">{description}</p> : null}
+      </div>
+      <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badgeClass}`}>{badgeText}</span>
+    </div>
+  )
 }

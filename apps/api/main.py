@@ -14,7 +14,8 @@ from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
 from billing import billing_router
 from promotions import promotions_router
 from database import engine, init_db
-from log_config import LOGGING_CONFIG, reset_request_id, set_request_id
+from config import settings
+from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
 from ratelimit import ensure_rate_limiter_ready
 from model_registry import list_enabled_models, get_default_model
 from routes.auth import (
@@ -47,11 +48,6 @@ from routes.stats import (
 from routes.debates import (
     debates_router,
     DebateUpdate,
-    CHANNELS,
-    CHANNEL_META,
-    CHANNEL_TTL_SECS,
-    CHANNEL_SWEEP_INTERVAL,
-    sweep_stale_channels,
     create_debate,
     list_debates,
     get_debate,
@@ -67,9 +63,15 @@ from routes.debates import (
     get_leaderboard_persona,
 )
 from routes.teams import teams_router, TeamCreate, TeamMemberCreate, create_team, list_teams, list_team_members, add_team_member
-from routes.admin import admin_router, admin_logs, admin_users, update_ratings_endpoint
+from routes.admin import admin_ops_summary, admin_router, admin_logs, admin_users, update_ratings_endpoint
 from schemas import DebateCreate
+from sse_backend import get_sse_backend
 
+root_level = settings.LOG_LEVEL.upper()
+LOGGING_CONFIG["loggers"][""]["level"] = root_level
+for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "apps"):
+    if logger_name in LOGGING_CONFIG["loggers"]:
+        LOGGING_CONFIG["loggers"][logger_name]["level"] = root_level
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
@@ -121,18 +123,18 @@ async def lifespan(app: FastAPI):
             logger.info("Models enabled: %s (default=%s)", [m.id for m in models], get_default_model().id)
     except Exception as exc:
         logger.error("Model registry initialization failed: %s", exc)
-    sweeper_task: asyncio.Task | None = None
+    cleanup_task: asyncio.Task | None = None
     try:
-        sweeper_task = asyncio.create_task(_channel_sweeper_loop())
+        cleanup_task = asyncio.create_task(_sse_cleanup_loop())
     except RuntimeError:
-        sweeper_task = None
+        cleanup_task = None
     try:
         yield
     finally:
-        if sweeper_task:
-            sweeper_task.cancel()
+        if cleanup_task:
+            cleanup_task.cancel()
             with suppress(asyncio.CancelledError):
-                await sweeper_task
+                await cleanup_task
 
 
 app = FastAPI(
@@ -158,10 +160,10 @@ def _warn_on_multi_worker() -> None:
     """Warn if multiple workers are in use while SSE queues are process-local."""
     worker_env = os.getenv("WEB_CONCURRENCY") or os.getenv("GUNICORN_WORKERS")
     try:
-        if worker_env and int(worker_env) > 1:
+        if worker_env and int(worker_env) > 1 and settings.SSE_BACKEND.lower() == "memory":
             logger.warning(
-                "SSE queues are process-local; running with %s workers may cause /debates/{id}/stream to miss events. "
-                "Use a single worker or move SSE to a shared backend.",
+                "SSE_BACKEND=memory; running with %s workers may cause /debates/{id}/stream to miss events. "
+                "Switch to SSE_BACKEND=redis for multi-worker deployments.",
                 worker_env,
             )
     except ValueError:
@@ -170,12 +172,14 @@ def _warn_on_multi_worker() -> None:
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        clear_log_context()
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         token = set_request_id(request_id)
         try:
             response = await call_next(request)
         finally:
             reset_request_id(token)
+            clear_log_context()
         response.headers["X-Request-ID"] = request_id
         return response
 
@@ -202,11 +206,12 @@ app.include_router(promotions_router)
 
 
 # Lifespan helpers
-async def _channel_sweeper_loop() -> None:
+async def _sse_cleanup_loop() -> None:
+    backend = get_sse_backend()
     try:
         while True:
-            sweep_stale_channels()
-            await asyncio.sleep(CHANNEL_SWEEP_INTERVAL)
+            await backend.cleanup()
+            await asyncio.sleep(settings.SSE_CHANNEL_TTL_SECONDS)
     except asyncio.CancelledError:
         raise
 
@@ -260,11 +265,6 @@ __all__ = [
     "add_team_member",
     "admin_users",
     "admin_logs",
+    "admin_ops_summary",
     "update_ratings_endpoint",
-    # channel state
-    "CHANNELS",
-    "CHANNEL_META",
-    "CHANNEL_TTL_SECS",
-    "CHANNEL_SWEEP_INTERVAL",
-    "sweep_stale_channels",
 ]

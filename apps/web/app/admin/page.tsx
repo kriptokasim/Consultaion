@@ -29,10 +29,10 @@ export default async function AdminOverviewPage() {
   const topModels = (modelsPayload.items || []).sort((a, b) => b.tokens_used - a.tokens_used).slice(0, 3)
 
   return (
-    <main id="main" className="space-y-6">
+    <div className="space-y-6">
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Admin Overview</p>
-        <h1 className="text-3xl font-semibold text-stone-900 dark:text-stone-100">Parliament Control Tower</h1>
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Admin overview</p>
+        <h1 className="heading-serif text-3xl font-semibold text-amber-950 dark:text-amber-50">Parliament control tower</h1>
         <p className="text-sm text-stone-600 dark:text-stone-300">Snapshot of users, billing mix, and chamber usage.</p>
       </header>
 
@@ -43,7 +43,7 @@ export default async function AdminOverviewPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-950">
+        <div className="card-elevated p-5">
           <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Plan mix</h2>
           <p className="text-sm text-stone-500 dark:text-stone-400">Breakdown of active plans among current users.</p>
           <div className="mt-4 space-y-2">
@@ -56,7 +56,7 @@ export default async function AdminOverviewPage() {
             {Object.keys(planMix).length === 0 ? <p className="text-sm text-stone-500">No users yet.</p> : null}
           </div>
         </div>
-        <div className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-950">
+        <div className="card-elevated p-5">
           <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Top models this period</h2>
           <p className="text-sm text-stone-500 dark:text-stone-400">Quick glance at token-heavy models.</p>
           <div className="mt-4 space-y-2">
@@ -73,13 +73,13 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
       </section>
-    </main>
+    </div>
   )
 }
 
 function StatCard({ label, value, description }: { label: string; value: number | string; description?: string }) {
   return (
-    <div className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-950">
+    <div className="glass-card p-5">
       <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-stone-900 dark:text-stone-100">{value}</p>
       {description ? <p className="text-sm text-stone-500 dark:text-stone-400">{description}</p> : null}

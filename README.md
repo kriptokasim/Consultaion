@@ -1,6 +1,8 @@
 # Consultaion
 A platform that produces the best answer via multi-agent debate/voting.
 
+> **Brand note:** The spelling “Consultaion” is intentional – it’s the product name for this multi-agent AI parliament, not a typo. Keep it consistent across docs, UI, and deploys.
+
 ## Quick Start
 1. `cp .env.example .env` and set `DATABASE_URL`/LLM keys.
 2. Backend: `cd apps/api && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
@@ -17,6 +19,7 @@ A platform that produces the best answer via multi-agent debate/voting.
 | --- | --- |
 | `DATABASE_URL` | Required Postgres connection string in production. |
 | `JWT_SECRET` | Required unique signing secret; app now refuses to boot if unchanged. |
+| `LOG_LEVEL` | Controls backend JSON log verbosity (`INFO`, `DEBUG`, etc.). |
 | `USE_MOCK` / `FAST_DEBATE` / `DISABLE_AUTORUN` | Control LiteLLM mocks, instant runs, and manual-start mode. |
 | `DEFAULT_MAX_RUNS_PER_HOUR` / `DEFAULT_MAX_TOKENS_PER_DAY` | Per-user quotas. |
 | `SENTRY_DSN` / `SENTRY_ENV` / `SENTRY_SAMPLE_RATE` | Optional backend error/trace reporting. |

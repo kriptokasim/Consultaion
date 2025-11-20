@@ -1,8 +1,6 @@
-import asyncio
 import os
 import uuid
 from pathlib import Path
-from time import time
 from typing import Any, Optional
 
 import sqlalchemy as sa
@@ -12,11 +10,8 @@ from sqlmodel import Session, select
 from metrics import increment_metric
 from models import Debate, RatingPersona, Score, Team, TeamMember, User
 from schemas import DebateConfig
+from log_config import update_log_context
 
-CHANNELS: dict[str, asyncio.Queue] = {}
-CHANNEL_META: dict[str, float] = {}
-CHANNEL_TTL_SECS = int(os.getenv("CHANNEL_TTL_SECS", "7200"))
-CHANNEL_SWEEP_INTERVAL = int(os.getenv("CHANNEL_SWEEP_INTERVAL", "60"))
 ENABLE_METRICS = os.getenv("ENABLE_METRICS", "1").lower() not in {"0", "false", "no"}
 
 MAX_CALLS = int(os.getenv("RL_MAX_CALLS", "5"))
@@ -25,41 +20,6 @@ AUTH_MAX_CALLS = int(os.getenv("AUTH_RL_MAX_CALLS", "10"))
 AUTH_WINDOW = int(os.getenv("AUTH_RL_WINDOW", "300"))
 EXPORT_DIR = Path(os.getenv("EXPORT_DIR", "exports"))
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def _mark_channel(debate_id: str) -> None:
-    try:
-        loop = asyncio.get_running_loop()
-        CHANNEL_META[debate_id] = loop.time()
-    except RuntimeError:
-        CHANNEL_META[debate_id] = time()
-
-
-def sweep_stale_channels(now: float | None = None) -> list[str]:
-    if now is None:
-        try:
-            now = asyncio.get_running_loop().time()
-        except RuntimeError:
-            now = time()
-    stale = [key for key, created in CHANNEL_META.items() if now - created > CHANNEL_TTL_SECS]
-    for debate_id in stale:
-        CHANNELS.pop(debate_id, None)
-        CHANNEL_META.pop(debate_id, None)
-    return stale
-
-
-async def channel_sweeper_loop() -> None:
-    try:
-        while True:
-            sweep_stale_channels()
-            await asyncio.sleep(CHANNEL_SWEEP_INTERVAL)
-    except asyncio.CancelledError:
-        raise
-
-
-def cleanup_channel(debate_id: str) -> None:
-    CHANNELS.pop(debate_id, None)
-    CHANNEL_META.pop(debate_id, None)
 
 
 def track_metric(name: str, value: int = 1) -> None:
@@ -177,6 +137,7 @@ def require_debate_access(debate: Optional[Debate], user: Optional[User], sessio
 
     if not debate or not can_access_debate(debate, user, session):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="debate not found")
+    update_log_context(debate_id=getattr(debate, "id", None), team_id=getattr(debate, "team_id", None))
     return debate
 
 

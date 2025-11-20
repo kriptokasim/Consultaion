@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from sqlmodel import Session
 
 from deps import get_session
+from log_config import update_log_context
 from models import User
 
 COOKIE_NAME = os.getenv("COOKIE_NAME", "consultaion_token")
@@ -106,7 +107,10 @@ def _resolve_user_from_token(token: Optional[str], session: Session) -> Optional
     user_id = payload.get("sub")
     if not user_id:
         return None
-    return session.get(User, user_id)
+    user = session.get(User, user_id)
+    if user:
+        update_log_context(user_id=user.id)
+    return user
 
 
 def get_optional_user(

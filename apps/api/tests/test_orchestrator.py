@@ -8,6 +8,7 @@ import sys
 
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("USE_MOCK", "1")
+os.environ.setdefault("SSE_BACKEND", "memory")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -29,6 +30,7 @@ from orchestrator import (  # noqa: E402
     run_debate,
 )
 from schemas import AgentConfig, BudgetConfig, DebateConfig, JudgeConfig  # noqa: E402
+from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 
 
 def _usage(tokens: int) -> UsageAccumulator:
@@ -88,8 +90,10 @@ async def test_fast_debate_path_emits_final_event(monkeypatch):
     )
 
     async def collect():
-        q: asyncio.Queue = asyncio.Queue()
-        events = []
+        backend = get_sse_backend()
+        channel_id = f"debate:{debate.id}"
+        await backend.create_channel(channel_id)
+        events: list[dict] = []
 
         class DummyScope:
             def __enter__(self):
@@ -101,12 +105,19 @@ async def test_fast_debate_path_emits_final_event(monkeypatch):
         def fake_scope():
             return DummyScope()
 
+        async def consume():
+            async for event in backend.subscribe(channel_id):
+                events.append(event)
+                if event.get("type") == "final":
+                    break
+
         with patch("orchestrator.session_scope", fake_scope), patch("orchestrator._complete_debate_record"):
-            await run_debate(debate.id, debate.prompt, q, debate.config)
-            while not q.empty():
-                events.append(await q.get())
+            consumer = asyncio.create_task(consume())
+            await run_debate(debate.id, debate.prompt, channel_id, debate.config)
+            await consumer
         return events
 
+    reset_sse_backend_for_tests()
     events = await collect()
     assert any(evt.get("type") == "final" for evt in events)
     monkeypatch.setenv("FAST_DEBATE", "0")

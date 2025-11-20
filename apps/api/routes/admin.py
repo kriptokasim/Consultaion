@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,12 +12,15 @@ from auth import get_current_admin
 from billing.models import BillingPlan, BillingSubscription, BillingUsage
 from billing.routes import MODEL_COST_PER_1K
 from billing.service import _current_period, get_active_plan
+from config import settings
 from deps import get_session
 from model_registry import get_default_model, list_enabled_models
 from models import AuditLog, Debate, User
 from promotions.models import Promotion
 from ratings import update_ratings_for_debate
+from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from routes.common import serialize_user
+from sse_backend import get_sse_backend
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -183,6 +187,70 @@ def admin_user_billing(
     return {
         "plan": _plan_payload(plan),
         "usage": _usage_payload(usage),
+    }
+
+
+@router.get("/ops/summary")
+async def admin_ops_summary(
+    session: Session = Depends(get_session),
+    current_admin: User = Depends(get_current_admin),
+):
+    _ = current_admin  # explicitly acknowledge dependency
+    now = datetime.now(timezone.utc)
+    since_24h = now - timedelta(hours=24)
+    since_7d = now - timedelta(days=7)
+
+    def _scalar(stmt) -> int:
+        row = session.exec(stmt).one()
+        value = row[0] if isinstance(row, tuple) else row
+        return int(value or 0)
+
+    debates_24h = _scalar(select(func.count(Debate.id)).where(Debate.created_at >= since_24h))
+    debates_7d = _scalar(select(func.count(Debate.id)).where(Debate.created_at >= since_7d))
+    active_users_24h = _scalar(
+        select(func.count(func.distinct(Debate.user_id))).where(
+            Debate.created_at >= since_24h,
+            Debate.user_id.is_not(None),
+        )
+    )
+    tokens_24h = _scalar(
+        select(func.coalesce(func.sum(BillingUsage.tokens_used), 0)).where(BillingUsage.last_updated_at >= since_24h)
+    )
+
+    model_totals: Dict[str, int] = defaultdict(int)
+    for usage in session.exec(select(BillingUsage)).all():
+        for model_id, amount in (usage.model_tokens or {}).items():
+            model_totals[model_id] += int(amount or 0)
+    top_models = sorted(model_totals.items(), key=lambda entry: entry[1], reverse=True)[:5]
+
+    rate_limit_backend, rate_redis_ok = ensure_rate_limiter_ready()
+    recent_429_events = get_recent_429_events()
+    sse_backend = settings.SSE_BACKEND.lower()
+    sse_redis_ok: Optional[bool] = None
+    if sse_backend == "redis":
+        try:
+            backend = get_sse_backend()
+            sse_redis_ok = await backend.ping()
+        except Exception:
+            sse_redis_ok = False
+
+    models_enabled = list_enabled_models()
+
+    return {
+        "debates_24h": debates_24h,
+        "debates_7d": debates_7d,
+        "active_users_24h": active_users_24h,
+        "tokens_24h": tokens_24h,
+        "postgres_ok": True,
+        "top_models": [{"model_name": model_id, "total_tokens": total} for model_id, total in top_models],
+        "rate_limit": {
+            "backend": rate_limit_backend,
+            "redis_ok": rate_redis_ok,
+            "recent_429": recent_429_events[-20:],
+            "recent_429_count": len(recent_429_events),
+        },
+        "sse": {"backend": sse_backend, "redis_ok": sse_redis_ok},
+        "models": {"available": bool(models_enabled), "enabled_count": len(models_enabled)},
     }
 
 

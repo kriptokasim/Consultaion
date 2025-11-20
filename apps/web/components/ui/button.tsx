@@ -11,6 +11,10 @@ const buttonVariants = cva(
       variant: {
         default:
           'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-300 text-amber-900 shadow-[0_14px_30px_rgba(255,190,92,0.3)] hover:brightness-[1.02] active:brightness-95',
+        amber:
+          'rounded-full bg-amber-500 text-amber-950 shadow-[0_14px_30px_rgba(245,158,11,0.45)] transition-all duration-200 hover:bg-amber-600 hover:-translate-y-[1px] hover:shadow-[0_18px_40px_rgba(245,158,11,0.55)] active:translate-y-0',
+        premium:
+          'rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 text-white shadow-[0_14px_30px_rgba(59,130,246,0.3)] hover:brightness-[1.03] hover:shadow-[0_18px_36px_rgba(59,130,246,0.4)] active:brightness-95',
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
         outline:

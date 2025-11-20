@@ -2,8 +2,10 @@ import json
 import logging
 from contextvars import ContextVar, Token
 from datetime import datetime
+from typing import Any, Dict
 
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
+log_context_ctx: ContextVar[Dict[str, Any]] = ContextVar("log_context", default={})
 
 
 def set_request_id(request_id: str) -> Token:
@@ -26,16 +28,35 @@ class RequestIdFilter(logging.Filter):
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        payload = {
+        payload: Dict[str, Any] = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
             "request_id": getattr(record, "request_id", "-"),
         }
+        payload.update(get_log_context())
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False)
+
+
+def get_log_context() -> Dict[str, Any]:
+    return dict(log_context_ctx.get({}))  # copy to avoid mutation leaks
+
+
+def update_log_context(**kwargs: Any) -> Dict[str, Any]:
+    current = get_log_context()
+    updates = {key: value for key, value in kwargs.items() if value is not None}
+    if not updates:
+        return current
+    current.update(updates)
+    log_context_ctx.set(current)
+    return current
+
+
+def clear_log_context() -> None:
+    log_context_ctx.set({})
 
 
 LOGGING_CONFIG = {

@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from auth import get_current_admin, get_optional_user
+from config import settings
 from deps import get_session
 from metrics import get_metrics_snapshot
 from models import Debate, DebateRound, Message, RatingPersona, Score
@@ -22,6 +23,7 @@ from routes.common import (
     members_from_config,
 )
 from schemas import DebateConfig, default_debate_config
+from sse_backend import get_sse_backend
 
 router = APIRouter(tags=["stats"])
 
@@ -87,26 +89,48 @@ class HallOfFameResponse(BaseModel):
     items: list[HallOfFameItem]
 
 
+async def _resolve_sse_status() -> tuple[str, Optional[bool]]:
+    backend = settings.SSE_BACKEND.lower()
+    redis_ok: Optional[bool] = None
+    if backend == "redis":
+        try:
+            backend_client = get_sse_backend()
+            redis_ok = await backend_client.ping()
+        except Exception:  # pragma: no cover - defensive
+            redis_ok = False
+    return backend, redis_ok
+
+
 @router.get("/healthz")
-def healthz():
+async def healthz():
     backend, redis_ok = ensure_rate_limiter_ready()
     models_enabled = list_enabled_models()
+    sse_backend, sse_redis_ok = await _resolve_sse_status()
     return {
         "status": "ok",
         "rate_limit_backend": backend,
         "redis_ok": redis_ok,
         "models_available": bool(models_enabled),
         "enabled_model_count": len(models_enabled),
+        "sse_backend": sse_backend,
+        "sse_redis_ok": sse_redis_ok,
     }
 
 
 @router.get("/readyz")
-def readyz(session: Session = Depends(get_session)):
+async def readyz(session: Session = Depends(get_session)):
     session.exec(sa.text("SELECT 1"))
     models_enabled = list_enabled_models()
     if not models_enabled:
         raise HTTPException(status_code=503, detail="no models enabled")
-    return {"db": "ok", "models_available": True, "enabled_model_count": len(models_enabled)}
+    sse_backend, sse_redis_ok = await _resolve_sse_status()
+    return {
+        "db": "ok",
+        "models_available": True,
+        "enabled_model_count": len(models_enabled),
+        "sse_backend": sse_backend,
+        "sse_redis_ok": sse_redis_ok,
+    }
 
 
 if os.getenv("ENABLE_METRICS", "1").lower() not in {"0", "false", "no"}:

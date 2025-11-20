@@ -32,6 +32,7 @@ os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("DISABLE_AUTORUN", "1")
 os.environ.setdefault("DISABLE_RATINGS", "1")
 os.environ.setdefault("FAST_DEBATE", "1")
+os.environ.setdefault("SSE_BACKEND", "memory")
 os.environ["RL_MAX_CALLS"] = "1000"
 os.environ["AUTH_RL_MAX_CALLS"] = "1000"
 os.environ.setdefault("JWT_SECRET", "test-secret")
@@ -45,15 +46,13 @@ from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from main import (  # noqa: E402
     AuthRequest,
-    CHANNELS,
-    CHANNEL_META,
-    CHANNEL_TTL_SECS,
     DebateCreate,
     DebateUpdate,
     TeamCreate,
     TeamMemberCreate,
     add_team_member,
     admin_logs,
+    admin_ops_summary,
     create_debate,
     create_team,
     export_scores_csv,
@@ -65,7 +64,6 @@ from main import (  # noqa: E402
     list_debates,
     register_user,
     start_debate_run,
-    sweep_stale_channels,
     update_debate,
 )
 from models import AuditLog, Debate, PairwiseVote, RatingPersona, Score, User  # noqa: E402
@@ -73,6 +71,7 @@ import orchestrator as orchestrator_module  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
+from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 
 init_db()
 
@@ -143,7 +142,7 @@ def dummy_request(path: str = "/debates") -> Request:
 
 
 def test_health_endpoint_direct():
-    result = healthz()
+    result = asyncio.run(healthz())
     assert result["status"] == "ok"
 
 
@@ -164,12 +163,26 @@ def test_run_debate_emits_final_events():
         )
         session.commit()
 
-    q: asyncio.Queue = asyncio.Queue()
-    asyncio.run(run_debate(debate_id, "Pytest prompt", q, default_debate_config().model_dump()))
+    reset_sse_backend_for_tests()
 
-    events = []
-    while not q.empty():
-        events.append(q.get_nowait())
+    async def _collect_events():
+        backend = get_sse_backend()
+        channel_id = f"debate:{debate_id}"
+        await backend.create_channel(channel_id)
+        events: list[dict] = []
+
+        async def _consume():
+            async for event in backend.subscribe(channel_id):
+                events.append(event)
+                if event.get("type") == "final":
+                    break
+
+        consumer = asyncio.create_task(_consume())
+        await run_debate(debate_id, "Pytest prompt", channel_id, default_debate_config().model_dump())
+        await consumer
+        return events
+
+    events = asyncio.run(_collect_events())
 
     final_events = [event for event in events if event.get("type") == "final"]
     assert final_events, f"No final event emitted: {events}"
@@ -391,6 +404,21 @@ def test_admin_logs_endpoint_lists_entries():
     assert any(entry["action"] == "debate_created" for entry in payload["items"])
 
 
+def test_admin_ops_summary_reports_status():
+    owner = _register_user("ops@example.com", "ownerpass")
+    _create_debate_for_user(owner, "Ops trail run")
+    with Session(engine) as session:
+        admin = session.get(User, owner.id)
+        admin.role = "admin"
+        session.add(admin)
+        session.commit()
+    with Session(engine) as session:
+        admin_user = session.get(User, owner.id)
+        payload = asyncio.run(admin_ops_summary(session=session, current_admin=admin_user))
+    assert "debates_24h" in payload
+    assert payload["rate_limit"]["backend"]
+
+
 def test_wilson_interval_bounds():
     low, high = wilson_interval(8, 10)
     assert 0.4 < low < high < 1.0
@@ -535,17 +563,8 @@ def test_manual_start_succeeds_when_disabled():
             )
         )
     assert result["status"] == "scheduled"
-    assert debate_id in CHANNELS
     os.environ["DISABLE_AUTORUN"] = previous
-    CHANNELS.pop(debate_id, None)
-    CHANNEL_META.pop(debate_id, None)
 
 
-def test_channel_sweeper_removes_stale_entries():
-    CHANNELS["stale-test"] = asyncio.Queue()
-    CHANNEL_META["stale-test"] = 0.0
-    removed = sweep_stale_channels(now=CHANNEL_TTL_SECS + 5)
-    assert "stale-test" in removed
-    assert "stale-test" not in CHANNELS
     start_debate_run,
     sweep_stale_channels,

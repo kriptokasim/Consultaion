@@ -2,33 +2,41 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 
-import GoogleButton from "@/components/auth/GoogleButton"
 import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { login } from "@/lib/auth"
+import { apiRequest } from "@/lib/apiClient"
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const nextPath = searchParams.get("next") || "/dashboard"
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirm, setConfirm] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
+
+    if (password !== confirm) {
+      setError("Passwords do not match.")
+      return
+    }
+
     setLoading(true)
     try {
-      await login(email, password)
-      router.push(nextPath)
+      await apiRequest({
+        method: "POST",
+        path: "/auth/register",
+        body: { email, password },
+      })
+      router.push("/login")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      setError(err instanceof Error ? err.message : "Unable to sign up")
     } finally {
       setLoading(false)
     }
@@ -36,23 +44,17 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      title="Welcome back"
-      subtitle="Sign in to your AI parliament cockpit."
+      title="Create your account"
+      subtitle="Spin up your own multi-agent AI Parliament."
       footer={
         <span>
-          Don’t have an account?{" "}
-          <Link href="/register" className="underline underline-offset-4 text-[#3a2a1a] dark:text-amber-200">
-            Sign up
+          Already have an account?{" "}
+          <Link href="/login" className="underline underline-offset-4 text-[#3a2a1a] dark:text-amber-200">
+            Sign in
           </Link>
         </span>
       }
     >
-      <div className="flex flex-col gap-3 rounded-2xl border border-amber-100/60 bg-amber-50/80 p-5 text-center shadow-lg text-amber-950 dark:bg-stone-700/60 dark:text-amber-50">
-        <GoogleButton nextPath={nextPath} className="w-full justify-center" />
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">or</div>
-        <p className="text-sm auth-muted">Use workspace credentials</p>
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
@@ -60,10 +62,9 @@ export default function LoginPage() {
             id="email"
             type="email"
             required
-            value={email}
             autoComplete="email"
+            value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
             className="border-amber-200/70 bg-white/80 focus-visible:ring-amber-500 dark:border-amber-200/30 dark:bg-white/5"
           />
         </div>
@@ -73,16 +74,27 @@ export default function LoginPage() {
             id="password"
             type="password"
             required
-            autoComplete="current-password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
+            className="border-amber-200/70 bg-white/80 focus-visible:ring-amber-500 dark:border-amber-200/30 dark:bg-white/5"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="confirm-password">Confirm password</Label>
+          <Input
+            id="confirm-password"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
             className="border-amber-200/70 bg-white/80 focus-visible:ring-amber-500 dark:border-amber-200/30 dark:bg-white/5"
           />
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        <Button type="submit" variant="amber" disabled={loading} className="mt-2 w-full">
-          {loading ? "Signing in…" : "Sign in"}
+        <Button type="submit" variant="amber" className="mt-2 w-full" disabled={loading}>
+          {loading ? "Creating account…" : "Create account"}
         </Button>
       </form>
     </AuthShell>

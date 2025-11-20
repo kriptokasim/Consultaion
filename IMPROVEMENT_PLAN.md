@@ -14,3 +14,9 @@
 | Improvement summary / tracking doc | P2 | ✅ Completed | See `IMPROVEMENTS_SUMMARY.md`. |
 
 Legend: ✅ = merged; ⚙️ = partial/test gaps; ⏳ = scheduled.
+
+## Future rename checklist
+- **Repo / package renames:** Update the GitHub repository name, default branch protection rules, and any references in `package.json`, `pyproject`, Docker images, and deployment manifests.
+- **Container + image tags:** Publish images under the new name (e.g., `ghcr.io/newname/api` + `web`) and update compose/k8s manifests plus CI workflows that push tags.
+- **Imports & env vars:** Search/replace Python and TypeScript imports (`consultaion.*`) plus environment defaults (`CONSULTAION_*`). Re-run formatting/tests to ensure the new module path sticks.
+- **CI & docs:** Adjust badges, build triggers, release scripts, and marketing copy in README, docs, and the product UI so the new brand is consistent before cutting a release.
