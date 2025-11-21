@@ -11,6 +11,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # allow DATABASE_URL env override when running migrations
+from dotenv import load_dotenv
+load_dotenv(dotenv_path='../../.env')
 import os
 url = os.getenv("DATABASE_URL")
 if url:

@@ -124,10 +124,13 @@ def upgrade() -> None:
         ["location", "is_active", "priority"],
         unique=False,
     )
-
+    bind = op.get_bind()
+    dialect_name = bind.dialect.name
+    is_postgres = dialect_name == "postgresql"
+    uuid_type = postgresql.UUID(as_uuid=True) if is_postgres else sa.String(length=36)
     plan_table = sa.table(
         "billing_plans",
-        sa.column("id", sa.String()),
+        sa.column("id", uuid_type),
         sa.column("slug", sa.Text()),
         sa.column("name", sa.Text()),
         sa.column("price_monthly", sa.Numeric(10, 2)),
@@ -135,7 +138,6 @@ def upgrade() -> None:
         sa.column("is_default_free", sa.Boolean()),
         sa.column("limits", JSON()),
     )
-
     op.bulk_insert(
         plan_table,
         [

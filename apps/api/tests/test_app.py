@@ -3,6 +3,7 @@ import importlib
 import os
 import sys
 import tempfile
+import time
 from decimal import Decimal
 from pathlib import Path
 import atexit
@@ -566,5 +567,12 @@ def test_manual_start_succeeds_when_disabled():
     os.environ["DISABLE_AUTORUN"] = previous
 
 
-    start_debate_run,
-    sweep_stale_channels,
+def test_sweep_stale_channels_removes_old_entries():
+    reset_sse_backend_for_tests()
+    backend = get_sse_backend()
+    backend._ttl_seconds = 0.01  # Patch the instance directly
+    channel_id = "stale-channel"
+    asyncio.run(backend.create_channel(channel_id))
+    time.sleep(0.02)
+    asyncio.run(backend.cleanup())
+    assert not backend._channels or not backend._channels.get(channel_id)

@@ -12,6 +12,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -22,9 +23,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    dialect_name = bind.dialect.name
+    is_postgres = dialect_name == "postgresql"
+    uuid_type = postgresql.UUID(as_uuid=True) if is_postgres else sa.String(length=36)
     promotion_table = sa.table(
         "promotions",
-        sa.column("id", sa.String()),
+        sa.column("id", uuid_type),
         sa.column("location", sa.Text()),
         sa.column("title", sa.Text()),
         sa.column("body", sa.Text()),

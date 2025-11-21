@@ -153,6 +153,7 @@ async def _run_mock_debate(
     backend = get_sse_backend()
     await backend.publish(channel_id, {"type": "message", "round": 0, "candidates": []})
     await backend.publish(
+        channel_id,
         {
             "type": "score",
             "scores": mock_scores,
@@ -163,6 +164,7 @@ async def _run_mock_debate(
         }
     )
     await backend.publish(
+        channel_id,
         {
             "type": "final",
             "content": "Fast debate completed.",
