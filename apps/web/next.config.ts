@@ -10,7 +10,6 @@ const withBundleAnalyzer = bundleAnalyzer({
 const workspaceRoot = path.join(__dirname, '..', '..')
 
 const nextConfig: NextConfig = {
-  distDir: '.next-build',
   outputFileTracingRoot: workspaceRoot,
   webpack: (config, { isServer }) => {
     if (!isServer) {
