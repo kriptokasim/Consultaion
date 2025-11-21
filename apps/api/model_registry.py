@@ -1,7 +1,8 @@
-import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
+
+from config import settings
 
 
 class ModelProvider(str, Enum):
@@ -94,16 +95,16 @@ ALL_MODELS: Dict[str, ModelConfig] = {
 
 
 def _provider_enabled(provider: ModelProvider) -> bool:
-    if os.getenv("USE_MOCK", "0") == "1":
+    if settings.USE_MOCK:
         return True
     if provider == ModelProvider.OPENROUTER:
-        return bool(os.getenv("OPENROUTER_API_KEY"))
+        return bool(settings.OPENROUTER_API_KEY)
     if provider == ModelProvider.OPENAI:
-        return bool(os.getenv("OPENAI_API_KEY"))
+        return bool(settings.OPENAI_API_KEY)
     if provider == ModelProvider.ANTHROPIC:
-        return bool(os.getenv("ANTHROPIC_API_KEY"))
+        return bool(settings.ANTHROPIC_API_KEY)
     if provider == ModelProvider.GEMINI:
-        return bool(os.getenv("GEMINI_API_KEY"))
+        return bool(settings.GEMINI_API_KEY)
     return False
 
 

@@ -23,6 +23,10 @@ type OpsSummaryResponse = {
   rate_limit?: RateLimitSummary
   sse?: SseSummary
   models?: { available?: boolean; enabled_count?: number }
+  parliament?: {
+    seat_counts?: Record<string, number>
+    model_usage_by_role?: Array<{ role: string; provider?: string; model?: string; total_tokens: number }>
+  }
 }
 
 export default async function AdminOpsPage() {
@@ -71,6 +75,8 @@ export default async function AdminOpsPage() {
   ]
 
   const topModels = payload.top_models ?? []
+  const seatCounts = payload.parliament?.seat_counts ?? {}
+  const modelUsage = payload.parliament?.model_usage_by_role ?? []
 
   return (
     <div className="space-y-6">
@@ -113,6 +119,44 @@ export default async function AdminOpsPage() {
             {statusItems.map((item) => (
               <StatusRow key={item.label} label={item.label} healthy={item.healthy} description={item.description} />
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="card-elevated p-5">
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Seat usage</h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400">How often each role is scheduled in panels.</p>
+          <div className="mt-4 space-y-2">
+            {Object.keys(seatCounts).length ? (
+              Object.entries(seatCounts).map(([role, count]) => (
+                <div key={role} className="flex items-center justify-between rounded-2xl border border-amber-100 px-3 py-2 text-sm font-semibold text-stone-700 dark:border-amber-900/40 dark:text-amber-50">
+                  <span className="capitalize">{role.replace(/_/g, " ")}</span>
+                  <span>{count}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-stone-500">No parliament usage yet.</p>
+            )}
+          </div>
+        </div>
+        <div className="card-elevated p-5">
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Model usage by role</h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400">Token totals grouped by role + provider.</p>
+          <div className="mt-4 space-y-2">
+            {modelUsage.length ? (
+              modelUsage.map((entry) => (
+                <div key={`${entry.role}-${entry.model}-${entry.provider}`} className="rounded-2xl border border-amber-100 px-3 py-2 text-sm text-stone-700 dark:border-amber-900/40 dark:text-amber-50">
+                  <p className="font-semibold capitalize">{entry.role.replace(/_/g, " ")}</p>
+                  <p className="text-xs text-stone-500">
+                    {entry.provider ?? "provider"} · {entry.model ?? "model"}
+                  </p>
+                  <p className="font-mono text-sm text-stone-900 dark:text-amber-50">{Intl.NumberFormat().format(entry.total_tokens)}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-stone-500">No token data recorded yet.</p>
+            )}
           </div>
         </div>
       </section>

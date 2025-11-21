@@ -1,13 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LivePanel from "@/components/consultaion/consultaion/live-panel";
 import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import PromptSuggestions from "@/components/parliament/PromptSuggestions";
+import PanelConfigurator from "@/components/parliament/PanelConfigurator";
 import type { Member, ScoreItem } from "@/components/parliament/types";
-import { ApiError, getMembers, getRateLimitInfo, startDebate, startDebateRun, streamDebate } from "@/lib/api";
+import { ApiError, getRateLimitInfo, startDebate, startDebateRun } from "@/lib/api";
+import { useEventSource } from "@/lib/sse";
+import { defaultPanelConfig, type PanelSeatConfig } from "@/lib/panels";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -16,21 +19,28 @@ const FALLBACK_MEMBERS: Member[] = [
   { id: 'JudgeAlpha', name: 'JudgeAlpha', role: 'judge' },
 ]
 
+const seatsToMembers = (seats: PanelSeatConfig[]): Member[] =>
+  seats.map((seat) => ({
+    id: seat.seat_id,
+    name: seat.display_name,
+    role: seat.role_profile === 'judge' ? 'judge' : seat.role_profile === 'risk_officer' ? 'critic' : 'agent',
+    party: seat.provider_key,
+  }))
+
 type VoteMeta = {
   method?: string
   ranking?: string[]
 }
 
-const RECONNECT_STEPS = [1000, 2000, 5000, 10000]
-
 export default function Page() {
   const [prompt, setPrompt] = useState('Draft a national EV policy')
+  const [panelConfig, setPanelConfig] = useState(() => defaultPanelConfig())
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState<any[]>([])
   const [activePersona, setActivePersona] = useState<string | undefined>(undefined)
   const [speakerTime, setSpeakerTime] = useState<number>(0)
   const [vote, setVote] = useState<VoteMeta | undefined>(undefined)
-  const [members, setMembers] = useState<Member[]>(FALLBACK_MEMBERS)
+  const [members, setMembers] = useState<Member[]>(() => seatsToMembers(panelConfig.seats))
   const [eventsLoading, setEventsLoading] = useState(false)
   const [currentDebateId, setCurrentDebateId] = useState<string | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -38,15 +48,84 @@ export default function Page() {
   const [latestScores, setLatestScores] = useState<ScoreItem[]>([])
   const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
 
-  const esRef = useRef<EventSource | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const reconnectAttemptRef = useRef(0)
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentDebateIdRef = useRef<string | null>(null)
   const runningRef = useRef(false)
-  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const manualStartAttemptedRef = useRef(false)
+  const stopStreamRef = useRef<((nextStatus: 'idle' | 'completed' | 'error') => void) | null>(null)
   const manualStartMode = (process.env.NEXT_PUBLIC_AUTORUN_HINT ?? "on") === "off"
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "")
+
+  const streamUrl = useMemo(() => {
+    if (!currentDebateId) return null
+    const path = `/debates/${currentDebateId}/stream`
+    return apiBase ? `${apiBase}${path}` : path
+  }, [apiBase, currentDebateId])
+
+  const shouldStream = Boolean(streamUrl) && running
+
+  const handleStreamEvent = useCallback(
+    (msg: any) => {
+      setEvents((prev) => [...prev, msg])
+      setEventsLoading(false)
+      if (msg.type === 'seat_message') {
+        if (msg.seat_name || msg.seat_id) {
+          setActivePersona(msg.seat_name ?? msg.seat_id)
+        }
+      } else if (msg.type === 'message') {
+        const persona = msg.revised?.[0]?.persona ?? msg.candidates?.[0]?.persona
+        if (persona) setActivePersona(persona)
+      }
+      if (msg.type === 'score' && Array.isArray(msg.scores)) {
+        const ranking = [...msg.scores].sort((a: any, b: any) => b.score - a.score).map((s: any) => s.persona)
+        setVote({ method: 'borda', ranking })
+        setLatestScores(
+          msg.scores.map((score: any) => ({
+            persona: score.persona,
+            score: Number(score.score) || 0,
+            rationale: score.rationale,
+          })),
+        )
+      }
+      if (msg.type === 'final') {
+        if (msg.meta?.ranking) {
+          setVote({
+            method: msg.meta?.vote?.method ?? 'borda',
+            ranking: msg.meta.ranking,
+          })
+        }
+        stopStreamRef.current?.('completed')
+      }
+    },
+    [setEvents, setActivePersona, setVote, setLatestScores],
+  )
+
+  const handleStreamError = useCallback(() => {
+    if (!runningRef.current || !currentDebateIdRef.current) {
+      return
+    }
+    if (manualStartMode && !manualStartAttemptedRef.current) {
+      manualStartAttemptedRef.current = true
+      startDebateRun(currentDebateIdRef.current)
+        .then(() => {
+          setSessionStatus('running')
+        })
+        .catch((error) => {
+          console.error('Manual start failed', error)
+          setSessionStatus('error')
+        })
+      return
+    }
+    setSessionStatus('error')
+  }, [manualStartMode])
+
+  const { status: streamStatus, close: closeStream } = useEventSource<any>(shouldStream ? streamUrl : null, {
+    enabled: shouldStream,
+    withCredentials: true,
+    onEvent: handleStreamEvent,
+    onError: handleStreamError,
+  })
 
   const reset = () => {
     setEvents([])
@@ -58,7 +137,7 @@ export default function Page() {
     manualStartAttemptedRef.current = false
   }
 
-  const clearTimers = () => {
+  const clearTimers = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current)
       timerRef.current = null
@@ -67,27 +146,41 @@ export default function Page() {
       clearInterval(elapsedTimerRef.current)
       elapsedTimerRef.current = null
     }
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current)
-      reconnectTimerRef.current = null
-    }
-  }
+  }, [])
 
-  const stopStream = (nextStatus: 'idle' | 'completed' | 'error' = 'idle') => {
-    esRef.current?.close()
-    esRef.current = null
+  const stopStream = useCallback((nextStatus: 'idle' | 'completed' | 'error' = 'idle') => {
+    closeStream()
     clearTimers()
-    reconnectAttemptRef.current = 0
-    currentDebateIdRef.current = null
     setRunning(false)
     runningRef.current = false
     setEventsLoading(false)
     setSessionStatus(nextStatus)
     if (nextStatus === 'idle') {
+      currentDebateIdRef.current = null
       setCurrentDebateId(null)
     }
     manualStartAttemptedRef.current = false
-  }
+  }, [clearTimers, closeStream])
+
+  useEffect(() => {
+    stopStreamRef.current = stopStream
+  }, [stopStream])
+
+  const handlePanelChange = useCallback(
+    (seats: PanelSeatConfig[]) => {
+      setPanelConfig((prev) => ({ ...prev, seats }))
+      setMembers(seatsToMembers(seats))
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (streamStatus === 'connecting' || streamStatus === 'reconnecting') {
+      setEventsLoading(true)
+    } else if (streamStatus === 'connected') {
+      setEventsLoading(false)
+    }
+  }, [streamStatus])
 
   const startElapsed = () => {
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current)
@@ -95,83 +188,6 @@ export default function Page() {
     elapsedTimerRef.current = setInterval(() => {
       setElapsedSeconds((prev) => prev + 1)
     }, 1000)
-  }
-
-  const scheduleReconnect = () => {
-    if (!runningRef.current || !currentDebateIdRef.current) {
-      return
-    }
-    const attempt = reconnectAttemptRef.current
-    const delay = RECONNECT_STEPS[Math.min(attempt, RECONNECT_STEPS.length - 1)]
-    reconnectAttemptRef.current = attempt + 1
-    setEventsLoading(true)
-    reconnectTimerRef.current = setTimeout(() => {
-      if (!currentDebateIdRef.current) return
-      openStream(currentDebateIdRef.current)
-    }, delay)
-  }
-
-  const openStream = (debateId: string) => {
-    esRef.current?.close()
-    const es = streamDebate(debateId)
-    esRef.current = es
-    setEventsLoading(true)
-    es.onopen = () => {
-      setEventsLoading(false)
-    }
-    es.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data)
-        setEvents((prev) => [...prev, msg])
-        setEventsLoading(false)
-        if (msg.type === 'message') {
-          const persona = msg.revised?.[0]?.persona ?? msg.candidates?.[0]?.persona
-          if (persona) setActivePersona(persona)
-        }
-        if (msg.type === 'score' && Array.isArray(msg.scores)) {
-          const ranking = [...msg.scores].sort((a: any, b: any) => b.score - a.score).map((s: any) => s.persona)
-          setVote({ method: 'borda', ranking })
-          setLatestScores(
-            msg.scores.map((score: any) => ({
-              persona: score.persona,
-              score: Number(score.score) || 0,
-              rationale: score.rationale,
-            })),
-          )
-        }
-        if (msg.type === 'final') {
-          if (msg.meta?.ranking) {
-            setVote({
-              method: msg.meta?.vote?.method ?? 'borda',
-              ranking: msg.meta.ranking,
-            })
-          }
-          stopStream('completed')
-        }
-      } catch (error) {
-        console.error('Failed to parse event', error)
-      }
-    }
-    es.onerror = () => {
-      es.close()
-      if (manualStartMode && !manualStartAttemptedRef.current) {
-        manualStartAttemptedRef.current = true
-        startDebateRun(debateId)
-          .then(() => {
-            setSessionStatus('running')
-            openStream(debateId)
-          })
-          .catch((error) => {
-            console.error('Manual start failed', error)
-            setSessionStatus('error')
-          })
-        return
-      }
-      setSessionStatus('error')
-      if (runningRef.current) {
-        scheduleReconnect()
-      }
-    }
   }
 
   const onStart = async () => {
@@ -185,12 +201,10 @@ export default function Page() {
     runningRef.current = true
     manualStartAttemptedRef.current = false
     try {
-      const { id } = await startDebate({ prompt })
+      const { id } = await startDebate({ prompt, panel_config: panelConfig })
       currentDebateIdRef.current = id
       setCurrentDebateId(id)
-      reconnectAttemptRef.current = 0
       setSessionStatus('running')
-      openStream(id)
       timerRef.current = setInterval(() => setSpeakerTime((t) => t + 1), 1000)
       startElapsed()
     } catch (error) {
@@ -209,39 +223,15 @@ export default function Page() {
   }
 
   useEffect(() => {
-    let active = true
-    getMembers()
-      .then((payload) => {
-        if (!active) return
-        const fetched = Array.isArray(payload?.members) ? payload.members : []
-        if (fetched.length) {
-          setMembers(
-            fetched.map((member: any) => ({
-              id: member.id ?? member.name,
-              name: member.name ?? member.id,
-              role: member.role ?? 'agent',
-              party: member.party,
-            })),
-          )
-        } else {
-          setMembers(FALLBACK_MEMBERS)
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setMembers(FALLBACK_MEMBERS)
-        }
-      })
     return () => {
-      active = false
       stopStream()
     }
-  }, [])
+  }, [stopStream])
 
   const sessionStats = useMemo(() => {
     return {
       rounds: events.filter((event) => event.type === 'round_started').length,
-      speeches: events.filter((event) => event.type === 'message').length,
+      speeches: events.filter((event) => event.type === 'seat_message' || event.type === 'message').length,
       votes: events.filter((event) => event.type === 'score').length,
     }
   }, [events])
@@ -298,7 +288,10 @@ export default function Page() {
           vote={vote}
           loading={eventsLoading}
         />
-        <PromptSuggestions onSelect={setPrompt} />
+        <div className="space-y-4">
+          <PanelConfigurator seats={panelConfig.seats} onChange={handlePanelChange} />
+          <PromptSuggestions onSelect={setPrompt} />
+        </div>
       </div>
     </main>
   )

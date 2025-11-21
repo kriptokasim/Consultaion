@@ -1,4 +1,3 @@
-import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Optional
@@ -22,7 +21,7 @@ from routes.common import (
     excerpt,
     members_from_config,
 )
-from schemas import DebateConfig, default_debate_config
+from schemas import DebateConfig, default_debate_config, default_panel_config
 from sse_backend import get_sse_backend
 
 router = APIRouter(tags=["stats"])
@@ -133,7 +132,7 @@ async def readyz(session: Session = Depends(get_session)):
     }
 
 
-if os.getenv("ENABLE_METRICS", "1").lower() not in {"0", "false", "no"}:
+if settings.ENABLE_METRICS:
 
     @router.get("/metrics")
     def metrics():
@@ -144,7 +143,7 @@ if os.getenv("ENABLE_METRICS", "1").lower() not in {"0", "false", "no"}:
 
 @router.get("/version")
 def version():
-    return {"app": "consultaion", "version": os.getenv("APP_VERSION", "0.2.0")}
+    return {"app": "consultaion", "version": settings.APP_VERSION}
 
 
 @router.get("/stats/models", response_model=list[ModelStatsSummary])
@@ -267,7 +266,8 @@ async def get_model_detail(
 @router.get("/config/members")
 async def get_members(response: Response):
     config: DebateConfig = default_debate_config()
-    payload = {"members": members_from_config(config)}
+    panel = default_panel_config()
+    payload = {"members": members_from_config(config, panel)}
     response.headers["Cache-Control"] = "private, max-age=30"
     return payload
 
@@ -341,19 +341,19 @@ async def get_system_health(
         db_ok=db_ok,
         rate_limit_backend=backend,
         redis_ok=redis_ok,
-        enable_csrf=os.getenv("ENABLE_CSRF", "1").lower() not in {"0", "false", "no"},
-        enable_sec_headers=os.getenv("ENABLE_SEC_HEADERS", "1").strip().lower() not in {"0", "false", "no"},
-        mock_mode=os.getenv("USE_MOCK", "1") != "0" and os.getenv("REQUIRE_REAL_LLM", "0") != "1",
+        enable_csrf=settings.ENABLE_CSRF,
+        enable_sec_headers=settings.ENABLE_SEC_HEADERS,
+        mock_mode=settings.USE_MOCK and not settings.REQUIRE_REAL_LLM,
     )
 
 
 @router.get("/stats/rate-limit", response_model=RateLimitSnapshot)
 async def get_rate_limit_snapshot(_: Any = Depends(get_current_admin)):
-    backend = os.getenv("RATE_LIMIT_BACKEND", "memory")
+    backend = settings.RATE_LIMIT_BACKEND or "memory"
     return RateLimitSnapshot(
         backend=backend,
-        window=int(os.getenv("RL_WINDOW", "60")),
-        max_calls=int(os.getenv("RL_MAX_CALLS", "5")),
+        window=settings.RL_WINDOW,
+        max_calls=settings.RL_MAX_CALLS,
         recent_429s=get_recent_429_events(),
         total_429s=len(get_recent_429_events()),
     )

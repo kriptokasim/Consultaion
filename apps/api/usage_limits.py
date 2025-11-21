@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-import os
 from datetime import timedelta, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
 
+from config import settings
 from database import session_scope
 from models import UsageCounter, UsageQuota, utcnow
 
 
 def _default_max_runs_per_hour() -> int:
-    return int(os.getenv("DEFAULT_MAX_RUNS_PER_HOUR", "30"))
+    return settings.DEFAULT_MAX_RUNS_PER_HOUR
 
 
 def _default_max_tokens_per_day() -> int:
-    return int(os.getenv("DEFAULT_MAX_TOKENS_PER_DAY", "150000"))
+    return settings.DEFAULT_MAX_TOKENS_PER_DAY
 
 
 def _period_seconds(period: str) -> int:

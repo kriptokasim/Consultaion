@@ -41,6 +41,7 @@ from database import engine, init_db  # noqa: E402
 from main import app  # noqa: E402
 from models import Debate, User  # noqa: E402
 from promotions.models import Promotion  # noqa: E402
+from schemas import default_panel_config  # noqa: E402
 
 init_db()
 
@@ -87,6 +88,8 @@ def _seed_admin_data():
             prompt="Explain Amber-Mocha oversight.",
             status="completed",
             config={},
+            panel_config=default_panel_config().model_dump(),
+            engine_version="parliament-v1",
             user_id=member.id,
             created_at=datetime.now(timezone.utc) - timedelta(days=1),
             updated_at=datetime.now(timezone.utc),

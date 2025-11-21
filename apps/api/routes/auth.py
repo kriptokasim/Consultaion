@@ -1,4 +1,3 @@
-import os
 import secrets
 from typing import Any, Optional
 from urllib.parse import urlencode, urlparse
@@ -27,6 +26,7 @@ from auth import (
 )
 from deps import get_session
 from models import TeamMember, User, utcnow
+from config import settings
 from ratelimit import increment_ip_bucket, record_429
 from routes.common import AUTH_MAX_CALLS, AUTH_WINDOW, serialize_user, user_team_role
 from schemas import UserProfile as UserProfileSchema, UserProfileUpdate
@@ -47,21 +47,7 @@ OAUTH_NEXT_COOKIE = "google_oauth_next"
 SAFE_NEXT_DEFAULT = "/dashboard"
 SAFE_NEXT_PREFIXES = ("/dashboard", "/runs", "/live", "/leaderboard", "/")
 
-_WEB_ORIGIN_ENV_KEYS = [
-    "WEB_APP_ORIGIN",
-    "NEXT_PUBLIC_WEB_URL",
-    "NEXT_PUBLIC_APP_URL",
-    "NEXT_PUBLIC_WEB_ORIGIN",
-    "NEXT_PUBLIC_APP_ORIGIN",
-    "NEXT_PUBLIC_SITE_URL",
-]
-for _env_key in _WEB_ORIGIN_ENV_KEYS:
-    _candidate = os.getenv(_env_key)
-    if _candidate:
-        WEB_APP_ORIGIN = _candidate.rstrip("/")
-        break
-else:
-    WEB_APP_ORIGIN = "http://localhost:3000"
+WEB_APP_ORIGIN = (settings.WEB_APP_ORIGIN or "http://localhost:3000").rstrip("/")
 
 
 def sanitize_next_path(raw_next: Optional[str]) -> str:
@@ -121,9 +107,9 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
 
 
 def _google_config() -> tuple[str, str, str]:
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    redirect_url = os.getenv("GOOGLE_REDIRECT_URL")
+    client_id = settings.GOOGLE_CLIENT_ID
+    client_secret = settings.GOOGLE_CLIENT_SECRET
+    redirect_url = settings.GOOGLE_REDIRECT_URL
     if not client_id or not client_secret or not redirect_url:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Google auth not configured")
     return client_id, client_secret, redirect_url

@@ -20,3 +20,7 @@ Legend: ✅ = merged; ⚙️ = partial/test gaps; ⏳ = scheduled.
 - **Container + image tags:** Publish images under the new name (e.g., `ghcr.io/newname/api` + `web`) and update compose/k8s manifests plus CI workflows that push tags.
 - **Imports & env vars:** Search/replace Python and TypeScript imports (`consultaion.*`) plus environment defaults (`CONSULTAION_*`). Re-run formatting/tests to ensure the new module path sticks.
 - **CI & docs:** Adjust badges, build triggers, release scripts, and marketing copy in README, docs, and the product UI so the new brand is consistent before cutting a release.
+
+## Localization follow-ups
+- Feed the selected UI locale into debate configs (agents + judges) so prompts, policies, and synthesized answers are emitted in the visitor's language. This likely means adding `locale` to `DebateConfig`, storing it on `Debate`, and passing it through orchestrator events once we wire Patchset 16 (multi-role orchestration).
+- Extend email/export templates with localized copy and document translation expectations for community-provided prompts.

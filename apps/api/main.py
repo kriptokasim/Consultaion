@@ -1,9 +1,7 @@
 import asyncio
 import logging.config
-import os
 import uuid
 from contextlib import asynccontextmanager, suppress
-from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +9,8 @@ from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
-from billing import billing_router
-from promotions import promotions_router
+from billing.routes import billing_router
+from promotions.routes import promotions_router
 from database import engine, init_db
 from config import settings
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
@@ -75,7 +73,7 @@ for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "apps"):
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
-SENTRY_DSN = os.getenv("SENTRY_DSN")
+SENTRY_DSN = settings.SENTRY_DSN
 if SENTRY_DSN:
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -83,13 +81,13 @@ if SENTRY_DSN:
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
-        environment=os.getenv("SENTRY_ENV", "local"),
-        traces_sample_rate=float(os.getenv("SENTRY_SAMPLE_RATE", "0.1")),
+        environment=settings.SENTRY_ENV,
+        traces_sample_rate=float(settings.SENTRY_SAMPLE_RATE),
         integrations=[FastApiIntegration(), SqlalchemyIntegration()],
     )
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
-ENABLE_SEC_HEADERS = os.getenv("ENABLE_SEC_HEADERS", "1").strip().lower() not in {"0", "false", "no"}
+ENABLE_SEC_HEADERS = settings.ENABLE_SEC_HEADERS
 
 
 async def csrf_protect(request: Request) -> None:
@@ -112,7 +110,7 @@ async def lifespan(app: FastAPI):
     init_db()
     _warn_on_multi_worker()
     try:
-        ensure_rate_limiter_ready(raise_on_failure=os.getenv("RATE_LIMIT_BACKEND", "memory") == "redis")
+        ensure_rate_limiter_ready(raise_on_failure=settings.RATE_LIMIT_BACKEND == "redis")
     except Exception as exc:
         logger.error("Rate limiter backend check failed: %s", exc)
     try:
@@ -158,7 +156,7 @@ if ENABLE_SEC_HEADERS:
 
 def _warn_on_multi_worker() -> None:
     """Warn if multiple workers are in use while SSE queues are process-local."""
-    worker_env = os.getenv("WEB_CONCURRENCY") or os.getenv("GUNICORN_WORKERS")
+    worker_env = settings.WEB_CONCURRENCY or settings.GUNICORN_WORKERS
     try:
         if worker_env and int(worker_env) > 1 and settings.SSE_BACKEND.lower() == "memory":
             logger.warning(
@@ -184,7 +182,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
-origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+origins = settings.CORS_ORIGINS.split(",")
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,

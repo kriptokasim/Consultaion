@@ -1,6 +1,5 @@
 import hashlib
 import hmac
-import os
 import secrets
 import time
 from typing import Any, Dict, Optional
@@ -10,27 +9,27 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from sqlmodel import Session
 
 from deps import get_session
+from config import settings
 from log_config import update_log_context
 from models import User
 
-COOKIE_NAME = os.getenv("COOKIE_NAME", "consultaion_token")
-JWT_SECRET = os.getenv("JWT_SECRET")
+COOKIE_NAME = settings.COOKIE_NAME
+JWT_SECRET = settings.JWT_SECRET
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET must be set")
 if JWT_SECRET == "change_me_in_prod":
     raise RuntimeError("JWT_SECRET must be changed from default value")
 JWT_ALGORITHM = "HS256"
-_expire_minutes_default = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
-JWT_TTL_SECONDS = int(os.getenv("JWT_TTL_SECONDS", str(_expire_minutes_default * 60)))
-PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_ITERATIONS", "150000"))
-COOKIE_SECURE = os.getenv("COOKIE_SECURE", "1").strip().lower() not in {"0", "false", "no"}
-_SAMESITE_VALUE = os.getenv("COOKIE_SAMESITE", "lax").strip().lower()
+JWT_TTL_SECONDS = settings.JWT_TTL_SECONDS
+PBKDF2_ITERATIONS = settings.PASSWORD_ITERATIONS
+COOKIE_SECURE = settings.COOKIE_SECURE
+_SAMESITE_VALUE = settings.COOKIE_SAMESITE.strip().lower()
 if _SAMESITE_VALUE not in {"lax", "strict", "none"}:
     _SAMESITE_VALUE = "lax"
 COOKIE_SAMESITE = "None" if _SAMESITE_VALUE == "none" else _SAMESITE_VALUE.capitalize()
-COOKIE_PATH = os.getenv("COOKIE_PATH", "/")
-ENABLE_CSRF = os.getenv("ENABLE_CSRF", "1").strip().lower() in {"1", "true", "yes"}
-CSRF_COOKIE_NAME = os.getenv("CSRF_COOKIE_NAME", "csrf_token")
+COOKIE_PATH = settings.COOKIE_PATH
+ENABLE_CSRF = settings.ENABLE_CSRF
+CSRF_COOKIE_NAME = settings.CSRF_COOKIE_NAME
 
 
 def hash_password(password: str) -> str:

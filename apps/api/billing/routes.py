@@ -7,8 +7,11 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
+from types import SimpleNamespace
+import json
 
 from auth import get_current_user
+from config import settings
 from deps import get_session
 from model_registry import ALL_MODELS
 from models import User
@@ -20,6 +23,20 @@ from .service import (
     get_active_plan,
     get_or_create_usage,
 )
+
+try:  # pragma: no cover - optional dependency guard
+    import stripe as stripe_sdk  # type: ignore
+except ImportError:  # pragma: no cover
+    stripe_sdk = None
+
+
+class _StripeWebhookStub:
+    @staticmethod
+    def construct_event(*_args, **_kwargs):
+        raise RuntimeError("Stripe SDK unavailable")
+
+
+stripe = stripe_sdk if stripe_sdk is not None else SimpleNamespace(Webhook=_StripeWebhookStub)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
@@ -144,17 +161,38 @@ def create_checkout(
 
 @router.post("/webhook/{provider}")
 async def billing_webhook(provider: str, request: Request):
-    payload: Optional[Dict] = None
-    try:
-        payload = await request.json()
-    except Exception:
-        logger.warning("billing webhook received non-JSON payload")
-        payload = None
-    headers = dict(request.headers)
     provider_name = provider.lower()
+    headers = dict(request.headers)
+    raw_body = await request.body()
+
     if provider_name == "stripe":
+        payload: Optional[Dict] = None
+        if settings.STRIPE_WEBHOOK_VERIFY and settings.STRIPE_WEBHOOK_SECRET:
+            sig_header = headers.get("stripe-signature")
+            if not sig_header:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing stripe signature")
+            try:
+                event = stripe.Webhook.construct_event(
+                    raw_body,
+                    sig_header,
+                    settings.STRIPE_WEBHOOK_SECRET,
+                )
+                payload = event.to_dict_recursive() if hasattr(event, "to_dict_recursive") else dict(event)
+            except Exception as exc:  # pragma: no cover - external dependency
+                logger.warning("Stripe webhook signature invalid: %s", exc)
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid signature") from exc
+        else:
+            if settings.STRIPE_WEBHOOK_VERIFY and not settings.STRIPE_WEBHOOK_SECRET:
+                logger.warning("STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET missing; skipping verification.")
+            try:
+                payload = json.loads(raw_body.decode("utf-8")) if raw_body else None
+            except json.JSONDecodeError:
+                logger.warning("Stripe webhook received non-JSON payload during dev mode")
+                payload = None
+
         get_billing_provider().handle_webhook(payload or {}, headers)
         return {"status": "ok"}
+
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="provider not supported")
 
 

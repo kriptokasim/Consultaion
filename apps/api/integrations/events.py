@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict
 
 import httpx
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 
 def emit_event(event: str, payload: Dict[str, Any]) -> None:
     """Send a lightweight event to n8n or other automation pipeline."""
-    webhook_url = os.getenv("N8N_WEBHOOK_URL")
+    webhook_url = settings.N8N_WEBHOOK_URL
     if not webhook_url:
         return
     try:

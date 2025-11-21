@@ -6,6 +6,7 @@ import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlmodel import Session, select
@@ -39,7 +40,6 @@ from auth import hash_password  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from models import UsageCounter, UsageQuota, User  # noqa: E402
 import ratelimit as ratelimit_module  # noqa: E402
-from ratelimit import get_recent_429_events, increment_ip_bucket, record_429  # noqa: E402
 from usage_limits import RateLimitError, record_token_usage, reserve_run_slot  # noqa: E402
 
 init_db()
@@ -49,7 +49,11 @@ init_db()
 def ensure_memory_backend(monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_BACKEND", "memory")
     monkeypatch.delenv("REDIS_URL", raising=False)
+    import config as config_module  # noqa: WPS433
+
+    config_module.settings.reload()
     importlib.reload(ratelimit_module)
+    ratelimit_module.reset_rate_limiter_backend_for_tests()
     yield
 
 
@@ -77,19 +81,19 @@ def test_user(db_session):
 def test_increment_ip_bucket_memory_respects_limit():
     ip = "10.0.0.1"
     for _ in range(5):
-        assert increment_ip_bucket(ip, 60, 5)
-    assert not increment_ip_bucket(ip, 60, 5)
+        assert ratelimit_module.increment_ip_bucket(ip, 60, 5)
+    assert not ratelimit_module.increment_ip_bucket(ip, 60, 5)
 
 
 def test_increment_ip_bucket_separate_ips():
-    assert increment_ip_bucket("10.0.0.2", 60, 2)
-    assert increment_ip_bucket("10.0.0.3", 60, 2)
+    assert ratelimit_module.increment_ip_bucket("10.0.0.2", 60, 2)
+    assert ratelimit_module.increment_ip_bucket("10.0.0.3", 60, 2)
 
 
 def test_record_429_tracks_recent_events():
-    before = len(get_recent_429_events())
-    record_429("10.0.0.9", "/debates")
-    events = get_recent_429_events()
+    before = len(ratelimit_module.get_recent_429_events())
+    ratelimit_module.record_429("10.0.0.9", "/debates")
+    events = ratelimit_module.get_recent_429_events()
     assert len(events) == before + 1
     assert events[-1]["ip"] == "10.0.0.9"
 
@@ -164,3 +168,52 @@ def test_ensure_rate_limiter_ready_handles_missing_redis(monkeypatch):
     backend, redis_ok = module.ensure_rate_limiter_ready()
     assert backend == "redis"
     assert redis_ok is False
+
+
+def test_redis_backend_tracks_recent_events(monkeypatch):
+    class FakeRedisClient:
+        def __init__(self):
+            self.counters: dict[str, int] = {}
+            self.recent: list[str] = []
+
+        def incr(self, key: str):
+            self.counters[key] = self.counters.get(key, 0) + 1
+            return self.counters[key]
+
+        def expire(self, *_args, **_kwargs):
+            return True
+
+        def rpush(self, _key: str, value: str):
+            self.recent.append(value)
+
+        def ltrim(self, *_args):
+            self.recent = self.recent[-5:]
+
+        def lrange(self, *_args):
+            return list(self.recent)
+
+        def ping(self):
+            return True
+
+    fake_client = FakeRedisClient()
+
+    class FakeRedisFactory:
+        @staticmethod
+        def from_url(_url: str):
+            return fake_client
+
+    monkeypatch.setenv("RATE_LIMIT_BACKEND", "redis")
+    monkeypatch.setenv("REDIS_URL", "redis://test")
+    import config as config_module  # noqa: WPS433
+
+    importlib.reload(config_module)
+    importlib.reload(ratelimit_module)
+    ratelimit_module.redis = SimpleNamespace(Redis=FakeRedisFactory)
+    ratelimit_module.reset_rate_limiter_backend_for_tests()
+
+    backend = ratelimit_module.get_rate_limiter_backend()
+    assert backend.allow("ip-1", 60, 1)
+    assert not backend.allow("ip-1", 60, 1)
+    backend.record_429("ip-1", "/debates")
+    events = backend.recent_429()
+    assert events and events[-1]["path"] == "/debates"

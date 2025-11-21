@@ -6,21 +6,22 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Brain, MessageSquare, Vote } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
 
 const featureCards = [
   {
-    title: "Multi-Agent Debate",
-    description: "Multiple AI agents with different viewpoints craft answers together.",
+    titleKey: "landing.feature.multi.title",
+    descriptionKey: "landing.feature.multi.description",
     icon: <MessageSquare className="h-6 w-6" />,
   },
   {
-    title: "Expert Judging",
-    description: "Impartial judges score arguments, keeping reasoning balanced.",
+    titleKey: "landing.feature.judges.title",
+    descriptionKey: "landing.feature.judges.description",
     icon: <Vote className="h-6 w-6" />,
   },
   {
-    title: "Synthesized Wisdom",
-    description: "Receive a champion answer that integrates diverse perspectives.",
+    titleKey: "landing.feature.synthesis.title",
+    descriptionKey: "landing.feature.synthesis.description",
     icon: <Brain className="h-6 w-6" />,
   },
 ];
@@ -29,6 +30,7 @@ export default function HomeContent() {
   const router = useRouter();
   const [user, setUser] = useState<{ email: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -80,14 +82,14 @@ export default function HomeContent() {
                 href="/dashboard"
                 className="rounded-lg border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
               >
-                Dashboard
+                {t("landing.nav.dashboard")}
               </Link>
             ) : (
               <Link
                 href="/login"
                 className="rounded-lg border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
               >
-                Sign in
+                {t("landing.nav.signIn")}
               </Link>
             )}
           </div>
@@ -96,42 +98,38 @@ export default function HomeContent() {
         <section className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
             <h1 className="text-5xl font-display font-bold tracking-tight text-[#3a2a1a] leading-[1.1] sm:text-6xl md:leading-[1.05]">
-              Wisdom Through
+              {t("landing.hero.title")}
               <span className="block bg-gradient-to-r from-amber-600 to-amber-400 bg-clip-text text-transparent">
-                Multi-Agent Debate
+                {t("landing.hero.accent")}
               </span>
             </h1>
-            <p className="max-w-2xl text-lg text-[#5a4a3a]">
-              Harness the collective intelligence of multiple AI agents debating your questions. Get balanced, well-reasoned answers through structured deliberation and expert judgment.
-            </p>
+            <p className="max-w-2xl text-lg text-[#5a4a3a]">{t("landing.hero.description")}</p>
             <div className="flex flex-col gap-2">
               <Button variant="amber" size="lg" className="w-fit px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
-                Start Your First Debate
+                {t("landing.hero.primaryCta")}
               </Button>
               {!user ? (
                 <>
                   <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline">
-                    Sign in with email
+                    {t("landing.hero.secondaryCta")}
                   </Link>
-                  <p className="text-xs text-amber-900/70">You can sign in with Google or email on the next step.</p>
+                  <p className="text-xs text-amber-900/70">{t("landing.hero.secondaryHint")}</p>
                 </>
               ) : null}
             </div>
           </div>
 
           <div className="relative rounded-3xl border border-amber-100/80 bg-white/80 p-8 shadow-[0_20px_50px_rgba(112,73,28,0.12)] backdrop-blur">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Parliament at a glance</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">{t("landing.snapshot.caption")}</p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <HeroStat label="Agents debating" value="8" />
-              <HeroStat label="Judges ready" value="3" />
-              <HeroStat label="Rounds per debate" value="4" />
-              <HeroStat label="Synthesizer" value="Online" />
+              <HeroStat label={t("landing.stats.agents")} value="8" />
+              <HeroStat label={t("landing.stats.judges")} value="3" />
+              <HeroStat label={t("landing.stats.rounds")} value="4" />
+              <HeroStat label={t("landing.stats.synthesizer")} value="Online" />
             </div>
             <div className="mt-8 flex flex-col items-center gap-3">
               <ArcDots />
-              <p className="max-w-sm text-center text-sm text-[#5a4a3a]">
-                Agents and judges assemble in a virtual chamber, exchanging arguments until a champion answer emerges.
-              </p>
+              <p className="max-w-sm text-center text-sm text-[#5a4a3a]">{t("landing.snapshot.description")}</p>
             </div>
           </div>
         </section>
@@ -139,14 +137,14 @@ export default function HomeContent() {
         <section className="grid gap-6 md:grid-cols-3">
           {featureCards.map((card) => (
             <div
-              key={card.title}
+              key={card.titleKey}
               className="rounded-2xl border border-amber-100/80 bg-white/80 p-6 shadow-sm transition hover:-translate-y-[2px] hover:shadow-md"
             >
               <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-amber-200 text-amber-700">
                 {card.icon}
               </div>
-              <h3 className="text-lg font-semibold text-[#3a2a1a]">{card.title}</h3>
-              <p className="mt-2 text-sm text-[#5a4a3a]">{card.description}</p>
+              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t(card.titleKey)}</h3>
+              <p className="mt-2 text-sm text-[#5a4a3a]">{t(card.descriptionKey)}</p>
             </div>
           ))}
         </section>
@@ -157,13 +155,14 @@ export default function HomeContent() {
   );
 }
 
+function LLMSelectorFallback() {
+  const { t } = useI18n();
+  return <div className="rounded-3xl border border-amber-100/70 bg-white/60 p-12 text-center text-sm text-[#5a4a3a]">{t("landing.model.loading")}</div>;
+}
+
 const DynamicLLMSelector = dynamic(() => import("@/components/ui/LLMSelector"), {
   ssr: false,
-  loading: () => (
-    <div className="rounded-3xl border border-amber-100/70 bg-white/60 p-12 text-center text-sm text-[#5a4a3a]">
-      Loading model selector…
-    </div>
-  ),
+  loading: () => <LLMSelectorFallback />,
 });
 
 function HeroStat({ label, value }: { label: string; value: string }) {

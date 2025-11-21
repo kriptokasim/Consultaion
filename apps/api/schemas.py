@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
+
 class BudgetConfig(BaseModel):
     max_tokens: Optional[int] = None
     max_cost_usd: Optional[float] = None
@@ -31,11 +32,26 @@ class DebateConfig(BaseModel):
     budget: Optional[BudgetConfig] = None
 
 
+class PanelSeat(BaseModel):
+    seat_id: str
+    display_name: str
+    provider_key: str = Field(pattern=r"^[a-z0-9_\-]+$")
+    model: str
+    role_profile: str
+    temperature: Optional[float] = Field(default=0.5, ge=0.0, le=2.0)
+
+
+class PanelConfig(BaseModel):
+    engine_version: str = "parliament-v1"
+    seats: List[PanelSeat]
+
+
 class DebateCreate(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     prompt: str
     config: Optional[DebateConfig] = None
     model_id: Optional[str] = None
+    panel_config: Optional[PanelConfig] = None
 
     @field_validator("prompt")
     @classmethod
@@ -84,6 +100,38 @@ def default_debate_config() -> DebateConfig:
         agents=[agent.model_copy() for agent in default_agents()],
         judges=[judge.model_copy() for judge in default_judges()],
         budget=default_budget().model_copy(),
+    )
+
+
+def default_panel_config() -> PanelConfig:
+    return PanelConfig(
+        engine_version="parliament-v1",
+        seats=[
+            PanelSeat(
+                seat_id="optimist",
+                display_name="Optimist",
+                provider_key="openai",
+                model="gpt-4o-mini",
+                role_profile="optimist",
+                temperature=0.7,
+            ),
+            PanelSeat(
+                seat_id="risk_officer",
+                display_name="Risk Officer",
+                provider_key="anthropic",
+                model="claude-3-5-sonnet",
+                role_profile="risk_officer",
+                temperature=0.4,
+            ),
+            PanelSeat(
+                seat_id="architect",
+                display_name="Systems Architect",
+                provider_key="openai",
+                model="gpt-4.1-mini",
+                role_profile="architect",
+                temperature=0.5,
+            ),
+        ],
     )
 
 

@@ -1,6 +1,7 @@
 # dependencies
 node_modules/
 apps/web/.next/
+apps/web/.next-build/
 apps/web/test-results/
 apps/api/node_modules/
 *.log

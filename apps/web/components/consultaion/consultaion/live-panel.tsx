@@ -60,6 +60,15 @@ function toEventRow(event: any): EventRow {
         ts,
         data: event,
       }
+    case "seat_message":
+      return {
+        type: "message",
+        round: event.round,
+        title: `${event.seat_name ?? event.seat_id ?? "Seat"} responded`,
+        text: event.content ?? "Seat contribution",
+        ts,
+        data: event,
+      }
     case "score":
       return {
         type: "score",

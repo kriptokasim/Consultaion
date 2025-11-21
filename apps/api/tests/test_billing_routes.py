@@ -1,4 +1,5 @@
 import atexit
+import importlib
 import os
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 from sqlmodel import Session, select
+from starlette.requests import Request
 
 fd, temp_path = tempfile.mkstemp(prefix="consultaion_billing_routes_", suffix=".db")
 os.close(fd)
@@ -20,6 +22,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
+import billing.routes as billing_routes_module  # noqa: E402
 from billing.routes import CheckoutRequest, create_checkout, get_billing_me, list_billing_plans  # noqa: E402
 from billing.service import get_or_create_usage  # noqa: E402
 from database import engine, init_db  # noqa: E402
@@ -68,6 +71,44 @@ def _create_user(session: Session) -> User:
     session.commit()
     session.refresh(user)
     return user
+
+
+def _build_request(body: bytes, headers: dict[str, str]) -> Request:
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "path": "/billing/webhook/stripe",
+        "raw_path": b"/billing/webhook/stripe",
+        "query_string": b"",
+        "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+        "client": ("testclient", 0),
+        "server": ("testserver", 80),
+    }
+    state = {"sent": False}
+
+    async def receive():
+        if state["sent"]:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        state["sent"] = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return Request(scope, receive)
+
+
+def _reload_billing_routes(monkeypatch, verify: str = "1", secret: str | None = "whsec_test"):
+    if verify is not None:
+        monkeypatch.setenv("STRIPE_WEBHOOK_VERIFY", verify)
+    if secret is None:
+        monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
+    else:
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", secret)
+
+    import config as config_module  # noqa: WPS433
+
+    importlib.reload(config_module)
+    return importlib.reload(billing_routes_module)
 
 
 def test_billing_plans_endpoint_lists_seeded_plans():
@@ -126,3 +167,67 @@ def test_billing_checkout_uses_provider(monkeypatch):
         response = create_checkout(CheckoutRequest(plan_slug="free"), session=session, current_user=user)
     assert stub.called
     assert response["checkout_url"] == stub.url
+
+
+@pytest.mark.anyio
+async def test_stripe_webhook_verifies_signature(monkeypatch):
+    module = _reload_billing_routes(monkeypatch, verify="1", secret="whsec_test")
+
+    class StubProvider:
+        def __init__(self):
+            self.payload = None
+
+        def handle_webhook(self, payload, headers):
+            self.payload = payload
+
+    provider = StubProvider()
+    monkeypatch.setattr(module, "get_billing_provider", lambda: provider)
+
+    class DummyEvent:
+        def to_dict_recursive(self):
+            return {"type": "customer.subscription.created"}
+
+    def fake_construct(body, signature, secret):
+        assert secret == "whsec_test"
+        assert signature == "sig_header"
+        return DummyEvent()
+
+    monkeypatch.setattr(module.stripe.Webhook, "construct_event", staticmethod(fake_construct))
+    request = _build_request(b"{}", {"Stripe-Signature": "sig_header"})
+    response = await module.billing_webhook("stripe", request)
+    assert response["status"] == "ok"
+    assert provider.payload["type"] == "customer.subscription.created"
+
+
+@pytest.mark.anyio
+async def test_stripe_webhook_rejects_invalid_signature(monkeypatch):
+    module = _reload_billing_routes(monkeypatch, verify="1", secret="whsec_test")
+
+    def fake_construct(*_args, **_kwargs):
+        raise ValueError("bad signature")
+
+    monkeypatch.setattr(module.stripe.Webhook, "construct_event", staticmethod(fake_construct))
+    monkeypatch.setattr(module, "get_billing_provider", lambda: None)
+    request = _build_request(b"{}", {"Stripe-Signature": "sig"})
+    with pytest.raises(HTTPException) as exc:
+        await module.billing_webhook("stripe", request)
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_stripe_webhook_dev_mode_skips_signature(monkeypatch):
+    module = _reload_billing_routes(monkeypatch, verify="0", secret=None)
+
+    class StubProvider:
+        def __init__(self):
+            self.payload = None
+
+        def handle_webhook(self, payload, headers):
+            self.payload = payload
+
+    provider = StubProvider()
+    monkeypatch.setattr(module, "get_billing_provider", lambda: provider)
+    request = _build_request(b'{"type":"test"}', {})
+    response = await module.billing_webhook("stripe", request)
+    assert response["status"] == "ok"
+    assert provider.payload["type"] == "test"

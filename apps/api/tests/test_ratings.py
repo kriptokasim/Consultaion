@@ -1,13 +1,40 @@
+import atexit
 import os
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
 from sqlmodel import Session, select
 
+fd, temp_path = tempfile.mkstemp(prefix="consultaion_ratings_", suffix=".db")
+os.close(fd)
+test_db_path = Path(temp_path)
+
+previous_ratings_env = os.environ.get("DISABLE_RATINGS")
+os.environ["DISABLE_RATINGS"] = "0"
+
+
+def _cleanup():
+    try:
+        test_db_path.unlink()
+    except OSError:
+        pass
+    if previous_ratings_env is None:
+        os.environ.pop("DISABLE_RATINGS", None)
+    else:
+        os.environ["DISABLE_RATINGS"] = previous_ratings_env
+
+
+atexit.register(_cleanup)
+
+os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 os.environ.setdefault("JWT_SECRET", "test-secret")
 sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+import config as config_module  # noqa: E402
+config_module.settings.reload()
 
 from database import engine, init_db  # noqa: E402
 from models import Debate, PairwiseVote, RatingPersona, Score  # noqa: E402
@@ -20,8 +47,10 @@ init_db()
 def enable_ratings():
     previous = os.environ.get("DISABLE_RATINGS", "1")
     os.environ["DISABLE_RATINGS"] = "0"
+    config_module.settings.reload()
     yield
     os.environ["DISABLE_RATINGS"] = previous
+    config_module.settings.reload()
 
 
 @pytest.fixture

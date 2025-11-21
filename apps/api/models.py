@@ -42,6 +42,8 @@ class Debate(SQLModel, table=True):
     prompt: str = Field(sa_column=Column(Text, nullable=False))
     status: str = Field(default="queued", nullable=False, index=True)
     config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    panel_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    engine_version: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     model_id: Optional[str] = Field(default=None, index=True, nullable=True)
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))

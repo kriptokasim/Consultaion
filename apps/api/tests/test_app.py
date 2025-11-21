@@ -3,6 +3,7 @@ import importlib
 import os
 import sys
 import tempfile
+import time
 from decimal import Decimal
 from pathlib import Path
 import atexit
@@ -42,6 +43,16 @@ os.environ.setdefault("COOKIE_SECURE", "0")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+import config as config_module  # noqa: E402
+from config import settings  # noqa: E402
+
+
+def _reload_settings():
+    config_module.settings.reload()
+
+
+_reload_settings()
+
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from main import (  # noqa: E402
@@ -70,7 +81,7 @@ from models import AuditLog, Debate, PairwiseVote, RatingPersona, Score, User  #
 import orchestrator as orchestrator_module  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
-from schemas import default_debate_config  # noqa: E402
+from schemas import default_debate_config, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 
 init_db()
@@ -117,9 +128,11 @@ def test_jwt_secret_default_rejected(monkeypatch):
     import auth as auth_module
 
     monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
+    _reload_settings()
     with pytest.raises(RuntimeError):
         importlib.reload(auth_module)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
+    _reload_settings()
     importlib.reload(auth_module)
 
 
@@ -159,6 +172,8 @@ def test_run_debate_emits_final_events():
                 prompt="Pytest prompt",
                 status="queued",
                 config=default_debate_config().model_dump(),
+                panel_config=default_panel_config().model_dump(),
+                engine_version="parliament-v1",
             )
         )
         session.commit()
@@ -184,6 +199,11 @@ def test_run_debate_emits_final_events():
 
     events = asyncio.run(_collect_events())
 
+    seat_events = [event for event in events if event.get("type") == "seat_message"]
+    with Session(engine) as session:
+        stored = session.get(Debate, debate_id)
+    if stored and stored.panel_config and settings.REQUIRE_REAL_LLM:
+        assert seat_events, f"No seat_message events: {events}"
     final_events = [event for event in events if event.get("type") == "final"]
     assert final_events, f"No final event emitted: {events}"
     meta = final_events[-1]["meta"]
@@ -284,6 +304,8 @@ def test_get_debate_events_includes_pairwise_votes():
                 prompt="Pairwise prompt",
                 status="completed",
                 config=default_debate_config().model_dump(),
+                panel_config=default_panel_config().model_dump(),
+                engine_version="parliament-v1",
             )
         )
         session.add(
@@ -374,6 +396,7 @@ def test_list_debates_prompt_query_filters_results():
 def test_rate_limit_blocks_after_threshold():
     previous = os.environ.get("DEFAULT_MAX_RUNS_PER_HOUR", "50")
     os.environ["DEFAULT_MAX_RUNS_PER_HOUR"] = "1"
+    _reload_settings()
     user = _register_user("ratelimit@example.com", "securepass")
     _create_debate_for_user(user, "First allowed run")
     with pytest.raises(HTTPException) as exc_info:
@@ -387,6 +410,7 @@ def test_rate_limit_blocks_after_threshold():
         ).all()
         assert logs
     os.environ["DEFAULT_MAX_RUNS_PER_HOUR"] = previous
+    _reload_settings()
 
 
 def test_admin_logs_endpoint_lists_entries():
@@ -452,8 +476,10 @@ def test_leaderboard_updates_after_score_entries():
         session.commit()
     previous = os.environ.get("DISABLE_RATINGS", "1")
     os.environ["DISABLE_RATINGS"] = "0"
+    _reload_settings()
     update_ratings_for_debate(debate_id)
     os.environ["DISABLE_RATINGS"] = previous
+    _reload_settings()
     with Session(engine) as session:
         ratings = session.exec(select(RatingPersona).where(RatingPersona.persona == "Analyst")).all()
         assert ratings
@@ -531,6 +557,7 @@ def test_model_leaderboard_stats_counts_champions():
 def test_manual_start_requires_flag():
     previous = os.environ.get("DISABLE_AUTORUN", "1")
     os.environ["DISABLE_AUTORUN"] = "0"
+    _reload_settings()
     user = _register_user("manual-guard@example.com", "manualpass")
     debate_id = _create_debate_for_user(user, "Manual guard prompt")
     with Session(engine) as session:
@@ -545,11 +572,13 @@ def test_manual_start_requires_flag():
                 )
             )
     os.environ["DISABLE_AUTORUN"] = previous
+    _reload_settings()
 
 
 def test_manual_start_succeeds_when_disabled():
     previous = os.environ.get("DISABLE_AUTORUN", "1")
     os.environ["DISABLE_AUTORUN"] = "1"
+    _reload_settings()
     user = _register_user("manual-ok@example.com", "manualpass")
     debate_id = _create_debate_for_user(user, "Manual start run prompt")
     with Session(engine) as session:
@@ -564,7 +593,15 @@ def test_manual_start_succeeds_when_disabled():
         )
     assert result["status"] == "scheduled"
     os.environ["DISABLE_AUTORUN"] = previous
+    _reload_settings()
 
 
-    start_debate_run,
-    sweep_stale_channels,
+def test_sweep_stale_channels_removes_old_entries():
+    reset_sse_backend_for_tests()
+    backend = get_sse_backend()
+    backend._ttl_seconds = 0.01  # Patch the instance directly
+    channel_id = "stale-channel"
+    asyncio.run(backend.create_channel(channel_id))
+    time.sleep(0.02)
+    asyncio.run(backend.cleanup())
+    assert not backend._channels or not backend._channels.get(channel_id)

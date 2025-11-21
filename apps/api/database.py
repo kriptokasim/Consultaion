@@ -1,22 +1,23 @@
-import os
 from contextlib import contextmanager
 
 from sqlmodel import Session, SQLModel, create_engine
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./consultaion.db")
+from config import settings
+
+DATABASE_URL = settings.DATABASE_URL
 
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 engine_kwargs = {
-    "echo": os.getenv("DB_ECHO", "0") == "1",
+    "echo": settings.DB_ECHO,
     "connect_args": connect_args,
     "pool_pre_ping": True,
 }
 if not DATABASE_URL.startswith("sqlite"):
     engine_kwargs.update(
         {
-            "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
-            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
-            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "3600")),
+            "pool_size": settings.DB_POOL_SIZE,
+            "max_overflow": settings.DB_MAX_OVERFLOW,
+            "pool_recycle": settings.DB_POOL_RECYCLE,
         }
     )
 
@@ -28,7 +29,7 @@ engine = create_engine(
 
 def init_db() -> None:
     backend = engine.url.get_backend_name()
-    if backend == "sqlite" or os.getenv("FORCE_CREATE_ALL", "0") == "1":
+    if backend == "sqlite" or settings.FORCE_CREATE_ALL:
         SQLModel.metadata.create_all(engine)
 
 

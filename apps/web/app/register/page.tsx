@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { apiRequest } from "@/lib/apiClient"
+import { useI18n } from "@/lib/i18n/client"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -17,13 +18,14 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const { t } = useI18n()
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
 
     if (password !== confirm) {
-      setError("Passwords do not match.")
+      setError(t("auth.register.errorMismatch"))
       return
     }
 
@@ -44,20 +46,20 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      title="Create your account"
-      subtitle="Spin up your own multi-agent AI Parliament."
+      title={t("auth.register.title")}
+      subtitle={t("auth.register.subtitle")}
       footer={
         <span>
-          Already have an account?{" "}
+          {t("auth.register.footer")} {" "}
           <Link href="/login" className="underline underline-offset-4 text-[#3a2a1a] dark:text-amber-200">
-            Sign in
+            {t("auth.register.footerLink")}
           </Link>
         </span>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("auth.register.email")}</Label>
           <Input
             id="email"
             type="email"
@@ -69,7 +71,7 @@ export default function RegisterPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t("auth.register.password")}</Label>
           <Input
             id="password"
             type="password"
@@ -81,7 +83,7 @@ export default function RegisterPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirm-password">Confirm password</Label>
+          <Label htmlFor="confirm-password">{t("auth.register.confirm")}</Label>
           <Input
             id="confirm-password"
             type="password"
@@ -94,7 +96,7 @@ export default function RegisterPage() {
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <Button type="submit" variant="amber" className="mt-2 w-full" disabled={loading}>
-          {loading ? "Creating account…" : "Create account"}
+          {loading ? t("auth.register.ctaLoading") : t("auth.register.cta")}
         </Button>
       </form>
     </AuthShell>

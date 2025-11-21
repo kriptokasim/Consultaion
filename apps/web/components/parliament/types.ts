@@ -54,6 +54,9 @@ export type DebateEvent =
       role?: Role;
       text?: string;
       at?: string;
+      seatId?: string;
+      provider?: string;
+      model?: string;
     }
   | JudgeScoreEvent
   | PairwiseEvent

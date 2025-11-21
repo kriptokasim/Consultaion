@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Dict
 from uuid import UUID
 
@@ -11,6 +10,7 @@ except ImportError:  # pragma: no cover
     stripe = None
 
 from billing.models import BillingPlan
+from config import settings
 from integrations.events import emit_event
 
 from .base import BillingProvider
@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 
 class StripeBillingProvider(BillingProvider):
     def __init__(self):
-        self.secret_key = os.getenv("STRIPE_SECRET_KEY")
-        self.webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
-        self.success_url = os.getenv("BILLING_CHECKOUT_SUCCESS_URL") or "https://example.com/success"
-        self.cancel_url = os.getenv("BILLING_CHECKOUT_CANCEL_URL") or "https://example.com/canceled"
+        self.secret_key = settings.STRIPE_SECRET_KEY
+        self.webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+        self.success_url = settings.BILLING_CHECKOUT_SUCCESS_URL or "https://example.com/success"
+        self.cancel_url = settings.BILLING_CHECKOUT_CANCEL_URL or "https://example.com/canceled"
         self.plan_price_map: Dict[str, str] = {
-            "pro": os.getenv("STRIPE_PRICE_PRO_ID", ""),
+            "pro": settings.STRIPE_PRICE_PRO_ID or "",
         }
 
     def create_checkout_session(self, user_id: UUID, plan: BillingPlan) -> str:

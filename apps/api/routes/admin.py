@@ -235,6 +235,38 @@ async def admin_ops_summary(
             sse_redis_ok = False
 
     models_enabled = list_enabled_models()
+    seat_counts: Dict[str, int] = defaultdict(int)
+    role_model_totals: Dict[tuple[str, str, str], int] = defaultdict(int)
+    meta_rows = session.exec(select(Debate.final_meta)).all()
+    for row in meta_rows:
+        meta = row[0] if isinstance(row, tuple) else row
+        if not isinstance(meta, dict):
+            continue
+        seat_usage = meta.get("seat_usage") or []
+        for seat in seat_usage:
+            if not isinstance(seat, dict):
+                continue
+            role = seat.get("role_profile") or seat.get("seat_name") or "seat"
+            provider = seat.get("provider") or "unknown"
+            model_name = seat.get("model") or "unknown"
+            try:
+                tokens = int(seat.get("tokens") or 0)
+            except (TypeError, ValueError):
+                tokens = 0
+            seat_counts[role] += 1
+            role_model_totals[(role, provider, model_name)] += tokens
+
+    model_usage_by_role = [
+        {
+            "role": role,
+            "provider": provider,
+            "model": model_name,
+            "total_tokens": tokens,
+        }
+        for (role, provider, model_name), tokens in role_model_totals.items()
+    ]
+    model_usage_by_role.sort(key=lambda entry: entry["total_tokens"], reverse=True)
+    model_usage_by_role = model_usage_by_role[:10]
 
     return {
         "debates_24h": debates_24h,
@@ -251,6 +283,10 @@ async def admin_ops_summary(
         },
         "sse": {"backend": sse_backend, "redis_ok": sse_redis_ok},
         "models": {"available": bool(models_enabled), "enabled_count": len(models_enabled)},
+        "parliament": {
+            "seat_counts": dict(seat_counts),
+            "model_usage_by_role": model_usage_by_role,
+        },
     }
 
 

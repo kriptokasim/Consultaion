@@ -12,18 +12,20 @@ import { useState, useEffect } from "react"
 import { logout } from "@/lib/auth"
 import { ToastProvider } from "@/components/ui/toast"
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
+import LanguageSwitcher from "@/components/LanguageSwitcher"
+import { useI18n } from "@/lib/i18n/client"
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: BarChart3 },
-  { name: "Live", href: "/live", icon: PlayCircle },
-  { name: "Runs", href: "/runs", icon: FileText },
-  { name: "Chamber", href: "/chamber", icon: Scale },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Leaderboard", href: "/leaderboard", icon: Trophy },
-  { name: "Hall of Fame", href: "/hall-of-fame", icon: Award },
-  { name: "Models", href: "/models", icon: Award },
-  { name: "Methodology", href: "/methodology", icon: BookOpen },
-  { name: "Settings", href: "/settings", icon: Settings },
+const BASE_NAV_LINKS = [
+  { labelKey: "nav.dashboard", href: "/dashboard", icon: BarChart3, tooltipKey: "nav.tooltip.dashboard" },
+  { labelKey: "nav.live", href: "/live", icon: PlayCircle, tooltipKey: "nav.tooltip.live" },
+  { labelKey: "nav.runs", href: "/runs", icon: FileText, tooltipKey: "nav.tooltip.runs" },
+  { labelKey: "nav.chamber", href: "/chamber", icon: Scale, tooltipKey: "nav.tooltip.chamber" },
+  { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, tooltipKey: "nav.tooltip.analytics" },
+  { labelKey: "nav.leaderboard", href: "/leaderboard", icon: Trophy, tooltipKey: "nav.tooltip.leaderboard" },
+  { labelKey: "nav.hall", href: "/hall-of-fame", icon: Award, tooltipKey: "nav.tooltip.hall" },
+  { labelKey: "nav.models", href: "/models", icon: Award, tooltipKey: "nav.tooltip.models" },
+  { labelKey: "nav.methodology", href: "/methodology", icon: BookOpen, tooltipKey: "nav.tooltip.methodology" },
+  { labelKey: "nav.settings", href: "/settings", icon: Settings, tooltipKey: "nav.tooltip.settings" },
 ]
 
 type CurrentUserProfile = {
@@ -41,6 +43,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  const { t } = useI18n()
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? localStorage.getItem("consultaion-theme") : null
@@ -100,11 +103,15 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     window.location.href = "/login"
   }
 
-  const navItems = [...navigation]
+  const navItems = BASE_NAV_LINKS.map((item) => ({
+    ...item,
+    name: t(item.labelKey),
+    tooltip: item.tooltipKey ? t(item.tooltipKey) : undefined,
+  }))
   const isAdmin = Boolean(profile?.is_admin || profile?.role === "admin")
   if (isAdmin) {
-    navItems.push({ name: "Admin", href: "/admin", icon: Shield })
-    navItems.push({ name: "Ops", href: "/admin/ops", icon: Shield })
+    navItems.push({ labelKey: "nav.admin", tooltipKey: "nav.tooltip.admin", name: t("nav.admin"), href: "/admin", icon: Shield, tooltip: t("nav.tooltip.admin") })
+    navItems.push({ labelKey: "nav.ops", tooltipKey: "nav.tooltip.ops", name: t("nav.ops"), href: "/admin/ops", icon: Shield, tooltip: t("nav.tooltip.ops") })
   }
 
   return (
@@ -133,21 +140,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   key={item.name}
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
-                  title={
-                    {
-                      Live: "Run a new live debate and watch the chamber in real time.",
-                      Runs: "Browse the full history of past debates and results.",
-                      Chamber: "Visualize how votes and champions move through Consultaion.",
-                      Analytics: "Aggregate stats across debates, models, and judges.",
-                      Leaderboard: "Top-performing prompts and debates.",
-                      "Hall of Fame": "Debates where one model’s answer became a Consultaion champion.",
-                      Models: "Performance statistics for each AI model.",
-                      Methodology: "How the chamber debates, scores, and selects champions.",
-                      Settings: "Account and chamber configuration (coming soon).",
-                      Admin: "Admin controls",
-                      Ops: "Operational health and rate limits.",
-                    }[item.name] || undefined
-                  }
+                  title={item.tooltip}
                   className={cn(
                     "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
                     isActive
@@ -167,7 +160,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <div className="rounded-xl border border-amber-100/80 bg-amber-50/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
-                Amber-Mocha cockpit, WCAG friendly
+                {t("nav.badge")}
               </div>
             </div>
             {profile ? (
@@ -182,9 +175,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </div>
             ) : (
               <Button variant="outline" asChild className="w-full justify-center border-amber-200/90 text-amber-900 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-50 dark:hover:bg-amber-900/30">
-                <Link href="/login">Sign In</Link>
+                <Link href="/login">{t("nav.signIn")}</Link>
               </Button>
             )}
+            <LanguageSwitcher />
           </div>
           <button
             type="button"

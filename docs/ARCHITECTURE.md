@@ -23,6 +23,10 @@ Browser ──▶ Next.js (Amber-Mocha UI)
 
 LLM access goes through LiteLLM, which can speak to OpenAI, Anthropic, OpenRouter, Gemini, etc. The registry (`model_registry.py`) loads configs from env vars, flags the recommended model, and powers `/models` as well as the orchestrator’s model selection.
 
+## Configuration
+
+Runtime configuration is centralized in `apps/api/config.py`, which exposes a Pydantic `AppSettings` instance. Every service (FastAPI app, rate limiter, SSE backend, auth, billing, etc.) imports from this module instead of reading `os.getenv` directly. This keeps type hints consistent, enforces sane defaults, and allows tests to reload settings deterministically when they override environment variables.
+
 ## Debate pipeline
 1. User calls `POST /debates`. `routes/debates.py` persists the record, enforces quotas (`reserve_run_slot`), increments billing usage, and registers an SSE channel through `sse_backend.get_sse_backend()`.
 2. `orchestrator.run_debate` loads the `DebateConfig`, spawns agents (`produce_candidate`), runs cross critiques, judges, and synthesizer, then writes back to Postgres (rounds, messages, scores, votes, final meta).

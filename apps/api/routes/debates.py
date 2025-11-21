@@ -1,10 +1,8 @@
 import asyncio
 import json
-import os
 import uuid
 from datetime import datetime, timedelta
 from io import StringIO
-from pathlib import Path
 from typing import Any, Optional
 
 import sqlalchemy as sa
@@ -18,6 +16,7 @@ from pydantic import BaseModel
 from audit import record_audit
 from billing.service import increment_debate_usage, increment_export_usage
 from auth import get_current_user, get_optional_user
+from config import settings
 from deps import get_session
 from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
 from model_registry import get_default_model, get_model, list_enabled_models
@@ -33,10 +32,12 @@ from routes.common import (
     track_metric,
     user_is_team_member,
 )
-from schemas import DebateConfig, DebateCreate, default_debate_config
+from schemas import DebateConfig, DebateCreate, PanelConfig, default_debate_config, default_panel_config
 from usage_limits import RateLimitError, reserve_run_slot
 from ratelimit import increment_ip_bucket, record_429
 from sse_backend import get_sse_backend
+from parliament.roles import ROLE_PROFILES
+from parliament.providers import PROVIDERS
 
 router = APIRouter(tags=["debates"])
 
@@ -53,8 +54,8 @@ def _champion_for_debate(session: Session, debate_id: str) -> tuple[Optional[str
     return champion_for_debate(session, debate_id)
 
 
-def _members_from_config(config: DebateConfig) -> list[dict[str, str]]:
-    return members_from_config(config)
+def _members_from_config(config: DebateConfig, panel: PanelConfig | None = None) -> list[dict[str, str]]:
+    return members_from_config(config, panel)
 
 
 @router.get("/config/default")
@@ -120,7 +121,13 @@ async def get_debate_members(
         config = DebateConfig.model_validate(config_data)
     except Exception:
         config = default_debate_config()
-    return {"members": _members_from_config(config)}
+    panel = None
+    if debate.panel_config:
+        try:
+            panel = PanelConfig.model_validate(debate.panel_config)
+        except Exception:
+            panel = None
+    return {"members": _members_from_config(config, panel)}
 
 
 @router.post("/debates")
@@ -132,7 +139,7 @@ async def create_debate(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     ip = request.client.host if request.client else "anonymous"
-    allowed = increment_ip_bucket(ip, int(os.getenv("RL_WINDOW", "60")), int(os.getenv("RL_MAX_CALLS", "5")))
+    allowed = increment_ip_bucket(ip, settings.RL_WINDOW, settings.RL_MAX_CALLS)
     if not allowed:
         record_429(ip, request.url.path)
         raise HTTPException(status_code=429, detail="rate limit exceeded")
@@ -164,6 +171,17 @@ async def create_debate(
     if chosen_model_id not in enabled_models:
         raise HTTPException(status_code=400, detail="Invalid or unavailable model_id")
 
+    panel_config = body.panel_config or default_panel_config()
+    try:
+        panel = PanelConfig.model_validate(panel_config)
+    except Exception as exc:  # pragma: no cover - validation
+        raise HTTPException(status_code=400, detail="Invalid panel_config payload") from exc
+    for seat in panel.seats:
+        if seat.provider_key not in PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Unknown provider_key '{seat.provider_key}'")
+        if seat.role_profile not in ROLE_PROFILES:
+            raise HTTPException(status_code=400, detail=f"Unknown role_profile '{seat.role_profile}'")
+
     debate_id = str(uuid.uuid4())
     debate = Debate(
         id=debate_id,
@@ -172,6 +190,8 @@ async def create_debate(
         config=config.model_dump(),
         user_id=current_user.id if current_user else None,
         model_id=chosen_model_id,
+        panel_config=panel.model_dump(),
+        engine_version=panel.engine_version,
     )
     session.add(debate)
     session.commit()
@@ -180,7 +200,7 @@ async def create_debate(
     channel_id = debate_channel_id(debate_id)
     await backend.create_channel(channel_id)
 
-    if os.getenv("DISABLE_AUTORUN", "0") != "1":
+    if not settings.DISABLE_AUTORUN:
         background_tasks.add_task(
             run_debate,
             debate_id,
@@ -207,7 +227,7 @@ async def start_debate_run(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    if os.getenv("DISABLE_AUTORUN", "0") != "1":
+    if not settings.DISABLE_AUTORUN:
         raise HTTPException(status_code=400, detail="Manual start is disabled")
     debate = session.get(Debate, debate_id)
     debate = require_debate_access(debate, current_user, session)
@@ -406,7 +426,22 @@ async def get_debate_events(
 
     events: list[dict[str, Any]] = []
     for message in messages:
-        if message.role in {"candidate", "revised"}:
+        if message.role == "seat":
+            meta = message.meta or {}
+            events.append(
+                {
+                    "type": "seat_message",
+                    "round": message.round_index,
+                    "seat_id": meta.get("seat_id"),
+                    "seat_name": message.persona,
+                    "role": meta.get("role_profile") or "agent",
+                    "provider": meta.get("provider"),
+                    "model": meta.get("model"),
+                    "text": message.content,
+                    "at": message.created_at.isoformat() if message.created_at else None,
+                }
+            )
+        elif message.role in {"candidate", "revised"}:
             events.append(
                 {
                     "type": "message",
@@ -414,7 +449,7 @@ async def get_debate_events(
                     "actor": message.persona,
                     "role": "agent",
                     "text": message.content,
-                    "at": message.created_at.isoformat(),
+                    "at": message.created_at.isoformat() if message.created_at else None,
                 }
             )
 

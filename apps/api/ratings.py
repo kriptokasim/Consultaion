@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-import os
 import logging
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -10,6 +9,7 @@ from sqlalchemy import delete
 from sqlmodel import Session, select
 
 from database import session_scope
+from config import settings
 from models import Debate, PairwiseVote, RatingPersona, Score, utcnow
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ def _recompute_ratings(session: Session, category: Optional[str], personas: Iter
 
 
 def update_ratings_for_debate(debate_id: str) -> None:
-    if os.getenv("DISABLE_RATINGS", "0") == "1":
+    if settings.DISABLE_RATINGS:
         logger.debug("Ratings disabled; skipping update for debate %s", debate_id)
         return
     with session_scope() as session:

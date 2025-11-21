@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import DashboardShell from '@/components/consultaion/consultaion/dashboard-shell'
 import '@/styles/globals.css'
+import { I18nProvider, loadMessages, resolveLocale } from '@/lib/i18n/provider'
 
 export const metadata: Metadata = {
   title: 'Consultaion',
@@ -8,8 +9,11 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = resolveLocale()
+  const messages = loadMessages(locale)
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </head>
@@ -20,7 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
-        <DashboardShell>{children}</DashboardShell>
+        <I18nProvider locale={locale} messages={messages}>
+          <DashboardShell>{children}</DashboardShell>
+        </I18nProvider>
       </body>
     </html>
   )

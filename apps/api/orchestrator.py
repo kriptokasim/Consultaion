@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Sequence, Tuple, Optional
 
@@ -15,11 +14,25 @@ from database import session_scope
 from models import Debate, DebateRound, Message, Score, Vote
 from ratings import update_ratings_for_debate
 from schemas import DebateConfig, default_agents, default_judges
+from parliament.engine import run_parliament_debate
 from usage_limits import record_token_usage
 from billing.service import add_tokens_usage
+from config import settings
 from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
+
+
+class DebateEngineError(RuntimeError):
+    """Base class for orchestration errors."""
+
+
+class SeatExecutionError(DebateEngineError):
+    def __init__(self, seat: str, stage: str, original: Exception):
+        self.seat = seat
+        self.stage = stage
+        self.original = original
+        super().__init__(f"{stage} failed for {seat}: {original}")
 
 
 def _start_round(debate_id: str, index: int, label: str, note: str) -> int:
@@ -153,6 +166,7 @@ async def _run_mock_debate(
     backend = get_sse_backend()
     await backend.publish(channel_id, {"type": "message", "round": 0, "candidates": []})
     await backend.publish(
+        channel_id,
         {
             "type": "score",
             "scores": mock_scores,
@@ -163,6 +177,7 @@ async def _run_mock_debate(
         }
     )
     await backend.publish(
+        channel_id,
         {
             "type": "final",
             "content": "Fast debate completed.",
@@ -197,13 +212,36 @@ async def _run_draft_round(
     """Execute the draft round."""
     draft_round = _start_round(debate_id, 1, "draft", "candidate drafting")
     candidate_results = await asyncio.gather(
-        *[produce_candidate(prompt, agent, model_id=model_id, debate_id=debate_id) for agent in agent_configs]
+        *[produce_candidate(prompt, agent, model_id=model_id, debate_id=debate_id) for agent in agent_configs],
+        return_exceptions=True,
     )
-    candidates = []
-    for payload, candidate_usage in candidate_results:
+    candidates: list[Dict[str, Any]] = []
+    failures: list[SeatExecutionError] = []
+    for agent, result in zip(agent_configs, candidate_results):
+        if isinstance(result, Exception):
+            error = SeatExecutionError(agent.name, "draft", result)
+            failures.append(error)
+            logger.error("Debate %s: draft seat %s failed: %s", debate_id, agent.name, result)
+            continue
+        payload, candidate_usage = result
         candidates.append(payload)
         usage_tracker.extend(candidate_usage)
-    
+
+    if failures:
+        backend = get_sse_backend()
+        await backend.publish(
+            channel_id,
+            {
+                "type": "notice",
+                "level": "warn",
+                "debate_id": debate_id,
+                "message": f"{len(failures)} seat(s) failed during drafting",
+            },
+        )
+
+    if not candidates:
+        raise DebateEngineError("All candidate generators failed")
+
     _persist_messages(debate_id, 1, candidates, role="candidate")
     _end_round(draft_round)
     backend = get_sse_backend()
@@ -313,7 +351,7 @@ async def run_debate(
     try:
         logger.debug("Debate %s: starting orchestration", debate_id)
 
-        if os.getenv("FAST_DEBATE", "0") == "1":
+        if settings.FAST_DEBATE:
             return await _run_mock_debate(debate_id, channel_id, agent_configs, usage_tracker)
 
         with session_scope() as session:
@@ -326,6 +364,30 @@ async def run_debate(
             debate.updated_at = datetime.now(timezone.utc)
             session.add(debate)
             session.commit()
+
+        with session_scope() as session:
+            debate = session.get(Debate, debate_id)
+        if debate and debate.panel_config and settings.REQUIRE_REAL_LLM:
+            panel_result = await run_parliament_debate(debate, model_id=model_id)
+            final_meta = panel_result.final_meta
+            _complete_debate_record(
+                debate_id,
+                final_content=panel_result.final_answer,
+                final_meta=final_meta,
+                status="completed",
+                tokens_total=panel_result.usage_tracker.total_tokens,
+                user_id=debate_user_id,
+            )
+            await backend.publish(
+                channel_id,
+                {
+                    "type": "final",
+                    "debate_id": debate_id,
+                    "content": panel_result.final_answer,
+                    "meta": final_meta,
+                },
+            )
+            return
 
         candidates = await _run_draft_round(debate_id, prompt, agent_configs, model_id, usage_tracker, channel_id)
         source_candidates = candidates
@@ -410,8 +472,10 @@ async def run_debate(
         )
 
         await backend.publish(
+            channel_id,
             {
                 "type": "final",
+                "debate_id": debate_id,
                 "content": final_answer,
                 "meta": final_meta,
             }
@@ -455,4 +519,7 @@ async def run_debate(
                 debate.final_meta = {"error": str(exc)}
                 session.add(debate)
                 session.commit()
-        await backend.publish(channel_id, {"type": "error", "message": str(exc)})
+        await backend.publish(
+            channel_id,
+            {"type": "error", "debate_id": debate_id, "message": str(exc)},
+        )

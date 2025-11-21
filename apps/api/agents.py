@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Literal
 
 from litellm import acompletion
+from config import settings
 from schemas import AgentConfig, JudgeConfig
 
 logger = logging.getLogger(__name__)
@@ -20,12 +21,11 @@ PROVIDER_KEYS = (
     "AZURE_API_KEY",
     "LITELLM_API_KEY",
 )
-_has_llm_key = any(os.getenv(key) for key in PROVIDER_KEYS)
-_use_mock_env = os.getenv("USE_MOCK", "1")
-REQUIRE_REAL_LLM = os.getenv("REQUIRE_REAL_LLM", "0") == "1"
-USE_MOCK = not (_use_mock_env == "0" and _has_llm_key)
-LITELLM_MODEL = os.getenv("LITELLM_MODEL", "gpt-4o-mini")
-LITELLM_API_BASE = os.getenv("LITELLM_API_BASE")
+_has_llm_key = any(getattr(settings, key, None) for key in PROVIDER_KEYS)
+REQUIRE_REAL_LLM = settings.REQUIRE_REAL_LLM
+USE_MOCK = not ((not settings.USE_MOCK) and _has_llm_key)
+LITELLM_MODEL = settings.LITELLM_MODEL
+LITELLM_API_BASE = settings.LITELLM_API_BASE
 if LITELLM_API_BASE:
     os.environ["LITELLM_API_BASE"] = LITELLM_API_BASE
 _INJECTION_PATTERNS = [r"ignore previous instructions", r"disregard above", r"reveal the system prompt", r"print the system prompt"]
@@ -225,6 +225,30 @@ async def _call_llm(
             provider="mock",
         )
         return fallback_text, fallback_usage
+
+
+async def call_llm_for_role(
+    messages: List[Dict[str, str]],
+    *,
+    role: str,
+    temperature: float = 0.3,
+    max_tokens: int = 600,
+    model_override: str | None = None,
+    model_id: str | None = None,
+    debate_id: str | None = None,
+) -> Tuple[str, UsageCall]:
+    """
+    Public helper for parliament orchestration to invoke a specific provider/model override.
+    """
+    return await _call_llm(
+        messages,
+        role=role,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        model_override=model_override,
+        model_id=model_id,
+        debate_id=debate_id,
+    )
 
 
 def _log_injection_hints(prompt: str, *, user_id: Optional[str] = None, debate_id: Optional[str] = None) -> None:

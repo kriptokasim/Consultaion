@@ -1,4 +1,3 @@
-import os
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -7,18 +6,19 @@ import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from config import settings
 from metrics import increment_metric
 from models import Debate, RatingPersona, Score, Team, TeamMember, User
-from schemas import DebateConfig
+from schemas import DebateConfig, PanelConfig
 from log_config import update_log_context
 
-ENABLE_METRICS = os.getenv("ENABLE_METRICS", "1").lower() not in {"0", "false", "no"}
+ENABLE_METRICS = settings.ENABLE_METRICS
 
-MAX_CALLS = int(os.getenv("RL_MAX_CALLS", "5"))
-WINDOW = int(os.getenv("RL_WINDOW", "60"))
-AUTH_MAX_CALLS = int(os.getenv("AUTH_RL_MAX_CALLS", "10"))
-AUTH_WINDOW = int(os.getenv("AUTH_RL_WINDOW", "300"))
-EXPORT_DIR = Path(os.getenv("EXPORT_DIR", "exports"))
+MAX_CALLS = settings.RL_MAX_CALLS
+WINDOW = settings.RL_WINDOW
+AUTH_MAX_CALLS = settings.AUTH_RL_MAX_CALLS
+AUTH_WINDOW = settings.AUTH_RL_WINDOW
+EXPORT_DIR = Path(settings.EXPORT_DIR)
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -40,9 +40,21 @@ def serialize_user(user: User) -> dict[str, Any]:
     }
 
 
-def members_from_config(config: DebateConfig) -> list[dict[str, str]]:
+def members_from_config(config: DebateConfig, panel: PanelConfig | None = None) -> list[dict[str, str]]:
     members: list[dict[str, str]] = []
     seen: set[str] = set()
+
+    if panel and panel.seats:
+        for seat in panel.seats:
+            members.append(
+                {
+                    "id": seat.seat_id,
+                    "name": seat.display_name,
+                    "role": seat.role_profile,
+                    "party": seat.provider_key,
+                }
+            )
+        return members
 
     for agent in config.agents:
         agent_id = agent.name

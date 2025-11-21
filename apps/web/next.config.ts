@@ -1,3 +1,4 @@
+import path from 'path'
 import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
 import bundleAnalyzer from '@next/bundle-analyzer'
@@ -6,7 +7,11 @@ const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 })
 
+const workspaceRoot = path.join(__dirname, '..', '..')
+
 const nextConfig: NextConfig = {
+  distDir: '.next-build',
+  outputFileTracingRoot: workspaceRoot,
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve = config.resolve || {}

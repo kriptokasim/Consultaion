@@ -1,5 +1,6 @@
 import { apiRequest } from "@/lib/apiClient";
 import { fetchWithAuth } from "@/lib/auth";
+import type { PanelConfigPayload } from "@/lib/panels";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -91,7 +92,7 @@ export async function getReport(id: string) {
   return request<any>(`/debates/${id}/report`, undefined, { auth: true });
 }
 
-export async function startDebate(payload: { prompt: string; config?: any; model_id?: string | null }) {
+export async function startDebate(payload: { prompt: string; config?: any; model_id?: string | null; panel_config?: PanelConfigPayload }) {
   return apiRequest<{ id: string }>({
     method: "POST",
     path: "/debates",
