@@ -52,6 +52,8 @@
     --chart-4: 46 89% 67%;
 
     --radius: 0.75rem;
+
+    color-scheme: light;
   }
 
   .dark {
@@ -95,6 +97,8 @@
     --chart-2: 27 45% 60%;
     --chart-3: 18 55% 50%;
     --chart-4: 46 89% 67%;
+
+    color-scheme: dark;
   }
 
   * {
@@ -110,6 +114,9 @@
       radial-gradient(circle at 80% 0%, rgba(255, 190, 120, 0.12), transparent 30%),
       linear-gradient(135deg, #fff9ee 0%, #ffefcf 60%, #f8e6c2 100%);
     background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   .rosetta-glyph::before {
@@ -166,6 +173,42 @@
     transform: scale(1.01);
     border-color: rgba(255, 190, 92, 0.7);
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading leading-relaxed-tight;
+  }
+
+  h1 {
+    @apply text-fluid-4xl font-bold;
+  }
+
+  h2 {
+    @apply text-fluid-3xl font-semibold;
+  }
+
+  h3 {
+    @apply text-fluid-2xl font-semibold;
+  }
+
+  h4 {
+    @apply text-fluid-xl font-semibold;
+  }
+
+  p {
+    @apply leading-relaxed;
+  }
+
+  small {
+    @apply text-fluid-xs;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
@@ -191,5 +234,58 @@
 
   .auth-card {
     @apply bg-white/95 border border-amber-200/60 text-amber-950 shadow-[0_25px_70px_-30px_rgba(112,73,28,0.4)] dark:bg-stone-900/90 dark:border-amber-200/30 dark:text-amber-50;
+  }
+
+  .floating-label {
+    @apply relative;
+  }
+
+  .floating-label input,
+  .floating-label textarea,
+  .floating-label select {
+    @apply w-full px-4 py-3 peer;
+  }
+
+  .floating-label label {
+    @apply pointer-events-none absolute left-4 top-4 text-sm font-medium text-muted-foreground transition-all duration-200 peer-focus:top-0 peer-focus:text-xs peer-focus:text-primary peer-placeholder-shown:top-3 peer-placeholder-shown:text-base;
+  }
+
+  .shimmer-loading {
+    background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--card)) 50%, hsl(var(--muted)) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-smooth-lg;
+  }
+
+  .button-base {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-500;
+  }
+
+  .link-hover {
+    @apply relative transition-colors duration-200 hover:text-amber-600 dark:hover:text-amber-400;
+  }
+
+  .link-hover::after {
+    @apply absolute -bottom-1 left-0 h-0.5 w-0 bg-amber-500 transition-all duration-300;
+  }
+
+  .link-hover:hover::after {
+    @apply w-full;
+  }
+
+  .blur-in {
+    @apply animate-fade-in blur-sm;
+    animation: fadeIn 300ms ease-out forwards;
+  }
+
+  .scale-entrance {
+    @apply animate-scale-up;
+  }
+
+  .slide-entrance {
+    @apply animate-slide-in-up;
   }
 }

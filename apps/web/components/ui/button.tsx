@@ -26,6 +26,10 @@ const buttonVariants = cva(
         muted:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         link: 'text-amber-800 underline-offset-4 hover:underline dark:text-amber-200',
+        success:
+          'bg-success text-success-foreground shadow-smooth hover:bg-success/90 hover:shadow-smooth-lg',
+        'soft-amber':
+          'border border-amber-200 bg-amber-50 text-amber-900 shadow-smooth hover:bg-amber-100 hover:shadow-smooth-lg dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',
