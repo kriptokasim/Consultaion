@@ -3,6 +3,7 @@ node_modules/
 apps/web/.next/
 apps/web/.next-build/
 apps/web/test-results/
+apps/web/.tmp/
 apps/web/e2e/
 apps/api/node_modules/
 *.log

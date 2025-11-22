@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   description: 'AI Parliament for multi-agent deliberation',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = resolveLocale()
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await resolveLocale()
   const messages = loadMessages(locale)
 
   return (

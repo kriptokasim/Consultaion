@@ -4,8 +4,8 @@ import { cookies } from "next/headers";
 import { I18nContext } from "@/lib/i18n/context";
 import { DEFAULT_LOCALE, getDictionary, isLocale, type Locale } from "@/lib/i18n/dictionaries";
 
-export function resolveLocale(): Locale {
-  const cookieStore = cookies() as any;
+export async function resolveLocale(): Promise<Locale> {
+  const cookieStore = await cookies();
   const cookieValue = cookieStore?.get?.("consultaion_locale")?.value;
   if (isLocale(cookieValue)) {
     return cookieValue;
