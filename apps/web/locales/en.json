@@ -47,6 +47,7 @@
   "landing.feature.synthesis.title": "Synthesized Wisdom",
   "landing.feature.synthesis.description": "Receive a champion answer that integrates diverse perspectives.",
   "landing.model.loading": "Loading model selector…",
+  "landing.selector.cta": "Start a Consultaion debate",
   "auth.login.title": "Welcome back",
   "auth.login.subtitle": "Sign in to your AI parliament cockpit.",
   "auth.login.footer": "Don’t have an account?",
@@ -86,5 +87,9 @@
   "arena.entriesLabel": "Entries",
   "arena.votingChamber": "Voting Chamber",
   "arena.votes.threshold": "Threshold",
-  "arena.runtimeLogs": "Runtime Logs"
+  "arena.runtimeLogs": "Runtime Logs",
+  "live.signInRequired": "Sign in to start a live session",
+  "live.signInDescription": "Live debates stream in real time. Sign in to summon a session and keep your prompts in sync.",
+  "live.signInCta": "Go to sign in",
+  "live.startError": "Unable to start the live session. Please try again."
 }

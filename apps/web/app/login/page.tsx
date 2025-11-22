@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 
 import GoogleButton from "@/components/auth/GoogleButton"
@@ -9,6 +9,7 @@ import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SkeletonLoader } from "@/components/ui/SkeletonLoader"
 import { login } from "@/lib/auth"
 import { useI18n } from "@/lib/i18n/client"
 
@@ -20,7 +21,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [hydrating, setHydrating] = useState(true)
   const { t } = useI18n()
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setHydrating(false), 150)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -49,11 +56,19 @@ export default function LoginPage() {
         </span>
       }
     >
-      <div className="flex flex-col gap-3 rounded-2xl border border-amber-100/60 bg-amber-50/80 p-5 text-center shadow-lg text-amber-950 dark:bg-stone-700/60 dark:text-amber-50">
-        <GoogleButton nextPath={nextPath} label={t("auth.login.google")} className="w-full justify-center" />
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">{t("auth.login.or")}</div>
-        <p className="text-sm auth-muted">{t("auth.login.credentials")}</p>
-      </div>
+      {hydrating ? (
+        <div className="space-y-3 rounded-2xl border border-amber-100/60 bg-amber-50/80 p-5 shadow-lg dark:bg-stone-700/60">
+          <SkeletonLoader className="h-10 w-full rounded-xl bg-white/60" />
+          <SkeletonLoader className="h-3 w-20 bg-white/60" />
+          <SkeletonLoader lines={2} className="h-3 bg-white/60" />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-100/60 bg-amber-50/80 p-5 text-center shadow-lg text-amber-950 dark:bg-stone-700/60 dark:text-amber-50">
+          <GoogleButton nextPath={nextPath} label={t("auth.login.google")} className="w-full justify-center focus-ring" />
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-100">{t("auth.login.or")}</div>
+          <p className="text-sm auth-muted">{t("auth.login.credentials")}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
@@ -66,7 +81,7 @@ export default function LoginPage() {
             autoComplete="email"
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="border-amber-200/70 bg-white/80 focus-visible:ring-amber-500 dark:border-amber-200/30 dark:bg-white/5"
+            className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
           />
         </div>
         <div className="space-y-2">
@@ -79,7 +94,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="border-amber-200/70 bg-white/80 focus-visible:ring-amber-500 dark:border-amber-200/30 dark:bg-white/5"
+            className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
           />
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}

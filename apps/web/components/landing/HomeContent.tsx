@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Brain, MessageSquare, Vote } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
+import AnimatedCounter from "@/components/ui/AnimatedCounter";
 
 const featureCards = [
   {
@@ -122,9 +123,9 @@ export default function HomeContent() {
           <div className="relative rounded-3xl border border-amber-100/80 bg-white/80 p-8 shadow-[0_20px_50px_rgba(112,73,28,0.12)] backdrop-blur">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">{t("landing.snapshot.caption")}</p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <HeroStat label={t("landing.stats.agents")} value="8" />
-              <HeroStat label={t("landing.stats.judges")} value="3" />
-              <HeroStat label={t("landing.stats.rounds")} value="4" />
+              <HeroStat label={t("landing.stats.agents")} value={8} animate />
+              <HeroStat label={t("landing.stats.judges")} value={3} animate />
+              <HeroStat label={t("landing.stats.rounds")} value={4} animate />
               <HeroStat label={t("landing.stats.synthesizer")} value="Online" />
             </div>
             <div className="mt-8 flex flex-col items-center gap-3">
@@ -165,11 +166,13 @@ const DynamicLLMSelector = dynamic(() => import("@/components/ui/LLMSelector"), 
   loading: () => <LLMSelectorFallback />,
 });
 
-function HeroStat({ label, value }: { label: string; value: string }) {
+function HeroStat({ label, value, animate }: { label: string; value: string | number; animate?: boolean }) {
   return (
     <div className="rounded-2xl border border-amber-100/80 bg-white p-4 text-left shadow-sm">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-[#3a2a1a]">{value}</p>
+      <p className="mt-2 text-2xl font-semibold text-[#3a2a1a]">
+        {typeof value === "number" && animate ? <AnimatedCounter value={value} /> : value}
+      </p>
     </div>
   );
 }

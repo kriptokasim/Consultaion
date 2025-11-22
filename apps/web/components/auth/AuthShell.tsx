@@ -45,7 +45,7 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/60 bg-white/70 text-amber-700 shadow-sm transition hover:-translate-y-[1px] dark:border-amber-200/30 dark:bg-white/10 dark:text-amber-50"
+              className="focus-ring absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/60 bg-white/90 text-amber-700 shadow-sm transition hover:-translate-y-[1px] dark:border-amber-200/30 dark:bg-white/10 dark:text-amber-50"
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>

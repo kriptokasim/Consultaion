@@ -1,6 +1,8 @@
 'use client'
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import LivePanel from "@/components/consultaion/consultaion/live-panel";
 import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
@@ -11,6 +13,10 @@ import type { Member, ScoreItem } from "@/components/parliament/types";
 import { ApiError, getRateLimitInfo, startDebate, startDebateRun } from "@/lib/api";
 import { useEventSource } from "@/lib/sse";
 import { defaultPanelConfig, type PanelSeatConfig } from "@/lib/panels";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { getMe } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n/client";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -47,7 +53,11 @@ export default function Page() {
   const [sessionStatus, setSessionStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle')
   const [latestScores, setLatestScores] = useState<ScoreItem[]>([])
   const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
+  const [authStatus, setAuthStatus] = useState<'unknown' | 'authed' | 'guest'>('unknown')
 
+  const router = useRouter()
+  const { pushToast } = useToast()
+  const { t } = useI18n()
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentDebateIdRef = useRef<string | null>(null)
@@ -166,6 +176,20 @@ export default function Page() {
     stopStreamRef.current = stopStream
   }, [stopStream])
 
+  useEffect(() => {
+    let cancelled = false
+    getMe()
+      .then((me) => {
+        if (!cancelled) setAuthStatus(me ? 'authed' : 'guest')
+      })
+      .catch(() => {
+        if (!cancelled) setAuthStatus('guest')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const handlePanelChange = useCallback(
     (seats: PanelSeatConfig[]) => {
       setPanelConfig((prev) => ({ ...prev, seats }))
@@ -192,6 +216,22 @@ export default function Page() {
 
   const onStart = async () => {
     if (!prompt.trim()) return
+    if (authStatus === 'guest') {
+      pushToast({
+        title: t("live.signInRequired"),
+        description: t("live.signInDescription"),
+        variant: "error",
+      })
+      router.push("/login?next=/live")
+      return
+    }
+    if (authStatus === 'unknown') {
+      pushToast({
+        title: t("live.signInRequired"),
+        description: t("live.signInDescription"),
+      })
+      return
+    }
     if (runningRef.current) {
       stopStream('idle')
     }
@@ -212,11 +252,14 @@ export default function Page() {
         const info = getRateLimitInfo(error)
         if (info) {
           setRateLimitNotice(info)
+          pushToast({ title: info.detail, variant: "error" })
         } else {
           console.error(error)
+          pushToast({ title: t("live.startError"), variant: "error" })
         }
       } else {
         console.error(error)
+        pushToast({ title: t("live.startError"), variant: "error" })
       }
       stopStream('error')
     }
@@ -258,6 +301,20 @@ export default function Page() {
             </button>
           }
         />
+      ) : null}
+      {authStatus === 'guest' ? (
+        <div className="rounded-2xl border border-amber-100/80 bg-white/80 p-5 text-stone-900 shadow-sm backdrop-blur dark:border-amber-900/40 dark:bg-stone-900/70 dark:text-amber-50">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">{t("live.signInRequired")}</p>
+          <p className="mt-1 text-sm text-stone-700 dark:text-amber-50/80">{t("live.signInDescription")}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button variant="amber" onClick={() => router.push("/login?next=/live")}>
+              {t("live.signInCta")}
+            </Button>
+            <Link href="/register" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline focus-ring dark:text-amber-100">
+              {t("auth.register.footerLink")}
+            </Link>
+          </div>
+        </div>
       ) : null}
       <ParliamentHome
         members={members}

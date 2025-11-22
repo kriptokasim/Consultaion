@@ -160,6 +160,10 @@
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
   .heading-serif {
     font-family: var(--font-heading);
     letter-spacing: 0.01em;
@@ -208,6 +212,10 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+
+    .skeleton-shimmer::after {
+      animation: none !important;
+    }
   }
 }
 
@@ -225,15 +233,15 @@
   }
 
   .auth-muted {
-    @apply text-[#5a4a3a] dark:text-amber-50/85;
+    @apply text-[#3d2f22] dark:text-amber-50/90;
   }
 
   .auth-meta {
-    @apply text-xs text-[#5a4a3a]/85 dark:text-amber-50/75;
+    @apply text-xs text-[#3d2f22]/80 dark:text-amber-50/75;
   }
 
   .auth-card {
-    @apply bg-white/95 border border-amber-200/60 text-amber-950 shadow-[0_25px_70px_-30px_rgba(112,73,28,0.4)] dark:bg-stone-900/90 dark:border-amber-200/30 dark:text-amber-50;
+    @apply bg-white/95 border border-amber-200/80 text-amber-950 shadow-[0_25px_70px_-30px_rgba(112,73,28,0.4)] dark:bg-stone-900/90 dark:border-amber-200/30 dark:text-amber-50;
   }
 
   .floating-label {
@@ -254,6 +262,25 @@
     background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--card)) 50%, hsl(var(--muted)) 75%);
     background-size: 200% 100%;
     animation: shimmer 2s infinite;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden bg-muted;
+  }
+
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    animation: shimmer-scan 1.6s infinite;
+  }
+
+  @keyframes shimmer-scan {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(40%); }
+    100% { transform: translateX(100%); }
   }
 
   .card-hover {

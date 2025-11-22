@@ -206,7 +206,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               <Link href="/home" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
                 <RosettaChamberLogo size={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-amber-900">
-                  ConsultAI on
+                  Consultaion
                 </span>
               </Link>
               <div className="relative w-64 lg:w-80">

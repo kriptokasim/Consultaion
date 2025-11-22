@@ -4,6 +4,7 @@ import { type ComponentType, useState } from "react"
 import { ArrowRight, Brain, Sparkles, Zap } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/client"
 
 type ModelCard = {
   id: string
@@ -43,6 +44,7 @@ const models: ModelCard[] = [
 
 export default function LLMSelector() {
   const [selected, setSelected] = useState(models[0].id)
+  const { t } = useI18n()
 
   return (
     <section className="relative mt-12 w-full overflow-hidden rounded-[36px] bg-neutral-950 px-6 py-14 text-white shadow-[0_50px_140px_-80px_rgba(15,15,15,0.9)]">
@@ -120,7 +122,7 @@ export default function LLMSelector() {
           type="button"
           className="group inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-8 py-3 text-sm font-semibold text-white shadow-[0_25px_60px_-20px_rgba(255,255,255,0.6)] transition-all duration-200 hover:scale-105 active:scale-95"
         >
-          Start Consultation
+          {t("landing.selector.cta")}
           <ArrowRight className="h-4 w-4 transition-all duration-200 group-hover:translate-x-1" />
         </button>
       </div>
