@@ -127,20 +127,20 @@ def upgrade() -> None:
 
     plan_table = sa.table(
         "billing_plans",
-        sa.column("id", sa.String()),
+        sa.column("id", uuid_type),
         sa.column("slug", sa.Text()),
         sa.column("name", sa.Text()),
         sa.column("price_monthly", sa.Numeric(10, 2)),
         sa.column("currency", sa.Text()),
         sa.column("is_default_free", sa.Boolean()),
-        sa.column("limits", JSON()),
+        sa.column("limits", json_type),
     )
 
     op.bulk_insert(
         plan_table,
         [
             {
-                "id": str(uuid.uuid4()),
+                "id": uuid.uuid4(),
                 "slug": "free",
                 "name": "Free",
                 "price_monthly": None,
@@ -153,7 +153,7 @@ def upgrade() -> None:
                 },
             },
             {
-                "id": str(uuid.uuid4()),
+                "id": uuid.uuid4(),
                 "slug": "pro",
                 "name": "Pro",
                 "price_monthly": Decimal("29.00"),

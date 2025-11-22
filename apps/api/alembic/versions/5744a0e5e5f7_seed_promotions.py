@@ -22,9 +22,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    is_postgres = bind.dialect.name == "postgresql"
+    uuid_type = sa.dialects.postgresql.UUID(as_uuid=True) if is_postgres else sa.String(length=36)
+
     promotion_table = sa.table(
         "promotions",
-        sa.column("id", sa.String()),
+        sa.column("id", uuid_type),
         sa.column("location", sa.Text()),
         sa.column("title", sa.Text()),
         sa.column("body", sa.Text()),
@@ -38,7 +42,7 @@ def upgrade() -> None:
         promotion_table,
         [
             {
-                "id": str(uuid.uuid4()),
+                "id": uuid.uuid4(),
                 "location": "dashboard_sidebar",
                 "title": "Upgrade to Pro",
                 "body": "Increase your monthly debates, unlock exports, and add more models to each run.",
@@ -49,7 +53,7 @@ def upgrade() -> None:
                 "target_plan_slug": "free",
             },
             {
-                "id": str(uuid.uuid4()),
+                "id": uuid.uuid4(),
                 "location": "debate_limit_modal",
                 "title": "Need more debates?",
                 "body": "Pro members get 100 debates per month plus priority processing.",
