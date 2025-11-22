@@ -367,7 +367,7 @@ async def run_debate(
 
         with session_scope() as session:
             debate = session.get(Debate, debate_id)
-        if debate and debate.panel_config and settings.REQUIRE_REAL_LLM:
+        if debate and debate.panel_config:
             panel_result = await run_parliament_debate(debate, model_id=model_id)
             final_meta = panel_result.final_meta
             _complete_debate_record(
