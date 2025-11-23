@@ -33,6 +33,10 @@ Runtime configuration is centralized in `apps/api/config.py`, which exposes a Py
 3. Token usage per model is aggregated through `UsageAccumulator` and recorded via `billing.service.add_tokens_usage`, feeding `/billing/usage/models` for the Amber billing UI.
 4. SSE consumers subscribe to `/debates/{debate_id}/stream`, which forwards events from the configured backend (in-memory queues by default, Redis pub/sub in multi-worker mode).
 
+Parliament seat outputs are now **structured JSON**: prompts instruct each seat to emit `{"content": "...", "reasoning": "...", "stance": "..."}` only. The engine parses this into `SeatLLMEnvelope`/`SeatMessage` models (with fallbacks to raw text) and publishes `seat_message` SSE events containing seat metadata (role, provider, model, stance) so downstream consumers and replay tools can rely on consistent shapes.
+
+LLM reliability now runs through a single retry/backoff helper (configurable via `LLM_RETRY_*` in `AppSettings`). Debate rounds track per-seat failures; when the failure ratio or minimum-seat threshold is breached, the parliament engine emits a `debate_failed` SSE event and returns a `FAILED` status instead of limping along with low-quality output.
+
 ## Billing subsystem
 - Tables: `billing_plans`, `billing_subscriptions`, `billing_usage`, `promotions`.
 - `billing/service.py` resolves the active plan, tracks debates/exports/tokens, and raises 402 errors when limits are exceeded. Usage events trigger n8n webhooks (`integrations/events.py`).

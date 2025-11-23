@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
+from pydantic import ValidationError
 from agents import UsageAccumulator, call_llm_for_role, UsageCall
+from config import settings
 from database import session_scope
 from models import Debate, Message
 from schemas import PanelConfig, PanelSeat, default_panel_config
 from sse_backend import get_sse_backend
-
+from .schemas import SeatLLMEnvelope, SeatMessage, DebateSnapshot, RoundSummary
 from .prompts import build_messages_for_seat, transcript_to_text, PARLIAMENT_CHARTER
 from .roles import ROLE_PROFILES
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_ROUNDS: List[dict[str, str]] = [
     {"index": 1, "phase": "explore", "task_for_seat": "Share your strongest arguments, opportunities, or risks."},
@@ -32,6 +38,8 @@ class SeatTurn:
     model: str
     content: str
     usage: UsageCall
+    stance: Optional[str] = None
+    reasoning: Optional[str] = None
 
 
 @dataclass
@@ -39,6 +47,55 @@ class ParliamentResult:
     final_answer: str
     final_meta: dict[str, Any]
     usage_tracker: UsageAccumulator
+    status: str = "completed"
+    error_reason: str | None = None
+
+
+@dataclass
+class RoundOutcome:
+    status: str
+    round_index: int
+    reason: Optional[str] = None
+    success_count: int = 0
+    failure_count: int = 0
+
+
+def parse_seat_llm_output(raw_text: str) -> SeatLLMEnvelope:
+    try:
+        data = json.loads(raw_text)
+        return SeatLLMEnvelope.model_validate(data)
+    except (json.JSONDecodeError, TypeError, ValidationError) as exc:
+        logger.warning("Seat LLM output was not valid JSON; falling back to raw content: %s", exc)
+        return SeatLLMEnvelope(content=raw_text.strip()[:16384])
+
+
+def _resolve_tolerance(panel: PanelConfig) -> tuple[float, int, bool]:
+    return (
+        panel.max_seat_fail_ratio if panel.max_seat_fail_ratio is not None else settings.DEBATE_MAX_SEAT_FAIL_RATIO,
+        panel.min_required_seats if panel.min_required_seats is not None else settings.DEBATE_MIN_REQUIRED_SEATS,
+        panel.fail_fast if panel.fail_fast is not None else settings.DEBATE_FAIL_FAST,
+    )
+
+
+def _build_seat_message_event(debate_id: str, turn: SeatTurn) -> dict:
+    return {
+        "type": "seat_message",
+        "debate_id": str(debate_id),
+        "round": turn.round_index,
+        "phase": turn.phase,
+        "seat_id": turn.seat_id,
+        "seat_name": turn.seat_name,
+        "provider": turn.provider,
+        "model": turn.model,
+        "content": turn.content,
+        "seat": {
+            "seat_id": turn.seat_id,
+            "role_id": turn.role_profile,
+            "provider": turn.provider,
+            "model": turn.model,
+            "stance": turn.stance,
+        },
+    }
 
 
 async def run_parliament_debate(
@@ -68,25 +125,16 @@ async def run_parliament_debate(
                 "phase": round_info["phase"],
             },
         )
-        round_turns = await _execute_round(
+        outcome, round_turns = await _execute_round(
             debate=debate,
             panel=panel,
             round_info=round_info,
             transcript_summary=transcript_to_text(transcript_buffer),
             usage_tracker=usage,
         )
+        seat_messages: list[SeatMessage] = []
         for turn in round_turns:
-            event = {
-                "type": "seat_message",
-                "debate_id": str(debate.id),
-                "round": turn.round_index,
-                "phase": turn.phase,
-                "seat_id": turn.seat_id,
-                "seat_name": turn.seat_name,
-                "provider": turn.provider,
-                "model": turn.model,
-                "content": turn.content,
-            }
+            event = _build_seat_message_event(debate.id, turn)
             transcript_buffer.append({"seat_name": turn.seat_name, "content": turn.content})
             seat_usage.append(
                 {
@@ -98,7 +146,25 @@ async def run_parliament_debate(
                     "tokens": turn.usage.total_tokens,
                 }
             )
+            seat_messages.append(
+                SeatMessage(
+                    seat_id=turn.seat_id,
+                    role_id=turn.role_profile,
+                    provider=turn.provider,
+                    model=turn.model,
+                    content=turn.content,
+                    reasoning=turn.reasoning,
+                    stance=turn.stance,
+                    round_index=turn.round_index,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
             await backend.publish(f"debate:{debate.id}", event)
+        _ = DebateSnapshot(
+            debate_id=str(debate.id),
+            round_index=round_info["index"],
+            seat_messages=seat_messages,
+        )
         round_history.append(
             {
                 "index": round_info["index"],
@@ -115,6 +181,35 @@ async def run_parliament_debate(
                 ],
             }
         )
+        if outcome.status == "failed":
+            await backend.publish(
+                f"debate:{debate.id}",
+                {
+                    "type": "debate_failed",
+                    "debate_id": str(debate.id),
+                    "reason": outcome.reason or "seat_failure_threshold_exceeded",
+                },
+            )
+            failure_meta = {
+                "engine": panel.engine_version,
+                "rounds": round_history,
+                "panel": panel.model_dump(),
+                "seat_usage": seat_usage,
+                "usage": usage.snapshot(),
+                "failure": {
+                    "reason": outcome.reason or "seat_failure_threshold_exceeded",
+                    "round_index": outcome.round_index,
+                    "success_count": outcome.success_count,
+                    "failure_count": outcome.failure_count,
+                },
+            }
+            return ParliamentResult(
+                final_answer="",
+                final_meta=failure_meta,
+                usage_tracker=usage,
+                status="failed",
+                error_reason=outcome.reason or "seat_failure_threshold_exceeded",
+            )
 
     final_text, final_usage = await _synthesize_verdict(
         debate=debate,
@@ -152,57 +247,92 @@ async def _execute_round(
     round_info: dict[str, Any],
     transcript_summary: str,
     usage_tracker: UsageAccumulator,
-) -> List[SeatTurn]:
+) -> tuple[RoundOutcome, List[SeatTurn]]:
     turns: list[SeatTurn] = []
+    success_count = 0
+    failure_count = 0
+    fail_ratio_limit, min_required, fail_fast = _resolve_tolerance(panel)
     for seat in panel.seats:
         role_profile = ROLE_PROFILES.get(seat.role_profile)
         seat_role = role_profile.title if role_profile else seat.role_profile
-        messages = build_messages_for_seat(
-            debate=debate,
-            seat=seat.model_dump(),
-            round_info=round_info,
-            transcript=transcript_summary,
-        )
-        text, call_usage = await call_llm_for_role(
-            messages,
-            role=seat.display_name,
-            temperature=seat.temperature or 0.5,
-            model_override=seat.model,
-            model_id=debate.model_id,
-            debate_id=debate.id,
-        )
-        usage_tracker.add_call(call_usage)
-        turns.append(
-            SeatTurn(
-                seat_id=seat.seat_id,
-                seat_name=seat.display_name,
-                role_profile=seat.role_profile,
-                round_index=round_info["index"],
-                phase=round_info["phase"],
-                provider=seat.provider_key,
-                model=seat.model,
-                content=text,
-                usage=call_usage,
+        try:
+            messages = build_messages_for_seat(
+                debate=debate,
+                seat=seat.model_dump(),
+                round_info=round_info,
+                transcript=transcript_summary,
             )
-        )
-        with session_scope() as session:
-            session.add(
-                Message(
-                    debate_id=debate.id,
+            text, call_usage = await call_llm_for_role(
+                messages,
+                role=seat.display_name,
+                temperature=seat.temperature or 0.5,
+                model_override=seat.model,
+                model_id=debate.model_id,
+                debate_id=debate.id,
+            )
+            envelope = parse_seat_llm_output(text)
+            usage_tracker.add_call(call_usage)
+            turns.append(
+                SeatTurn(
+                    seat_id=seat.seat_id,
+                    seat_name=seat.display_name,
+                    role_profile=seat.role_profile,
                     round_index=round_info["index"],
-                    role="seat",
-                    persona=seat.display_name,
-                    content=text,
-                    meta={
-                        "seat_id": seat.seat_id,
-                        "role_profile": seat.role_profile,
-                        "provider": seat.provider_key,
-                        "model": seat.model,
-                        "phase": round_info["phase"],
-                    },
+                    phase=round_info["phase"],
+                    provider=seat.provider_key,
+                    model=seat.model,
+                    content=envelope.content,
+                    stance=envelope.stance,
+                    reasoning=envelope.reasoning,
+                    usage=call_usage,
                 )
             )
-    return turns
+            with session_scope() as session:
+                session.add(
+                    Message(
+                        debate_id=debate.id,
+                        round_index=round_info["index"],
+                        role="seat",
+                        persona=seat.display_name,
+                        content=envelope.content,
+                        meta={
+                            "seat_id": seat.seat_id,
+                            "role_profile": seat.role_profile,
+                            "provider": seat.provider_key,
+                            "model": seat.model,
+                            "round_index": round_info["index"],
+                            "stance": envelope.stance,
+                            "reasoning": envelope.reasoning,
+                            "phase": round_info["phase"],
+                        },
+                    )
+                )
+            success_count += 1
+        except Exception as exc:  # pragma: no cover - counted for tolerance
+            logger.error(
+                "Seat %s failed in round %s: %s",
+                seat.seat_id,
+                round_info.get("index"),
+                exc,
+            )
+            failure_count += 1
+            continue
+
+    total_seats = len(panel.seats) or (success_count + failure_count)
+    fail_ratio = (failure_count / total_seats) if total_seats else 1.0
+    outcome_status = "ok"
+    outcome_reason: Optional[str] = None
+    if fail_fast and (fail_ratio > fail_ratio_limit or success_count < min_required):
+        outcome_status = "failed"
+        outcome_reason = "seat_failure_threshold_exceeded"
+
+    return RoundOutcome(
+        status=outcome_status,
+        round_index=round_info["index"],
+        reason=outcome_reason,
+        success_count=success_count,
+        failure_count=failure_count,
+    ), turns
 
 
 async def _synthesize_verdict(

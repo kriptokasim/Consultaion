@@ -26,10 +26,11 @@ atexit.register(_cleanup)
 
 from database import engine, init_db  # noqa: E402
 from models import Debate  # noqa: E402
-from parliament.engine import run_parliament_debate  # noqa: E402
+from parliament.engine import run_parliament_debate, parse_seat_llm_output  # noqa: E402
 from parliament.prompts import build_messages_for_seat  # noqa: E402
 from schemas import default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
+from agents import UsageCall  # noqa: E402
 
 init_db()
 
@@ -72,3 +73,34 @@ async def test_parliament_engine_runs_with_mock_llm():
     assert result.final_meta["panel"]["engine_version"] == panel.engine_version
     assert result.final_meta["seat_usage"], "seat usage should be recorded"
     assert isinstance(result.final_answer, str) and result.final_answer
+
+
+@pytest.mark.anyio("asyncio")
+async def test_parliament_engine_parses_structured_output(monkeypatch):
+    panel = default_panel_config()
+    debate_id = "parliament-structured"
+    with Session(engine) as session:
+        debate = Debate(
+            id=debate_id,
+            prompt="Structured parliament prompt",
+            status="queued",
+            panel_config=panel.model_dump(),
+            engine_version=panel.engine_version,
+        )
+        session.add(debate)
+        session.commit()
+        session.refresh(debate)
+
+    async def fake_call(messages, role, temperature=0.3, model_override=None, model_id=None, debate_id=None):
+        return (
+            '{"content":"Structured response","stance":"support","reasoning":"coherent"}',
+            UsageCall(total_tokens=10, provider="mock", model="mock-model"),
+        )
+
+    monkeypatch.setattr("parliament.engine.call_llm_for_role", fake_call)
+
+    reset_sse_backend_for_tests()
+    backend = get_sse_backend()
+    await backend.create_channel(f"debate:{debate_id}")
+    result = await run_parliament_debate(debate, model_id=None)
+    assert result.final_meta["seat_usage"]

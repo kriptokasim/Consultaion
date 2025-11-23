@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { getMe } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n/client";
+import { DebateReplay } from "@/components/debate/DebateReplay";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -350,6 +351,11 @@ export default function Page() {
           <PromptSuggestions onSelect={setPrompt} />
         </div>
       </div>
+      {currentDebateId ? (
+        <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/70">
+          <DebateReplay debateId={currentDebateId} />
+        </section>
+      ) : null}
     </main>
   )
 }

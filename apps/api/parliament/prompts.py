@@ -16,6 +16,14 @@ PARLIAMENT_CHARTER = (
 )
 
 
+def seat_output_contract_instructions() -> str:
+    return (
+        "You MUST respond with valid JSON only, using this exact schema: "
+        '{"content": "<the message>", "reasoning": "<optional reasoning>", "stance": "<optional stance label>"} . '
+        "Do not add extra keys, no markdown, no commentary outside the JSON."
+    )
+
+
 def build_messages_for_seat(
     *,
     debate: Debate,
@@ -29,6 +37,7 @@ def build_messages_for_seat(
         [
             PARLIAMENT_CHARTER,
             role_profile.instructions,
+            seat_output_contract_instructions(),
         ]
     )
 
@@ -39,7 +48,8 @@ def build_messages_for_seat(
         f"Seat: {seat_name}\n"
         f"User question:\n{debate.prompt}\n\n"
         f"Summary of previous contributions:\n{transcript or 'No previous contributions.'}\n\n"
-        f"Your task this round: {round_info.get('task_for_seat', '').strip() or 'Contribute meaningfully to this round.'}"
+        f"Your task this round: {round_info.get('task_for_seat', '').strip() or 'Contribute meaningfully to this round.'}\n\n"
+        "Remember: respond with JSON only using the provided schema."
     )
 
     return [

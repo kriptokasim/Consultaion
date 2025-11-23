@@ -222,7 +222,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
               <TableHead className="w-[140px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.team")}</TableHead>
               <TableHead className="w-[150px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.created")}</TableHead>
               <TableHead className="w-[150px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.updated")}</TableHead>
-              <TableHead className="w-[140px]" />
+              <TableHead className="w-[180px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -263,6 +263,11 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
+                    {(normalizeStatus(run.status) === "completed" || normalizeStatus(run.status) === "failed") ? (
+                      <Link href={`/debates/${run.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
+                        {t("dashboard.recentDebates.replay")}
+                      </Link>
+                    ) : null}
                     <Link href={`/runs/${run.id}`} className="inline-flex">
                       <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("runs.table.view")}>
                         <Eye className="h-4 w-4" />

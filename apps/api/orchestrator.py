@@ -370,14 +370,33 @@ async def run_debate(
         if debate and debate.panel_config:
             panel_result = await run_parliament_debate(debate, model_id=model_id)
             final_meta = panel_result.final_meta
+            final_status = panel_result.status or "completed"
+            if panel_result.status != "completed" or panel_result.error_reason:
+                final_status = "failed"
+            final_content = (
+                panel_result.final_answer
+                if panel_result.final_answer
+                else "Debate aborted due to seat failures."
+            )
             _complete_debate_record(
                 debate_id,
-                final_content=panel_result.final_answer,
+                final_content=final_content,
                 final_meta=final_meta,
-                status="completed",
+                status=final_status,
                 tokens_total=panel_result.usage_tracker.total_tokens,
                 user_id=debate_user_id,
             )
+            if final_status == "failed":
+                await backend.publish(
+                    channel_id,
+                    {
+                        "type": "debate_failed",
+                        "debate_id": debate_id,
+                        "reason": panel_result.error_reason or "seat_failure_threshold_exceeded",
+                        "meta": final_meta,
+                    },
+                )
+                return
             await backend.publish(
                 channel_id,
                 {

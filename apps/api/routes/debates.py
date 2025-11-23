@@ -22,6 +22,8 @@ from deps import get_session
 from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
 from model_registry import get_default_model, get_model, list_enabled_models
 from debate_dispatch import dispatch_debate_run
+from parliament.timeline import build_debate_timeline
+from parliament.schemas import TimelineEvent
 from routes.common import (
     avg_scores_for_debate,
     can_access_debate,
@@ -124,6 +126,21 @@ async def get_debate_members(
         except Exception:
             panel = None
     return {"members": _members_from_config(config, panel)}
+
+@router.get("/debates/{debate_id}/timeline", response_model=list[TimelineEvent])
+async def get_debate_timeline(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    debate = session.get(Debate, debate_id)
+    debate = require_debate_access(debate, current_user, session)
+    if not debate:
+        raise HTTPException(status_code=404, detail="debate not found")
+    if (debate.status or "").lower() not in {"completed", "failed"}:
+        raise HTTPException(status_code=409, detail="debate not finished")
+    timeline = build_debate_timeline(session, debate)
+    return timeline
 
 
 @router.post("/debates")

@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -51,6 +53,17 @@ class AppSettings(BaseSettings):
     SSE_BACKEND: Literal["memory", "redis"] = "memory"
     SSE_REDIS_URL: str | None = None
     SSE_CHANNEL_TTL_SECONDS: int = 900
+
+    # LLM retry controls
+    LLM_RETRY_ENABLED: bool = Field(True, description="Enable retry/backoff around LLM calls.")
+    LLM_RETRY_MAX_ATTEMPTS: int = Field(3, ge=1, le=10)
+    LLM_RETRY_INITIAL_DELAY_SECONDS: float = Field(1.0, ge=0.0)
+    LLM_RETRY_MAX_DELAY_SECONDS: float = Field(8.0, ge=0.0)
+
+    # Debate failure tolerance
+    DEBATE_MAX_SEAT_FAIL_RATIO: float = Field(0.4, ge=0.0, le=1.0)
+    DEBATE_MIN_REQUIRED_SEATS: int = Field(1, ge=0)
+    DEBATE_FAIL_FAST: bool = Field(True, description="Abort debates when too many seats fail.")
 
     DEBATE_DISPATCH_MODE: Literal["inline", "celery"] = "inline"
     CELERY_BROKER_URL: str | None = None

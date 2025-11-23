@@ -295,6 +295,13 @@ async def admin_ops_summary(
             "model_usage_by_role": model_usage_by_role,
         },
         "dispatch": dispatch_payload,
+        "llm_reliability": {
+            "retry_enabled": settings.LLM_RETRY_ENABLED,
+            "retry_max_attempts": settings.LLM_RETRY_MAX_ATTEMPTS,
+            "debate_max_seat_fail_ratio": settings.DEBATE_MAX_SEAT_FAIL_RATIO,
+            "debate_min_required_seats": settings.DEBATE_MIN_REQUIRED_SEATS,
+            "debate_fail_fast": settings.DEBATE_FAIL_FAST,
+        },
     }
 
 

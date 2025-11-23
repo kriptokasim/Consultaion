@@ -163,7 +163,9 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
         ) : (
           <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white/90 shadow-[0_18px_40px_rgba(112,73,28,0.12)]">
             <div className="divide-y divide-amber-100/80">
-              {debates.map((debate) => (
+              {debates.map((debate) => {
+                const replayAvailable = (debate.status || "").toLowerCase() === "completed" || (debate.status || "").toLowerCase() === "failed";
+                return (
                 <Link
                   key={debate.id}
                   href={`/runs/${debate.id}`}
@@ -176,9 +178,16 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
                     <p className="text-sm font-semibold text-[#3a2a1a] line-clamp-1">{debate.prompt || t("dashboard.prompt.untitled")}</p>
                     <p className="text-xs text-[#5a4a3a]">{t("dashboard.time.createdPrefix")} {formatTimestamp(debate.created_at)}</p>
                   </div>
-                  <Badge className={`border ${statusTone(debate.status)}`}>{debate.status ?? "queued"}</Badge>
+                  <div className="flex items-center gap-2">
+                    {replayAvailable ? (
+                      <Link href={`/debates/${debate.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
+                        {t("dashboard.recentDebates.replay")}
+                      </Link>
+                    ) : null}
+                    <Badge className={`border ${statusTone(debate.status)}`}>{debate.status ?? "queued"}</Badge>
+                  </div>
                 </Link>
-              ))}
+              )})}
             </div>
           </div>
         )}

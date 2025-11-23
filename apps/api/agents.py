@@ -3,12 +3,12 @@ import json
 import logging
 import os
 import re
-import traceback
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Literal
 
 from litellm import acompletion
 from config import settings
+from llm_errors import TransientLLMError
 from schemas import AgentConfig, JudgeConfig
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,14 @@ async def _fake_llm(prompt: str, role: str) -> str:
     return f"[{role}] Suggestion and reasoning for: {prompt[:80]}…"
 
 
-async def _call_llm(
+def _llm_retry_decorator():
+    # Legacy hook retained for compatibility; no-op when retries are disabled.
+    def _identity(fn):
+        return fn
+    return _identity
+
+
+async def _raw_llm_call(
     messages: List[Dict[str, str]],
     *,
     role: str,
@@ -156,17 +163,6 @@ async def _call_llm(
     except Exception:
         model_cfg = get_default_model()
     target_model = model_override or model_cfg.litellm_model
-    if USE_MOCK:
-        text = await _fake_llm(messages[-1]["content"], role=role)
-        approx_tokens = max(50, len(messages[-1]["content"]) // 2)
-        call_usage = _usage_call_from_counts(
-            {"prompt": approx_tokens * 0.6, "completion": approx_tokens * 0.4, "total": approx_tokens},
-            _estimate_cost(approx_tokens),
-            model=target_model,
-            provider="mock",
-        )
-        return text, call_usage
-
     try:
         response = await acompletion(
             model=target_model,
@@ -212,8 +208,93 @@ async def _call_llm(
             },
         )
         return content.strip(), call_usage
-    except Exception as exc:
-        logger.error("LLM call failed for role %s: %s\n%s", role, exc, traceback.format_exc())
+    except Exception as exc:  # pragma: no cover - handled by retry/fallback
+        raise TransientLLMError(f"LLM call failed for role {role}: {exc}", cause=exc)
+
+
+async def call_llm_with_retry(
+    messages: List[Dict[str, str]],
+    *,
+    role: str,
+    temperature: float = 0.3,
+    max_tokens: int = 600,
+    model_override: str | None = None,
+    model_id: str | None = None,
+    debate_id: str | None = None,
+) -> Tuple[str, UsageCall]:
+    max_attempts = settings.LLM_RETRY_MAX_ATTEMPTS if settings.LLM_RETRY_ENABLED else 1
+    delay = settings.LLM_RETRY_INITIAL_DELAY_SECONDS or 0.0
+    max_delay = settings.LLM_RETRY_MAX_DELAY_SECONDS or delay
+    last_exc: TransientLLMError | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await _raw_llm_call(
+                messages,
+                role=role,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model_override=model_override,
+                model_id=model_id,
+                debate_id=debate_id,
+            )
+        except TransientLLMError as exc:
+            last_exc = exc
+            if attempt >= max_attempts:
+                raise
+            logger.warning(
+                "LLM transient error during call (attempt %s/%s): %s",
+                attempt,
+                max_attempts,
+                exc,
+            )
+            if delay > 0:
+                await asyncio.sleep(min(delay, max_delay))
+                delay = min(max_delay, delay * 2 if delay else max_delay)
+            else:
+                await asyncio.sleep(0)
+    raise last_exc or TransientLLMError("LLM call failed after retries")
+
+
+async def _call_llm(
+    messages: List[Dict[str, str]],
+    *,
+    role: str,
+    temperature: float = 0.3,
+    max_tokens: int = 600,
+    model_override: str | None = None,
+    model_id: str | None = None,
+    debate_id: str | None = None,
+) -> Tuple[str, UsageCall]:
+    from model_registry import get_default_model, get_model
+
+    try:
+        model_cfg = get_model(model_id) if model_id else get_default_model()
+    except Exception:
+        model_cfg = get_default_model()
+    target_model = model_override or model_cfg.litellm_model
+    if USE_MOCK:
+        text = await _fake_llm(messages[-1]["content"], role=role)
+        approx_tokens = max(50, len(messages[-1]["content"]) // 2)
+        call_usage = _usage_call_from_counts(
+            {"prompt": approx_tokens * 0.6, "completion": approx_tokens * 0.4, "total": approx_tokens},
+            _estimate_cost(approx_tokens),
+            model=target_model,
+            provider="mock",
+        )
+        return text, call_usage
+
+    try:
+        return await call_llm_with_retry(
+            messages,
+            role=role,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            model_override=model_override,
+            model_id=model_id,
+            debate_id=debate_id,
+        )
+    except TransientLLMError as exc:
+        logger.error("LLM call failed for role %s: %s", role, exc)
         if REQUIRE_REAL_LLM:
             raise
         fallback_text = await _fake_llm(messages[-1]["content"], role=role + " [mock]")

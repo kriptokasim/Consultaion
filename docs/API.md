@@ -76,3 +76,7 @@ or for structured billing/rate errors:
 ## Testing notes
 - Set `USE_MOCK=1 FAST_DEBATE=1` to exercise the mocked debate path without calling external LLMs.
 - The pytest suite covers `auth`, `debates`, `billing`, `promotions`, orchestrator helpers, ratings, rate limits, SSE channel hygiene, and the model registry.
+
+## Operations
+- LLM reliability knobs live in `LLM_RETRY_*` settings; increase delays/attempts if providers are rate limiting.
+- Debate failure tolerance is controlled by `DEBATE_MAX_SEAT_FAIL_RATIO`, `DEBATE_MIN_REQUIRED_SEATS`, and `DEBATE_FAIL_FAST`. When thresholds are breached, debates are marked failed and emit a `debate_failed` SSE event.
