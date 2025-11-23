@@ -15,16 +15,15 @@ import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
 import { useI18n } from "@/lib/i18n/client"
 
+// NOTE: Marketing-only routes (pricing, leaderboard, hall-of-fame, models, methodology)
+// live under (marketing) and are not linked from the authenticated sidebar to avoid
+// tearing down the DashboardShell. They remain reachable via the public header/footer.
 const BASE_NAV_LINKS = [
   { labelKey: "nav.dashboard", href: "/dashboard", icon: BarChart3, tooltipKey: "nav.tooltip.dashboard" },
   { labelKey: "nav.live", href: "/live", icon: PlayCircle, tooltipKey: "nav.tooltip.live" },
   { labelKey: "nav.runs", href: "/runs", icon: FileText, tooltipKey: "nav.tooltip.runs" },
   { labelKey: "nav.chamber", href: "/chamber", icon: Scale, tooltipKey: "nav.tooltip.chamber" },
   { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, tooltipKey: "nav.tooltip.analytics" },
-  { labelKey: "nav.leaderboard", href: "/leaderboard", icon: Trophy, tooltipKey: "nav.tooltip.leaderboard" },
-  { labelKey: "nav.hall", href: "/hall-of-fame", icon: Award, tooltipKey: "nav.tooltip.hall" },
-  { labelKey: "nav.models", href: "/models", icon: Award, tooltipKey: "nav.tooltip.models" },
-  { labelKey: "nav.methodology", href: "/methodology", icon: BookOpen, tooltipKey: "nav.tooltip.methodology" },
   { labelKey: "nav.settings", href: "/settings", icon: Settings, tooltipKey: "nav.tooltip.settings" },
 ]
 
@@ -213,11 +212,12 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                 <Button
                   variant="outline"
                   size="sm"
-                  className="hidden md:inline-flex border-amber-200/80 text-amber-900 hover:bg-amber-50"
+                  className="inline-flex items-center gap-0 border-amber-200/80 text-amber-900 hover:bg-amber-50 sm:gap-2"
                   onClick={() => router.back()}
+                  aria-label={t("nav.goBack")}
                 >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  {t("nav.goBack")}
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t("nav.goBack")}</span>
                 </Button>
               ) : null}
               <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">

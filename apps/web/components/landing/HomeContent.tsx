@@ -32,6 +32,13 @@ export default function HomeContent() {
   const [user, setUser] = useState<{ email: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const { t } = useI18n();
+  const marketingLinks = [
+    { href: "/pricing", label: t("nav.pricing") },
+    { href: "/leaderboard", label: t("nav.leaderboard") },
+    { href: "/hall-of-fame", label: t("nav.hallOfFame") },
+    { href: "/models", label: t("nav.models") },
+    { href: "/methodology", label: t("nav.methodology") },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -70,14 +77,23 @@ export default function HomeContent() {
       </div>
 
       <div className="relative mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16">
-        <header className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-200/50">
-              <Brain className="h-6 w-6" />
-            </div>
-            <span className="text-2xl font-display font-bold text-[#3a2a1a]">Consultaion</span>
-          </Link>
-          <div className="flex items-center gap-3">
+        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-1 items-center gap-4">
+            <Link href="/" className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-200/50">
+                <Brain className="h-6 w-6" />
+              </div>
+              <span className="text-2xl font-display font-bold text-[#3a2a1a]">Consultaion</span>
+            </Link>
+            <nav className="hidden flex-1 items-center gap-6 text-sm font-semibold text-[#6b5844] md:flex">
+              {marketingLinks.map((item) => (
+                <Link key={item.href} href={item.href} className="transition hover:text-amber-700">
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
             {user ? (
               <Link
                 href="/dashboard"
@@ -158,6 +174,13 @@ export default function HomeContent() {
             {t("landing.selector.cta")}
           </Button>
         </section>
+        <footer className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs font-semibold uppercase tracking-wide text-[#7a6653]">
+          {marketingLinks.map((item) => (
+            <Link key={item.href} href={item.href} className="transition hover:text-amber-700">
+              {item.label}
+            </Link>
+          ))}
+        </footer>
       </div>
     </main>
   );
