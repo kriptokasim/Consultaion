@@ -7,7 +7,7 @@ from pathlib import Path
 
 import jwt
 import pytest
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from sqlmodel import Session, select
 
 fd, temp_path = tempfile.mkstemp(prefix="consultaion_auth_flows_", suffix=".db")
@@ -46,50 +46,52 @@ from routes.auth import OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE  # noqa: E402
 
 init_db()
 
+pytestmark = pytest.mark.anyio
 
 @pytest.fixture
-def client():
-    with TestClient(app) as test_client:
+async def client():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
         yield test_client
 
 
-def _csrf_headers(client: TestClient) -> dict[str, str]:
+def _csrf_headers(client: AsyncClient) -> dict[str, str]:
     token = client.cookies.get("csrf_token")
     if not token:
         return {}
     return {"X-CSRF-Token": token}
 
 
-def test_email_password_flow_sets_cookies(client: TestClient):
+async def test_email_password_flow_sets_cookies(client: AsyncClient):
     email = f"user-{uuid.uuid4().hex[:6]}@example.com"
     payload = {"email": email, "password": "SecurePass123!"}
-    res = client.post("/auth/register", json=payload)
+    res = await client.post("/auth/register", json=payload)
     assert res.status_code == 201
     assert res.json()["email"] == email
     assert client.cookies.get(COOKIE_NAME)
     assert client.cookies.get("csrf_token")
 
-    res = client.post("/auth/login", json=payload)
+    res = await client.post("/auth/login", json=payload)
     assert res.status_code == 200
     assert client.cookies.get(COOKIE_NAME)
     assert client.cookies.get("csrf_token")
 
-    me = client.get("/me")
+    me = await client.get("/me")
     assert me.status_code == 200
     assert me.json()["email"] == email
 
-    bad = client.post("/auth/login", json={"email": email, "password": "wrong"})
+    bad = await client.post("/auth/login", json={"email": email, "password": "wrong"})
     assert bad.status_code == 401
 
-    logout = client.post("/auth/logout", headers=_csrf_headers(client))
+    logout = await client.post("/auth/logout", headers=_csrf_headers(client))
     assert logout.status_code == 200
     assert not client.cookies.get(COOKIE_NAME)
 
 
-def test_invalid_and_expired_tokens_rejected(client: TestClient):
+async def test_invalid_and_expired_tokens_rejected(client: AsyncClient):
     bogus = jwt.encode({"sub": "fake", "exp": 0}, "other-secret", algorithm="HS256")
     client.cookies.set(COOKIE_NAME, bogus, domain="testserver", path="/")
-    res = client.get("/me")
+    res = await client.get("/me")
     assert res.status_code == 401
 
     with Session(engine) as session:
@@ -99,7 +101,7 @@ def test_invalid_and_expired_tokens_rejected(client: TestClient):
         session.refresh(user)
     expired = create_access_token(user_id=user.id, email=user.email, role=user.role, ttl_seconds=-5)
     client.cookies.set(COOKIE_NAME, expired, domain="testserver", path="/")
-    res = client.get("/me")
+    res = await client.get("/me")
     assert res.status_code == 401
 
     with Session(engine) as session:
@@ -114,23 +116,23 @@ def test_invalid_and_expired_tokens_rejected(client: TestClient):
         session.refresh(inactive)
     token = create_access_token(user_id=inactive.id, email=inactive.email, role=inactive.role)
     client.cookies.set(COOKIE_NAME, token, domain="testserver", path="/")
-    res = client.get("/me")
+    res = await client.get("/me")
     assert res.status_code in (401, 403)
 
 
-def test_google_login_sets_state_and_redirect(client: TestClient):
-    res = client.get("/auth/google/login?next=/dashboard", follow_redirects=False)
+async def test_google_login_sets_state_and_redirect(client: AsyncClient):
+    res = await client.get("/auth/google/login?next=/dashboard", follow_redirects=False)
     assert res.status_code in (302, 307)
     assert "accounts.google.com" in res.headers["location"]
     assert client.cookies.get(OAUTH_STATE_COOKIE)
     assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('\"') == "/dashboard"
 
-    evil = client.get("/auth/google/login?next=https://evil.example/phish", follow_redirects=False)
+    evil = await client.get("/auth/google/login?next=https://evil.example/phish", follow_redirects=False)
     assert evil.status_code in (302, 307)
     assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('\"') == "/dashboard"
 
 
-def test_google_callback_creates_user_and_sets_cookie(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+async def test_google_callback_creates_user_and_sets_cookie(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     async def fake_exchange(code: str, client_id: str, client_secret: str, redirect_url: str):
         return {"access_token": "token", "id_token": "ignored"}
 
@@ -141,16 +143,16 @@ def test_google_callback_creates_user_and_sets_cookie(client: TestClient, monkey
 
     monkeypatch.setattr(auth_routes, "_exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(auth_routes, "_fetch_google_profile", fake_profile)
-    login = client.get("/auth/google/login?next=/dashboard", follow_redirects=False)
+    login = await client.get("/auth/google/login?next=/dashboard", follow_redirects=False)
     assert login.status_code in (302, 307)
     state = (client.cookies.get(OAUTH_STATE_COOKIE) or "").strip('\"')
     assert state
-    res = client.get(f"/auth/google/callback?code=abc&state={state}", follow_redirects=False)
+    res = await client.get(f"/auth/google/callback?code=abc&state={state}", follow_redirects=False)
     assert res.status_code in (302, 303, 307)
     assert client.cookies.get(COOKIE_NAME)
 
 
-def test_get_me_requires_cookie(client: TestClient):
+async def test_get_me_requires_cookie(client: AsyncClient):
     client.cookies.clear()
-    res = client.get("/me")
+    res = await client.get("/me")
     assert res.status_code == 401

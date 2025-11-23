@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import os
 
@@ -33,6 +33,10 @@ class BaseRateLimiterBackend:
         return None
 
 
+def _utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 class MemoryRateLimiterBackend(BaseRateLimiterBackend):
     def __init__(self) -> None:
         self._buckets: dict[str, dict[str, float]] = {}
@@ -48,7 +52,7 @@ class MemoryRateLimiterBackend(BaseRateLimiterBackend):
         return bucket["count"] <= max_requests
 
     def record_429(self, ip: str, path: str) -> None:
-        self._recent.append({"ip": ip, "path": path, "ts": datetime.utcnow().isoformat() + "Z"})
+        self._recent.append({"ip": ip, "path": path, "ts": _utc_timestamp()})
 
     def recent_429(self) -> list[dict]:
         return list(self._recent)
@@ -75,7 +79,7 @@ class RedisRateLimiterBackend(BaseRateLimiterBackend):
             return True
 
     def record_429(self, ip: str, path: str) -> None:
-        entry = {"ip": ip, "path": path, "ts": datetime.utcnow().isoformat() + "Z"}
+        entry = {"ip": ip, "path": path, "ts": _utc_timestamp()}
         try:
             self._client.rpush(self.RECENT_KEY, json.dumps(entry))
             self._client.ltrim(self.RECENT_KEY, -self._max_events, -1)

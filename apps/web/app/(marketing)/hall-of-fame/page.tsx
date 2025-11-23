@@ -3,16 +3,10 @@ import { getHallOfFame, getMembers } from "@/lib/api";
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
 import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
 import { ChampionGlow } from "@/components/parliament/ChampionGlow";
+import { getServerTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
-import { Suspense } from "react";
-
-const sortOptions = [
-  { value: "top", label: "Top" },
-  { value: "recent", label: "Most recent" },
-  { value: "closest", label: "Closest debates" },
-];
 
 function toDate(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -24,6 +18,12 @@ export default async function HallOfFamePage({
 }: {
   searchParams?: Promise<Record<string, string | string[]>>;
 }) {
+  const { t } = await getServerTranslations();
+  const sortOptions = [
+    { value: "top", label: t("hall.filters.sort.top") },
+    { value: "recent", label: t("hall.filters.sort.recent") },
+    { value: "closest", label: t("hall.filters.sort.closest") },
+  ];
   const resolved = (await Promise.resolve(searchParams ?? {})) as Record<string, string | string[]>;
   const sort = typeof resolved?.sort === "string" ? resolved.sort : "top";
   const model = typeof resolved?.model === "string" ? resolved.model : undefined;
@@ -35,7 +35,7 @@ export default async function HallOfFamePage({
     getMembers().catch(() => ({ members: [] })),
   ]);
   const members = Array.isArray((membersPayload as any)?.members) ? (membersPayload as any).members : [];
-  const modelOptions = [{ id: "", name: "All models" }, ...members.map((m: any) => ({ id: m.name ?? m.id, name: m.name ?? m.id }))];
+  const modelOptions = [{ id: "", name: t("hall.filters.modelAll") }, ...members.map((m: any) => ({ id: m.name ?? m.id, name: m.name ?? m.id }))];
 
   if (!items || items.length === 0) {
     return (
@@ -43,21 +43,19 @@ export default async function HallOfFamePage({
         <div className="flex items-center gap-3">
           <RosettaChamberLogo size={40} />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Hall of Fame</p>
-            <h1 className="text-3xl font-semibold text-stone-900">Distinguished Debates of the House of AI</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("hall.kicker")}</p>
+            <h1 className="text-3xl font-semibold text-stone-900">{t("hall.title")}</h1>
           </div>
         </div>
         <div className="rounded-3xl border border-dashed border-stone-200 bg-white/80 p-6 text-center shadow-sm">
-          <p className="text-base font-semibold text-stone-900">No Hall of Fame debates yet</p>
-          <p className="mt-2 text-sm text-stone-600">
-            Once you’ve had a few debates where a model wins clearly, they’ll appear here as Consultaion champions.
-          </p>
+          <p className="text-base font-semibold text-stone-900">{t("hall.empty.title")}</p>
+          <p className="mt-2 text-sm text-stone-600">{t("hall.empty.description")}</p>
           <div className="mt-4">
             <Link
               href="/"
               className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-500"
             >
-              Run your first debate
+              {t("hall.empty.cta")}
             </Link>
           </div>
         </div>
@@ -71,20 +69,17 @@ export default async function HallOfFamePage({
         <div className="flex items-center gap-3">
           <RosettaChamberLogo size={40} className="drop-shadow-sm" />
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-200">Hall of Fame</p>
-            <h1 className="text-3xl font-semibold text-stone-900 dark:text-amber-50">Distinguished Debates of the House of AI</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-200">{t("hall.kicker")}</p>
+            <h1 className="text-3xl font-semibold text-stone-900 dark:text-amber-50">{t("hall.title")}</h1>
           </div>
         </div>
-        <p className="max-w-3xl text-sm text-stone-700 dark:text-stone-300">
-          Debates where one model’s answer became the Consultaion champion. Browse prompts, winning personas, and jump
-          into the full debate transcript.
-        </p>
+        <p className="max-w-3xl text-sm text-stone-700 dark:text-stone-300">{t("hall.description")}</p>
       </header>
 
       <form className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4 shadow-sm dark:border-amber-900/40 dark:bg-stone-900/70" method="get">
         <div className="grid gap-4 md:grid-cols-3">
           <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
-            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Model</span>
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.model")}</span>
             <select name="model" defaultValue={model ?? ""} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50">
               {modelOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>
@@ -94,7 +89,7 @@ export default async function HallOfFamePage({
             </select>
           </label>
           <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
-            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Start date</span>
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.startDate")}</span>
             <input
               type="date"
               name="start"
@@ -103,7 +98,7 @@ export default async function HallOfFamePage({
             />
           </label>
           <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
-            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">End date</span>
+            <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.endDate")}</span>
             <input
               type="date"
               name="end"
@@ -114,7 +109,7 @@ export default async function HallOfFamePage({
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">Sort</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.sort")}</span>
             <select name="sort" defaultValue={sort} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50">
               {sortOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -127,29 +122,27 @@ export default async function HallOfFamePage({
             type="submit"
             className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
           >
-            Apply
+            {t("hall.filters.apply")}
           </button>
         </div>
       </form>
 
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-6 text-sm text-stone-600">
-          No debates available yet. Run a new session to populate the Hall of Fame.
-        </div>
+        <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-6 text-sm text-stone-600">{t("hall.notice.emptyFiltered")}</div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {items.map((card: any) => (
             <ChampionGlow key={card.id} active={true}>
               <article className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
                 <div className="mb-3 space-y-2">
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">Prompt</p>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">{t("hall.card.prompt")}</p>
                   <p className="line-clamp-3 text-sm leading-relaxed text-stone-900">{card.prompt}</p>
                 </div>
                 <div className="mb-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
                   <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-amber-800">
                     <span className="inline-flex items-center gap-2">
                       <RosettaGlyphMini className="h-4 w-4" />
-                      Champion
+                      {t("hall.card.championLabel")}
                     </span>
                     {typeof card.champion_score === "number" ? (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 font-mono text-amber-800">
@@ -158,23 +151,21 @@ export default async function HallOfFamePage({
                     ) : null}
                   </div>
                   <p className="mt-1 text-sm font-semibold text-stone-900">
-                    {card.champion ?? "Champion unavailable"}
+                    {card.champion ?? t("hall.card.noChampion")}
                     {typeof card.runner_up_score === "number" && typeof card.champion_score === "number" ? (
                       <span className="ml-2 text-xs font-normal text-amber-700">
-                        Won by {(card.champion_score - card.runner_up_score).toFixed(2)}
+                        {t("hall.card.winDeltaPrefix")} {(card.champion_score - card.runner_up_score).toFixed(2)}
                       </span>
                     ) : (
                       <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[0.7rem] text-amber-800">
-                        Mock run
+                        {t("hall.card.mockBadge")}
                       </span>
                     )}
                   </p>
                   {card.champion_excerpt ? (
                     <p className="mt-2 line-clamp-3 text-sm text-stone-800">{card.champion_excerpt}</p>
                   ) : (
-                    <p className="mt-2 text-sm text-stone-600">
-                      Champion answer unavailable. This debate may have been generated in mock or test mode.
-                    </p>
+                    <p className="mt-2 text-sm text-stone-600">{t("hall.card.noExcerpt")}</p>
                   )}
                 </div>
                 <div className="flex-1" />
@@ -182,7 +173,7 @@ export default async function HallOfFamePage({
                   href={`/runs/${card.id}`}
                   className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:border-amber-400 hover:text-amber-900"
                 >
-                  View debate →
+                  {t("hall.card.cta")} →
                 </Link>
               </article>
             </ChampionGlow>

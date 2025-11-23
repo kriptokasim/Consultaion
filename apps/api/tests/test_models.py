@@ -1,10 +1,13 @@
 import asyncio
+import atexit
 import os
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import BackgroundTasks
+import pytest
+from fastapi import BackgroundTasks, HTTPException
 from starlette.requests import Request
 
 os.environ.setdefault("JWT_SECRET", "test-secret")
@@ -12,9 +15,22 @@ os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("COOKIE_SECURE", "0")
 os.environ["RL_MAX_CALLS"] = "1000"
 os.environ["AUTH_RL_MAX_CALLS"] = "1000"
+fd, temp_path = tempfile.mkstemp(prefix="consultaion_models_", suffix=".db")
+os.close(fd)
+os.environ["DATABASE_URL"] = f"sqlite:///{temp_path}"
+
+
+def _cleanup_models_db():
+    try:
+        Path(temp_path).unlink()
+    except OSError:
+        pass
+
+
+atexit.register(_cleanup_models_db)
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from billing.models import BillingUsage  # noqa: E402
+from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from billing.routes import get_model_usage  # noqa: E402
 from billing.service import _current_period  # noqa: E402
 from database import engine, init_db  # noqa: E402
@@ -24,7 +40,7 @@ from models import User  # noqa: E402
 from routes.debates import create_debate  # noqa: E402
 import agents as agents_module  # noqa: E402
 from schemas import DebateCreate  # noqa: E402
-from sqlmodel import Session  # noqa: E402
+from sqlmodel import Session, select  # noqa: E402
 from auth import get_optional_user  # noqa: E402
 
 
@@ -46,6 +62,21 @@ def _dummy_request(path: str = "/debates") -> Request:
     return Request(scope)
 
 
+def _ensure_plans(session: Session) -> None:
+    existing = session.exec(select(BillingPlan)).first()
+    if existing:
+        return
+    session.add(
+        BillingPlan(
+            slug="free",
+            name="Free",
+            is_default_free=True,
+            limits={"max_debates_per_month": 5, "exports_enabled": True},
+        )
+    )
+    session.commit()
+
+
 def test_models_endpoint_lists_entries(monkeypatch):
     monkeypatch.setenv("USE_MOCK", "1")
     models = list_enabled_models()
@@ -58,13 +89,16 @@ def test_create_debate_invalid_model(monkeypatch):
     init_db()
     body = DebateCreate(prompt="This is a sufficiently long prompt text", model_id="nope")
     with Session(engine) as session:
-        try:
-            background_tasks = BackgroundTasks()
-            request = _dummy_request()
-            asyncio.run(create_debate(body, background_tasks, request, session, None))  # type: ignore[arg-type]
-            assert False, "Expected HTTPException for invalid model id"
-        except Exception as exc:
-            assert "model" in str(exc)
+        _ensure_plans(session)
+        user = User(id=str(uuid.uuid4()), email="model-test@example.com", password_hash="secret", role="user")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        background_tasks = BackgroundTasks()
+        request = _dummy_request()
+        with pytest.raises(HTTPException) as excinfo:
+            asyncio.run(create_debate(body, background_tasks, request, session, current_user=user))
+        assert excinfo.value.status_code == 400
 
 
 def test_call_llm_uses_registry_model(monkeypatch):

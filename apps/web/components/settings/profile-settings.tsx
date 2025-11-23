@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { apiRequest } from "@/lib/apiClient"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/client"
 
 type ProfileResponse = {
   id: string
@@ -30,6 +31,7 @@ export default function ProfileSettings() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { t } = useI18n()
 
   useEffect(() => {
     let cancelled = false
@@ -51,7 +53,7 @@ export default function ProfileSettings() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError("Unable to load profile. Please check your session.")
+          setError(t("settings.profile.loadError"))
         }
       } finally {
         if (!cancelled) {
@@ -89,7 +91,7 @@ export default function ProfileSettings() {
         body: payload,
       })) as ProfileResponse
       setProfile(updated)
-      setMessage("Profile updated.")
+      setMessage(t("settings.profile.saved"))
       setForm({
         display_name: updated.display_name ?? "",
         avatar_url: updated.avatar_url ?? "",
@@ -97,7 +99,7 @@ export default function ProfileSettings() {
         timezone: updated.timezone ?? "",
       })
     } catch (err) {
-      setError("Unable to save profile. Please try again.")
+      setError(t("settings.profile.saveError"))
     } finally {
       setSaving(false)
       setTimeout(() => setMessage(null), 4000)
@@ -107,7 +109,7 @@ export default function ProfileSettings() {
   if (loading) {
     return (
       <div className="card-elevated p-6">
-        <p className="text-sm text-stone-500">Loading profile…</p>
+        <p className="text-sm text-stone-500">{t("settings.profile.loading")}</p>
       </div>
     )
   }
@@ -115,7 +117,7 @@ export default function ProfileSettings() {
   if (!profile) {
     return (
       <div className="card-elevated border border-red-200/70 p-6">
-        <p className="text-sm text-red-600">{error || "You must be signed in to edit your profile."}</p>
+        <p className="text-sm text-red-600">{error || t("settings.profile.signInRequired")}</p>
       </div>
     )
   }
@@ -123,19 +125,19 @@ export default function ProfileSettings() {
   return (
     <form onSubmit={handleSubmit} className="card-elevated p-6">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Account profile</p>
-        <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">Amber-Mocha identity</h1>
-        <p className="text-sm text-stone-600 dark:text-stone-300">Adjust your display name, avatar, and timezone so run receipts feel personal.</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("settings.profile.section.kicker")}</p>
+        <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">{t("settings.profile.section.title")}</h1>
+        <p className="text-sm text-stone-600 dark:text-stone-300">{t("settings.profile.section.description")}</p>
       </div>
       <div className="mt-6 space-y-4">
         <div>
-          <label className="text-sm font-semibold text-stone-700 dark:text-stone-200">Email</label>
+          <label className="text-sm font-semibold text-stone-700 dark:text-stone-200">{t("settings.profile.emailLabel")}</label>
           <p className="text-sm text-stone-500">{profile.email}</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-2">
             <label htmlFor="display_name" className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-              Display name
+              {t("settings.profile.displayName")}
             </label>
             <input
               id="display_name"
@@ -144,12 +146,12 @@ export default function ProfileSettings() {
               value={form.display_name}
               onChange={handleChange("display_name")}
               className="rounded-2xl border border-amber-200/70 bg-white px-3 py-2 text-sm text-stone-800 shadow-inner focus-visible:ring-amber-500 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-200"
-              placeholder="Amber Operative"
+              placeholder={t("settings.profile.displayPlaceholder")}
             />
           </div>
           <div className="flex flex-col gap-2">
             <label htmlFor="avatar_url" className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-              Avatar URL
+              {t("settings.profile.avatarUrl")}
             </label>
             <input
               id="avatar_url"
@@ -157,13 +159,13 @@ export default function ProfileSettings() {
               value={form.avatar_url}
               onChange={handleChange("avatar_url")}
               className="rounded-2xl border border-amber-200/70 bg-white px-3 py-2 text-sm text-stone-800 shadow-inner focus-visible:ring-amber-500 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-200"
-              placeholder="https://example.com/avatar.png"
+              placeholder={t("settings.profile.avatarPlaceholder")}
             />
           </div>
         </div>
         <div className="flex flex-col gap-2">
           <label htmlFor="bio" className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-            Bio
+            {t("settings.profile.bio")}
           </label>
           <textarea
             id="bio"
@@ -173,13 +175,15 @@ export default function ProfileSettings() {
             value={form.bio}
             onChange={handleChange("bio")}
             className="rounded-2xl border border-amber-200/70 bg-white px-3 py-2 text-sm text-stone-800 shadow-inner focus-visible:ring-amber-500 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-200"
-            placeholder="AI parliament builder, policy tinkerer, midnight pilot."
+            placeholder={t("settings.profile.bioPlaceholder")}
           />
-          <p className="text-xs text-stone-400">{form.bio.length}/1000</p>
+          <p className="text-xs text-stone-400">
+            {t("settings.profile.bioCountLabel")} {form.bio.length}/1000
+          </p>
         </div>
         <div className="flex flex-col gap-2">
           <label htmlFor="timezone" className="text-sm font-semibold text-stone-700 dark:text-stone-200">
-            Timezone
+            {t("settings.profile.timezone")}
           </label>
           <select
             id="timezone"
@@ -188,7 +192,7 @@ export default function ProfileSettings() {
             onChange={handleChange("timezone")}
             className="rounded-2xl border border-amber-200/70 bg-white px-3 py-2 text-sm text-stone-800 shadow-inner focus-visible:ring-amber-500 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-200"
           >
-            <option value="">Select a timezone</option>
+            <option value="">{t("settings.profile.timezonePlaceholder")}</option>
             {TIMEZONES.map((tz) => (
               <option key={tz} value={tz}>
                 {tz}
@@ -206,7 +210,7 @@ export default function ProfileSettings() {
             saving && "opacity-70",
           )}
         >
-          {saving ? "Saving…" : "Save profile"}
+          {saving ? t("settings.profile.saving") : t("settings.profile.save")}
         </button>
         {message ? <span className="text-sm text-emerald-600">{message}</span> : null}
         {error ? <span className="text-sm text-red-600">{error}</span> : null}

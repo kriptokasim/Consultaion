@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from sqlmodel import Session, select
 
 fd, temp_path = tempfile.mkstemp(prefix="consultaion_profile_", suffix=".db")
@@ -38,24 +38,26 @@ from models import User  # noqa: E402
 
 init_db()
 
+pytestmark = pytest.mark.anyio
 
 @pytest.fixture
-def client():
-    with TestClient(app) as test_client:
+async def client():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
         yield test_client
 
 
-def _register_and_login(client: TestClient, email: str, password: str) -> None:
-    client.post("/auth/register", json={"email": email, "password": password})
-    res = client.post("/auth/login", json={"email": email, "password": password})
+async def _register_and_login(client: AsyncClient, email: str, password: str) -> None:
+    await client.post("/auth/register", json={"email": email, "password": password})
+    res = await client.post("/auth/login", json={"email": email, "password": password})
     assert res.status_code == 200
 
 
-def test_profile_read_write_happy_path(client: TestClient):
+async def test_profile_read_write_happy_path(client: AsyncClient):
     email = f"profile-{uuid.uuid4().hex[:6]}@example.com"
-    _register_and_login(client, email, "ProfilePass123!")
+    await _register_and_login(client, email, "ProfilePass123!")
 
-    res = client.get("/me/profile")
+    res = await client.get("/me/profile")
     assert res.status_code == 200
     payload = res.json()
     assert payload["email"] == email
@@ -66,7 +68,7 @@ def test_profile_read_write_happy_path(client: TestClient):
         "bio": "Amber mocha pilot",
         "timezone": "Europe/Istanbul",
     }
-    updated = client.put("/me/profile", json=update, headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")})
+    updated = await client.put("/me/profile", json=update, headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")})
     assert updated.status_code == 200
     data = updated.json()
     assert data["display_name"] == "Amber"
@@ -79,20 +81,20 @@ def test_profile_read_write_happy_path(client: TestClient):
         assert user.timezone == "Europe/Istanbul"
 
 
-def test_profile_requires_auth(client: TestClient):
+async def test_profile_requires_auth(client: AsyncClient):
     client.cookies.clear()
-    res = client.get("/me/profile")
+    res = await client.get("/me/profile")
     assert res.status_code == 401
     client.cookies.set("csrf_token", "fake", domain="testserver", path="/")
-    res = client.put("/me/profile", json={"display_name": "Nope"}, headers={"X-CSRF-Token": "fake"})
+    res = await client.put("/me/profile", json={"display_name": "Nope"}, headers={"X-CSRF-Token": "fake"})
     assert res.status_code == 403
 
 
-def test_profile_validation_errors(client: TestClient):
+async def test_profile_validation_errors(client: AsyncClient):
     email = f"profile-err-{uuid.uuid4().hex[:6]}@example.com"
-    _register_and_login(client, email, "ProfileValidate123!")
+    await _register_and_login(client, email, "ProfileValidate123!")
     too_long = "x" * 2000
-    res = client.put(
+    res = await client.put(
         "/me/profile",
         json={"bio": too_long},
         headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")},

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import sqlalchemy as sa
@@ -102,18 +102,7 @@ async def _resolve_sse_status() -> tuple[str, Optional[bool]]:
 
 @router.get("/healthz")
 async def healthz():
-    backend, redis_ok = ensure_rate_limiter_ready()
-    models_enabled = list_enabled_models()
-    sse_backend, sse_redis_ok = await _resolve_sse_status()
-    return {
-        "status": "ok",
-        "rate_limit_backend": backend,
-        "redis_ok": redis_ok,
-        "models_available": bool(models_enabled),
-        "enabled_model_count": len(models_enabled),
-        "sse_backend": sse_backend,
-        "sse_redis_ok": sse_redis_ok,
-    }
+    return {"status": "ok", "version": settings.APP_VERSION}
 
 
 @router.get("/readyz")
@@ -361,7 +350,7 @@ async def get_rate_limit_snapshot(_: Any = Depends(get_current_admin)):
 
 @router.get("/stats/debates", response_model=DebateSummary)
 async def get_debate_summary(_: Any = Depends(get_current_admin), session: Session = Depends(get_session)):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     total = session.exec(select(func.count()).select_from(Debate)).one()
     last_24h = session.exec(
         select(func.count()).select_from(Debate).where(Debate.created_at >= now - timedelta(days=1))

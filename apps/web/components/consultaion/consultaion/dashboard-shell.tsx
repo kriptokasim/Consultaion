@@ -3,8 +3,8 @@
 import type React from "react"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { FileText, PlayCircle, Settings, Search, Moon, Sun, Shield, Scale, BarChart3, Trophy, BookOpen, Award, Menu, X, Sparkles } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { FileText, PlayCircle, Settings, Search, Moon, Sun, Shield, Scale, BarChart3, Trophy, BookOpen, Award, Menu, X, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -36,11 +36,18 @@ type CurrentUserProfile = {
   is_admin?: boolean
 }
 
-export default function DashboardShell({ children }: { children: React.ReactNode }) {
+type DashboardShellProps = {
+  children: React.ReactNode
+  initialProfile?: CurrentUserProfile | null
+}
+
+export default function DashboardShell({ children, initialProfile }: DashboardShellProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [theme, setTheme] = useState<"light" | "dark">("light")
-  const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
-  const [loadingProfile, setLoadingProfile] = useState(true)
+  const hasInitialProfile = typeof initialProfile !== "undefined"
+  const [profile, setProfile] = useState<CurrentUserProfile | null>(hasInitialProfile ? initialProfile ?? null : null)
+  const [loadingProfile, setLoadingProfile] = useState(!hasInitialProfile)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   const { t } = useI18n()
@@ -65,6 +72,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   }, [theme])
 
   useEffect(() => {
+    if (hasInitialProfile) {
+      setProfile(initialProfile ?? null)
+      setLoadingProfile(false)
+      return
+    }
     let cancelled = false
     const loadProfile = async () => {
       try {
@@ -91,7 +103,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     return () => {
       cancelled = true
     }
-  }, [apiBase])
+  }, [apiBase, hasInitialProfile, initialProfile])
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark")
@@ -125,7 +137,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           )}
           aria-label="Primary navigation"
         >
-          <Link href="/home" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
+          <Link href="/dashboard" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
             <RosettaChamberLogo size={32} className="drop-shadow" />
             <div className="leading-tight">
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700">Consultaion</p>
@@ -157,12 +169,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             })}
           </nav>
           <div className="mt-4 space-y-3 border-t border-sidebar-border pt-4">
-            <div className="rounded-xl border border-amber-100/80 bg-amber-50/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4" aria-hidden="true" />
-                {t("nav.badge")}
-              </div>
-            </div>
             {profile ? (
               <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent/80 px-3 py-3 shadow-inner shadow-amber-900/5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
@@ -184,7 +190,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             type="button"
             className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full p-1 text-amber-800 transition hover:bg-amber-100 md:hidden"
             onClick={() => setSidebarOpen(false)}
-            aria-label="Close navigation"
+            aria-label={t("dashboardShell.nav.close")}
           >
             <X className="h-5 w-5" />
           </button>
@@ -199,11 +205,22 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 type="button"
                 className="inline-flex items-center justify-center rounded-lg border border-amber-200/80 bg-white/70 p-2 text-amber-800 shadow-sm transition hover:-translate-y-[1px] hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-amber-500 md:hidden"
                 onClick={() => setSidebarOpen(true)}
-                aria-label="Open navigation"
+                aria-label={t("dashboardShell.nav.open")}
               >
                 <Menu className="h-4 w-4" />
               </button>
-              <Link href="/home" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
+              {pathname !== "/dashboard" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden md:inline-flex border-amber-200/80 text-amber-900 hover:bg-amber-50"
+                  onClick={() => router.back()}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  {t("nav.goBack")}
+                </Button>
+              ) : null}
+              <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
                 <RosettaChamberLogo size={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-amber-900">
                   Consultaion
@@ -211,13 +228,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </Link>
               <div className="relative w-64 lg:w-80">
                 <label className="sr-only" htmlFor="global-search">
-                  Search runs, prompts, or results
+                  {t("dashboardShell.search.aria")}
                 </label>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
                 <Input
                   id="global-search"
                   type="search"
-                  placeholder="Search runs, prompts, results..."
+                  placeholder={t("dashboardShell.search.placeholder")}
                   className="search-elevated w-full rounded-xl border-stone-200 bg-white pl-10 text-sm text-stone-800 placeholder:text-stone-500 shadow-inner shadow-amber-900/5 focus-visible:ring-amber-500 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card dark:border-amber-900/50 dark:bg-stone-900 dark:text-amber-50 dark:placeholder:text-amber-200/70"
                 />
               </div>
@@ -231,10 +248,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                     asChild
                     className="hidden sm:inline-flex border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
                   >
-                    <Link href="/dashboard">Dashboard</Link>
+                    <Link href="/dashboard">{t("nav.dashboard")}</Link>
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleLogout} disabled={loadingProfile} className="hidden sm:inline-flex">
-                    Logout
+                    {t("auth.logout")}
                   </Button>
                   <div className="ml-1 flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5">
                     {(profile.display_name || profile.email).charAt(0).toUpperCase()}
@@ -245,17 +262,17 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   variant="outline"
                   size="sm"
                   asChild
-                  aria-label="Sign in"
+                  aria-label={t("nav.signIn")}
                   className="hidden sm:inline-flex border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
                 >
-                  <Link href="/login">Sign in</Link>
+                  <Link href="/login">{t("nav.signIn")}</Link>
                 </Button>
               )}
             </div>
           </header>
 
           {/* Page content */}
-          <main className="flex-1 overflow-auto bg-background/60 px-4 pb-8 pt-4 md:px-8">{children}</main>
+          <main id="main-content" className="flex-1 overflow-auto bg-background/60 px-4 pb-8 pt-4 md:px-8">{children}</main>
         </div>
       </div>
     </ToastProvider>

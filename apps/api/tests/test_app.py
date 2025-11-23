@@ -66,6 +66,7 @@ from main import (  # noqa: E402
     admin_ops_summary,
     create_debate,
     create_team,
+    export_debate_report,
     export_scores_csv,
     get_debate,
     get_debate_events,
@@ -281,6 +282,22 @@ def test_export_scores_csv_endpoint():
     text = csv_response.body.decode()
     assert "persona,judge,score,rationale,timestamp" in text
     assert "Analyst" in text
+
+
+def test_export_markdown_streams_content():
+    user = _register_user("export-md@example.com", "secret123")
+    debate_id = _create_debate_for_user(user, "Markdown export prompt")
+    with Session(engine) as session:
+        response = asyncio.run(
+            export_debate_report(
+                debate_id,
+                session=session,
+                current_user=user,
+            )
+        )
+    body = response.body.decode()
+    assert f"# Debate {debate_id}" in body
+    assert "Markdown export prompt" in body
 
 
 def test_billing_usage_increments_on_debate_create():

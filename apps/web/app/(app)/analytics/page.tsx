@@ -1,6 +1,9 @@
 import AnalyticsDashboard, { AnalyticsActivityItem, AnalyticsData, AnalyticsWinRate } from "@/components/parliament/AnalyticsDashboard";
 import { getMyDebates } from "@/lib/api";
 import { getMe } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { getServerTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,21 +20,29 @@ type DebateRecord = {
 };
 
 export default async function AnalyticsPage() {
+  const { t } = await getServerTranslations();
   const profile = await getMe();
   if (!profile) {
+    redirect("/login?next=/analytics");
+  }
+  const data = await getMyDebates({ limit: 100 });
+  const analytics = buildAnalytics(data?.items ?? []);
+  if (!analytics.totals.debates) {
     return (
-      <main id="main" className="flex h-full items-center justify-center py-6">
-        <div className="rounded-lg border border-border bg-card p-6 text-center">
-          <p className="text-sm text-muted-foreground">Sign in to view analytics.</p>
-          <a href="/login" className="mt-3 inline-flex items-center rounded bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
-            Go to Login
-          </a>
+      <main id="main" className="flex h-full items-center justify-center p-6">
+        <div className="space-y-3 rounded-3xl border border-amber-200/70 bg-white p-6 text-center shadow-sm">
+          <h2 className="text-xl font-semibold text-stone-900">{t("analytics.empty.overviewTitle")}</h2>
+          <p className="text-sm text-stone-600">{t("analytics.empty.overviewDescription")}</p>
+          <Link
+            href="/live"
+            className="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-500"
+          >
+            {t("analytics.empty.cta")}
+          </Link>
         </div>
       </main>
     );
   }
-  const data = await getMyDebates({ limit: 100 });
-  const analytics = buildAnalytics(data?.items ?? []);
   return (
     <main id="main" className="space-y-6 p-4">
       <AnalyticsDashboard data={analytics} />

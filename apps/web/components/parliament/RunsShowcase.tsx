@@ -6,6 +6,7 @@ import { FileText, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "@/components/parliament/StatusBadge";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
 
 export type RunSummary = {
   id: string;
@@ -27,6 +28,7 @@ const pillTone: Record<string, string> = {
 };
 
 export default function RunsShowcase({ runs }: RunsShowcaseProps) {
+  const { t } = useI18n();
   const visibleRuns = useMemo(() => runs.slice(0, 8), [runs]);
 
   if (!visibleRuns.length) return null;
@@ -47,7 +49,7 @@ export default function RunsShowcase({ runs }: RunsShowcaseProps) {
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-700 dark:text-amber-200">
-                  Run
+                  {t("runs.showcase.runLabel")}
                 </p>
                 <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 line-clamp-1">
                   {run.id}
@@ -60,22 +62,24 @@ export default function RunsShowcase({ runs }: RunsShowcaseProps) {
           <div className="mt-4 flex items-center justify-between text-xs text-stone-600 dark:text-amber-100/70">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" aria-hidden="true" />
-              <span>Updated {new Date(run.updated_at ?? run.created_at).toLocaleString()}</span>
+              <span>
+                {t("runs.showcase.updated")} {new Date(run.updated_at ?? run.created_at).toLocaleString()}
+              </span>
             </div>
             <span className="rounded-full border border-amber-200/70 bg-white/80 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 shadow-inner shadow-amber-900/5 dark:border-amber-900/30 dark:bg-amber-950/30 dark:text-amber-100">
-              Status: {run.status || "queued"}
+              {t("runs.showcase.status")} {run.status || "queued"}
             </span>
           </div>
           <div className="mt-4 flex items-center gap-2">
             <Button asChild size="sm" className="rounded-lg">
-              <Link href={`/runs/${run.id}`} aria-label={`View run ${run.id}`}>
-                View
+              <Link href={`/runs/${run.id}`} aria-label={`${t("runs.showcase.viewAria")} ${run.id}`}>
+                {t("runs.showcase.view")}
               </Link>
             </Button>
             <Button asChild variant="ghost" size="sm" className="gap-1 text-amber-800 dark:text-amber-100">
-              <Link href={`/runs/${run.id}?export=1`} aria-label={`Export run ${run.id}`}>
+              <Link href={`/runs/${run.id}?export=1`} aria-label={`${t("runs.showcase.exportAria")} ${run.id}`}>
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
-                Export
+                {t("runs.showcase.export")}
               </Link>
             </Button>
           </div>

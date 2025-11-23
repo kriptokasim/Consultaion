@@ -1,7 +1,7 @@
 import json
 import logging
 from contextvars import ContextVar, Token
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
@@ -29,7 +29,7 @@ class RequestIdFilter(logging.Filter):
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: Dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

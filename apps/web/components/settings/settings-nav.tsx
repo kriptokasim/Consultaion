@@ -4,24 +4,26 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/client"
 
 const items = [
-  { name: "Overview", href: "/settings" },
-  { name: "Profile", href: "/settings/profile" },
-  { name: "Billing", href: "/settings/billing" },
+  { nameKey: "settings.nav.overview", href: "/settings" },
+  { nameKey: "settings.nav.profile", href: "/settings/profile" },
+  { nameKey: "settings.nav.billing", href: "/settings/billing" },
 ]
 
 export default function SettingsNav() {
   const pathname = usePathname()
+  const { t } = useI18n()
   return (
     <nav className="card-elevated space-y-1 p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Settings</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("settings.nav.title")}</p>
       <div className="mt-3 space-y-1 text-sm font-semibold text-stone-600">
         {items.map((item) => {
           const active = pathname === item.href
           return (
             <Link
-              key={item.name}
+              key={item.nameKey}
               href={item.href}
               className={cn(
                 "block rounded-xl px-3 py-2 transition-all",
@@ -30,7 +32,7 @@ export default function SettingsNav() {
                   : "text-stone-600 hover:bg-amber-50/70 hover:text-amber-900",
               )}
             >
-              {item.name}
+              {t(item.nameKey)}
             </Link>
           )
         })}

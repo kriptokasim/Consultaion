@@ -26,6 +26,9 @@ def upgrade() -> None:
     is_postgres = bind.dialect.name == "postgresql"
     uuid_type = sa.dialects.postgresql.UUID(as_uuid=True) if is_postgres else sa.String(length=36)
 
+    def _uuid():
+        return uuid.uuid4() if is_postgres else str(uuid.uuid4())
+
     promotion_table = sa.table(
         "promotions",
         sa.column("id", uuid_type),
@@ -42,7 +45,7 @@ def upgrade() -> None:
         promotion_table,
         [
             {
-                "id": uuid.uuid4(),
+                "id": _uuid(),
                 "location": "dashboard_sidebar",
                 "title": "Upgrade to Pro",
                 "body": "Increase your monthly debates, unlock exports, and add more models to each run.",
@@ -53,7 +56,7 @@ def upgrade() -> None:
                 "target_plan_slug": "free",
             },
             {
-                "id": uuid.uuid4(),
+                "id": _uuid(),
                 "location": "debate_limit_modal",
                 "title": "Need more debates?",
                 "body": "Pro members get 100 debates per month plus priority processing.",

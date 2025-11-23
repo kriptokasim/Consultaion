@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import sqlalchemy as sa
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -22,7 +22,6 @@ from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
 from model_registry import get_default_model, get_model, list_enabled_models
 from orchestrator import run_debate
 from routes.common import (
-    EXPORT_DIR,
     avg_scores_for_debate,
     can_access_debate,
     champion_for_debate,
@@ -136,32 +135,31 @@ async def create_debate(
     background_tasks: BackgroundTasks,
     request: Request,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     ip = request.client.host if request.client else "anonymous"
     allowed = increment_ip_bucket(ip, settings.RL_WINDOW, settings.RL_MAX_CALLS)
     if not allowed:
         record_429(ip, request.url.path)
         raise HTTPException(status_code=429, detail="rate limit exceeded")
-    if current_user:
-        try:
-            reserve_run_slot(session, current_user.id)
-            increment_debate_usage(session, current_user.id)
-        except RateLimitError as exc:
-            payload = {
-                "code": "rate_limit",
-                "reason": exc.code,
-                "detail": exc.detail,
-                "reset_at": exc.reset_at,
-            }
-            record_audit(
-                "rate_limit_block",
-                user_id=current_user.id,
-                target_type="debate",
-                target_id=None,
-                meta=payload,
-            )
-            raise HTTPException(status_code=429, detail=payload) from exc
+    try:
+        reserve_run_slot(session, current_user.id)
+        increment_debate_usage(session, current_user.id)
+    except RateLimitError as exc:
+        payload = {
+            "code": "rate_limit",
+            "reason": exc.code,
+            "detail": exc.detail,
+            "reset_at": exc.reset_at,
+        }
+        record_audit(
+            "rate_limit_block",
+            user_id=current_user.id,
+            target_type="debate",
+            target_id=None,
+            meta=payload,
+        )
+        raise HTTPException(status_code=429, detail=payload) from exc
 
     config = body.config or default_debate_config()
     enabled_models = {m.id: m for m in list_enabled_models()}
@@ -188,7 +186,7 @@ async def create_debate(
         prompt=body.prompt,
         status="queued",
         config=config.model_dump(),
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         model_id=chosen_model_id,
         panel_config=panel.model_dump(),
         engine_version=panel.engine_version,
@@ -211,7 +209,7 @@ async def create_debate(
         )
     record_audit(
         "debate_created",
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
         meta={"prompt": body.prompt},
@@ -387,20 +385,18 @@ async def export_debate_report(
 ):
     increment_export_usage(session, current_user.id)
     data = _build_report(session, debate_id, current_user)
-    filepath = EXPORT_DIR / f"{debate_id}.md"
-    filepath.write_text(_report_to_markdown(data), encoding="utf-8")
+    content = _report_to_markdown(data)
     track_metric("exports_generated")
     record_audit(
         "export_markdown",
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
     )
-    content = filepath.read_text(encoding="utf-8")
-    return Response(
+    return PlainTextResponse(
         content=content,
         media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filepath.name}"'},
+        headers={"Content-Disposition": f'attachment; filename="{debate_id}.md"'},
     )
 
 
@@ -549,7 +545,7 @@ async def export_scores_csv(
     filename = f"scores_{debate_id}.csv"
     record_audit(
         "export_scores_csv",
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
     )

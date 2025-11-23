@@ -1,4 +1,7 @@
+"use client";
+
 import { Activity, ArrowUpRight, BarChart3, Clock, Hash, TrendingUp } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
 
 export interface AnalyticsActivityItem {
   id: string;
@@ -30,43 +33,41 @@ interface AnalyticsDashboardProps {
 }
 
 export default function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
+  const { t } = useI18n();
   return (
     <section className="space-y-6">
       <header className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-[0_20px_45px_rgba(120,113,108,0.12)]">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-          Analytics overview
+          {t("analytics.header.kicker")}
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-3xl font-semibold text-stone-900">Chamber Analytics</h1>
+          <h1 className="text-3xl font-semibold text-stone-900">{t("analytics.header.title")}</h1>
           <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
             <BarChart3 className="h-4 w-4" />
-            Sepia dashboard
+            {t("analytics.header.badge")}
           </span>
         </div>
-        <p className="mt-3 text-sm text-stone-600">
-          Totals update on each debate creation, completion and score export. Filter logic is intentionally
-          lightweight for rapid iteration—heavy analytics belong in the data warehouse.
-        </p>
+        <p className="mt-3 text-sm text-stone-600">{t("analytics.header.description")}</p>
       </header>
 
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard
-          label="Debates total"
+          label={t("analytics.stats.debates")}
           value={data.totals.debates}
           icon={<Hash className="h-4 w-4 text-amber-500" />}
         />
         <StatCard
-          label="Completion rate"
+          label={t("analytics.stats.completionRate")}
           value={`${Math.round(data.totals.completionRate * 100)}%`}
           icon={<TrendingUp className="h-4 w-4 text-amber-500" />}
         />
         <StatCard
-          label="Avg duration"
+          label={t("analytics.stats.avgDuration")}
           value={`${data.totals.avgDurationMinutes.toFixed(1)}m`}
           icon={<Clock className="h-4 w-4 text-amber-500" />}
         />
         <StatCard
-          label="Completed runs"
+          label={t("analytics.stats.completed")}
           value={data.totals.completed}
           icon={<ArrowUpRight className="h-4 w-4 text-amber-500" />}
         />
@@ -77,21 +78,21 @@ export default function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Model win rates
+                {t("analytics.sections.winRates.kicker")}
               </p>
-              <h3 className="text-xl font-semibold text-stone-900">Persona performance</h3>
+              <h3 className="text-xl font-semibold text-stone-900">{t("analytics.sections.winRates.title")}</h3>
             </div>
           </div>
           <div className="mt-6 space-y-4">
             {data.winRates.length === 0 ? (
-              <EmptyState message="No completed debates yet." />
+              <EmptyState message={t("analytics.empty.winRates")} />
             ) : (
               data.winRates.map((rate) => (
                 <div key={rate.persona} className="space-y-2 rounded-xl border border-stone-100 p-4">
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-semibold text-stone-800">{rate.persona}</span>
                     <span className="text-stone-500">
-                      {rate.wins}/{rate.total} wins
+                      {rate.wins}/{rate.total} {t("analytics.winSuffix")}
                     </span>
                   </div>
                   <div className="h-2 rounded-full bg-stone-200">
@@ -112,14 +113,14 @@ export default function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                Score distribution
+                {t("analytics.sections.score.kicker")}
               </p>
-              <h3 className="text-xl font-semibold text-stone-900">Judge ribbons</h3>
+              <h3 className="text-xl font-semibold text-stone-900">{t("analytics.sections.score.title")}</h3>
             </div>
           </div>
           <div className="mt-6 space-y-3">
             {data.scoreDistribution.length === 0 ? (
-              <EmptyState message="No scores recorded." />
+              <EmptyState message={t("analytics.empty.score")} />
             ) : (
               data.scoreDistribution.map((bucket) => (
                 <div key={bucket.label} className="flex items-center gap-3">
@@ -145,11 +146,11 @@ export default function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
       <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
           <Activity className="h-4 w-4 text-amber-500" />
-          Recent activity
+          {t("analytics.sections.activity.kicker")}
         </div>
         <div className="mt-4 divide-y divide-stone-100">
           {data.activity.length === 0 ? (
-            <EmptyState message="No recent events logged." />
+            <EmptyState message={t("analytics.empty.activity")} />
           ) : (
             data.activity.map((item) => (
               <div

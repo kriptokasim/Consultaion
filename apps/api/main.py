@@ -113,6 +113,8 @@ async def lifespan(app: FastAPI):
         ensure_rate_limiter_ready(raise_on_failure=settings.RATE_LIMIT_BACKEND == "redis")
     except Exception as exc:
         logger.error("Rate limiter backend check failed: %s", exc)
+        if not settings.IS_LOCAL_ENV:
+            raise
     try:
         models = list_enabled_models()
         if not models:

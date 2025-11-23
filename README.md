@@ -5,13 +5,15 @@ A platform that produces the best answer via multi-agent debate/voting.
 
 ## Quick Start
 1. `cp .env.example .env` and set `DATABASE_URL`/LLM keys.
-2. Backend: `cd apps/api && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
+2. Backend: `cd apps/api && python3.11 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
 3. Run migrations: `alembic upgrade head`.
 4. Frontend: `cd apps/web && npm install`.
 5. `cd infra && docker compose up --build` (starts FastAPI, Next.js, Postgres).
 6. Optional for local smoketests: set `FAST_DEBATE=1` to bypass the full LLM loop and return mock events instantly.
 
 📚 Need endpoint details or diagrams? See `docs/API.md` and `docs/ARCHITECTURE.md`. Progress against the audit plan lives in `IMPROVEMENT_PLAN.md` / `IMPROVEMENTS_SUMMARY.md`.
+
+> **Python runtime:** The FastAPI backend and its pytest suite currently target **Python 3.11.x**. Running under newer interpreters (3.12/3.13) causes ASGI/TestClient hangs on POST requests, so stick to 3.11 for local dev, CI, and Docker builds until upstream fixes land.
 
 ### Environment Flags
 

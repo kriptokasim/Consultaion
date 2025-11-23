@@ -1,4 +1,6 @@
-import { fetchWithAuth } from "@/lib/auth"
+import { fetchWithAuth, getMe } from "@/lib/auth"
+import { redirect } from "next/navigation"
+import { getServerTranslations } from "@/lib/i18n/server"
 
 export const dynamic = "force-dynamic"
 
@@ -13,6 +15,11 @@ type AdminModelsResponse = {
 }
 
 export default async function AdminOverviewPage() {
+  const profile = await getMe().catch(() => null)
+  if (!profile) {
+    redirect("/login?next=/admin")
+  }
+  const { t } = await getServerTranslations()
   const [usersRes, modelsRes] = await Promise.all([fetchWithAuth("/admin/users"), fetchWithAuth("/admin/models")])
   const usersPayload = (await usersRes.json().catch(() => ({ items: [] }))) as AdminUsersResponse
   const modelsPayload = (await modelsRes.json().catch(() => ({ items: [] }))) as AdminModelsResponse
@@ -31,21 +38,21 @@ export default async function AdminOverviewPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Admin overview</p>
-        <h1 className="heading-serif text-3xl font-semibold text-amber-950 dark:text-amber-50">Parliament control tower</h1>
-        <p className="text-sm text-stone-600 dark:text-stone-300">Snapshot of users, billing mix, and chamber usage.</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("admin.overview.kicker")}</p>
+        <h1 className="heading-serif text-3xl font-semibold text-amber-950 dark:text-amber-50">{t("admin.overview.title")}</h1>
+        <p className="text-sm text-stone-600 dark:text-stone-300">{t("admin.overview.description")}</p>
       </header>
 
       <section className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Total users" value={totalUsers} description={`${adminCount} admin seats`} />
-        <StatCard label="Admin seats" value={adminCount} description="Operators with console access" />
-        <StatCard label="Tokens used (month)" value={Intl.NumberFormat().format(tokensUsed)} description="Approximate across all models" />
+        <StatCard label={t("admin.stats.total")} value={totalUsers} description={`${adminCount} ${t("admin.stats.totalAdmins")}`} />
+        <StatCard label={t("admin.stats.adminSeats")} value={adminCount} description={t("admin.stats.adminDescription")} />
+        <StatCard label={t("admin.stats.tokens")} value={Intl.NumberFormat().format(tokensUsed)} description={t("admin.stats.tokensDescription")} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="card-elevated p-5">
-          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Plan mix</h2>
-          <p className="text-sm text-stone-500 dark:text-stone-400">Breakdown of active plans among current users.</p>
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">{t("admin.plan.title")}</h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400">{t("admin.plan.description")}</p>
           <div className="mt-4 space-y-2">
             {Object.entries(planMix).map(([slug, count]) => (
               <div key={slug} className="flex items-center justify-between rounded-2xl bg-amber-50/60 px-3 py-2 text-sm font-semibold text-amber-900">
@@ -53,12 +60,12 @@ export default async function AdminOverviewPage() {
                 <span>{count}</span>
               </div>
             ))}
-            {Object.keys(planMix).length === 0 ? <p className="text-sm text-stone-500">No users yet.</p> : null}
+            {Object.keys(planMix).length === 0 ? <p className="text-sm text-stone-500">{t("admin.plan.empty")}</p> : null}
           </div>
         </div>
         <div className="card-elevated p-5">
-          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Top models this period</h2>
-          <p className="text-sm text-stone-500 dark:text-stone-400">Quick glance at token-heavy models.</p>
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">{t("admin.models.title")}</h2>
+          <p className="text-sm text-stone-500 dark:text-stone-400">{t("admin.models.description")}</p>
           <div className="mt-4 space-y-2">
             {topModels.length ? (
               topModels.map((model) => (
@@ -68,7 +75,7 @@ export default async function AdminOverviewPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-stone-500">No usage recorded.</p>
+              <p className="text-sm text-stone-500">{t("admin.models.empty")}</p>
             )}
           </div>
         </div>

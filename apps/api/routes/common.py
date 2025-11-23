@@ -1,5 +1,4 @@
 import uuid
-from pathlib import Path
 from typing import Any, Optional
 
 import sqlalchemy as sa
@@ -18,9 +17,6 @@ MAX_CALLS = settings.RL_MAX_CALLS
 WINDOW = settings.RL_WINDOW
 AUTH_MAX_CALLS = settings.AUTH_RL_MAX_CALLS
 AUTH_WINDOW = settings.AUTH_RL_WINDOW
-EXPORT_DIR = Path(settings.EXPORT_DIR)
-EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-
 
 def track_metric(name: str, value: int = 1) -> None:
     if ENABLE_METRICS:

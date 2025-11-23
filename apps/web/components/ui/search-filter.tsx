@@ -16,6 +16,7 @@ type SearchFilterProps = {
   onStatusChange?: (value: string | null) => void;
   statuses?: FilterChip[];
   placeholder?: string;
+  clearLabel?: string;
 };
 
 export default function SearchFilter({
@@ -25,6 +26,7 @@ export default function SearchFilter({
   onStatusChange,
   statuses = [],
   placeholder = "Search by prompt or ID…",
+  clearLabel = "Clear",
 }: SearchFilterProps) {
   const inputId = useId();
   return (
@@ -64,7 +66,7 @@ export default function SearchFilter({
               className="text-xs font-semibold uppercase tracking-wide text-amber-600"
               onClick={() => onStatusChange?.(null)}
             >
-              Clear
+              {clearLabel}
             </button>
           ) : null}
         </div>

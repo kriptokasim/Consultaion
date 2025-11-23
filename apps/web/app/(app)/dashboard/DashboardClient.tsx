@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Play, BarChart3, Trophy, Plus, AlertCircle } from "lucide-react";
+import { Play, BarChart3, Trophy, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { PromotionArea } from "@/components/PromotionArea";
 import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
 import { ApiClientError } from "@/lib/apiClient";
 import type { DebateSummary } from "./types";
+import { useI18n } from "@/lib/i18n/client";
 
 type ModelOption = {
   id: string;
@@ -44,6 +45,7 @@ function statusTone(status?: string | null) {
 }
 
 export default function DashboardClient({ initialDebates, email }: { initialDebates: DebateSummary[]; email?: string | null }) {
+  const { t } = useI18n();
   const [showModal, setShowModal] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [saving, setSaving] = useState(false);
@@ -53,6 +55,12 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
   const [modelError, setModelError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
+  const formatTimestamp = (ts?: string | null) => {
+    if (!ts) return t("dashboard.time.justNow");
+    const date = new Date(ts);
+    if (Number.isNaN(date.getTime())) return t("dashboard.time.justNow");
+    return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -66,22 +74,22 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
         const recommended = items.find((m) => m.recommended) || items[0];
         setSelectedModel(recommended ? recommended.id : null);
         if (!items.length) {
-          setModelError("No models available - please contact the admin.");
+          setModelError(t("dashboard.errors.noModelsAdmin"));
         }
       })
       .catch(() => {
         if (cancelled) return;
-        setModelError("Unable to load models");
+        setModelError(t("dashboard.errors.loadModels"));
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const handleCreate = async () => {
     if (!prompt.trim()) return;
     if (!selectedModel) {
-      setError("No models available.");
+      setError(t("dashboard.errors.noModels"));
       return;
     }
     setSaving(true);
@@ -102,7 +110,7 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
       if (err instanceof ApiClientError && err.status === 402) {
         setLimitModal({ open: true, code: (err.body as any)?.code });
       } else {
-        setError(err instanceof Error ? err.message : "Unable to create debate");
+        setError(err instanceof Error ? err.message : t("dashboard.errors.create"));
       }
     } finally {
       setSaving(false);
@@ -114,11 +122,9 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
       <section className="rounded-3xl border border-amber-200/80 bg-gradient-to-br from-white via-[#fff7eb] to-[#f8e6c2] p-8 shadow-[0_24px_60px_rgba(112,73,28,0.12)]">
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">Welcome</p>
-            <h1 className="heading-serif text-4xl font-semibold text-[#3a2a1a]">Your Mocha-inspired cockpit</h1>
-            <p className="mt-2 max-w-2xl text-sm text-[#5a4a3a]">
-              Launch new debates, view quick stats, and jump to the leaderboard from a calm, cream-toned dashboard.
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">{t("dashboard.hero.kicker")}</p>
+            <h1 className="heading-serif text-4xl font-semibold text-[#3a2a1a]">{t("dashboard.hero.title")}</h1>
+            <p className="mt-2 max-w-2xl text-sm text-[#5a4a3a]">{t("dashboard.hero.description")}</p>
           </div>
           {email ? (
             <div className="ml-auto flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm">
@@ -128,27 +134,30 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
           ) : null}
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <PrimaryCard icon={<Plus className="h-5 w-5" />} title="New Debate" description="Start a fresh, multi-agent debate." onClick={() => setShowModal(true)} />
-          <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title="Analytics" description="Browse your runs and stats." />
-          <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title="Leaderboard" description="See who is winning the chamber." />
+          <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => setShowModal(true)} />
+          <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
+          <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title={t("dashboard.cards.leaderboard.title")} description={t("dashboard.cards.leaderboard.description")} />
         </div>
       </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">Recent debates</p>
-            <h2 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">Latest activity</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">{t("dashboard.section.recent.kicker")}</p>
+            <h2 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.section.recent.title")}</h2>
           </div>
           <Link href="/runs" className="text-sm font-semibold text-amber-800 hover:text-amber-700">
-            View all
+            {t("dashboard.section.recent.link")}
           </Link>
         </div>
         {debates.length === 0 ? (
           <Card className="bg-white/90">
-            <div className="flex items-center gap-3 text-sm text-[#5a4a3a]">
-              <AlertCircle className="h-4 w-4 text-amber-700" />
-              <span>No debates yet. Start your first one with the amber button above.</span>
+            <div className="space-y-3">
+              <h3 className="heading-serif text-xl font-semibold text-[#3a2a1a]">{t("dashboard.empty.title")}</h3>
+              <p className="text-sm text-[#5a4a3a]">{t("dashboard.empty.description")}</p>
+              <Button variant="amber" className="px-5" onClick={() => setShowModal(true)}>
+                {t("dashboard.empty.cta")}
+              </Button>
             </div>
           </Card>
         ) : (
@@ -164,8 +173,8 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
                     <Play className="h-5 w-5" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#3a2a1a] line-clamp-1">{debate.prompt || "Untitled debate"}</p>
-                    <p className="text-xs text-[#5a4a3a]">Created {formatTimestamp(debate.created_at)}</p>
+                    <p className="text-sm font-semibold text-[#3a2a1a] line-clamp-1">{debate.prompt || t("dashboard.prompt.untitled")}</p>
+                    <p className="text-xs text-[#5a4a3a]">{t("dashboard.time.createdPrefix")} {formatTimestamp(debate.created_at)}</p>
                   </div>
                   <Badge className={`border ${statusTone(debate.status)}`}>{debate.status ?? "queued"}</Badge>
                 </Link>
@@ -179,29 +188,31 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl border border-amber-200/80 bg-white p-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)]">
             <div className="space-y-2">
-              <h3 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">Start a New Debate</h3>
-              <p className="text-sm text-[#5a4a3a]">Ask a question and let the chamber deliberate for you.</p>
+              <h3 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.modal.title")}</h3>
+              <p className="text-sm text-[#5a4a3a]">{t("dashboard.modal.description")}</p>
             </div>
             <div className="mt-4 space-y-2">
               <label className="text-sm font-semibold text-[#3a2a1a]" htmlFor="prompt">
-                Your question
+                {t("dashboard.modal.questionLabel")}
               </label>
               <Textarea
                 id="prompt"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g., How should we balance energy security with rapid decarbonization?"
+                placeholder={t("dashboard.modal.placeholder")}
                 minLength={10}
                 maxLength={5000}
                 className="min-h-[140px] bg-white text-[#3a2a1a]"
               />
               <div className="flex items-center justify-between text-xs text-stone-600">
-                <span>{prompt.length} characters</span>
+                <span>
+                  {prompt.length} {t("dashboard.modal.characters")}
+                </span>
               </div>
             </div>
             <div className="mt-4 space-y-2">
               <label className="text-sm font-semibold text-[#3a2a1a]" htmlFor="model">
-                Model
+                {t("dashboard.modal.modelLabel")}
               </label>
               {modelError ? (
                 <p className="text-sm font-medium text-red-600">{modelError}</p>
@@ -214,23 +225,23 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
                 >
                   {models.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.display_name} {m.recommended ? "(Recommended)" : ""}
+                      {m.display_name} {m.recommended ? `(${t("dashboard.modal.recommendedTag")})` : ""}
                     </option>
                   ))}
                 </select>
               ) : models.length === 1 ? (
                 <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
-                  Model: {models[0].display_name}
+                  {t("dashboard.modal.singleModelLabel")} {models[0].display_name}
                 </div>
               ) : null}
             </div>
             {error ? <p className="mt-2 text-sm font-medium text-red-600">{error}</p> : null}
             <div className="mt-6 flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
-                Cancel
+                {t("dashboard.modal.cancel")}
               </Button>
               <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (!selectedModel && models.length > 0)} className="shadow-[0_14px_32px_rgba(255,190,92,0.35)]">
-                {saving ? "Creating…" : "Create Debate"}
+                {saving ? t("dashboard.modal.creating") : t("dashboard.modal.submit")}
               </Button>
             </div>
           </div>

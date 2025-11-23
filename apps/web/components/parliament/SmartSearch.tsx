@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n/client";
 
 type SearchItem = { id: string; prompt: string };
 
@@ -13,6 +14,7 @@ type SmartSearchProps = {
 export default function SmartSearch({ items, initialQuery = "" }: SmartSearchProps) {
   const [query, setQuery] = useState(initialQuery);
   const router = useRouter();
+  const { t } = useI18n();
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
@@ -26,15 +28,15 @@ export default function SmartSearch({ items, initialQuery = "" }: SmartSearchPro
     <div className="rounded-2xl border border-amber-200/70 bg-white/80 p-4 shadow-sm dark:border-amber-700/60 dark:bg-stone-900/60">
       <div className="flex flex-col gap-2">
         <label className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-200" htmlFor="smart-search">
-          Smart search
+          {t("runs.smartSearch.label")}
         </label>
         <input
           id="smart-search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search your runs…"
+          placeholder={t("runs.smartSearch.placeholder")}
           className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:border-amber-800 dark:bg-stone-900 dark:text-amber-50"
-          aria-label="Search runs"
+          aria-label={t("runs.smartSearch.aria")}
         />
         {results.length ? (
           <ul className="divide-y divide-amber-100 rounded-xl border border-amber-100 bg-amber-50/60 text-sm text-stone-800 dark:divide-amber-900/40 dark:border-amber-900/40 dark:bg-stone-900/60">
@@ -52,7 +54,7 @@ export default function SmartSearch({ items, initialQuery = "" }: SmartSearchPro
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-stone-500 dark:text-stone-400">Search results will appear here.</p>
+          <p className="text-xs text-stone-500 dark:text-stone-400">{t("runs.smartSearch.empty")}</p>
         )}
       </div>
     </div>

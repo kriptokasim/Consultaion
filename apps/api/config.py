@@ -16,6 +16,7 @@ class AppSettings(BaseSettings):
         case_sensitive=False,
     )
     ENV: str = "development"
+    IS_LOCAL_ENV: bool = True
 
     DATABASE_URL: str = "sqlite:///./consultaion.db"
     REDIS_URL: str | None = None
@@ -65,6 +66,7 @@ class AppSettings(BaseSettings):
     STRIPE_SECRET_KEY: str | None = None
     STRIPE_WEBHOOK_SECRET: str | None = None
     STRIPE_WEBHOOK_VERIFY: bool = True
+    STRIPE_WEBHOOK_INSECURE_DEV: bool = False
     BILLING_CHECKOUT_SUCCESS_URL: str | None = None
     BILLING_CHECKOUT_CANCEL_URL: str | None = None
     STRIPE_PRICE_PRO_ID: str | None = None
@@ -103,14 +105,32 @@ class AppSettings(BaseSettings):
     EXPORT_DIR: str = "exports"
 
     def model_post_init(self, __context):
+        env_label = (self.ENV or "development").lower()
+        local_envs = {"development", "dev", "local", "test"}
+        is_local = env_label in local_envs
+        object.__setattr__(self, "IS_LOCAL_ENV", is_local)
+
         if self.RATE_LIMIT_BACKEND is None:
             object.__setattr__(
                 self,
                 "RATE_LIMIT_BACKEND",
                 "redis" if self.REDIS_URL else "memory",
             )
+        if not is_local:
+            object.__setattr__(self, "RATE_LIMIT_BACKEND", "redis")
+            if not self.REDIS_URL:
+                raise RuntimeError("REDIS_URL is required when RATE_LIMIT_BACKEND=redis in non-dev environments")
+
         if self.JWT_TTL_SECONDS is None:
             object.__setattr__(self, "JWT_TTL_SECONDS", self.JWT_EXPIRE_MINUTES * 60)
+
+        if not self.SSE_REDIS_URL and self.REDIS_URL:
+            object.__setattr__(self, "SSE_REDIS_URL", self.REDIS_URL)
+        if not is_local:
+            object.__setattr__(self, "SSE_BACKEND", "redis")
+            if not (self.SSE_REDIS_URL or self.REDIS_URL):
+                raise RuntimeError("SSE_REDIS_URL or REDIS_URL is required for SSE in non-dev environments")
+
         web_candidates = [
             self.WEB_APP_ORIGIN,
             self.NEXT_PUBLIC_WEB_URL,

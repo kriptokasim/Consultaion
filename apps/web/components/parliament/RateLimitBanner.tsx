@@ -1,6 +1,7 @@
-'use client'
+"use client"
 
 import React, { useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n/client";
 
 type Props = {
   detail: string;
@@ -10,6 +11,7 @@ type Props = {
 
 export default function RateLimitBanner({ detail, resetAt, actions }: Props) {
   const [countdown, setCountdown] = useState<string | null>(null)
+  const { t } = useI18n()
 
   useEffect(() => {
     if (!resetAt) return
@@ -35,11 +37,11 @@ export default function RateLimitBanner({ detail, resetAt, actions }: Props) {
   return (
     <div className="flex items-start justify-between gap-4 rounded-3xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-900 shadow-sm">
       <div>
-        <p className="font-semibold">Rate limit reached</p>
+        <p className="font-semibold">{t("rateLimit.banner.title")}</p>
         <p className="mt-1 text-rose-800">{detail}</p>
         {resetAt ? (
           <p className="mt-1 text-xs uppercase tracking-wide text-rose-700">
-            Resets around {new Date(resetAt).toLocaleTimeString()}
+            {t("rateLimit.banner.resetsPrefix")} {new Date(resetAt).toLocaleTimeString()}
             {countdown ? <span className="ml-2 font-mono text-rose-800">{countdown}</span> : null}
           </p>
         ) : null}

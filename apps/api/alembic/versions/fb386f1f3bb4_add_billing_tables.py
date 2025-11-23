@@ -136,11 +136,14 @@ def upgrade() -> None:
         sa.column("limits", json_type),
     )
 
+    def _uuid():
+        return uuid.uuid4() if is_postgres else str(uuid.uuid4())
+
     op.bulk_insert(
         plan_table,
         [
             {
-                "id": uuid.uuid4(),
+                "id": _uuid(),
                 "slug": "free",
                 "name": "Free",
                 "price_monthly": None,
@@ -153,7 +156,7 @@ def upgrade() -> None:
                 },
             },
             {
-                "id": uuid.uuid4(),
+                "id": _uuid(),
                 "slug": "pro",
                 "name": "Pro",
                 "price_monthly": Decimal("29.00"),

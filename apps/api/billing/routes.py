@@ -167,7 +167,14 @@ async def billing_webhook(provider: str, request: Request):
 
     if provider_name == "stripe":
         payload: Optional[Dict] = None
-        if settings.STRIPE_WEBHOOK_VERIFY and settings.STRIPE_WEBHOOK_SECRET:
+        if settings.STRIPE_WEBHOOK_VERIFY:
+            secret = settings.STRIPE_WEBHOOK_SECRET
+            if not secret:
+                logger.error("Stripe webhook verification enabled but STRIPE_WEBHOOK_SECRET is missing")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="stripe webhook misconfigured",
+                )
             sig_header = headers.get("stripe-signature")
             if not sig_header:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing stripe signature")
@@ -175,15 +182,22 @@ async def billing_webhook(provider: str, request: Request):
                 event = stripe.Webhook.construct_event(
                     raw_body,
                     sig_header,
-                    settings.STRIPE_WEBHOOK_SECRET,
+                    secret,
                 )
                 payload = event.to_dict_recursive() if hasattr(event, "to_dict_recursive") else dict(event)
             except Exception as exc:  # pragma: no cover - external dependency
                 logger.warning("Stripe webhook signature invalid: %s", exc)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid signature") from exc
         else:
-            if settings.STRIPE_WEBHOOK_VERIFY and not settings.STRIPE_WEBHOOK_SECRET:
-                logger.warning("STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET missing; skipping verification.")
+            if not settings.STRIPE_WEBHOOK_INSECURE_DEV:
+                logger.error(
+                    "Stripe webhook verification disabled without STRIPE_WEBHOOK_INSECURE_DEV=1; rejecting payload"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="stripe webhook verification disabled",
+                )
+            logger.info("Processing unsigned Stripe webhook in insecure dev mode")
             try:
                 payload = json.loads(raw_body.decode("utf-8")) if raw_body else None
             except json.JSONDecodeError:

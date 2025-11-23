@@ -71,7 +71,7 @@ export default function HomeContent() {
 
       <div className="relative mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16">
         <header className="flex items-center justify-between">
-          <Link href="/home" className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50">
+          <Link href="/" className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-200/50">
               <Brain className="h-6 w-6" />
             </div>
@@ -126,7 +126,7 @@ export default function HomeContent() {
               <HeroStat label={t("landing.stats.agents")} value={8} animate />
               <HeroStat label={t("landing.stats.judges")} value={3} animate />
               <HeroStat label={t("landing.stats.rounds")} value={4} animate />
-              <HeroStat label={t("landing.stats.synthesizer")} value="Online" />
+              <HeroStat label={t("landing.stats.synthesizer")} value={t("landing.stats.online")} />
             </div>
             <div className="mt-8 flex flex-col items-center gap-3">
               <ArcDots />
@@ -150,7 +150,14 @@ export default function HomeContent() {
           ))}
         </section>
 
-        <DynamicLLMSelector />
+        <DynamicLLMSelector onStart={handleStartDebate} />
+
+        <section className="relative z-10 mt-12 flex flex-col items-center gap-3 rounded-3xl border border-amber-100/70 bg-white/80 p-8 text-center shadow-[0_20px_50px_rgba(112,73,28,0.08)]">
+          <p className="text-sm text-[#5a4a3a]">{t("landing.footer.prompt")}</p>
+          <Button variant="amber" size="lg" className="px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
+            {t("landing.selector.cta")}
+          </Button>
+        </section>
       </div>
     </main>
   );
@@ -161,7 +168,7 @@ function LLMSelectorFallback() {
   return <div className="rounded-3xl border border-amber-100/70 bg-white/60 p-12 text-center text-sm text-[#5a4a3a]">{t("landing.model.loading")}</div>;
 }
 
-const DynamicLLMSelector = dynamic(() => import("@/components/ui/LLMSelector"), {
+const DynamicLLMSelector = dynamic<{ onStart?: () => void }>(() => import("@/components/ui/LLMSelector"), {
   ssr: false,
   loading: () => <LLMSelectorFallback />,
 });

@@ -3,6 +3,7 @@ import Brand from "@/components/parliament/Brand";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import { ApiError, getLeaderboard, getRateLimitInfo, isAuthError } from "@/lib/api";
 import { redirect } from "next/navigation";
+import { getServerTranslations } from "@/lib/i18n/server";
 
 type LeaderboardPageProps = {
   searchParams: Promise<{ category?: string; min_matches?: string }>;
@@ -11,6 +12,7 @@ type LeaderboardPageProps = {
 export const dynamic = "force-dynamic";
 
 export default async function LeaderboardPage({ searchParams }: LeaderboardPageProps) {
+  const { t } = await getServerTranslations();
   const params = (await searchParams) || {};
   const category = params.category ?? undefined;
   const minMatches = params.min_matches ? parseInt(params.min_matches, 10) || 0 : 0;
@@ -32,10 +34,10 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
       } else if (isAuthError(error)) {
         redirect("/login");
       } else {
-        errorMessage = "Leaderboard is temporarily unavailable. Please try again shortly.";
+        errorMessage = t("leaderboard.error.short");
       }
     } else {
-      errorMessage = "Leaderboard is temporarily unavailable. Please try again later.";
+      errorMessage = t("leaderboard.error.long");
     }
   }
 
@@ -47,14 +49,11 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         <div className="flex items-center gap-3">
           <Brand height={32} tone="amber" />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Consultaion</p>
-            <h1 className="text-3xl font-semibold text-stone-900">Leaderboard</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("leaderboard.kicker")}</p>
+            <h1 className="text-3xl font-semibold text-stone-900">{t("leaderboard.title")}</h1>
           </div>
         </div>
-        <p className="mt-3 max-w-3xl text-sm text-stone-600">
-          Elo-style ratings derived from judge pairwise ballots. Wilson confidence intervals highlight uncertainty until
-          a persona logs sufficient matches.
-        </p>
+        <p className="mt-3 max-w-3xl text-sm text-stone-600">{t("leaderboard.description")}</p>
       </header>
       {rateLimitNotice ? (
         <RateLimitBanner detail={rateLimitNotice.detail} resetAt={rateLimitNotice.resetAt} />
@@ -67,14 +66,14 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         ) : null}
         <form className="flex flex-wrap items-center gap-4 text-sm text-stone-600" method="get">
           <label className="flex items-center gap-2">
-            Category
+            {t("leaderboard.filters.category")}
             <select
               name="category"
               defaultValue={category ?? "all"}
               className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-900"
             >
-              <option value="all">All</option>
-              <option value="">Uncategorized</option>
+              <option value="all">{t("leaderboard.filters.categoryAll")}</option>
+              <option value="">{t("leaderboard.filters.categoryNone")}</option>
               {categories.map((cat) => (
                 <option key={cat} value={cat ?? ""}>
                   {cat}
@@ -83,7 +82,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
             </select>
           </label>
           <label className="flex items-center gap-2">
-            Min matches
+            {t("leaderboard.filters.minMatches")}
             <input
               type="number"
               name="min_matches"
@@ -96,19 +95,16 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
             type="submit"
             className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-4 py-1.5 text-sm font-semibold text-white shadow hover:bg-amber-500"
           >
-            Apply filters
+            {t("leaderboard.filters.submit")}
           </button>
           <a href="/methodology" className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-            Methodology →
+            {t("leaderboard.filters.methodology")} →
           </a>
         </form>
         <div className="mt-6">
           <LeaderboardTable items={items} />
         </div>
-        <p className="mt-3 text-xs text-stone-500">
-          Ratings update automatically after each debate completes. Wilson interval assumes 95% confidence for binomial
-          wins vs. losses.
-        </p>
+        <p className="mt-3 text-xs text-stone-500">{t("leaderboard.footer.note")}</p>
       </section>
     </main>
   );

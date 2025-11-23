@@ -9,7 +9,7 @@ import { useI18n } from "@/lib/i18n/client"
 type ModelCard = {
   id: string
   name: string
-  description: string
+  descriptionKey: string
   icon: ComponentType<{ className?: string }>
   gradient: string
   glow: string
@@ -19,7 +19,7 @@ const models: ModelCard[] = [
   {
     id: "gpt4o",
     name: "GPT‑4o",
-    description: "Most capable reasoning + coding",
+    descriptionKey: "landing.selector.models.gpt4o",
     icon: Sparkles,
     gradient: "from-sky-400 via-blue-500 to-indigo-600",
     glow: "shadow-sky-400/40",
@@ -27,7 +27,7 @@ const models: ModelCard[] = [
   {
     id: "claude35",
     name: "Claude 3.5",
-    description: "Natural language + alignment",
+    descriptionKey: "landing.selector.models.claude35",
     icon: Brain,
     gradient: "from-amber-400 via-rose-500 to-pink-600",
     glow: "shadow-rose-400/40",
@@ -35,14 +35,14 @@ const models: ModelCard[] = [
   {
     id: "gemini",
     name: "Gemini Pro",
-    description: "Multimodal + long context reports",
+    descriptionKey: "landing.selector.models.gemini",
     icon: Zap,
     gradient: "from-emerald-400 via-teal-500 to-cyan-500",
     glow: "shadow-emerald-400/40",
   },
 ]
 
-export default function LLMSelector() {
+export default function LLMSelector({ onStart }: { onStart?: () => void }) {
   const [selected, setSelected] = useState(models[0].id)
   const { t } = useI18n()
 
@@ -53,13 +53,12 @@ export default function LLMSelector() {
       </div>
 
       <div className="relative mx-auto flex max-w-5xl flex-col items-center text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.5em] text-white/60">Choose your intelligence</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.5em] text-white/60">{t("landing.selector.caption")}</p>
         <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-          Multi‑LLM Chamber tuned for strategy, research, or shipping
+          {t("landing.selector.title")}
         </h2>
         <p className="mt-4 max-w-2xl text-base text-white/70">
-          Blend GPT‑4o, Claude 3.5, and Gemini Pro depending on the mission. Each profile comes with curated prompts,
-          temperature, and rubric tweaks.
+          {t("landing.selector.description")}
         </p>
       </div>
 
@@ -102,7 +101,7 @@ export default function LLMSelector() {
                 </div>
                 <div>
                   <p className="text-lg font-semibold">{model.name}</p>
-                  <p className="mt-1 text-sm text-white/70">{model.description}</p>
+                  <p className="mt-1 text-sm text-white/70">{t(model.descriptionKey)}</p>
                 </div>
                 <div
                   className={cn(
@@ -120,6 +119,7 @@ export default function LLMSelector() {
       <div className="relative mt-10 flex justify-center">
         <button
           type="button"
+          onClick={onStart}
           className="group inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-8 py-3 text-sm font-semibold text-white shadow-[0_25px_60px_-20px_rgba(255,255,255,0.6)] transition-all duration-200 hover:scale-105 active:scale-95"
         >
           {t("landing.selector.cta")}

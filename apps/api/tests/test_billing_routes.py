@@ -97,13 +97,22 @@ def _build_request(body: bytes, headers: dict[str, str]) -> Request:
     return Request(scope, receive)
 
 
-def _reload_billing_routes(monkeypatch, verify: str = "1", secret: str | None = "whsec_test"):
+def _reload_billing_routes(
+    monkeypatch,
+    verify: str = "1",
+    secret: str | None = "whsec_test",
+    insecure_dev: str | None = "0",
+):
     if verify is not None:
         monkeypatch.setenv("STRIPE_WEBHOOK_VERIFY", verify)
     if secret is None:
         monkeypatch.delenv("STRIPE_WEBHOOK_SECRET", raising=False)
     else:
         monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", secret)
+    if insecure_dev is None:
+        monkeypatch.delenv("STRIPE_WEBHOOK_INSECURE_DEV", raising=False)
+    else:
+        monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", insecure_dev)
 
     import config as config_module  # noqa: WPS433
 
@@ -200,6 +209,17 @@ async def test_stripe_webhook_verifies_signature(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_stripe_webhook_missing_secret_fails(monkeypatch):
+    module = _reload_billing_routes(monkeypatch, verify="1", secret=None)
+    request = _build_request(b"{}", {"Stripe-Signature": "sig"})
+    with pytest.raises(HTTPException) as excinfo:
+        await module.billing_webhook("stripe", request)
+    assert excinfo.value.status_code == 500
+
+
+
+
+@pytest.mark.anyio
 async def test_stripe_webhook_rejects_invalid_signature(monkeypatch):
     module = _reload_billing_routes(monkeypatch, verify="1", secret="whsec_test")
 
@@ -216,7 +236,7 @@ async def test_stripe_webhook_rejects_invalid_signature(monkeypatch):
 
 @pytest.mark.anyio
 async def test_stripe_webhook_dev_mode_skips_signature(monkeypatch):
-    module = _reload_billing_routes(monkeypatch, verify="0", secret=None)
+    module = _reload_billing_routes(monkeypatch, verify="0", secret=None, insecure_dev="1")
 
     class StubProvider:
         def __init__(self):

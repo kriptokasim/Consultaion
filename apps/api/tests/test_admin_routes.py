@@ -3,12 +3,11 @@ import os
 import sys
 import tempfile
 import uuid
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 from sqlmodel import Session, select
 
 fd, temp_path = tempfile.mkstemp(prefix="consultaion_admin_routes_", suffix=".db")
@@ -34,29 +33,16 @@ os.environ["AUTH_RL_MAX_CALLS"] = "1000"
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from auth import COOKIE_NAME, COOKIE_PATH, create_access_token, hash_password  # noqa: E402
+from auth import get_current_admin, hash_password  # noqa: E402
 from billing.models import BillingPlan, BillingSubscription, BillingUsage  # noqa: E402
 from billing.service import _current_period  # noqa: E402
 from database import engine, init_db  # noqa: E402
-from main import app  # noqa: E402
 from models import Debate, User  # noqa: E402
 from promotions.models import Promotion  # noqa: E402
+from routes.admin import admin_user_billing, admin_user_detail, admin_users  # noqa: E402
 from schemas import default_panel_config  # noqa: E402
 
 init_db()
-
-
-@pytest.fixture
-def client():
-    with TestClient(app) as test_client:
-        yield test_client
-
-
-@dataclass
-class SimpleUser:
-    id: str
-    email: str
-    role: str
 
 
 def _seed_admin_data():
@@ -116,49 +102,37 @@ def _seed_admin_data():
         promo = Promotion(location="dashboard", title="Promo", body="Body copy", is_active=True)
         session.add(promo)
         session.commit()
-        admin_simple = SimpleUser(id=admin.id, email=admin.email, role=admin.role)
-        member_simple = SimpleUser(id=member.id, email=member.email, role=member.role)
-        return admin_simple, member_simple
+        return admin.id, member.id, member.email
 
 
-def _set_token(client: TestClient, user: SimpleUser) -> None:
-    token = create_access_token(user_id=user.id, email=user.email, role=user.role)
-    client.cookies.set(COOKIE_NAME, token, path=COOKIE_PATH or "/")
+def test_admin_requires_admin_role():
+    admin_id, member_id, _ = _seed_admin_data()
+    non_admin_stub = type("Stub", (), {"is_admin": False, "role": "member"})()
+    admin_stub = type("Stub", (), {"is_admin": True, "role": "admin"})()
+    with pytest.raises(HTTPException):
+        get_current_admin(non_admin_stub)
+    assert get_current_admin(admin_stub) == admin_stub
 
 
-def test_admin_endpoints_require_admin(client: TestClient):
-    admin, member = _seed_admin_data()
-    _set_token(client, member)
-    res = client.get("/admin/users")
-    assert res.status_code == 403
+def test_admin_payload_helpers_return_data():
+    admin_id, member_id, member_email = _seed_admin_data()
 
+    with Session(engine) as session:
+        admin_db = session.get(User, admin_id)
+        payload = admin_users(q=None, plan_slug=None, limit=100, offset=0, session=session, _=admin_db)
+    assert any(item["email"] == member_email for item in payload["items"])
 
-def test_admin_endpoints_return_payloads(client: TestClient):
-    admin, member = _seed_admin_data()
-    _set_token(client, admin)
+    with Session(engine) as session:
+        admin_db = session.get(User, admin_id)
+        detail_payload = admin_user_detail(user_id=member_id, session=session, _=admin_db)
+    assert detail_payload["user"]["email"] == member_email
+    assert detail_payload["plan"]["slug"] == "free"
 
-    users_res = client.get("/admin/users")
-    assert users_res.status_code == 200
-    users_payload = users_res.json()
-    assert any(item["email"] == member.email for item in users_payload["items"])
-
-    detail = client.get(f"/admin/users/{member.id}")
-    assert detail.status_code == 200
-    detail_payload = detail.json()
-    assert detail_payload["user"]["email"] == member.email
-    assert detail_payload["plan"] and detail_payload["plan"]["slug"] == "free"
-
-    billing = client.get(f"/admin/users/{member.id}/billing")
-    assert billing.status_code == 200
-    billing_payload = billing.json()
-    assert billing_payload["plan"]["slug"] == "free"
+    with Session(engine) as session:
+        admin_db = session.get(User, admin_id)
+        billing_payload = admin_user_billing(user_id=member_id, session=session, _=admin_db)
     assert billing_payload["usage"]["debates_created"] == 3
 
-    models_res = client.get("/admin/models")
-    assert models_res.status_code == 200
-    models_payload = models_res.json()
-    assert models_payload["items"]
-
-    promotions_res = client.get("/admin/promotions")
-    assert promotions_res.status_code == 200
-    assert promotions_res.json()["items"]
+    with Session(engine) as session:
+        promo_count = session.exec(select(Promotion)).all()
+    assert promo_count

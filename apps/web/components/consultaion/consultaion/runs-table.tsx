@@ -14,6 +14,7 @@ import EmptyState from "@/components/ui/empty-state"
 import { useDebounce } from "@/hooks/use-debounce"
 import { useToast } from "@/components/ui/toast"
 import StatusBadge from "@/components/parliament/StatusBadge"
+import { useI18n } from "@/lib/i18n/client"
 
 type Run = {
   id: string
@@ -27,18 +28,18 @@ type Run = {
 
 type Scope = "mine" | "team" | "all"
 
+const SCOPE_KEYS: Record<Scope, string> = {
+  mine: "runs.scope.mine",
+  team: "runs.scope.team",
+  all: "runs.scope.all",
+}
+
 type RunsTableProps = {
   items: Run[]
   teams: TeamSummary[]
   profile: { id: string; role: string }
   initialQuery?: string
   initialStatus?: string | null
-}
-
-const SCOPE_LABELS: Record<Scope, string> = {
-  mine: "Mine",
-  team: "Team",
-  all: "All",
 }
 
 function normalizeStatus(status?: string) {
@@ -58,6 +59,7 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () =
 }
 
 export default function RunsTable({ items, teams, profile, initialQuery = "", initialStatus = null }: RunsTableProps) {
+  const { t } = useI18n()
   const [scope, setScope] = useState<Scope>(profile.role === "admin" ? "all" : "mine")
   const [rows, setRows] = useState(items)
   const [search, setSearch] = useState(initialQuery)
@@ -98,27 +100,27 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
         await assignDebateTeam(runId, teamId)
         setRows((prev) => prev.map((run) => (run.id === runId ? { ...run, team_id: teamId ?? null } : run)))
         pushToast({
-          title: teamId ? "Run shared with team" : "Run is now private",
+          title: teamId ? t("runs.toast.shared") : t("runs.toast.private"),
           variant: "success",
         })
       } catch (error) {
         if (error instanceof ApiError) {
           const detail = typeof error.body === "object" && error.body?.detail ? error.body.detail : error.message
-          pushToast({ title: "Unable to update sharing", description: detail, variant: "error" })
+          pushToast({ title: t("runs.toast.shareError"), description: detail, variant: "error" })
           throw new Error(detail)
         }
-        pushToast({ title: "Unable to update sharing", variant: "error" })
-        throw new Error("Unable to update sharing settings")
+        pushToast({ title: t("runs.toast.shareError"), variant: "error" })
+        throw new Error(t("runs.toast.shareError"))
       }
     },
-    [setRows, pushToast],
+    [setRows, pushToast, t],
   )
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard
       ?.writeText(text)
-      .then(() => pushToast({ title: "Run ID copied", variant: "success" }))
-      .catch(() => pushToast({ title: "Unable to copy", variant: "error" }))
+      .then(() => pushToast({ title: t("runs.toast.copySuccess"), variant: "success" }))
+      .catch(() => pushToast({ title: t("runs.toast.copyError"), variant: "error" }))
   }
 
   const truncate = (str: string, length: number) => {
@@ -162,8 +164,8 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
       })
       .catch((error) => {
         pushToast({
-          title: "Unable to fetch runs",
-          description: error instanceof Error ? error.message : "Search failed",
+          title: t("runs.error.fetchTitle"),
+          description: error instanceof Error ? error.message : t("runs.error.fetchDescription"),
           variant: "error",
         })
       })
@@ -188,11 +190,11 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
               )}
               onClick={() => setScope(option)}
               >
-              {SCOPE_LABELS[option]}
+              {t(SCOPE_KEYS[option])}
             </button>
           ))}
         </div>
-        <p className="text-xs text-stone-500">Share a run with a team to make it visible to collaborators.</p>
+        <p className="text-xs text-stone-500">{t("runs.scope.note")}</p>
       </div>
       <SearchFilter
         value={search}
@@ -200,24 +202,26 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
         status={statusFilter}
         onStatusChange={setStatusFilter}
         statuses={[
-          { value: "completed", label: "Completed" },
-          { value: "running", label: "Running" },
-          { value: "queued", label: "Queued" },
-          { value: "failed", label: "Failed" },
+          { value: "completed", label: t("runs.statusFilter.completed") },
+          { value: "running", label: t("runs.statusFilter.running") },
+          { value: "queued", label: t("runs.statusFilter.queued") },
+          { value: "failed", label: t("runs.statusFilter.failed") },
         ]}
+        placeholder={t("runs.filter.placeholder")}
+        clearLabel={t("runs.filter.clear")}
       />
-      {searchLoading ? <p className="text-xs text-stone-500">Searching…</p> : null}
+      {searchLoading ? <p className="text-xs text-stone-500">{t("runs.searching")}</p> : null}
 
       <div className="rounded-3xl border border-stone-200 bg-white shadow-sm">
         <Table>
           <TableHeader>
             <TableRow className="border-b border-stone-100">
-              <TableHead className="w-[120px] font-mono text-xs uppercase tracking-wide text-stone-400">Run</TableHead>
-              <TableHead className="font-mono text-xs uppercase tracking-wide text-stone-400">Prompt</TableHead>
-              <TableHead className="w-[120px] font-mono text-xs uppercase tracking-wide text-stone-400">Status</TableHead>
-              <TableHead className="w-[140px] font-mono text-xs uppercase tracking-wide text-stone-400">Team</TableHead>
-              <TableHead className="w-[150px] font-mono text-xs uppercase tracking-wide text-stone-400">Created</TableHead>
-              <TableHead className="w-[150px] font-mono text-xs uppercase tracking-wide text-stone-400">Updated</TableHead>
+              <TableHead className="w-[120px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.run")}</TableHead>
+              <TableHead className="font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.prompt")}</TableHead>
+              <TableHead className="w-[120px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.status")}</TableHead>
+              <TableHead className="w-[140px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.team")}</TableHead>
+              <TableHead className="w-[150px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.created")}</TableHead>
+              <TableHead className="w-[150px] font-mono text-xs uppercase tracking-wide text-stone-400">{t("runs.table.columns.updated")}</TableHead>
               <TableHead className="w-[140px]" />
             </TableRow>
           </TableHeader>
@@ -231,7 +235,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 text-stone-500 hover:text-stone-900"
-                      aria-label="Copy run ID"
+                      aria-label={t("runs.table.copyId")}
                       onClick={() => copyToClipboard(run.id)}
                     >
                       <Copy className="h-3.5 w-3.5" />
@@ -245,10 +249,10 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                 <TableCell>
                   {run.team_id ? (
                     <Badge className="bg-amber-100 text-amber-900">
-                      {teamMap[run.team_id] ?? "Shared"}
+                      {teamMap[run.team_id] ?? t("runs.table.shared")}
                     </Badge>
                   ) : (
-                    <span className="text-xs uppercase tracking-wide text-stone-400">Private</span>
+                    <span className="text-xs uppercase tracking-wide text-stone-400">{t("runs.table.private")}</span>
                   )}
                 </TableCell>
                 <TableCell className="font-mono text-xs text-stone-500">
@@ -260,7 +264,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Link href={`/runs/${run.id}`} className="inline-flex">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="View run details">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={t("runs.table.view")}>
                         <Eye className="h-4 w-4" />
                       </Button>
                     </Link>
@@ -269,6 +273,14 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                         currentTeamId={run.team_id}
                         teams={teams}
                         onAssign={(teamId) => handleAssignTeam(run.id, teamId)}
+                        labels={{
+                          heading: t("runs.share.heading"),
+                          keepPrivate: t("runs.share.keepPrivate"),
+                          cancel: t("runs.share.cancel"),
+                          apply: t("runs.share.apply"),
+                          error: t("runs.share.error"),
+                          button: t("runs.share.buttonLabel"),
+                        }}
                       />
                     ) : null}
                   </div>
@@ -280,21 +292,31 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
       </div>
       {paginatedRuns.length === 0 ? (
         <EmptyState
-          title="No runs match this filter"
-          description="Adjust the search text or clear the status filter to view all debates."
+          title={t("runs.empty.title")}
+          description={t("runs.empty.description")}
         />
       ) : null}
     </div>
   )
 }
 
+type SharePopoverLabels = {
+  heading: string
+  keepPrivate: string
+  cancel: string
+  apply: string
+  error: string
+  button: string
+}
+
 type SharePopoverProps = {
   currentTeamId?: string | null
   teams: TeamSummary[]
   onAssign: (teamId: string | null) => Promise<void>
+  labels: SharePopoverLabels
 }
 
-function SharePopover({ currentTeamId, teams, onAssign }: SharePopoverProps) {
+function SharePopover({ currentTeamId, teams, onAssign, labels }: SharePopoverProps) {
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState(currentTeamId ?? "")
   const [error, setError] = useState<string | null>(null)
@@ -317,7 +339,7 @@ function SharePopover({ currentTeamId, teams, onAssign }: SharePopoverProps) {
         setError(null)
         setOpen(false)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to share run")
+        setError(err instanceof Error ? err.message : labels.error)
       }
     })
   }
@@ -328,7 +350,7 @@ function SharePopover({ currentTeamId, teams, onAssign }: SharePopoverProps) {
         variant="ghost"
         size="icon"
         className="h-8 w-8"
-        aria-label="Share to team"
+        aria-label={labels.button}
         onClick={() => setOpen((prev) => !prev)}
       >
         <Share2 className="h-4 w-4" />
@@ -338,13 +360,13 @@ function SharePopover({ currentTeamId, teams, onAssign }: SharePopoverProps) {
           ref={panelRef}
           className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-2xl"
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Share with team</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{labels.heading}</p>
           <select
             className="mt-2 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-900"
             value={value}
             onChange={(event) => setValue(event.target.value)}
           >
-            <option value="">Keep private</option>
+            <option value="">{labels.keepPrivate}</option>
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
                 {team.name} {team.role ? `(${team.role})` : ""}
@@ -354,11 +376,11 @@ function SharePopover({ currentTeamId, teams, onAssign }: SharePopoverProps) {
           {error ? <p className="mt-2 text-xs text-rose-600">{error}</p> : null}
           <div className="mt-3 flex items-center justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Cancel
+              {labels.cancel}
             </Button>
             <Button size="sm" onClick={apply} disabled={isPending}>
               {isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-              Apply
+              {labels.apply}
             </Button>
           </div>
         </div>
