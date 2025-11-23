@@ -16,11 +16,12 @@ from pydantic import BaseModel
 from audit import record_audit
 from billing.service import increment_debate_usage, increment_export_usage
 from auth import get_current_user, get_optional_user
+from channels import debate_channel_id
 from config import settings
 from deps import get_session
 from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
 from model_registry import get_default_model, get_model, list_enabled_models
-from orchestrator import run_debate
+from debate_dispatch import dispatch_debate_run
 from routes.common import (
     avg_scores_for_debate,
     can_access_debate,
@@ -43,10 +44,6 @@ router = APIRouter(tags=["debates"])
 
 class DebateUpdate(BaseModel):
     team_id: Optional[str] = None
-
-
-def debate_channel_id(debate_id: str) -> str:
-    return f"debate:{debate_id}"
 
 
 def _champion_for_debate(session: Session, debate_id: str) -> tuple[Optional[str], Optional[float], Optional[float]]:
@@ -181,11 +178,12 @@ async def create_debate(
             raise HTTPException(status_code=400, detail=f"Unknown role_profile '{seat.role_profile}'")
 
     debate_id = str(uuid.uuid4())
+    config_payload = config.model_dump()
     debate = Debate(
         id=debate_id,
         prompt=body.prompt,
         status="queued",
-        config=config.model_dump(),
+        config=config_payload,
         user_id=current_user.id,
         model_id=chosen_model_id,
         panel_config=panel.model_dump(),
@@ -200,11 +198,11 @@ async def create_debate(
 
     if not settings.DISABLE_AUTORUN:
         background_tasks.add_task(
-            run_debate,
+            dispatch_debate_run,
             debate_id,
             body.prompt,
             channel_id,
-            config.model_dump(),
+            config_payload,
             chosen_model_id,
         )
     record_audit(
@@ -236,11 +234,11 @@ async def start_debate_run(
     channel_id = debate_channel_id(debate_id)
     await backend.create_channel(channel_id)
     background_tasks.add_task(
-        run_debate,
+        dispatch_debate_run,
         debate_id,
         debate.prompt,
         channel_id,
-        debate.config,
+        debate.config or {},
         debate.model_id,
     )
     debate.status = "scheduled"

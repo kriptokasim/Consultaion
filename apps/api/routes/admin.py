@@ -268,6 +268,13 @@ async def admin_ops_summary(
     model_usage_by_role.sort(key=lambda entry: entry["total_tokens"], reverse=True)
     model_usage_by_role = model_usage_by_role[:10]
 
+    dispatch_payload = {
+        "mode": settings.DEBATE_DISPATCH_MODE,
+        "celery_broker": settings.CELERY_BROKER_URL,
+        "celery_backend": settings.CELERY_RESULT_BACKEND,
+        "celery_configured": bool(settings.CELERY_BROKER_URL),
+    }
+
     return {
         "debates_24h": debates_24h,
         "debates_7d": debates_7d,
@@ -287,6 +294,7 @@ async def admin_ops_summary(
             "seat_counts": dict(seat_counts),
             "model_usage_by_role": model_usage_by_role,
         },
+        "dispatch": dispatch_payload,
     }
 
 

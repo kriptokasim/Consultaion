@@ -32,12 +32,18 @@ A platform that produces the best answer via multi-agent debate/voting.
 | `WEB_APP_ORIGIN` | Frontend base used for OAuth redirects (default `http://localhost:3000`). |
 | `BILLING_PROVIDER` / `STRIPE_*` / `BILLING_CHECKOUT_*` | Billing provider selection, Stripe keys, and checkout redirect URLs. |
 | `N8N_WEBHOOK_URL` | Optional automation webhook target for subscription/usage events. |
-| `WEB_APP_ORIGIN` | Frontend base used for OAuth redirects (default `http://localhost:3000`). |
+| `DEBATE_DISPATCH_MODE` | Debate execution strategy (`inline` for dev, `celery` in production). |
+| `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery broker/backend (defaults to the Redis SSE URL when omitted). |
 
 ### Model catalog & providers
 - Consultaion uses LiteLLM as an internal gateway and supports OpenRouter, OpenAI, Anthropic, and Gemini (server-side keys only; users do not supply their own).
 - Configure provider API keys in `.env` (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`); models auto-enable when keys are present.
 - A curated catalog is exposed via `GET /models`; the recommended model is set in the registry (`ModelConfig.recommended`) and used as the default when creating debates.
+
+### Async debate workers
+- Keep `DEBATE_DISPATCH_MODE=inline` for local/dev environments so debates run inside the FastAPI process and honor `FAST_DEBATE` mock flows.
+- Switch to `DEBATE_DISPATCH_MODE=celery` in production to enqueue runs on the worker. This requires Redis-backed SSE so the API process and worker share channels.
+- Start the worker via `celery -A worker.celery_app worker -l info` (or `docker compose up worker`). The API automatically schedules `debates.run` tasks whenever a debate is created or manually started.
 
 
 ### Production Checklist

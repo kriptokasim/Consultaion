@@ -4,27 +4,26 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from config import settings
 
-DATABASE_URL = settings.DATABASE_URL
+def _create_engine():
+    database_url = settings.DATABASE_URL
+    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+    engine_kwargs = {
+        "echo": settings.DB_ECHO,
+        "connect_args": connect_args,
+        "pool_pre_ping": True,
+    }
+    if not database_url.startswith("sqlite"):
+        engine_kwargs.update(
+            {
+                "pool_size": settings.DB_POOL_SIZE,
+                "max_overflow": settings.DB_MAX_OVERFLOW,
+                "pool_recycle": settings.DB_POOL_RECYCLE,
+            }
+        )
+    return create_engine(database_url, **engine_kwargs)
 
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine_kwargs = {
-    "echo": settings.DB_ECHO,
-    "connect_args": connect_args,
-    "pool_pre_ping": True,
-}
-if not DATABASE_URL.startswith("sqlite"):
-    engine_kwargs.update(
-        {
-            "pool_size": settings.DB_POOL_SIZE,
-            "max_overflow": settings.DB_MAX_OVERFLOW,
-            "pool_recycle": settings.DB_POOL_RECYCLE,
-        }
-    )
 
-engine = create_engine(
-    DATABASE_URL,
-    **engine_kwargs,
-)
+engine = _create_engine()
 
 
 def init_db() -> None:
@@ -49,3 +48,12 @@ def session_scope():
         raise
     finally:
         session.close()
+
+
+def reset_engine() -> None:
+    global engine
+    try:
+        engine.dispose()
+    except Exception:
+        pass
+    engine = _create_engine()

@@ -52,6 +52,10 @@ class AppSettings(BaseSettings):
     SSE_REDIS_URL: str | None = None
     SSE_CHANNEL_TTL_SECONDS: int = 900
 
+    DEBATE_DISPATCH_MODE: Literal["inline", "celery"] = "inline"
+    CELERY_BROKER_URL: str | None = None
+    CELERY_RESULT_BACKEND: str | None = None
+
     JWT_SECRET: str = "change_me_in_prod"
     JWT_EXPIRE_MINUTES: int = 1440
     JWT_TTL_SECONDS: int | None = None
@@ -130,6 +134,26 @@ class AppSettings(BaseSettings):
             object.__setattr__(self, "SSE_BACKEND", "redis")
             if not (self.SSE_REDIS_URL or self.REDIS_URL):
                 raise RuntimeError("SSE_REDIS_URL or REDIS_URL is required for SSE in non-dev environments")
+
+        broker = self.CELERY_BROKER_URL or self.SSE_REDIS_URL or self.REDIS_URL
+        if broker:
+            object.__setattr__(self, "CELERY_BROKER_URL", broker)
+        backend = self.CELERY_RESULT_BACKEND or broker
+        if backend:
+            object.__setattr__(self, "CELERY_RESULT_BACKEND", backend)
+
+        dispatch_mode = (self.DEBATE_DISPATCH_MODE or "inline").lower()
+        if dispatch_mode not in {"inline", "celery"}:
+            dispatch_mode = "inline"
+        if dispatch_mode == "celery":
+            if not self.CELERY_BROKER_URL:
+                if is_local:
+                    dispatch_mode = "inline"
+                else:
+                    raise RuntimeError("CELERY_BROKER_URL is required when DEBATE_DISPATCH_MODE=celery")
+            elif not is_local and self.SSE_BACKEND.lower() != "redis":
+                raise RuntimeError("SSE_BACKEND=redis is required when using Celery dispatch in non-dev environments")
+        object.__setattr__(self, "DEBATE_DISPATCH_MODE", dispatch_mode)
 
         web_candidates = [
             self.WEB_APP_ORIGIN,

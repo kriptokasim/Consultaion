@@ -11,6 +11,17 @@ services:
       - db
       - redis
     ports: ["8000:8000"]
+  worker:
+    build: ../apps/api
+    env_file: ../.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SSE_REDIS_URL=${SSE_REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      - db
+      - redis
+    command: ["celery", "-A", "worker.celery_app", "worker", "-l", "info"]
   web:
     build: ../apps/web
     environment:

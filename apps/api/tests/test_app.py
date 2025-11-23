@@ -80,6 +80,7 @@ from main import (  # noqa: E402
 )
 from models import AuditLog, Debate, PairwiseVote, RatingPersona, Score, User  # noqa: E402
 import orchestrator as orchestrator_module  # noqa: E402
+import debate_dispatch as debate_dispatch_module  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config, default_panel_config  # noqa: E402
@@ -235,7 +236,10 @@ def _create_debate_for_user(user: User, prompt: str) -> str:
                 current_user=user,
             )
         )
-        return result["id"]
+    # Execute background tasks to mirror FastAPI behavior when routes are called directly
+    if background_tasks.tasks:
+        asyncio.run(background_tasks())
+    return result["id"]
 
 
 def _create_team_for_user(owner: User, name: str = "Sepia Team") -> str:
@@ -458,6 +462,7 @@ def test_admin_ops_summary_reports_status():
         payload = asyncio.run(admin_ops_summary(session=session, current_admin=admin_user))
     assert "debates_24h" in payload
     assert payload["rate_limit"]["backend"]
+    assert payload["dispatch"]["mode"]
 
 
 def test_wilson_interval_bounds():
@@ -610,6 +615,44 @@ def test_manual_start_succeeds_when_disabled():
         )
     assert result["status"] == "scheduled"
     os.environ["DISABLE_AUTORUN"] = previous
+    _reload_settings()
+
+
+def test_debate_creation_dispatches_celery_task(monkeypatch):
+    prev_mode = os.environ.get("DEBATE_DISPATCH_MODE", "inline")
+    prev_autorun = os.environ.get("DISABLE_AUTORUN", "1")
+    prev_broker = os.environ.get("CELERY_BROKER_URL")
+    prev_backend = os.environ.get("CELERY_RESULT_BACKEND")
+    os.environ["DEBATE_DISPATCH_MODE"] = "celery"
+    os.environ["DISABLE_AUTORUN"] = "0"
+    os.environ["CELERY_BROKER_URL"] = "memory://"
+    os.environ["CELERY_RESULT_BACKEND"] = "memory://"
+    _reload_settings()
+
+    class DummyTask:
+        def __init__(self):
+            self.debate_id = None
+
+        def delay(self, debate_id: str):
+            self.debate_id = debate_id
+
+    dummy = DummyTask()
+    monkeypatch.setattr(debate_dispatch_module, "run_debate_task", dummy, raising=False)
+
+    user = _register_user("celery-dispatch@example.com", "celerypass")
+    debate_id = _create_debate_for_user(user, "Celery dispatch prompt")
+    assert dummy.debate_id == debate_id
+
+    os.environ["DEBATE_DISPATCH_MODE"] = prev_mode
+    os.environ["DISABLE_AUTORUN"] = prev_autorun
+    if prev_broker is None:
+        os.environ.pop("CELERY_BROKER_URL", None)
+    else:
+        os.environ["CELERY_BROKER_URL"] = prev_broker
+    if prev_backend is None:
+        os.environ.pop("CELERY_RESULT_BACKEND", None)
+    else:
+        os.environ["CELERY_RESULT_BACKEND"] = prev_backend
     _reload_settings()
 
 
