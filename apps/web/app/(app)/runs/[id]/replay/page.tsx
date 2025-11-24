@@ -41,8 +41,9 @@ export default async function ReplayPage({ params }: ReplayPageProps) {
         <main className="flex flex-col h-full p-6 gap-6">
             <div className="flex items-center gap-4">
                 <Link href={`/runs/${id}`}>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="outline" size="sm" className="inline-flex items-center gap-2">
                         <ArrowLeft className="h-4 w-4" />
+                        <span>Back to Run</span>
                     </Button>
                 </Link>
                 <div>

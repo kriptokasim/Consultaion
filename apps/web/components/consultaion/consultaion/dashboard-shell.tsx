@@ -212,12 +212,12 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                 <Button
                   variant="outline"
                   size="sm"
-                  className="inline-flex items-center gap-0 border-amber-200/80 text-amber-900 hover:bg-amber-50 sm:gap-2"
+                  className="inline-flex items-center gap-2 border-amber-200/80 bg-white text-amber-900 hover:bg-amber-50 shadow-sm"
                   onClick={() => router.back()}
                   aria-label={t("nav.goBack")}
                 >
                   <ArrowLeft className="h-4 w-4" />
-                  <span className="hidden sm:inline">{t("nav.goBack")}</span>
+                  <span>{t("nav.goBack")}</span>
                 </Button>
               ) : null}
               <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
