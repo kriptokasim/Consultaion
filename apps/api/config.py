@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+import builtins
 from typing import Literal
 
 from pydantic import Field
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -41,7 +45,7 @@ class AppSettings(BaseSettings):
     APP_VERSION: str = "0.2.0"
 
     LOG_LEVEL: str = "INFO"
-    ENABLE_SEC_HEADERS: bool = True
+    ENABLE_SEC_HEADERS: bool = False
     CORS_ORIGINS: str = "http://localhost:3000"
     WEB_APP_ORIGIN: str | None = None
     NEXT_PUBLIC_WEB_URL: str | None = None
@@ -65,7 +69,17 @@ class AppSettings(BaseSettings):
     DEBATE_MIN_REQUIRED_SEATS: int = Field(1, ge=0)
     DEBATE_FAIL_FAST: bool = Field(True, description="Abort debates when too many seats fail.")
 
+    # Provider health & circuit breaker (Patchset 28.0)
+    PROVIDER_HEALTH_WINDOW_SECONDS: int = Field(300, description="Sliding window for health metrics (seconds)")
+    PROVIDER_HEALTH_ERROR_THRESHOLD: float = Field(0.5, ge=0.0, le=1.0, description="Error rate threshold to open circuit")
+    PROVIDER_HEALTH_MIN_CALLS: int = Field(10, ge=0, description="Minimum calls before circuit can open")
+    PROVIDER_HEALTH_COOLDOWN_SECONDS: int = Field(60, ge=0, description="How long to keep circuit open (seconds)")
+
+    # Celery queues (Patchset 28.0)
     DEBATE_DISPATCH_MODE: Literal["inline", "celery"] = "inline"
+    DEBATE_FAST_QUEUE_NAME: str = "debates_fast"
+    DEBATE_DEEP_QUEUE_NAME: str = "debates_deep"
+    DEBATE_DEFAULT_QUEUE: str = "debates_fast"
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None
 
@@ -88,6 +102,9 @@ class AppSettings(BaseSettings):
     BILLING_CHECKOUT_CANCEL_URL: str | None = None
     STRIPE_PRICE_PRO_ID: str | None = None
     BILLING_PROVIDER: str = "stripe"
+
+    # Safety & security (Patchset 29.0)
+    ENABLE_PII_SCRUB: bool = Field(True, description="Enable PII scrubbing before LLM calls")
 
     SENTRY_DSN: str | None = None
     SENTRY_ENV: str = "local"
@@ -122,10 +139,43 @@ class AppSettings(BaseSettings):
     EXPORT_DIR: str = "exports"
 
     def model_post_init(self, __context):
+        # Patchset 29.0: Validate production secrets
         env_label = (self.ENV or "development").lower()
         local_envs = {"development", "dev", "local", "test"}
         is_local = env_label in local_envs
         object.__setattr__(self, "IS_LOCAL_ENV", is_local)
+        
+        # Production secret validation
+        if not is_local:
+            # JWT Secret
+            if not self.JWT_SECRET or self.JWT_SECRET in ("change_me_in_prod", "CHANGE_ME_IN_PRODUCTION"):
+                raise ValueError("JWT_SECRET must be set to a secure value in production (ENV={})".format(self.ENV))
+            if len(self.JWT_SECRET) < 32:
+                raise ValueError("JWT_SECRET must be at least 32 characters in production")
+            
+            # Stripe Webhook
+            if self.STRIPE_WEBHOOK_VERIFY and not self.STRIPE_WEBHOOK_SECRET:
+                raise ValueError("STRIPE_WEBHOOK_SECRET required when STRIPE_WEBHOOK_VERIFY=True in production")
+            
+            # LLM Providers
+            if self.REQUIRE_REAL_LLM:
+                has_provider = any([
+                    self.OPENAI_API_KEY,
+                    self.ANTHROPIC_API_KEY,
+                    self.GEMINI_API_KEY,
+                    self.GOOGLE_API_KEY,
+                ])
+                if not has_provider:
+                    raise ValueError(
+                        "At least one provider API key required when REQUIRE_REAL_LLM=1 in production. "\
+                        "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY."
+                    )
+        else:
+            # Local env: log warnings
+            if not self.JWT_SECRET or self.JWT_SECRET in ("change_me_in_prod", "CHANGE_ME_IN_PRODUCTION"):
+                logger.warning("JWT_SECRET not properly configured (OK for local env)")
+            if self.STRIPE_WEBHOOK_VERIFY and not self.STRIPE_WEBHOOK_SECRET:
+                logger.warning("STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET not set (OK for local env)")
 
         if self.RATE_LIMIT_BACKEND is None:
             object.__setattr__(
@@ -185,10 +235,30 @@ class SettingsProxy:
         self._settings = AppSettings()
 
     def reload(self) -> None:
+        previous_url = getattr(self._settings, "DATABASE_URL", None)
         self._settings = AppSettings()
+        new_url = self._settings.DATABASE_URL
+        try:  # pragma: no cover - debug
+            with open("/tmp/settings_debug.log", "a", encoding="utf-8") as fp:
+                fp.write(f"reload previous={previous_url} new={new_url}\n")
+        except Exception:
+            pass
+        if previous_url and new_url and previous_url != new_url:
+            try:  # pragma: no cover - safeguards test envs that swap DB URLs
+                from database import reset_engine
+
+                reset_engine()
+            except Exception:
+                pass
 
     def __getattr__(self, name: str):  # pragma: no cover - passthrough
         return getattr(self._settings, name)
 
 
-settings = SettingsProxy()
+# Keep a process-wide singleton so tests that reload modules still share the same settings proxy.
+_singleton = getattr(builtins, "_consultaion_settings_proxy", None)
+if _singleton is None:
+    _singleton = SettingsProxy()
+    builtins._consultaion_settings_proxy = _singleton
+
+settings = _singleton

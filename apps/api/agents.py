@@ -4,12 +4,16 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Literal
 
 from litellm import acompletion
 from config import settings
 from llm_errors import TransientLLMError
 from schemas import AgentConfig, JudgeConfig
+from exceptions import ProviderCircuitOpenError
+from parliament.provider_health import get_health_state, record_call_result
+from safety.pii import scrub_messages
 
 logger = logging.getLogger(__name__)
 
@@ -163,10 +167,34 @@ async def _raw_llm_call(
     except Exception:
         model_cfg = get_default_model()
     target_model = model_override or model_cfg.litellm_model
+    
+    # Extract provider name for health tracking
+    provider_name = model_cfg.provider.value if hasattr(model_cfg, 'provider') else "unknown"
+    
+    # Patchset 28.0: Check circuit breaker
+    now = datetime.now(timezone.utc)
+    health_state = get_health_state(provider_name, target_model)
+    if health_state.is_open(now):
+        if not settings.IS_LOCAL_ENV:
+            # Production: block the call
+            raise ProviderCircuitOpenError(
+                f"Circuit breaker open for {provider_name}/{target_model} "
+                f"(error_rate={health_state.error_calls/max(1, health_state.total_calls):.2%})"
+            )
+        else:
+            # Local: log warning but allow call
+            logger.warning(
+                f"Circuit breaker open for {provider_name}/{target_model} "
+                f"(allowing in local env)"
+            )
+    
+    # Patchset 29.0: Scrub PII from messages
+    scrubbed_messages = scrub_messages(messages, enable=settings.ENABLE_PII_SCRUB)
+    
     try:
         response = await acompletion(
             model=target_model,
-            messages=messages,
+            messages=scrubbed_messages,
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -207,8 +235,17 @@ async def _raw_llm_call(
                 "tokens_out": token_counts.get("completion"),
             },
         )
+        
+        # Patchset 28.0: Record successful call
+        record_call_result(provider_name, target_model, success=True, now=now)
+        
         return content.strip(), call_usage
+    except ProviderCircuitOpenError:
+        # Don't track circuit breaker blocks as errors
+        raise
     except Exception as exc:  # pragma: no cover - handled by retry/fallback
+        # Patchset 28.0: Record failed call
+        record_call_result(provider_name, target_model, success=False, now=now)
         raise TransientLLMError(f"LLM call failed for role {role}: {exc}", cause=exc)
 
 
