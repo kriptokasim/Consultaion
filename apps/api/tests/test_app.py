@@ -29,30 +29,12 @@ def _cleanup():
 atexit.register(_cleanup)
 
 os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
-os.environ.setdefault("USE_MOCK", "1")
-os.environ.setdefault("DISABLE_AUTORUN", "1")
-os.environ.setdefault("DISABLE_RATINGS", "1")
-os.environ.setdefault("FAST_DEBATE", "1")
-os.environ.setdefault("SSE_BACKEND", "memory")
-os.environ["RL_MAX_CALLS"] = "1000"
-os.environ["AUTH_RL_MAX_CALLS"] = "1000"
-os.environ.setdefault("JWT_SECRET", "test-secret")
-os.environ.setdefault("DEFAULT_MAX_RUNS_PER_HOUR", "50")
-os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
-os.environ.setdefault("COOKIE_SECURE", "0")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import config as config_module  # noqa: E402
 from config import settings  # noqa: E402
-
-
-def _reload_settings():
-    os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
-    config_module.settings.reload()
-
-
-_reload_settings()
+from tests.utils import settings_context
 
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from database import engine, init_db, reset_engine  # noqa: E402
@@ -133,11 +115,11 @@ def test_jwt_secret_default_rejected(monkeypatch):
     import auth as auth_module
 
     monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
-    _reload_settings()
+    settings.reload()
     with pytest.raises(RuntimeError):
         importlib.reload(auth_module)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    _reload_settings()
+    settings.reload()
     importlib.reload(auth_module)
 
 
@@ -418,23 +400,19 @@ def test_list_debates_prompt_query_filters_results():
 
 
 def test_rate_limit_blocks_after_threshold():
-    previous = os.environ.get("DEFAULT_MAX_RUNS_PER_HOUR", "50")
-    os.environ["DEFAULT_MAX_RUNS_PER_HOUR"] = "1"
-    _reload_settings()
-    user = _register_user("ratelimit@example.com", "securepass")
-    _create_debate_for_user(user, "First allowed run")
-    with pytest.raises(HTTPException) as exc_info:
-        _create_debate_for_user(user, "Second run should fail")
-    detail = exc_info.value.detail
-    assert isinstance(detail, dict)
-    assert detail["code"] == "rate_limit"
-    with Session(engine) as session:
-        logs = session.exec(
-            select(AuditLog).where(AuditLog.action == "rate_limit_block", AuditLog.user_id == user.id)
-        ).all()
-        assert logs
-    os.environ["DEFAULT_MAX_RUNS_PER_HOUR"] = previous
-    _reload_settings()
+    with settings_context(DEFAULT_MAX_RUNS_PER_HOUR="1"):
+        user = _register_user("ratelimit@example.com", "securepass")
+        _create_debate_for_user(user, "First allowed run")
+        with pytest.raises(HTTPException) as exc_info:
+            _create_debate_for_user(user, "Second run should fail")
+        detail = exc_info.value.detail
+        assert isinstance(detail, dict)
+        assert detail["code"] == "rate_limit"
+        with Session(engine) as session:
+            logs = session.exec(
+                select(AuditLog).where(AuditLog.action == "rate_limit_block", AuditLog.user_id == user.id)
+            ).all()
+            assert logs
 
 
 def test_admin_logs_endpoint_lists_entries():
@@ -481,8 +459,8 @@ def test_wilson_interval_bounds():
     assert 0.4 < low < high < 1.0
 
 
-def test_leaderboard_updates_after_score_entries():
-    user = _register_user("elo@example.com", "elo-pass")
+def test_leaderboard_updates_after_score_entries(monkeypatch):
+    user = _register_user(f"elo-{uuid.uuid4().hex[:8]}@example.com", "elo-pass")
     debate_id = _create_debate_for_user(user, "Leaderboard prompt")
     with Session(engine) as session:
         debate = session.get(Debate, debate_id)
@@ -507,12 +485,11 @@ def test_leaderboard_updates_after_score_entries():
             )
         )
         session.commit()
-    previous = os.environ.get("DISABLE_RATINGS", "1")
-    os.environ["DISABLE_RATINGS"] = "0"
-    _reload_settings()
+    
+    # Temporarily enable ratings without reloading settings (to avoid DB switch)
+    monkeypatch.setattr(settings, "DISABLE_RATINGS", False)
     update_ratings_for_debate(debate_id)
-    os.environ["DISABLE_RATINGS"] = previous
-    _reload_settings()
+        
     with Session(engine) as session:
         ratings = session.exec(select(RatingPersona).where(RatingPersona.persona == "Analyst")).all()
         assert ratings
@@ -588,15 +565,29 @@ def test_model_leaderboard_stats_counts_champions():
 
 
 def test_manual_start_requires_flag():
-    previous = os.environ.get("DISABLE_AUTORUN", "1")
-    os.environ["DISABLE_AUTORUN"] = "0"
-    _reload_settings()
-    user = _register_user("manual-guard@example.com", "manualpass")
-    debate_id = _create_debate_for_user(user, "Manual guard prompt")
-    with Session(engine) as session:
-        background_tasks = BackgroundTasks()
-        with pytest.raises(HTTPException):
-            asyncio.run(
+    with settings_context(DISABLE_AUTORUN="0"):
+        user = _register_user("manual-guard@example.com", "manualpass")
+        debate_id = _create_debate_for_user(user, "Manual guard prompt")
+        with Session(engine) as session:
+            background_tasks = BackgroundTasks()
+            with pytest.raises(HTTPException):
+                asyncio.run(
+                    start_debate_run(
+                        debate_id,
+                        background_tasks,
+                        session=session,
+                        current_user=user,
+                    )
+                )
+
+
+def test_manual_start_succeeds_when_disabled():
+    with settings_context(DISABLE_AUTORUN="1"):
+        user = _register_user("manual-ok@example.com", "manualpass")
+        debate_id = _create_debate_for_user(user, "Manual start run prompt")
+        with Session(engine) as session:
+            background_tasks = BackgroundTasks()
+            result = asyncio.run(
                 start_debate_run(
                     debate_id,
                     background_tasks,
@@ -604,67 +595,29 @@ def test_manual_start_requires_flag():
                     current_user=user,
                 )
             )
-    os.environ["DISABLE_AUTORUN"] = previous
-    _reload_settings()
-
-
-def test_manual_start_succeeds_when_disabled():
-    previous = os.environ.get("DISABLE_AUTORUN", "1")
-    os.environ["DISABLE_AUTORUN"] = "1"
-    _reload_settings()
-    user = _register_user("manual-ok@example.com", "manualpass")
-    debate_id = _create_debate_for_user(user, "Manual start run prompt")
-    with Session(engine) as session:
-        background_tasks = BackgroundTasks()
-        result = asyncio.run(
-            start_debate_run(
-                debate_id,
-                background_tasks,
-                session=session,
-                current_user=user,
-            )
-        )
-    assert result["status"] == "scheduled"
-    os.environ["DISABLE_AUTORUN"] = previous
-    _reload_settings()
+        assert result["status"] == "scheduled"
 
 
 def test_debate_creation_dispatches_celery_task(monkeypatch):
-    prev_mode = os.environ.get("DEBATE_DISPATCH_MODE", "inline")
-    prev_autorun = os.environ.get("DISABLE_AUTORUN", "1")
-    prev_broker = os.environ.get("CELERY_BROKER_URL")
-    prev_backend = os.environ.get("CELERY_RESULT_BACKEND")
-    os.environ["DEBATE_DISPATCH_MODE"] = "celery"
-    os.environ["DISABLE_AUTORUN"] = "0"
-    os.environ["CELERY_BROKER_URL"] = "memory://"
-    os.environ["CELERY_RESULT_BACKEND"] = "memory://"
-    _reload_settings()
+    with settings_context(
+        DEBATE_DISPATCH_MODE="celery",
+        DISABLE_AUTORUN="0",
+        CELERY_BROKER_URL="memory://",
+        CELERY_RESULT_BACKEND="memory://",
+    ):
+        class DummyTask:
+            def __init__(self):
+                self.debate_id = None
 
-    class DummyTask:
-        def __init__(self):
-            self.debate_id = None
+            def delay(self, debate_id: str):
+                self.debate_id = debate_id
 
-        def delay(self, debate_id: str):
-            self.debate_id = debate_id
+        dummy = DummyTask()
+        monkeypatch.setattr(debate_dispatch_module, "run_debate_task", dummy, raising=False)
 
-    dummy = DummyTask()
-    monkeypatch.setattr(debate_dispatch_module, "run_debate_task", dummy, raising=False)
-
-    user = _register_user("celery-dispatch@example.com", "celerypass")
-    debate_id = _create_debate_for_user(user, "Celery dispatch prompt")
-    assert dummy.debate_id == debate_id
-
-    os.environ["DEBATE_DISPATCH_MODE"] = prev_mode
-    os.environ["DISABLE_AUTORUN"] = prev_autorun
-    if prev_broker is None:
-        os.environ.pop("CELERY_BROKER_URL", None)
-    else:
-        os.environ["CELERY_BROKER_URL"] = prev_broker
-    if prev_backend is None:
-        os.environ.pop("CELERY_RESULT_BACKEND", None)
-    else:
-        os.environ["CELERY_RESULT_BACKEND"] = prev_backend
-    _reload_settings()
+        user = _register_user("celery-dispatch@example.com", "celerypass")
+        debate_id = _create_debate_for_user(user, "Celery dispatch prompt")
+        assert dummy.debate_id == debate_id
 
 
 def test_sweep_stale_channels_removes_old_entries():

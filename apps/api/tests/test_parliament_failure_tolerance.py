@@ -12,8 +12,6 @@ fd, temp_path = tempfile.mkstemp(prefix="consultaion_tolerance_", suffix=".db")
 os.close(fd)
 test_db_path = Path(temp_path)
 os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
-os.environ.setdefault("JWT_SECRET", "test-secret")
-os.environ.setdefault("USE_MOCK", "1")
 
 
 def _cleanup():
