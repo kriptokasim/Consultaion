@@ -1,37 +1,18 @@
-import atexit
 import os
-import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
 from sqlmodel import Session
 
-os.environ.setdefault("DATABASE_URL", "")
-fd, temp_path = tempfile.mkstemp(prefix="consultaion_tolerance_", suffix=".db")
-os.close(fd)
-test_db_path = Path(temp_path)
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
-
-
-def _cleanup():
-    try:
-        test_db_path.unlink()
-    except OSError:
-        pass
-
-
-atexit.register(_cleanup)
 
 import agents  # noqa: E402
 from agents import UsageCall  # noqa: E402
-from database import engine, init_db  # noqa: E402
+from database import engine  # noqa: E402
 from models import Debate  # noqa: E402
 from parliament.engine import ParliamentResult, run_parliament_debate  # noqa: E402
 from schemas import PanelSeat, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
-
-init_db()
 
 
 class _FlakyLLM:

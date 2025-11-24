@@ -2,11 +2,9 @@ import asyncio
 import importlib
 import os
 import sys
-import tempfile
 import time
 from decimal import Decimal
 from pathlib import Path
-import atexit
 import uuid
 
 import pytest
@@ -14,31 +12,14 @@ from fastapi import BackgroundTasks, HTTPException, Response
 from sqlmodel import Session, select
 from starlette.requests import Request
 
-fd, temp_path = tempfile.mkstemp(prefix="consultaion_test_", suffix=".db")
-os.close(fd)
-test_db_path = Path(temp_path)
-
-
-def _cleanup():
-    try:
-        test_db_path.unlink()
-    except OSError:
-        pass
-
-
-atexit.register(_cleanup)
-
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
-
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import config as config_module  # noqa: E402
 from config import settings  # noqa: E402
-from tests.utils import settings_context
+from tests.utils import settings_context, unique_email  # noqa: E402
 
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
-from database import engine, init_db, reset_engine  # noqa: E402
-reset_engine()
+from database import engine, init_db  # noqa: E402
 from main import (  # noqa: E402
     AuthRequest,
     DebateCreate,
@@ -70,36 +51,6 @@ from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 from parliament.provider_health import clear_all_health_states, record_call_result  # noqa: E402
-
-init_db()
-
-
-def _seed_billing_plans():
-    with Session(engine) as session:
-        existing = session.exec(select(BillingPlan).where(BillingPlan.slug == "free")).first()
-        if existing:
-            return
-        session.add(
-            BillingPlan(
-                slug="free",
-                name="Free",
-                is_default_free=True,
-                limits={"max_debates_per_month": 5, "exports_enabled": True},
-            )
-        )
-        session.add(
-            BillingPlan(
-                slug="pro",
-                name="Pro",
-                price_monthly=Decimal("29.00"),
-                currency="USD",
-                limits={"max_debates_per_month": 100, "exports_enabled": True},
-            )
-        )
-        session.commit()
-
-
-_seed_billing_plans()
 
 
 def test_debate_create_prompt_validation():

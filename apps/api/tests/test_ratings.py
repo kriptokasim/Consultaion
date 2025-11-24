@@ -1,7 +1,5 @@
-import atexit
 import os
 import sys
-import tempfile
 import uuid
 from pathlib import Path
 
@@ -10,46 +8,20 @@ from sqlmodel import Session, select
 
 from tests.utils import settings_context
 
-fd, temp_path = tempfile.mkstemp(prefix="consultaion_ratings_", suffix=".db")
-os.close(fd)
-test_db_path = Path(temp_path)
-
-
-def _cleanup():
-    try:
-        test_db_path.unlink()
-    except OSError:
-        pass
-
-
-atexit.register(_cleanup)
-
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import config as config_module  # noqa: E402
-config_module.settings.reload()
 
 import database  # noqa: E402
-database.reset_engine()
 from database import init_db  # noqa: E402
 from models import Debate, PairwiseVote, RatingPersona, Score  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
-
-init_db()
 
 
 @pytest.fixture(autouse=True)
 def enable_ratings():
     with settings_context(DISABLE_RATINGS="0"):
         yield
-
-
-@pytest.fixture
-def db_session():
-    with Session(database.engine) as session:
-        yield session
-        session.rollback()
 
 
 @pytest.fixture
