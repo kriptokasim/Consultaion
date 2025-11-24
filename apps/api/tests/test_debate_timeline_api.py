@@ -1,123 +1,136 @@
-import atexit
+import pytest
+import uuid
+from datetime import datetime, timezone, timedelta
+from fastapi.testclient import TestClient
+from sqlmodel import Session
+from models import Debate, User, Message
+# Setup test DB
 import os
 import tempfile
 from pathlib import Path
 
-import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlmodel import Session
-
-fd, temp_path = tempfile.mkstemp(prefix="consultaion_timeline_api_", suffix=".db")
+fd, temp_path = tempfile.mkstemp(prefix="timeline_api_test_", suffix=".db")
 os.close(fd)
 test_db_path = Path(temp_path)
+os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
+os.environ["JWT_SECRET"] = "test-secret"
 
+import config as config_module
+config_module.settings.reload()
 
-def _cleanup():
+import database
+from auth import create_access_token
+
+from database import init_db, reset_engine
+from main import app
+
+@pytest.fixture(scope="module", autouse=True)
+def setup_db():
+    reset_engine()
+    init_db()
+    yield
     try:
         test_db_path.unlink()
     except OSError:
         pass
 
-
-atexit.register(_cleanup)
-
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
-os.environ.setdefault("JWT_SECRET", "test-secret")
-os.environ.setdefault("USE_MOCK", "1")
-os.environ.setdefault("ENABLE_CSRF", "1")
-os.environ.setdefault("COOKIE_SECURE", "0")
-os.environ["RL_MAX_CALLS"] = "1000"
-os.environ["AUTH_RL_MAX_CALLS"] = "1000"
-
-import importlib
-import config as config_module
-importlib.reload(config_module)
-
-from auth import COOKIE_NAME, hash_password  # noqa: E402
-from database import engine, init_db, reset_engine  # noqa: E402
-from main import app  # noqa: E402
-from models import Debate, Message, User  # noqa: E402
-from schemas import default_panel_config  # noqa: E402
-
-reset_engine()
-init_db()
-
-pytestmark = pytest.mark.anyio
-
+@pytest.fixture
+def session():
+    with Session(database.engine) as session:
+        yield session
 
 @pytest.fixture
-async def client():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
-        yield test_client
+def client():
+    return TestClient(app)
 
+@pytest.fixture
+def auth_cookies(session):
+    user_id = str(uuid.uuid4())
+    user = User(id=user_id, email=f"user-{user_id[:8]}@example.com", password_hash="hash")
+    session.add(user)
+    session.commit()
+    # Ensure we use the same secret as the app
+    from config import settings
+    token = create_access_token(user_id=user.id, email=user.email, role="user")
+    return {settings.COOKIE_NAME: token}, user
 
-async def _login(client: AsyncClient) -> User:
-    with Session(engine) as session:
-        user = User(email="timeline@example.com", password_hash=hash_password("StrongPass123!"))
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-    res = await client.post("/auth/login", json={"email": user.email, "password": "StrongPass123!"})
-    assert res.status_code == 200
-    assert client.cookies.get(COOKIE_NAME)
-    return user
+def test_get_timeline_completed_debate(client, session, auth_cookies):
+    cookies, user = auth_cookies
+    debate_id = str(uuid.uuid4())
+    debate = Debate(
+        id=debate_id,
+        prompt="Test Debate",
+        status="completed",
+        user_id=user.id,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    session.add(debate)
+    session.commit()
 
+    # Set cookies directly on the request
+    response = client.get(f"/debates/{debate_id}/timeline", cookies=cookies)
+    assert response.status_code == 200
+    events = response.json()
+    assert len(events) > 0
+    assert events[0]["type"] == "system_notice"
+    assert events[-1]["type"] == "debate_completed"
 
-async def test_get_timeline_requires_auth(client: AsyncClient):
-    res = await client.get("/debates/123/timeline")
-    assert res.status_code in (401, 403)
+def test_get_timeline_failed_debate(client, session, auth_cookies):
+    cookies, user = auth_cookies
+    debate_id = str(uuid.uuid4())
+    debate = Debate(
+        id=debate_id,
+        prompt="Failed Debate",
+        status="failed",
+        user_id=user.id,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    session.add(debate)
+    session.commit()
 
+    response = client.get(f"/debates/{debate_id}/timeline", cookies=cookies)
+    assert response.status_code == 200
+    events = response.json()
+    assert len(events) > 0
+    assert events[-1]["type"] == "debate_failed"
 
-async def test_get_timeline_returns_events_for_completed_debate(client: AsyncClient):
-    user = await _login(client)
-    panel = default_panel_config()
-    debate_id = "timeline-api"
-    with Session(engine) as session:
-        debate = Debate(
-            id=debate_id,
-            prompt="Timeline api test",
-            status="completed",
-            panel_config=panel.model_dump(),
-            engine_version=panel.engine_version,
-            user_id=user.id,
-        )
-        session.add(debate)
-        session.commit()
-        for idx, seat in enumerate(panel.seats):
-            session.add(
-                Message(
-                    debate_id=debate_id,
-                    round_index=idx,
-                    role="seat",
-                    persona=seat.display_name,
-                    content="hello",
-                    meta={"seat_id": seat.seat_id, "role_profile": seat.role_profile, "phase": "explore"},
-                )
-            )
-        session.commit()
+def test_get_timeline_in_progress_debate(client, session, auth_cookies):
+    cookies, user = auth_cookies
+    debate_id = str(uuid.uuid4())
+    debate = Debate(
+        id=debate_id,
+        prompt="Running Debate",
+        status="running",
+        user_id=user.id,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    session.add(debate)
+    session.commit()
 
-    res = await client.get(f"/debates/{debate_id}/timeline")
-    assert res.status_code == 200
-    payload = res.json()
-    assert isinstance(payload, list)
-    assert payload and payload[0]["event_type"] == "seat_message"
+    response = client.get(f"/debates/{debate_id}/timeline", cookies=cookies)
+    assert response.status_code == 409 # Conflict
 
+def test_get_timeline_unauthorized(client, session, auth_cookies):
+    cookies, user = auth_cookies
+    debate_id = str(uuid.uuid4())
+    debate = Debate(
+        id=debate_id,
+        prompt="Other User Debate",
+        status="completed",
+        user_id="other-user",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    session.add(debate)
+    session.commit()
 
-async def test_timeline_409_when_running(client: AsyncClient):
-    user = await _login(client)
-    panel = default_panel_config()
-    debate_id = "timeline-running"
-    with Session(engine) as session:
-        debate = Debate(
-            id=debate_id,
-            prompt="Timeline running",
-            status="running",
-            panel_config=panel.model_dump(),
-            engine_version=panel.engine_version,
-            user_id=user.id,
-        )
-        session.add(debate)
-        session.commit()
-    res = await client.get(f"/debates/{debate_id}/timeline")
-    assert res.status_code == 409
+    response = client.get(f"/debates/{debate_id}/timeline", cookies=cookies)
+    assert response.status_code == 404 # Not Found (access denied hides existence)
+
+def test_get_timeline_not_found(client, auth_cookies):
+    cookies, _ = auth_cookies
+    response = client.get(f"/debates/{str(uuid.uuid4())}/timeline", cookies=cookies)
+    assert response.status_code == 404

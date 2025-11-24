@@ -185,11 +185,11 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
             <button
               key={option}
               className={cn(
-                "rounded-full px-3 py-1 transition", 
+                "rounded-full px-3 py-1 transition",
                 scope === option ? "bg-amber-600 text-white shadow" : "text-stone-600 hover:text-stone-900",
               )}
               onClick={() => setScope(option)}
-              >
+            >
               {t(SCOPE_KEYS[option])}
             </button>
           ))}
@@ -264,7 +264,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                 <TableCell>
                   <div className="flex items-center gap-2">
                     {(normalizeStatus(run.status) === "completed" || normalizeStatus(run.status) === "failed") ? (
-                      <Link href={`/debates/${run.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
+                      <Link href={`/runs/${run.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
                         {t("dashboard.recentDebates.replay")}
                       </Link>
                     ) : null}

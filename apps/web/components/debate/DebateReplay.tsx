@@ -79,7 +79,7 @@ export function DebateReplay({ debateId }: Props) {
     );
   }
 
-  const isSystemNotice = current.eventType === "system_notice";
+  const isSystemNotice = current.type === "system_notice";
 
   return (
     <div className="glass-card space-y-6 rounded-3xl border border-amber-200/70 bg-white/80 p-6 shadow-lg">
@@ -105,7 +105,7 @@ export function DebateReplay({ debateId }: Props) {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs text-stone-600">
-          <span>{t("replay.position", { current: index + 1, total: events.length })}</span>
+          <span>{t("replay.position").replace("{{current}}", String(index + 1)).replace("{{total}}", String(events.length))}</span>
           <button
             type="button"
             className="text-amber-700 underline"
@@ -118,20 +118,20 @@ export function DebateReplay({ debateId }: Props) {
           </button>
         </div>
         <input
-            type="range"
-            min={0}
-            max={Math.max(events.length - 1, 0)}
-            value={index}
-            onChange={(e) => setIndex(Number(e.target.value))}
-            className="w-full accent-amber-600"
-          />
+          type="range"
+          min={0}
+          max={Math.max(events.length - 1, 0)}
+          value={index}
+          onChange={(e) => setIndex(Number(e.target.value))}
+          className="w-full accent-amber-600"
+        />
       </div>
 
       <div className="space-y-3 rounded-2xl border border-amber-200/70 bg-white/80 p-4 shadow-inner shadow-amber-900/5">
         <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
-          <span>{t("replay.currentRound", { round: current.roundIndex + 1, phase: current.phase })}</span>
+          <span>{t("replay.currentRound").replace("{{round}}", String((current.round_index ?? 0) + 1)).replace("{{phase}}", current.type)}</span>
           <span>·</span>
-          <span>{t("replay.currentSeat", { role: current.seatRole, provider: current.provider ?? "—", model: current.model ?? "—" })}</span>
+          <span>{t("replay.currentSeat").replace("{{role}}", current.role ?? "—").replace("{{provider}}", current.provider ?? "—").replace("{{model}}", current.model ?? "—")}</span>
         </div>
 
         {isSystemNotice ? (
@@ -143,7 +143,6 @@ export function DebateReplay({ debateId }: Props) {
           <div className="space-y-2">
             {current.stance ? <p className="text-sm font-semibold text-amber-900">{current.stance}</p> : null}
             {current.content ? <p className="text-sm leading-relaxed text-stone-800">{current.content}</p> : null}
-            {current.reasoning ? <p className="text-xs text-stone-600">{current.reasoning}</p> : null}
           </div>
         )}
       </div>

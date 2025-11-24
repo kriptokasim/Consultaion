@@ -47,17 +47,23 @@ class DebateSnapshot(BaseModel):
 
 
 class TimelineEvent(BaseModel):
-    ts: datetime
     debate_id: str
-    round_index: int
-    phase: str
-    seat_id: str
-    seat_role: str
+    event_id: str
+    ts: datetime
+    type: Literal[
+        "system_notice",
+        "seat_message",
+        "round_start",
+        "round_end",
+        "debate_failed",
+        "debate_completed",
+    ]
+    round_index: Optional[int] = None
+    seat_id: Optional[str] = None
+    seat_label: Optional[str] = None
+    role: Optional[str] = None
     provider: Optional[str] = None
     model: Optional[str] = None
-    event_type: Literal["seat_message", "system_notice", "score_update", "summary"]
-    content: Optional[str] = None
     stance: Optional[str] = None
-    reasoning: Optional[str] = None
-    score: Optional[float] = None
-    meta: Optional[dict[str, Any]] = None
+    content: Optional[str] = None
+    meta: dict[str, Any] = Field(default_factory=dict)

@@ -166,28 +166,29 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
               {debates.map((debate) => {
                 const replayAvailable = (debate.status || "").toLowerCase() === "completed" || (debate.status || "").toLowerCase() === "failed";
                 return (
-                <Link
-                  key={debate.id}
-                  href={`/runs/${debate.id}`}
-                  className="flex items-center gap-4 px-5 py-4 transition hover:bg-amber-50/70"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 shadow-inner shadow-amber-900/10">
-                    <Play className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-[#3a2a1a] line-clamp-1">{debate.prompt || t("dashboard.prompt.untitled")}</p>
-                    <p className="text-xs text-[#5a4a3a]">{t("dashboard.time.createdPrefix")} {formatTimestamp(debate.created_at)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {replayAvailable ? (
-                      <Link href={`/debates/${debate.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
-                        {t("dashboard.recentDebates.replay")}
-                      </Link>
-                    ) : null}
-                    <Badge className={`border ${statusTone(debate.status)}`}>{debate.status ?? "queued"}</Badge>
-                  </div>
-                </Link>
-              )})}
+                  <Link
+                    key={debate.id}
+                    href={`/runs/${debate.id}`}
+                    className="flex items-center gap-4 px-5 py-4 transition hover:bg-amber-50/70"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 shadow-inner shadow-amber-900/10">
+                      <Play className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-[#3a2a1a] line-clamp-1">{debate.prompt || t("dashboard.prompt.untitled")}</p>
+                      <p className="text-xs text-[#5a4a3a]">{t("dashboard.time.createdPrefix")} {formatTimestamp(debate.created_at)}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {replayAvailable ? (
+                        <Link href={`/runs/${debate.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
+                          {t("dashboard.recentDebates.replay")}
+                        </Link>
+                      ) : null}
+                      <Badge className={`border ${statusTone(debate.status)}`}>{debate.status ?? "queued"}</Badge>
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
           </div>
         )}
