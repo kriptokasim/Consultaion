@@ -167,18 +167,28 @@ def truncate_all_tables() -> None:
         if engine.url.get_backend_name() == "sqlite":
             connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
         
-        # Truncate each table
+        # Truncate each table (in reverse order to handle dependencies)
         for table in reversed(tables):
             try:
                 if engine.url.get_backend_name() == "sqlite":
                     # SQLite doesn't support TRUNCATE, use DELETE
                     connection.exec_driver_sql(f"DELETE FROM {table.name}")
+                    # Reset the auto-increment counter for SQLite (if it exists)
+                    # sqlite_sequence only exists if there are tables with AUTOINCREMENT
+                    try:
+                        connection.exec_driver_sql(
+                            f"DELETE FROM sqlite_sequence WHERE name='{table.name}'"
+                        )
+                    except Exception:
+                        # sqlite_sequence might not exist yet, that's OK
+                        pass
                 else:
                     # PostgreSQL and others support TRUNCATE
-                    connection.exec_driver_sql(f"TRUNCATE TABLE {table.name} CASCADE")
-            except Exception:
-                # Ignore errors for tables that don't exist or can't be truncated
-                pass
+                    connection.exec_driver_sql(f"TRUNCATE TABLE {table.name} RESTART IDENTITY CASCADE")
+            except Exception as e:
+                # Log but don't fail - some tables might not exist or can't be truncated
+                import sys
+                print(f"Warning: Could not truncate table {table.name}: {e}", file=sys.stderr)
         
         # Re-enable foreign key constraints for SQLite
         if engine.url.get_backend_name() == "sqlite":

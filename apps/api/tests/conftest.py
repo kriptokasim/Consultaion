@@ -114,23 +114,25 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     - Truncates all tables for clean state
     - Re-seeds billing plans
     - Clears provider health registry
+    - Resets SSE backend
     
     This ensures complete isolation between tests even when application code
     creates its own database sessions.
     """
     from tests.utils import reset_provider_health, truncate_all_tables
+    from sse_backend import reset_sse_backend_for_tests
     
-    # Truncate all tables to ensure clean state
-    # (Skip for the first test in the session to avoid truncating seed data)
-    if not hasattr(reset_global_state, '_first_run'):
-        reset_global_state._first_run = True
-    else:
-        truncate_all_tables()
-        # Re-seed billing plans after truncation
-        seed_billing_plans()
+    # Truncate all tables to ensure clean state before each test
+    truncate_all_tables()
+    
+    # Re-seed billing plans after truncation
+    seed_billing_plans()
 
     # Reset provider health (circuit breaker state)
     reset_provider_health()
+    
+    # Reset SSE backend (in-memory event channels)
+    reset_sse_backend_for_tests()
 
     yield
 
