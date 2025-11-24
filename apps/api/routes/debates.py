@@ -172,6 +172,7 @@ async def create_debate(
             target_type="debate",
             target_id=None,
             meta=payload,
+            session=session,
         )
         raise HTTPException(status_code=429, detail=payload) from exc
 
@@ -228,6 +229,7 @@ async def create_debate(
         target_type="debate",
         target_id=debate_id,
         meta={"prompt": body.prompt},
+        session=session,
     )
     track_metric("debates_created")
     return {"id": debate_id}
@@ -266,6 +268,7 @@ async def start_debate_run(
         user_id=current_user.id if current_user else None,
         target_type="debate",
         target_id=debate_id,
+        session=session,
     )
     return {"id": debate_id, "status": "scheduled"}
 
@@ -407,6 +410,7 @@ async def export_debate_report(
         user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
+        session=session,
     )
     return PlainTextResponse(
         content=content,
@@ -563,6 +567,7 @@ async def export_scores_csv(
         user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
+        session=session,
     )
     return Response(
         content=content,
@@ -637,6 +642,7 @@ async def update_debate(
             target_type="debate",
             target_id=debate.id,
             meta={"team_id": debate.team_id},
+            session=session,
         )
     return {
         "id": debate.id,

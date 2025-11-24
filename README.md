@@ -64,6 +64,12 @@ A platform that produces the best answer via multi-agent debate/voting.
 - Pairwise vote tracking → Elo & Wilson confidence intervals powering a public leaderboard and Methodology brief.
 - Web UI uses an “Amber-Mocha” cockpit theme (warm cream background with amber accents) across landing, dashboard, and live views.
 
+### Reliability, Safety & Secrets
+- Provider/model health tracking with a circuit breaker surfaces in the admin Ops view; unhealthy providers cool down automatically.
+- PII scrubbing runs on LLM inputs before they leave the API process to reduce accidental leakage.
+- Production boot validation enforces strong, non-default secrets (JWT, Stripe webhook) and requires real provider keys when `REQUIRE_REAL_LLM=1`.
+- See `SECURITY.md` for deployment guidance.
+
 ### Test coverage
 - `pytest -q` in `apps/api` now includes the audit-derived suites for orchestrator helpers, ratings, rate limits, SSE channel hygiene, and the multi-LLM registry (`apps/api/tests/test_*.py`). Run them locally after migrations to catch regressions early.
 

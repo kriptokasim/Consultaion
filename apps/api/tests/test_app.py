@@ -48,13 +48,15 @@ from config import settings  # noqa: E402
 
 
 def _reload_settings():
+    os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
     config_module.settings.reload()
 
 
 _reload_settings()
 
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
-from database import engine, init_db  # noqa: E402
+from database import engine, init_db, reset_engine  # noqa: E402
+reset_engine()
 from main import (  # noqa: E402
     AuthRequest,
     DebateCreate,
@@ -85,6 +87,7 @@ from orchestrator import run_debate  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
+from parliament.provider_health import clear_all_health_states, record_call_result  # noqa: E402
 
 init_db()
 
@@ -191,7 +194,7 @@ def test_run_debate_emits_final_events():
         async def _consume():
             async for event in backend.subscribe(channel_id):
                 events.append(event)
-                if event.get("type") == "final":
+                if event.get("type") in ("final", "error"):
                     break
 
         consumer = asyncio.create_task(_consume())
@@ -452,6 +455,9 @@ def test_admin_logs_endpoint_lists_entries():
 def test_admin_ops_summary_reports_status():
     owner = _register_user("ops@example.com", "ownerpass")
     _create_debate_for_user(owner, "Ops trail run")
+    clear_all_health_states()
+    record_call_result("openai", "gpt-4o", success=False)
+    record_call_result("openai", "gpt-4o", success=True)
     with Session(engine) as session:
         admin = session.get(User, owner.id)
         admin.role = "admin"
@@ -463,6 +469,11 @@ def test_admin_ops_summary_reports_status():
     assert "debates_24h" in payload
     assert payload["rate_limit"]["backend"]
     assert payload["dispatch"]["mode"]
+    assert "provider_health" in payload
+    assert isinstance(payload["provider_health"], list)
+    if payload["provider_health"]:
+        entry = payload["provider_health"][0]
+        assert {"provider", "model", "error_rate", "total_calls", "is_open", "last_opened"} <= set(entry.keys())
 
 
 def test_wilson_interval_bounds():
@@ -665,3 +676,29 @@ def test_sweep_stale_channels_removes_old_entries():
     time.sleep(0.02)
     asyncio.run(backend.cleanup())
     assert not backend._channels or not backend._channels.get(channel_id)
+
+
+def test_admin_ops_summary_reports_status():
+    admin = _register_user("admin-ops@example.com", "secret123")
+    
+    with Session(engine) as session:
+        # Mock provider health
+        record_call_result("openai", "gpt-4", success=True)
+        record_call_result("anthropic", "claude-2", success=False)
+        
+        # Call endpoint
+        result = asyncio.run(admin_ops_summary(session=session, current_admin=admin))
+        
+        assert "provider_health" in result
+        health = result["provider_health"]
+        assert len(health) >= 2
+        
+        openai = next(h for h in health if h["provider"] == "openai")
+        assert openai["total_calls"] >= 1
+        
+        anthropic = next(h for h in health if h["provider"] == "anthropic")
+        assert anthropic["error_calls"] >= 1
+        
+        # Clean up
+        clear_all_health_states()
+

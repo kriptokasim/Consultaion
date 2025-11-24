@@ -56,6 +56,7 @@ async def create_team(
         target_type="team",
         target_id=team.id,
         meta={"name": team.name},
+        session=session,
     )
     return serialize_team(team, "owner")
 
@@ -135,6 +136,7 @@ async def add_team_member(
         target_type="team",
         target_id=team.id,
         meta={"member_id": member.user_id, "role": member.role},
+        session=session,
     )
     return {
         "id": member.id,

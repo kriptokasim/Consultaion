@@ -25,8 +25,13 @@ def _cleanup():
 
 atexit.register(_cleanup)
 
+import config as config_module
+config_module.settings.reload()
+
 from agents import UsageAccumulator  # noqa: E402
-from database import engine, init_db  # noqa: E402
+import database  # noqa: E402
+database.reset_engine()
+from database import init_db  # noqa: E402
 from models import Debate  # noqa: E402
 import orchestrator  # noqa: E402
 from parliament.engine import ParliamentResult  # noqa: E402
@@ -36,11 +41,24 @@ from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E4
 init_db()
 
 
+@pytest.fixture
+def disable_fast_debate():
+    previous = os.environ.get("FAST_DEBATE")
+    os.environ["FAST_DEBATE"] = "0"
+    config_module.settings.reload()
+    yield
+    if previous is None:
+        os.environ.pop("FAST_DEBATE", None)
+    else:
+        os.environ["FAST_DEBATE"] = previous
+    config_module.settings.reload()
+
+
 @pytest.mark.anyio("asyncio")
-async def test_orchestrator_marks_debate_failed(monkeypatch):
+async def test_orchestrator_marks_debate_failed(monkeypatch, disable_fast_debate):
     panel = default_panel_config()
     debate_id = f"orchestrator-failed-{uuid.uuid4().hex[:6]}"
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         debate = Debate(
             id=debate_id,
             prompt="Abort path",
@@ -75,6 +93,6 @@ async def test_orchestrator_marks_debate_failed(monkeypatch):
         model_id=None,
     )
 
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         debate = session.get(Debate, debate_id)
         assert debate.status == "failed"

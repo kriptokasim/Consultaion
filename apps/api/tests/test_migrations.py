@@ -9,10 +9,12 @@ SQLITE_PATH = BASE_DIR / "ci_migrate.db"
 DB_URL = f"sqlite:///{SQLITE_PATH}"
 
 
+import sys
+
 def _run_alembic(database_url: str):
   env = os.environ.copy()
   env["DATABASE_URL"] = database_url
-  subprocess.check_call(["alembic", "upgrade", "head"], cwd=BASE_DIR, env=env)
+  subprocess.check_call([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=BASE_DIR, env=env)
 
 
 def test_000_sqlite_migration(tmp_path=None):

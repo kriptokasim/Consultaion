@@ -4,7 +4,7 @@ from urllib.parse import urlencode, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlmodel import Session, select
 
 from pydantic import BaseModel
@@ -237,12 +237,18 @@ async def google_callback(
         target_type="user",
         target_id=user.id,
         meta={"email": user.email, "provider": "google"},
+        session=session,
     )
     return redirect_resp
 
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 async def register_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
+    try:
+        with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
+            fp.write("register_user enter\n")
+    except Exception:
+        pass
     ip = request.client.host if request and request.client else "anonymous"
     if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
         record_429(ip, request.url.path)
@@ -259,16 +265,27 @@ async def register_user(body: AuthRequest, response: Response, session: Session 
     session.add(user)
     session.commit()
     session.refresh(user)
+    try:
+        with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
+            fp.write("register_user after_commit\n")
+    except Exception:
+        pass
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
     if ENABLE_CSRF:
         set_csrf_cookie(response, generate_csrf_token())
+    try:
+        with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
+            fp.write("register_user after_cookies\n")
+    except Exception:
+        pass
     record_audit(
         "register",
         user_id=user.id,
         target_type="user",
         target_id=user.id,
         meta={"email": user.email},
+        session=session,
     )
     return serialize_user(user)
 
@@ -293,6 +310,7 @@ async def login_user(body: AuthRequest, response: Response, session: Session = D
         target_type="user",
         target_id=user.id,
         meta={"email": user.email},
+        session=session,
     )
     return serialize_user(user)
 

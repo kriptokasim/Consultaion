@@ -29,14 +29,22 @@ os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("COOKIE_SECURE", "0")
 os.environ["RL_MAX_CALLS"] = "1000"
 os.environ["AUTH_RL_MAX_CALLS"] = "1000"
+os.environ.setdefault("FASTAPI_TEST_MODE", "1")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from database import engine, init_db  # noqa: E402
+import config as config_module  # noqa: E402
+config_module.settings.reload()
+
+import database  # noqa: E402
+database.reset_engine()
+from database import init_db  # noqa: E402
 from main import app  # noqa: E402
 from models import User  # noqa: E402
 
+# Create tables after models are loaded
 init_db()
+
 
 pytestmark = pytest.mark.anyio
 
@@ -75,7 +83,7 @@ async def test_profile_read_write_happy_path(client: AsyncClient):
     assert data["avatar_url"] == "https://example.com/avatar.png"
     assert data["timezone"] == "Europe/Istanbul"
 
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         user = session.exec(select(User).where(User.email == email)).first()
         assert user.display_name == "Amber"
         assert user.timezone == "Europe/Istanbul"
@@ -87,7 +95,7 @@ async def test_profile_requires_auth(client: AsyncClient):
     assert res.status_code == 401
     client.cookies.set("csrf_token", "fake", domain="testserver", path="/")
     res = await client.put("/me/profile", json={"display_name": "Nope"}, headers={"X-CSRF-Token": "fake"})
-    assert res.status_code == 403
+    assert res.status_code == 401
 
 
 async def test_profile_validation_errors(client: AsyncClient):

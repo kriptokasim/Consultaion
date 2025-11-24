@@ -1,4 +1,5 @@
 import { fetchWithAuth } from "@/lib/auth"
+import { getServerTranslations } from "@/lib/i18n/server"
 
 export const dynamic = "force-dynamic"
 
@@ -11,6 +12,15 @@ type RateLimitSummary = {
 type SseSummary = {
   backend?: string
   redis_ok?: boolean | null
+}
+
+type ProviderHealthRow = {
+  provider?: string
+  model?: string
+  error_rate?: number
+  total_calls?: number
+  is_open?: boolean
+  last_opened?: string | null
 }
 
 type OpsSummaryResponse = {
@@ -27,9 +37,11 @@ type OpsSummaryResponse = {
     seat_counts?: Record<string, number>
     model_usage_by_role?: Array<{ role: string; provider?: string; model?: string; total_tokens: number }>
   }
+  provider_health?: ProviderHealthRow[]
 }
 
 export default async function AdminOpsPage() {
+  const { t } = await getServerTranslations()
   const response = await fetchWithAuth("/admin/ops/summary")
   const payload = (await response.json().catch(() => ({}))) as OpsSummaryResponse
 
@@ -77,6 +89,7 @@ export default async function AdminOpsPage() {
   const topModels = payload.top_models ?? []
   const seatCounts = payload.parliament?.seat_counts ?? {}
   const modelUsage = payload.parliament?.model_usage_by_role ?? []
+  const providerHealth = payload.provider_health ?? []
 
   return (
     <div className="space-y-6">
@@ -160,6 +173,45 @@ export default async function AdminOpsPage() {
           </div>
         </div>
       </section>
+
+      <section className="card-elevated p-5">
+        <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">{t("admin.ops.providerHealth.title")}</h2>
+        <p className="text-sm text-stone-500 dark:text-stone-400">{t("admin.ops.providerHealth.description")}</p>
+        <div className="mt-4 space-y-2">
+          {providerHealth.length ? (
+            providerHealth.map((entry) => {
+              const errorRate = Math.round((entry.error_rate ?? 0) * 100)
+              const status = entry.is_open
+                ? ("circuitOpen" as const)
+                : errorRate >= 50
+                  ? ("degraded" as const)
+                  : ("healthy" as const)
+              return (
+                <div
+                  key={`${entry.provider}-${entry.model}`}
+                  className="flex items-center justify-between rounded-2xl border border-amber-100/50 bg-white/70 px-4 py-3 shadow-sm dark:border-amber-900/40 dark:bg-stone-900"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                      {entry.provider ?? t("admin.ops.providerHealth.provider")}
+                    </p>
+                    <p className="text-xs text-stone-500 dark:text-stone-400">
+                      {entry.model ?? t("admin.ops.providerHealth.model")} ·{" "}
+                      {(entry.total_calls ?? 0).toString()} {t("admin.ops.providerHealth.callsLabel")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="font-mono text-sm text-stone-900 dark:text-amber-50">{errorRate}%</p>
+                    <HealthBadge status={status} label={t(`admin.ops.providerHealth.status.${status}`)} />
+                  </div>
+                </div>
+              )
+            })
+          ) : (
+            <p className="text-sm text-stone-500 dark:text-stone-400">{t("admin.ops.providerHealth.empty")}</p>
+          )}
+        </div>
+      </section>
     </div>
   )
 }
@@ -194,4 +246,15 @@ function StatusRow({ label, healthy, description }: { label: string; healthy?: b
       <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badgeClass}`}>{badgeText}</span>
     </div>
   )
+}
+
+function HealthBadge({ status, label }: { status: "healthy" | "degraded" | "circuitOpen"; label: string }) {
+  const className =
+    status === "healthy"
+      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+      : status === "degraded"
+        ? "bg-amber-50 text-amber-800 border-amber-200"
+        : "bg-red-50 text-red-700 border-red-200"
+
+  return <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>{label}</span>
 }

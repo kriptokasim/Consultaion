@@ -405,5 +405,14 @@
   "admin.plan.empty": "Henüz kullanıcı yok.",
   "admin.models.title": "Bu dönemin öne çıkan modelleri",
   "admin.models.description": "Token tüketimi yüksek modellere hızlı bakış.",
-  "admin.models.empty": "Kayıtlı kullanım yok."
+  "admin.models.empty": "Kayıtlı kullanım yok.",
+  "admin.ops.providerHealth.title": "Sağlayıcı sağlığı",
+  "admin.ops.providerHealth.description": "Son sağlayıcı/model hata oranları ve devre durumları.",
+  "admin.ops.providerHealth.provider": "Sağlayıcı",
+  "admin.ops.providerHealth.model": "Model",
+  "admin.ops.providerHealth.callsLabel": "çağrı",
+  "admin.ops.providerHealth.status.healthy": "Sağlıklı",
+  "admin.ops.providerHealth.status.degraded": "Degrade",
+  "admin.ops.providerHealth.status.circuitOpen": "Devre açık",
+  "admin.ops.providerHealth.empty": "Henüz çağrı yok."
 }

@@ -18,6 +18,9 @@ JWT_SECRET = settings.JWT_SECRET
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET must be set")
 if JWT_SECRET == "change_me_in_prod":
+    settings.reload()
+    JWT_SECRET = settings.JWT_SECRET
+if JWT_SECRET == "change_me_in_prod":
     raise RuntimeError("JWT_SECRET must be changed from default value")
 JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = settings.JWT_TTL_SECONDS

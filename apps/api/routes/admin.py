@@ -20,6 +20,7 @@ from promotions.models import Promotion
 from ratings import update_ratings_for_debate
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from routes.common import serialize_user
+from parliament.provider_health import get_provider_health_snapshot
 from sse_backend import get_sse_backend
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -275,6 +276,8 @@ async def admin_ops_summary(
         "celery_configured": bool(settings.CELERY_BROKER_URL),
     }
 
+    provider_health = get_provider_health_snapshot(now)
+
     return {
         "debates_24h": debates_24h,
         "debates_7d": debates_7d,
@@ -294,6 +297,7 @@ async def admin_ops_summary(
             "seat_counts": dict(seat_counts),
             "model_usage_by_role": model_usage_by_role,
         },
+        "provider_health": get_provider_health_snapshot(datetime.now(timezone.utc)),
         "dispatch": dispatch_payload,
         "llm_reliability": {
             "retry_enabled": settings.LLM_RETRY_ENABLED,

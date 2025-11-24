@@ -36,7 +36,9 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 import config as config_module  # noqa: E402
 config_module.settings.reload()
 
-from database import engine, init_db  # noqa: E402
+import database  # noqa: E402
+database.reset_engine()
+from database import init_db  # noqa: E402
 from models import Debate, PairwiseVote, RatingPersona, Score  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 
@@ -55,7 +57,7 @@ def enable_ratings():
 
 @pytest.fixture
 def db_session():
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         yield session
         session.rollback()
 

@@ -117,6 +117,7 @@ def _reload_billing_routes(
     import config as config_module  # noqa: WPS433
 
     importlib.reload(config_module)
+    config_module.settings.reload()
     return importlib.reload(billing_routes_module)
 
 

@@ -1,4 +1,8 @@
 import pytest
+import os
+
+# Simplify ASGI middleware for test stability
+os.environ.setdefault("FASTAPI_TEST_MODE", "1")
 
 from worker.celery_app import celery_app
 

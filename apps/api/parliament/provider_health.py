@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Tuple
+from typing import Dict, Tuple, TypedDict
 
 from pydantic import BaseModel
 
@@ -111,6 +111,15 @@ class ProviderHealthState(BaseModel):
 _health_registry: Dict[Tuple[str, str], ProviderHealthState] = {}
 
 
+class ProviderHealthSummary(TypedDict):
+    provider: str
+    model: str
+    error_rate: float
+    total_calls: int
+    is_open: bool
+    last_opened: datetime | None
+
+
 def get_health_state(provider: str, model: str) -> ProviderHealthState:
     """
     Get or create health state for a provider/model combination.
@@ -167,6 +176,26 @@ def get_all_health_states() -> list[ProviderHealthState]:
         List of all ProviderHealthState objects in the registry
     """
     return list(_health_registry.values())
+
+
+def get_provider_health_snapshot(now: datetime | None = None) -> list[ProviderHealthSummary]:
+    """Summarize provider/model health for admin visibility."""
+    timestamp = now or datetime.now(timezone.utc)
+    snapshot: list[ProviderHealthSummary] = []
+    for state in sorted(_health_registry.values(), key=lambda entry: (entry.provider, entry.model)):
+        error_rate = state.error_calls / max(1, state.total_calls)
+        snapshot.append(
+            {
+                "provider": state.provider,
+                "model": state.model,
+                "error_rate": error_rate,
+                "total_calls": state.total_calls,
+                "error_calls": state.error_calls,
+                "is_open": state.is_open(timestamp),
+                "last_opened": state.last_opened,
+            }
+        )
+    return snapshot
 
 
 def reset_health_state(provider: str, model: str) -> None:

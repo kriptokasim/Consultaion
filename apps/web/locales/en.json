@@ -405,5 +405,14 @@
   "admin.plan.empty": "No users yet.",
   "admin.models.title": "Top models this period",
   "admin.models.description": "Quick glance at token-heavy models.",
-  "admin.models.empty": "No usage recorded."
+  "admin.models.empty": "No usage recorded.",
+  "admin.ops.providerHealth.title": "Provider health",
+  "admin.ops.providerHealth.description": "Recent provider/model error rates and circuit status.",
+  "admin.ops.providerHealth.provider": "Provider",
+  "admin.ops.providerHealth.model": "Model",
+  "admin.ops.providerHealth.callsLabel": "calls",
+  "admin.ops.providerHealth.status.healthy": "Healthy",
+  "admin.ops.providerHealth.status.degraded": "Degraded",
+  "admin.ops.providerHealth.status.circuitOpen": "Circuit open",
+  "admin.ops.providerHealth.empty": "No recent calls yet."
 }

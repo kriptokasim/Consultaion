@@ -35,6 +35,7 @@ os.environ.setdefault("WEB_APP_ORIGIN", "http://localhost:3000")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client")
 os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test-secret")
 os.environ.setdefault("GOOGLE_REDIRECT_URL", "http://testserver/auth/google/callback")
+os.environ.setdefault("FASTAPI_TEST_MODE", "1")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
