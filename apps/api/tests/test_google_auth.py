@@ -1,8 +1,6 @@
 import asyncio
 import os
 import sys
-import tempfile
-import atexit
 from pathlib import Path
 
 from fastapi import Response
@@ -11,21 +9,6 @@ from starlette.requests import Request
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-fd, temp_path = tempfile.mkstemp(prefix="consultaion_google_test_", suffix=".db")
-os.close(fd)
-test_db_path = Path(temp_path)
-
-
-def _cleanup():
-    try:
-        test_db_path.unlink()
-    except OSError:
-        pass
-
-
-atexit.register(_cleanup)
-
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("DISABLE_AUTORUN", "1")
 os.environ.setdefault("DISABLE_RATINGS", "1")
@@ -37,7 +20,7 @@ os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
 
 from main import app  # noqa: E402
 from models import User  # noqa: E402
-from database import engine, init_db  # noqa: E402
+import database  # noqa: E402
 from routes.auth import google_callback, sanitize_next_path  # noqa: E402
 
 
@@ -67,7 +50,7 @@ def _build_request() -> Request:
 
 
 def test_google_callback_creates_user(monkeypatch):
-    init_db()
+    # init_db() is handled by conftest
     import routes.auth as auth_routes
 
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client")
@@ -82,7 +65,7 @@ def test_google_callback_creates_user(monkeypatch):
 
     request = _build_request()
     response = Response()
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         redirect_response = asyncio.run(
             google_callback(
                 request=request,
@@ -95,7 +78,7 @@ def test_google_callback_creates_user(monkeypatch):
     assert redirect_response.status_code in (302, 307)
     assert redirect_response.headers["location"] == "http://localhost:3000/dashboard"
 
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         user = session.exec(select(User).where(User.email == "google-user@example.com")).first()
         assert user is not None
 

@@ -108,6 +108,15 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
     setTheme(theme === "dark" ? "light" : "dark")
   }
 
+  const handleBackClick = () => {
+    // Prefer history back when available, otherwise return to the main dashboard.
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push("/dashboard")
+  }
+
   const handleLogout = async () => {
     await logout()
     setProfile(null)
@@ -199,7 +208,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
         <div className="flex flex-1 flex-col overflow-hidden app-surface">
           {/* Header */}
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-amber-100/70 bg-card/90 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-amber-900/5 md:px-6">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               <button
                 type="button"
                 className="inline-flex items-center justify-center rounded-lg border border-amber-200/80 bg-white/70 p-2 text-amber-800 shadow-sm transition hover:-translate-y-[1px] hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-amber-500 md:hidden"
@@ -212,8 +221,8 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                 <Button
                   variant="outline"
                   size="sm"
-                  className="inline-flex items-center gap-2 border-amber-200/80 bg-white text-amber-900 hover:bg-amber-50 shadow-sm"
-                  onClick={() => router.back()}
+                  className="inline-flex items-center gap-2 border-amber-300 bg-white/95 text-amber-900 shadow-sm hover:bg-amber-100"
+                  onClick={handleBackClick}
                   aria-label={t("nav.goBack")}
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -226,7 +235,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   Consultaion
                 </span>
               </Link>
-              <div className="relative w-64 lg:w-80">
+              <div className="relative hidden min-w-[180px] flex-1 sm:block lg:max-w-xl">
                 <label className="sr-only" htmlFor="global-search">
                   {t("dashboardShell.search.aria")}
                 </label>

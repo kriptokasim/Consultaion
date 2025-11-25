@@ -1,15 +1,19 @@
 import type { DebateEvent, Member } from "@/components/parliament/types";
 import { fetchWithAuth } from "@/lib/auth";
+import { notFound, redirect } from "next/navigation";
 import RunDetailClient from "./RunDetailClient";
 
 export const dynamic = "force-dynamic";
 
 type RunDetailProps = {
-  params?: Promise<{ id: string }>;
+  params: { id: string };
 };
 
 export default async function RunDetailPage({ params }: RunDetailProps) {
-  const { id } = await (params ?? Promise.resolve({ id: "" }));
+  const { id } = params;
+  if (!id) {
+    notFound();
+  }
 
   let debate: any;
   let report: any;
@@ -24,8 +28,13 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
       fetchWithAuth(`/debates/${id}/members`),
     ]);
 
-    if ([debateRes, reportRes, eventsRes, membersRes].some((res) => !res.ok)) {
-      throw new Error("unauthorized");
+    const responses = [debateRes, reportRes, eventsRes, membersRes];
+    const isUnauthorized = responses.some((res) => res.status === 401 || res.status === 403);
+    if (isUnauthorized) {
+      redirect(`/login?next=/runs/${encodeURIComponent(id)}`);
+    }
+    if (responses.some((res) => !res.ok)) {
+      notFound();
     }
 
     [debate, report, eventPayload, memberPayload] = await Promise.all([
@@ -35,21 +44,7 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
       membersRes.json(),
     ]);
   } catch (error) {
-    return (
-      <main id="main" className="flex h-full items-center justify-center p-6">
-        <div className="rounded-lg border border-border bg-card p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            This run is unavailable or you do not have access.
-          </p>
-          <a
-            href="/runs"
-            className="mt-3 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90"
-          >
-            Back to runs
-          </a>
-        </div>
-      </main>
-    );
+    notFound();
   }
 
   const events: DebateEvent[] = Array.isArray(eventPayload?.items)
@@ -68,11 +63,11 @@ export default async function RunDetailPage({ params }: RunDetailProps) {
 
   const memberList: Member[] = Array.isArray(memberPayload?.members)
     ? memberPayload.members.map((member: any) => ({
-        id: member.id ?? member.name,
-        name: member.name ?? member.id,
-        role: member.role ?? "agent",
-        party: member.party,
-      }))
+      id: member.id ?? member.name,
+      name: member.name ?? member.id,
+      role: member.role ?? "agent",
+      party: member.party,
+    }))
     : [];
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";

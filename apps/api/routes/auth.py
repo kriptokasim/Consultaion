@@ -29,14 +29,12 @@ from models import TeamMember, User, utcnow
 from config import settings
 from ratelimit import increment_ip_bucket, record_429
 from routes.common import AUTH_MAX_CALLS, AUTH_WINDOW, serialize_user, user_team_role
-from schemas import UserProfile as UserProfileSchema, UserProfileUpdate
+from schemas import UserProfile as UserProfileSchema, UserProfileUpdate, AuthRequest
 
 router = APIRouter(tags=["auth"])
 
 
-class AuthRequest(BaseModel):
-    email: str
-    password: str
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -106,12 +104,14 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
     return trimmed or None
 
 
+from exceptions import AuthError, ValidationError, RateLimitError, ProviderCircuitOpenError
+
 def _google_config() -> tuple[str, str, str]:
     client_id = settings.GOOGLE_CLIENT_ID
     client_secret = settings.GOOGLE_CLIENT_SECRET
     redirect_url = settings.GOOGLE_REDIRECT_URL
     if not client_id or not client_secret or not redirect_url:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Google auth not configured")
+        raise ProviderCircuitOpenError(message="Google auth not configured", code="auth.google_not_configured")
     return client_id, client_secret, redirect_url
 
 
@@ -126,10 +126,10 @@ async def _exchange_code_for_token(code: str, client_id: str, client_secret: str
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(GOOGLE_TOKEN_URL, data=payload, headers={"Content-Type": "application/x-www-form-urlencoded"})
     if resp.status_code != 200:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="google_oauth_exchange_failed")
+        raise AuthError(message="Google OAuth exchange failed", code="auth.google_exchange_failed", status_code=400)
     data = resp.json()
     if "access_token" not in data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="google_oauth_missing_token")
+        raise AuthError(message="Google OAuth missing token", code="auth.google_missing_token", status_code=400)
     return data
 
 
@@ -138,10 +138,10 @@ async def _fetch_google_profile(access_token: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(GOOGLE_USERINFO_URL, headers=headers)
     if resp.status_code != 200:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="google_oauth_profile_failed")
+        raise AuthError(message="Google OAuth profile fetch failed", code="auth.google_profile_failed", status_code=400)
     data = resp.json()
     if "email" not in data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="google_oauth_missing_email")
+        raise AuthError(message="Google OAuth missing email", code="auth.google_missing_email", status_code=400)
     return data
 
 
@@ -150,7 +150,7 @@ async def google_login(request: Request, response: Response) -> Response:
     ip = request.client.host if request and request.client else "anonymous"
     if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
         record_429(ip, request.url.path)
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
     client_id, _, redirect_url = _google_config()
     state = secrets.token_urlsafe(16)
     next_param = sanitize_next_path(request.query_params.get("next"))
@@ -199,20 +199,20 @@ async def google_callback(
     ip = request.client.host if request and request.client else "anonymous"
     if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
         record_429(ip, request.url.path)
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
 
     if not code or not state:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing_code_or_state")
+        raise ValidationError(message="Missing code or state", code="auth.missing_params")
     state_cookie = request.cookies.get(OAUTH_STATE_COOKIE)
     if not state_cookie or state_cookie != state:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_oauth_state")
+        raise ValidationError(message="Invalid OAuth state", code="auth.invalid_state")
 
     client_id, client_secret, redirect_url = _google_config()
     token_data = await _exchange_code_for_token(code, client_id, client_secret, redirect_url)
     profile = await _fetch_google_profile(token_data["access_token"])
     email = profile.get("email", "").strip().lower()
     if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing_email")
+        raise ValidationError(message="Missing email from Google profile", code="auth.missing_email")
 
     user = session.exec(select(User).where(User.email == email)).first()
     audit_action = "login_google"
@@ -244,41 +244,26 @@ async def google_callback(
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 async def register_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
-    try:
-        with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
-            fp.write("register_user enter\n")
-    except Exception:
-        pass
     ip = request.client.host if request and request.client else "anonymous"
     if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
         record_429(ip, request.url.path)
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
     email = body.email.strip().lower()
     if "@" not in email:
-        raise HTTPException(status_code=400, detail="invalid email")
+        raise ValidationError(message="Invalid email address", code="auth.invalid_email")
     existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
-        raise HTTPException(status_code=400, detail="email already registered")
+        raise ValidationError(message="Email already registered", code="auth.email_exists")
     if len(body.password or "") < 8:
-        raise HTTPException(status_code=400, detail="password too short; minimum 8 characters")
+        raise ValidationError(message="Password too short; minimum 8 characters", code="auth.password_too_short")
     user = User(email=email, password_hash=hash_password(body.password))
     session.add(user)
     session.commit()
     session.refresh(user)
-    try:
-        with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
-            fp.write("register_user after_commit\n")
-    except Exception:
-        pass
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
     if ENABLE_CSRF:
         set_csrf_cookie(response, generate_csrf_token())
-    try:
-        with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
-            fp.write("register_user after_cookies\n")
-    except Exception:
-        pass
     record_audit(
         "register",
         user_id=user.id,
@@ -295,11 +280,11 @@ async def login_user(body: AuthRequest, response: Response, session: Session = D
     ip = request.client.host if request and request.client else "anonymous"
     if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
         record_429(ip, request.url.path)
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
     if not user or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="invalid credentials")
+        raise AuthError(message="Invalid credentials", code="auth.invalid_credentials")
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
     if ENABLE_CSRF:

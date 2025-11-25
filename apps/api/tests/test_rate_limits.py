@@ -158,6 +158,8 @@ def test_record_token_usage_updates_daily_counter(db_session, test_user):
 def test_ensure_rate_limiter_ready_memory(monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_BACKEND", "memory")
     monkeypatch.delenv("REDIS_URL", raising=False)
+    import config as config_module
+    config_module.settings.reload()
     module = importlib.reload(ratelimit_module)
     backend, redis_ok = module.ensure_rate_limiter_ready()
     assert backend == "memory"
@@ -167,6 +169,8 @@ def test_ensure_rate_limiter_ready_memory(monkeypatch):
 def test_ensure_rate_limiter_ready_handles_missing_redis(monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_BACKEND", "redis")
     monkeypatch.delenv("REDIS_URL", raising=False)
+    import config as config_module
+    config_module.settings.reload()
     module = importlib.reload(ratelimit_module)
     backend, redis_ok = module.ensure_rate_limiter_ready()
     assert backend == "redis"

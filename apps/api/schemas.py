@@ -156,6 +156,11 @@ class ModelPublic(BaseModel):
     recommended: bool = False
 
 
+class AuthRequest(BaseModel):
+    email: str
+    password: str
+
+
 class UserProfile(BaseModel):
     id: str
     email: str

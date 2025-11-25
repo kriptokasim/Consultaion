@@ -33,25 +33,11 @@ def init_db() -> None:
 
 
 def get_session():
-    try:  # pragma: no cover - debug aid
-        with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
-            fp.write(f"get_session start url={getattr(engine, 'url', None)}\n")
-    except Exception:
-        pass
     with Session(engine) as session:
         try:
             yield session
-            try:
-                with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
-                    fp.write("get_session after_yield\n")
-            except Exception:
-                pass
         finally:
-            try:
-                with open("/tmp/auth_debug.log", "a", encoding="utf-8") as fp:
-                    fp.write("get_session exit\n")
-            except Exception:
-                pass
+            pass
 
 
 @contextmanager
@@ -69,12 +55,6 @@ def session_scope():
 
 def reset_engine() -> None:
     global engine
-    try:  # pragma: no cover - debug
-        from pathlib import Path
-        with open("/tmp/settings_debug.log", "a", encoding="utf-8") as fp:
-            fp.write(f"reset_engine to {settings.DATABASE_URL}\n")
-    except Exception:
-        pass
     try:
         engine.dispose()
     except Exception:

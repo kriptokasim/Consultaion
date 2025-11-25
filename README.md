@@ -34,6 +34,8 @@ A platform that produces the best answer via multi-agent debate/voting.
 | `N8N_WEBHOOK_URL` | Optional automation webhook target for subscription/usage events. |
 | `DEBATE_DISPATCH_MODE` | Debate execution strategy (`inline` for dev, `celery` in production). |
 | `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery broker/backend (defaults to the Redis SSE URL when omitted). |
+| `COOKIE_SECURE` | Defaults to `True` in non-local environments (`IS_LOCAL_ENV=False`). Set to `0` explicitly if running behind non-SSL proxy. |
+| `WORKERS` | Number of Gunicorn workers. If > 1, `SSE_BACKEND` must be `redis` to ensure event delivery. |
 
 ### Model catalog & providers
 - Consultaion uses LiteLLM as an internal gateway and supports OpenRouter, OpenAI, Anthropic, and Gemini (server-side keys only; users do not supply their own).
@@ -72,6 +74,8 @@ A platform that produces the best answer via multi-agent debate/voting.
 
 ### Test coverage
 - `pytest -q` in `apps/api` now includes the audit-derived suites for orchestrator helpers, ratings, rate limits, SSE channel hygiene, and the multi-LLM registry (`apps/api/tests/test_*.py`). Run them locally after migrations to catch regressions early.
+- Backend smoke: `cd apps/api && pytest -q`
+- Web E2E (app must be running): `cd apps/web && npm run test:e2e`
 
 ### API Router Layout
 - `apps/api/routes/auth.py`: login/register/session endpoints.

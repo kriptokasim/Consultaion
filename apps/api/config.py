@@ -144,6 +144,11 @@ class AppSettings(BaseSettings):
         local_envs = {"development", "dev", "local", "test"}
         is_local = env_label in local_envs
         object.__setattr__(self, "IS_LOCAL_ENV", is_local)
+        if is_local:
+            object.__setattr__(self, "COOKIE_SECURE", False)
+        else:
+            object.__setattr__(self, "ENABLE_SEC_HEADERS", True)
+            object.__setattr__(self, "COOKIE_SECURE", True)
         
         # Production secret validation
         if not is_local:
@@ -218,6 +223,20 @@ class AppSettings(BaseSettings):
                 raise RuntimeError("SSE_BACKEND=redis is required when using Celery dispatch in non-dev environments")
         object.__setattr__(self, "DEBATE_DISPATCH_MODE", dispatch_mode)
 
+        # SSE & Workers validation
+        workers_count = int(self.WEB_CONCURRENCY or self.GUNICORN_WORKERS or 1)
+        if workers_count > 1 and self.SSE_BACKEND.lower() != "redis":
+            if not is_local:
+                raise ValueError(
+                    f"SSE_BACKEND='redis' is required when running with {workers_count} workers in production. "
+                    "Configure REDIS_URL and set SSE_BACKEND=redis."
+                )
+            else:
+                logger.warning(
+                    f"Running with {workers_count} workers and SSE_BACKEND={self.SSE_BACKEND}. "
+                    "SSE events may not be delivered correctly (OK for local dev)."
+                )
+
         web_candidates = [
             self.WEB_APP_ORIGIN,
             self.NEXT_PUBLIC_WEB_URL,
@@ -238,11 +257,7 @@ class SettingsProxy:
         previous_url = getattr(self._settings, "DATABASE_URL", None)
         self._settings = AppSettings()
         new_url = self._settings.DATABASE_URL
-        try:  # pragma: no cover - debug
-            with open("/tmp/settings_debug.log", "a", encoding="utf-8") as fp:
-                fp.write(f"reload previous={previous_url} new={new_url}\n")
-        except Exception:
-            pass
+        
         if previous_url and new_url and previous_url != new_url:
             try:  # pragma: no cover - safeguards test envs that swap DB URLs
                 from database import reset_engine

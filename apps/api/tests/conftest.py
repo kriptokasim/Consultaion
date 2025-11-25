@@ -8,7 +8,7 @@ os.environ.setdefault("FASTAPI_TEST_MODE", "1")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")  # Default to SQLite for tests
 os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("DISABLE_AUTORUN", "1")
-os.environ.setdefault("DISABLE_RATINGS", "1")
+os.environ.setdefault("DISABLE_RATINGS", "0")
 os.environ.setdefault("FAST_DEBATE", "1")
 os.environ.setdefault("SSE_BACKEND", "memory")
 os.environ.setdefault("RL_MAX_CALLS", "1000")
@@ -121,16 +121,36 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     """
     from tests.utils import reset_provider_health, truncate_all_tables
     from sse_backend import reset_sse_backend_for_tests
-    
+    from config import settings
+    from database import reset_engine
+
+    # Force the shared settings/engine to the session database even if other tests mutated env.
+    if settings.DATABASE_URL != test_database_url:
+        os.environ["DATABASE_URL"] = test_database_url
+        settings.reload()
+        reset_engine()
+
     # Truncate all tables to ensure clean state before each test
     truncate_all_tables()
-    
+    # Defensive cleanup for rate-limit counters/quotas in case a test swaps metadata
+    from sqlmodel import Session
+    from sqlalchemy import delete
+    from database import engine
+    from models import UsageCounter, UsageQuota
+    with Session(engine) as session:
+        session.exec(delete(UsageCounter))
+        session.exec(delete(UsageQuota))
+        session.commit()
+
     # Re-seed billing plans after truncation
     seed_billing_plans()
 
+    # Ensure test runs always have ratings enabled unless explicitly disabled in a test
+    settings.DISABLE_RATINGS = False
+
     # Reset provider health (circuit breaker state)
     reset_provider_health()
-    
+
     # Reset SSE backend (in-memory event channels)
     reset_sse_backend_for_tests()
 
@@ -194,3 +214,13 @@ def db_session(test_database_url):
     
     session.close()
 
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_routes():
+    """
+    Mount test-only routes to the FastAPI app for the duration of the test session.
+    """
+    from main import app
+    from tests.fake_routes import test_router
+    
+    app.include_router(test_router)

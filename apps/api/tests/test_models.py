@@ -1,8 +1,6 @@
 import asyncio
-import atexit
 import os
 import sys
-import tempfile
 import uuid
 from pathlib import Path
 
@@ -15,28 +13,17 @@ os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("COOKIE_SECURE", "0")
 os.environ["RL_MAX_CALLS"] = "1000"
 os.environ["AUTH_RL_MAX_CALLS"] = "1000"
-fd, temp_path = tempfile.mkstemp(prefix="consultaion_models_", suffix=".db")
-os.close(fd)
-os.environ["DATABASE_URL"] = f"sqlite:///{temp_path}"
 
-
-def _cleanup_models_db():
-    try:
-        Path(temp_path).unlink()
-    except OSError:
-        pass
-
-
-atexit.register(_cleanup_models_db)
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from billing.routes import get_model_usage  # noqa: E402
 from billing.service import _current_period  # noqa: E402
-from database import engine, init_db  # noqa: E402
+import database  # noqa: E402
 from main import app  # noqa: E402
 from model_registry import ModelConfig, ModelProvider, list_enabled_models  # noqa: E402
 from models import User  # noqa: E402
+from config import settings  # noqa: E402
 from routes.debates import create_debate  # noqa: E402
 import agents as agents_module  # noqa: E402
 from schemas import DebateCreate  # noqa: E402
@@ -84,11 +71,12 @@ def test_models_endpoint_lists_entries(monkeypatch):
 
 
 def test_create_debate_invalid_model(monkeypatch):
+    from exceptions import ValidationError
     monkeypatch.setenv("USE_MOCK", "1")
     monkeypatch.setenv("DISABLE_AUTORUN", "1")
-    init_db()
+    # init_db() handled by conftest
     body = DebateCreate(prompt="This is a sufficiently long prompt text", model_id="nope")
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         _ensure_plans(session)
         user = User(id=str(uuid.uuid4()), email="model-test@example.com", password_hash="secret", role="user")
         session.add(user)
@@ -96,7 +84,7 @@ def test_create_debate_invalid_model(monkeypatch):
         session.refresh(user)
         background_tasks = BackgroundTasks()
         request = _dummy_request()
-        with pytest.raises(HTTPException) as excinfo:
+        with pytest.raises(ValidationError) as excinfo:
             asyncio.run(create_debate(body, background_tasks, request, session, current_user=user))
         assert excinfo.value.status_code == 400
 
@@ -150,8 +138,8 @@ def test_call_llm_uses_registry_model(monkeypatch):
 
 def test_billing_model_usage_endpoint(monkeypatch):
     monkeypatch.setenv("USE_MOCK", "1")
-    init_db()
-    with Session(engine) as session:
+    # init_db() handled by conftest
+    with Session(database.engine) as session:
         user = User(id=str(uuid.uuid4()), email="usage@example.com", password_hash="x", role="user")
         session.add(user)
         session.commit()

@@ -113,11 +113,6 @@ _backend: BaseRateLimiterBackend | None = None
 
 
 def _resolved_backend_name() -> str:
-    env_value = os.getenv("RATE_LIMIT_BACKEND")
-    if env_value and env_value.lower() in {"redis", "memory"}:
-        if env_value.lower() != settings.RATE_LIMIT_BACKEND.lower():
-            settings.reload()
-        return env_value.lower()
     return settings.RATE_LIMIT_BACKEND.lower()
 
 

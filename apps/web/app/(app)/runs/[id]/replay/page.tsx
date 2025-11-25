@@ -7,11 +7,11 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 type ReplayPageProps = {
-    params?: Promise<{ id: string }>;
+    params: { id: string };
 };
 
 export default async function ReplayPage({ params }: ReplayPageProps) {
-    const { id } = await (params ?? Promise.resolve({ id: "" }));
+    const { id } = params;
 
     let debate: any;
 
@@ -40,12 +40,12 @@ export default async function ReplayPage({ params }: ReplayPageProps) {
     return (
         <main className="flex flex-col h-full p-6 gap-6">
             <div className="flex items-center gap-4">
-                <Link href={`/runs/${id}`}>
-                    <Button variant="outline" size="sm" className="inline-flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild className="inline-flex items-center gap-2">
+                    <Link href={`/runs/${id}`}>
                         <ArrowLeft className="h-4 w-4" />
                         <span>Back to Run</span>
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Replay: {debate.prompt}</h1>
                     <p className="text-sm text-muted-foreground">

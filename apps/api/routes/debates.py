@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import Any, Optional
+import os
 
 import sqlalchemy as sa
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
@@ -40,6 +41,8 @@ from ratelimit import increment_ip_bucket, record_429
 from sse_backend import get_sse_backend
 from parliament.roles import ROLE_PROFILES
 from parliament.providers import PROVIDERS
+
+from exceptions import NotFoundError, ValidationError, RateLimitError, PermissionError, ProviderCircuitOpenError, AppError
 
 router = APIRouter(tags=["debates"])
 
@@ -101,7 +104,7 @@ async def get_leaderboard_persona(
         stmt = stmt.where(RatingPersona.category == category)
     row = session.exec(stmt).first()
     if not row:
-        raise HTTPException(status_code=404, detail="persona not found")
+        raise NotFoundError(message="Persona not found", code="leaderboard.persona_not_found")
     payload = serialize_rating_persona(row)
     response.headers["Cache-Control"] = "private, max-age=30"
     return payload
@@ -136,9 +139,9 @@ async def get_debate_timeline(
     debate = session.get(Debate, debate_id)
     debate = require_debate_access(debate, current_user, session)
     if not debate:
-        raise HTTPException(status_code=404, detail="debate not found")
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
     if (debate.status or "").lower() not in {"completed", "failed"}:
-        raise HTTPException(status_code=409, detail="debate not finished")
+        raise AppError(message="Debate not finished", code="debate.not_finished", status_code=409)
     timeline = build_debate_timeline(session, debate)
     return timeline
 
@@ -155,7 +158,7 @@ async def create_debate(
     allowed = increment_ip_bucket(ip, settings.RL_WINDOW, settings.RL_MAX_CALLS)
     if not allowed:
         record_429(ip, request.url.path)
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
     try:
         reserve_run_slot(session, current_user.id)
         increment_debate_usage(session, current_user.id)
@@ -174,26 +177,26 @@ async def create_debate(
             meta=payload,
             session=session,
         )
-        raise HTTPException(status_code=429, detail=payload) from exc
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
     config = body.config or default_debate_config()
     enabled_models = {m.id: m for m in list_enabled_models()}
     if not enabled_models:
-        raise HTTPException(status_code=503, detail="No models available; configure provider keys.")
+        raise ProviderCircuitOpenError(message="No models available; configure provider keys.", code="models.unavailable")
     chosen_model_id = body.model_id or get_default_model().id
     if chosen_model_id not in enabled_models:
-        raise HTTPException(status_code=400, detail="Invalid or unavailable model_id")
+        raise ValidationError(message="Invalid or unavailable model_id", code="debate.invalid_model")
 
     panel_config = body.panel_config or default_panel_config()
     try:
         panel = PanelConfig.model_validate(panel_config)
     except Exception as exc:  # pragma: no cover - validation
-        raise HTTPException(status_code=400, detail="Invalid panel_config payload") from exc
+        raise ValidationError(message="Invalid panel_config payload", code="debate.invalid_panel_config") from exc
     for seat in panel.seats:
         if seat.provider_key not in PROVIDERS:
-            raise HTTPException(status_code=400, detail=f"Unknown provider_key '{seat.provider_key}'")
+            raise ValidationError(message=f"Unknown provider_key '{seat.provider_key}'", code="debate.invalid_provider")
         if seat.role_profile not in ROLE_PROFILES:
-            raise HTTPException(status_code=400, detail=f"Unknown role_profile '{seat.role_profile}'")
+            raise ValidationError(message=f"Unknown role_profile '{seat.role_profile}'", code="debate.invalid_role")
 
     debate_id = str(uuid.uuid4())
     config_payload = config.model_dump()
@@ -243,11 +246,11 @@ async def start_debate_run(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     if not settings.DISABLE_AUTORUN:
-        raise HTTPException(status_code=400, detail="Manual start is disabled")
+        raise ValidationError(message="Manual start is disabled", code="debate.manual_start_disabled")
     debate = session.get(Debate, debate_id)
     debate = require_debate_access(debate, current_user, session)
     if debate.status not in {"queued", "failed"}:
-        raise HTTPException(status_code=400, detail="debate already started")
+        raise ValidationError(message="Debate already started", code="debate.already_started")
 
     backend = get_sse_backend()
     channel_id = debate_channel_id(debate_id)
@@ -544,7 +547,7 @@ async def export_scores_csv(
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())).all()
     if not scores:
-        raise HTTPException(status_code=404, detail="no scores found")
+        raise NotFoundError(message="No scores found", code="scores.not_found")
 
     header = ["persona", "judge", "score", "rationale", "timestamp"]
     with StringIO() as output:
@@ -616,9 +619,9 @@ async def update_debate(
 ):
     debate = session.get(Debate, debate_id)
     if not debate:
-        raise HTTPException(status_code=404, detail="debate not found")
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
     if not (current_user.role == "admin" or debate.user_id == current_user.id):
-        raise HTTPException(status_code=403, detail="insufficient permissions")
+        raise PermissionError(message="Insufficient permissions", code="permission.denied")
 
     previous_team = debate.team_id
     if body.team_id is not None:
@@ -627,9 +630,9 @@ async def update_debate(
         else:
             team = session.get(Team, body.team_id)
             if not team:
-                raise HTTPException(status_code=404, detail="team not found")
+                raise NotFoundError(message="Team not found", code="team.not_found")
             if not user_is_team_member(session, current_user, team.id):
-                raise HTTPException(status_code=403, detail="cannot assign to this team")
+                raise PermissionError(message="Cannot assign to this team", code="permission.denied")
             debate.team_id = team.id
 
     session.add(debate)
