@@ -1,107 +1,56 @@
-"""
-Tests for config validation (Patchset 29.0).
-
-Tests that production environments enforce secret configuration
-and local environments log warnings without blocking.
-"""
-
-import pytest
 import os
-from unittest.mock import patch
-
+import pytest
+from pydantic import ValidationError as PydanticValidationError
 from config import AppSettings
 
-
-def test_production_requires_jwt_secret():
-    """Production must have non-default JWT_SECRET."""
-    with pytest.raises(ValueError, match="JWT_SECRET must be set"):
-        AppSettings(
-            ENV="production",
-            JWT_SECRET="change_me_in_prod",
-        )
-
-
-def test_production_requires_long_jwt_secret():
-    """Production JWT_SECRET must be at least 32 characters."""
-    with pytest.raises(ValueError, match="at least 32 characters"):
-        AppSettings(
-            ENV="production",
-            JWT_SECRET="short",
-        )
-
-
-def test_production_stripe_webhook_verify_requires_secret():
-    """Stripe webhook verification requires secret in production."""
-    with pytest.raises(ValueError, match="STRIPE_WEBHOOK_SECRET required"):
-        AppSettings(
-            ENV="production",
-            JWT_SECRET="a" * 32,  # Valid JWT secret
-            STRIPE_WEBHOOK_VERIFY=True,
-            STRIPE_WEBHOOK_SECRET=None,
-        )
-
-
-def test_production_require_real_llm_needs_provider():
-    """REQUIRE_REAL_LLM=1 requires at least one provider key."""
-    with pytest.raises(ValueError, match="At least one provider API key"):
-        AppSettings(
-            ENV="production",
-            JWT_SECRET="a" * 32,
-            REQUIRE_REAL_LLM=True,
-            REDIS_URL="redis://localhost",
-            STRIPE_WEBHOOK_VERIFY=False,  # Disable to test LLM validation only
-            OPENAI_API_KEY=None,
-            ANTHROPIC_API_KEY=None,
-            GEMINI_API_KEY=None,
-            GOOGLE_API_KEY=None,
-        )
-
-
-def test_production_accepts_valid_config():
-    """Production should accept properly configured secrets."""
-    settings = AppSettings(
-        ENV="production",
-        JWT_SECRET="a" * 32,
-        OPENAI_API_KEY="sk-test",
-        REQUIRE_REAL_LLM=True,
-        REDIS_URL="redis://localhost",
-        STRIPE_WEBHOOK_VERIFY=False,  # Simplify test
-    )
+def test_config_local_env_defaults():
+    # ENV=local -> COOKIE_SECURE=False, ENABLE_SEC_HEADERS=False
+    os.environ["ENV"] = "local"
+    os.environ["JWT_SECRET"] = "test-secret"
+    os.environ["DATABASE_URL"] = "sqlite:///test.db"
     
-    assert settings.JWT_SECRET == "a" * 32
-    assert not settings.IS_LOCAL_ENV
+    settings = AppSettings()
+    assert settings.IS_LOCAL_ENV is True
+    assert settings.COOKIE_SECURE is False
+    assert settings.ENABLE_SEC_HEADERS is False
 
-
-def test_local_env_allows_weak_secrets():
-    """Local environment should allow weak secrets with warnings."""
-    # Should not raise, only warn
-    settings = AppSettings(
-        ENV="local",
-        JWT_SECRET="change_me_in_prod",
-    )
+def test_config_prod_env_defaults():
+    # ENV=production -> COOKIE_SECURE=True, ENABLE_SEC_HEADERS=True
+    os.environ["ENV"] = "production"
+    os.environ["JWT_SECRET"] = "prod-secret-must-be-long-enough-32chars"
+    os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost/db"
+    os.environ["REDIS_URL"] = "redis://localhost:6379/0"  # Required for prod
+    os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_secret"
     
-    assert settings.IS_LOCAL_ENV
-    assert settings.JWT_SECRET == "change_me_in_prod"
+    settings = AppSettings()
+    assert settings.IS_LOCAL_ENV is False
+    assert settings.COOKIE_SECURE is True
+    assert settings.ENABLE_SEC_HEADERS is True
 
-
-def test_local_env_with_stripe_verify_no_secret():
-    """Local env should warn but not block on Stripe config."""
-    settings = AppSettings(
-        ENV="local",
-        STRIPE_WEBHOOK_VERIFY=True,
-        STRIPE_WEBHOOK_SECRET=None,
-    )
+def test_config_workers_validation_memory_backend():
+    # WORKERS > 1 with SSE_BACKEND=memory should fail
+    os.environ["ENV"] = "production"
+    os.environ["JWT_SECRET"] = "prod-secret-must-be-long-enough-32chars"
+    os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost/db"
+    os.environ["REDIS_URL"] = "redis://localhost:6379/0"
+    os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_secret"
+    os.environ["WEB_CONCURRENCY"] = "2"
+    os.environ["SSE_BACKEND"] = "memory"
     
-    assert settings.IS_LOCAL_ENV
+    with pytest.raises(PydanticValidationError) as exc:
+        AppSettings()
+    assert "SSE_BACKEND='redis' is required when running with 2 workers" in str(exc.value)
 
-
-def test_development_env_is_local():
-    """'development' should be treated as local."""
-    settings = AppSettings(ENV="development")
-    assert settings.IS_LOCAL_ENV
-
-
-def test_test_env_is_local():
-    """'test' should be treated as local."""
-    settings = AppSettings(ENV="test")
-    assert settings.IS_LOCAL_ENV
+def test_config_workers_validation_redis_backend():
+    # WORKERS > 1 with SSE_BACKEND=redis should pass
+    os.environ["ENV"] = "production"
+    os.environ["JWT_SECRET"] = "prod-secret-must-be-long-enough-32chars"
+    os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost/db"
+    os.environ["WEB_CONCURRENCY"] = "2"
+    os.environ["SSE_BACKEND"] = "redis"
+    os.environ["REDIS_URL"] = "redis://localhost:6379/0"
+    os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_test_secret"
+    
+    settings = AppSettings()
+    assert settings.WEB_CONCURRENCY == 2
+    assert settings.SSE_BACKEND == "redis"

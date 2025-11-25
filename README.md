@@ -11,7 +11,7 @@ A platform that produces the best answer via multi-agent debate/voting.
 5. `cd infra && docker compose up --build` (starts FastAPI, Next.js, Postgres).
 6. Optional for local smoketests: set `FAST_DEBATE=1` to bypass the full LLM loop and return mock events instantly.
 
-📚 Need endpoint details or diagrams? See `docs/API.md` and `docs/ARCHITECTURE.md`. Progress against the audit plan lives in `IMPROVEMENT_PLAN.md` / `IMPROVEMENTS_SUMMARY.md`.
+📚 Need endpoint details or diagrams? See `docs/API.md` and `docs/ARCHITECTURE.md`. For error codes, see `apps/api/ERROR_CODES.md`. Progress against the audit plan lives in `IMPROVEMENT_PLAN.md` / `IMPROVEMENTS_SUMMARY.md`.
 
 > **Python runtime:** The FastAPI backend and its pytest suite currently target **Python 3.11.x**. Running under newer interpreters (3.12/3.13) causes ASGI/TestClient hangs on POST requests, so stick to 3.11 for local dev, CI, and Docker builds until upstream fixes land.
 
