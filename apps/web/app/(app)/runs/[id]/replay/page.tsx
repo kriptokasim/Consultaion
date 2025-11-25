@@ -7,10 +7,11 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 type ReplayPageProps = {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 };
 
-export default async function ReplayPage({ params }: ReplayPageProps) {
+export default async function ReplayPage(props: ReplayPageProps) {
+    const params = await props.params;
     const { id } = params;
 
     let debate: any;
