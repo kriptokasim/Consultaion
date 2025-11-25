@@ -355,212 +355,95 @@ async def run_debate(
         if settings.FAST_DEBATE:
             return await _run_mock_debate(debate_id, channel_id, agent_configs, usage_tracker)
 
-        with session_scope() as session:
-            debate = session.get(Debate, debate_id)
-            if not debate:
-                await backend.publish(channel_id, {"type": "error", "message": "debate not found"})
-                return
-            debate_user_id = debate.user_id
-            debate.status = "running"
-            debate.updated_at = datetime.now(timezone.utc)
-            session.add(debate)
-            session.commit()
+        # 1. Initialize State Manager
+        from orchestration.state import DebateStateManager
+        state_manager = DebateStateManager(debate_id, debate_user_id)
+        state_manager.set_status("running")
 
+        # 2. Check for Parliament Mode
         with session_scope() as session:
             debate = session.get(Debate, debate_id)
-        if debate and debate.panel_config:
-            panel_result = await run_parliament_debate(debate, model_id=model_id)
-            final_meta = panel_result.final_meta
-            final_status = panel_result.status or "completed"
-            if panel_result.status != "completed" or panel_result.error_reason:
-                final_status = "failed"
-            final_content = (
-                panel_result.final_answer
-                if panel_result.final_answer
-                else "Debate aborted due to seat failures."
-            )
-            _complete_debate_record(
-                debate_id,
-                final_content=final_content,
-                final_meta=final_meta,
-                status=final_status,
-                tokens_total=panel_result.usage_tracker.total_tokens,
-                user_id=debate_user_id,
-            )
-            if final_status == "failed":
+            is_parliament = bool(debate and debate.panel_config)
+
+        if is_parliament:
+             # Legacy Parliament Path (for now, or wrap in a pipeline later)
+            with session_scope() as session:
+                debate = session.get(Debate, debate_id)
+            if debate:
+                panel_result = await run_parliament_debate(debate, model_id=model_id)
+                final_meta = panel_result.final_meta
+                final_status = panel_result.status or "completed"
+                if panel_result.status != "completed" or panel_result.error_reason:
+                    final_status = "failed"
+                final_content = (
+                    panel_result.final_answer
+                    if panel_result.final_answer
+                    else "Debate aborted due to seat failures."
+                )
+                
+                state_manager.complete_debate(
+                    final_content=final_content,
+                    final_meta=final_meta,
+                    status=final_status,
+                    tokens_total=float(panel_result.usage_tracker.total_tokens)
+                )
+
+                if final_status == "failed":
+                    await backend.publish(
+                        channel_id,
+                        {
+                            "type": "debate_failed",
+                            "debate_id": debate_id,
+                            "reason": panel_result.error_reason or "seat_failure_threshold_exceeded",
+                            "meta": final_meta,
+                        },
+                    )
+                    return
                 await backend.publish(
                     channel_id,
                     {
-                        "type": "debate_failed",
+                        "type": "final",
                         "debate_id": debate_id,
-                        "reason": panel_result.error_reason or "seat_failure_threshold_exceeded",
+                        "content": panel_result.final_answer,
                         "meta": final_meta,
                     },
                 )
                 return
-            await backend.publish(
-                channel_id,
-                {
-                    "type": "final",
-                    "debate_id": debate_id,
-                    "content": panel_result.final_answer,
-                    "meta": final_meta,
-                },
-            )
-            return
 
-        candidates = await _run_draft_round(debate_id, prompt, agent_configs, model_id, usage_tracker, channel_id)
-        source_candidates = candidates
+        # 3. Standard Pipeline Execution
+        from orchestration.interfaces import DebateContext
+        from orchestration.pipeline import StandardDebatePipeline
+        from orchestration.engine import DebateRunner
 
-        budget_reason = _check_budget(budget, usage_tracker) or budget_reason
-        if budget_reason and not budget_notice_sent:
-            await backend.publish(channel_id, {"type": "notice", "message": budget_reason})
-            budget_notice_sent = True
-
-        revised = candidates
-        if not budget_reason:
-            revised = await _run_critique_round(debate_id, prompt, candidates, model_id, usage_tracker, channel_id)
-            source_candidates = revised
-
-            budget_reason = _check_budget(budget, usage_tracker) or budget_reason
-            if budget_reason and not budget_notice_sent:
-                await backend.publish(channel_id, {"type": "notice", "message": budget_reason})
-                budget_notice_sent = True
-
-        if not budget_reason:
-            aggregate_scores, ranking, vote_details = await _run_judge_round(
-                debate_id, prompt, revised, judge_configs, model_id, usage_tracker, channel_id
-            )
-
-            # Early stop check based on score gap
-            if aggregate_scores:
-                sorted_scores = sorted(aggregate_scores, key=lambda s: s["score"], reverse=True)
-                if (
-                    budget
-                    and budget.early_stop_delta is not None
-                    and len(sorted_scores) > 1
-                    and (sorted_scores[0]["score"] - sorted_scores[1]["score"]) > budget.early_stop_delta
-                ):
-                    early_stop_reason = f"score_gap_{sorted_scores[0]['score'] - sorted_scores[1]['score']:.2f}"
-                    selected_override = [sorted_scores[0]["persona"]]
-
-        # 6. Final Selection & Synthesis
-        # Fallback if no scores/ranking
-        if not aggregate_scores:
-            aggregate_scores = [
-                {"persona": c["persona"], "score": 0.0, "rationale": "No judges available"}
-                for c in (source_candidates or candidates)
-            ]
-            ranking = [c["persona"] for c in (source_candidates or candidates)]
-        elif not ranking:
-            ranking = [c["persona"] for c in aggregate_scores]
-
-        preferred = selected_override or ranking[:3]
-        selected_candidates = _select_candidates(preferred, source_candidates or candidates)
-        selected_scores = [s for s in aggregate_scores if s["persona"] in {c["persona"] for c in selected_candidates}]
-        
-        if not selected_candidates:
-            selected_candidates = source_candidates or candidates
-        if not selected_scores:
-            selected_scores = aggregate_scores
-
-        final_answer, synthesis_usage = await synthesize(
-            prompt, selected_candidates, selected_scores, model_id=model_id, debate_id=debate_id
-        )
-        usage_tracker.extend(synthesis_usage)
-        
-        # 7. Finalization & Billing
-        usage_snapshot = usage_tracker.snapshot()
-        tokens_total = float(usage_tracker.total_tokens)
-        final_meta = {
-            "prompt": prompt,
-            "scores": aggregate_scores,
-            "ranking": ranking,
-            "usage": usage_snapshot,
-            "vote": vote_details,
-            "budget_reason": budget_reason,
-            "early_stop_reason": early_stop_reason,
-        }
-        
-        _complete_debate_record(
-            debate_id,
-            final_content=final_answer,
-            final_meta=final_meta,
-            status="completed" if not budget_reason else "completed_budget",
-            tokens_total=tokens_total,
-            user_id=debate_user_id,
-        )
-
-        await backend.publish(
-            channel_id,
-            {
-                "type": "final",
-                "debate_id": debate_id,
-                "content": final_answer,
-                "meta": final_meta,
-            }
-        )
-
-        # Billing
-        if debate_user_id:
-            token_totals: Dict[str, int] = {}
-            for call in usage_tracker.calls:
-                if not getattr(call, "model", None):
-                    continue
-                token_totals[call.model] = token_totals.get(call.model, 0) + int(call.total_tokens)
-            if token_totals:
-                try:
-                    with session_scope() as session:
-                        for model_name, total in token_totals.items():
-                            add_tokens_usage(session, debate_user_id, model_name, total)
-                        session.commit()
-                except Exception:
-                    logger.exception("Failed to record billing token usage for debate %s", debate_id)
-
-        from log_config import log_event
-        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
-        log_event(
-            "debate.completed",
+        context = DebateContext(
             debate_id=debate_id,
-            user_id=debate_user_id,
-            duration_seconds=duration,
-            tokens_total=tokens_total,
-            status="completed" if not budget_reason else "completed_budget",
+            prompt=prompt,
+            config=config_data,
+            channel_id=channel_id,
+            model_id=model_id,
+            usage_tracker=usage_tracker, # Pass the tracker we initialized
         )
-
-        # Rating Updates (Async)
-        logger.debug("Debate %s: finalized, triggering rating update", debate_id)
-        loop = asyncio.get_running_loop()
-        def _run_update():
-            try:
-                update_ratings_for_debate(debate_id)
-                logger.debug("Debate %s: rating update completed", debate_id)
-            except Exception:
-                logger.exception("Rating update failed for debate %s", debate_id)
-
-        loop.run_in_executor(None, _run_update)
+        
+        pipeline = StandardDebatePipeline(state_manager)
+        runner = DebateRunner(pipeline, state_manager)
+        
+        await runner.run(context)
 
     except Exception as exc:
         logger.exception("Debate %s failed: %s", debate_id, exc)
-        with session_scope() as session:
-            debate = session.get(Debate, debate_id)
-            if debate:
-                debate.status = "failed"
-                debate.updated_at = datetime.now(timezone.utc)
-                debate.final_meta = {"error": str(exc)}
-                session.add(debate)
-                session.commit()
-        
-        from log_config import log_event
-        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
-        log_event(
-            "debate.failed",
-            debate_id=debate_id,
-            user_id=debate_user_id,
-            duration_seconds=duration,
-            error=str(exc),
-            error_type=type(exc).__name__,
-        )
+        # Fallback error handling if Runner didn't catch it (though it should)
+        # But we need to ensure DB status is updated if Runner failed completely
+        try:
+            with session_scope() as session:
+                debate = session.get(Debate, debate_id)
+                if debate and debate.status != "failed":
+                    debate.status = "failed"
+                    debate.updated_at = datetime.now(timezone.utc)
+                    debate.final_meta = {"error": str(exc)}
+                    session.add(debate)
+                    session.commit()
+        except Exception:
+            pass
 
         await backend.publish(
             channel_id,

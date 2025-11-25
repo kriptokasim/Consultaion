@@ -1,0 +1,77 @@
+{
+    "draft": [
+        {
+            "persona": "Optimist",
+            "text": "We should proceed because the benefits outweigh the risks.",
+            "usage": {
+                "total_tokens": 100,
+                "cost_usd": 0.001
+            }
+        },
+        {
+            "persona": "Pessimist",
+            "text": "We should be cautious because the risks are too high.",
+            "usage": {
+                "total_tokens": 100,
+                "cost_usd": 0.001
+            }
+        }
+    ],
+    "critique": [
+        {
+            "persona": "Optimist",
+            "text": "I acknowledge the risks but still believe in the benefits.",
+            "usage": {
+                "total_tokens": 150,
+                "cost_usd": 0.0015
+            }
+        },
+        {
+            "persona": "Pessimist",
+            "text": "The benefits are overstated.",
+            "usage": {
+                "total_tokens": 150,
+                "cost_usd": 0.0015
+            }
+        }
+    ],
+    "judge": {
+        "scores": [
+            {
+                "persona": "Optimist",
+                "score": 8.5,
+                "rationale": "Strong arguments."
+            },
+            {
+                "persona": "Pessimist",
+                "score": 7.0,
+                "rationale": "Valid concerns but less persuasive."
+            }
+        ],
+        "details": [
+            {
+                "persona": "Optimist",
+                "judge": "Judge1",
+                "score": 8.5,
+                "rationale": "Strong arguments."
+            },
+            {
+                "persona": "Pessimist",
+                "judge": "Judge1",
+                "score": 7.0,
+                "rationale": "Valid concerns but less persuasive."
+            }
+        ],
+        "usage": {
+            "total_tokens": 200,
+            "cost_usd": 0.002
+        }
+    },
+    "synthesis": {
+        "text": "The debate concluded that while risks exist, the benefits justify proceeding with caution.",
+        "usage": {
+            "total_tokens": 300,
+            "cost_usd": 0.003
+        }
+    }
+}

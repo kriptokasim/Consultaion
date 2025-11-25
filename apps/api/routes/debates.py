@@ -381,32 +381,14 @@ async def get_debate(
     return require_debate_access(debate, current_user, session)
 
 
-def _build_report(session: Session, debate_id: str, current_user: Optional[User]):
-    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
-
-    rounds = session.exec(
-        select(DebateRound).where(DebateRound.debate_id == debate_id).order_by(DebateRound.index)
-    ).all()
-    scores = session.exec(select(Score).where(Score.debate_id == debate_id)).all()
-    messages_count = session.exec(select(func.count()).where(Message.debate_id == debate_id)).one()
-    if isinstance(messages_count, tuple):
-        messages_count = messages_count[0]
-
-    return {
-        "debate": debate,
-        "rounds": rounds,
-        "scores": scores,
-        "messages_count": messages_count,
-    }
-
-
 @router.get("/debates/{debate_id}/report")
 async def get_debate_report(
     debate_id: str,
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    data = _build_report(session, debate_id, current_user)
+    from services.reporting import build_report
+    data = build_report(session, debate_id, current_user)
     return {
         "id": debate_id,
         "prompt": data["debate"].prompt,
@@ -420,30 +402,6 @@ async def get_debate_report(
     }
 
 
-def _report_to_markdown(payload: dict) -> str:
-    debate: Debate = payload["debate"]
-    rounds: list[DebateRound] = payload["rounds"]
-    scores: list[Score] = payload["scores"]
-    lines = [
-        f"# Debate {debate.id}",
-        "",
-        f"Prompt: {debate.prompt}",
-        f"Status: {debate.status}",
-        f"Final Answer:\n{debate.final_content or 'N/A'}",
-        "",
-        "## Rounds",
-    ]
-    for rnd in rounds:
-        lines.append(f"- Round {rnd.index} ({rnd.label}): {rnd.note or ''}")
-    lines.append("")
-    lines.append("## Scores")
-    for score in scores:
-        lines.append(f"- {score.persona} judged by {score.judge}: {score.score} — {score.rationale}")
-    lines.append("")
-    lines.append(f"Messages logged: {payload['messages_count']}")
-    return "\n".join(lines)
-
-
 @router.post("/debates/{debate_id}/export")
 async def export_debate_report(
     debate_id: str,
@@ -452,11 +410,13 @@ async def export_debate_report(
 ):
     increment_export_usage(session, current_user.id)
     
+    from services.reporting import build_report, report_to_markdown
+    
     # Run heavy export generation in thread pool
     loop = asyncio.get_running_loop()
     content = await loop.run_in_executor(
         None, 
-        lambda: _report_to_markdown(_build_report(session, debate_id, current_user))
+        lambda: report_to_markdown(build_report(session, debate_id, current_user))
     )
     
     track_metric("exports_generated")
@@ -589,24 +549,6 @@ async def get_debate_judges(
     return {"judges": judges}
 
 
-def _generate_csv_content(scores: list[Score]) -> str:
-    header = ["persona", "judge", "score", "rationale", "timestamp"]
-    with StringIO() as output:
-        writer = csv_writer(output)
-        writer.writerow(header)
-        for score in scores:
-            writer.writerow(
-                [
-                    score.persona,
-                    score.judge,
-                    float(score.score),
-                    score.rationale or "",
-                    score.created_at.isoformat() if score.created_at else "",
-                ]
-            )
-        return output.getvalue()
-
-
 @router.get("/debates/{debate_id}/scores.csv")
 async def export_scores_csv(
     debate_id: str,
@@ -619,8 +561,9 @@ async def export_scores_csv(
     if not scores:
         raise NotFoundError(message="No scores found", code="scores.not_found")
 
+    from services.reporting import generate_csv_content
     loop = asyncio.get_running_loop()
-    content = await loop.run_in_executor(None, lambda: _generate_csv_content(scores))
+    content = await loop.run_in_executor(None, lambda: generate_csv_content(scores))
     
     filename = f"scores_{debate_id}.csv"
     record_audit(
@@ -635,12 +578,6 @@ async def export_scores_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
-def csv_writer(buffer: StringIO):
-    import csv
-
-    return csv.writer(buffer)
 
 
 @router.get("/debates/{debate_id}/stream")

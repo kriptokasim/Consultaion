@@ -5,23 +5,10 @@ from typing import Any, Iterable
 from models import Debate
 from .roles import ROLE_PROFILES
 
-PARLIAMENT_CHARTER = (
-    "You are a member of the Consultaion AI Parliament.\n"
-    "The Parliament answers complex questions by running structured debates between multiple AI seats.\n"
-    "Rules for every seat:\n"
-    "- Speak from your assigned role only.\n"
-    "- Refer to other seats by name when agreeing or disagreeing.\n"
-    "- Avoid repeating arguments; contribute new insights or refinements.\n"
-    "- In early rounds, explore. In later rounds, converge and prepare the verdict.\n"
-)
-
+from .config import PARLIAMENT_CHARTER, SEAT_OUTPUT_CONTRACT
 
 def seat_output_contract_instructions() -> str:
-    return (
-        "You MUST respond with valid JSON only, using this exact schema: "
-        '{"content": "<the message>", "reasoning": "<optional reasoning>", "stance": "<optional stance label>"} . '
-        "Do not add extra keys, no markdown, no commentary outside the JSON."
-    )
+    return SEAT_OUTPUT_CONTRACT
 
 
 def build_messages_for_seat(

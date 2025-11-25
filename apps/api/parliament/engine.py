@@ -15,16 +15,13 @@ from models import Debate, Message
 from schemas import PanelConfig, PanelSeat, default_panel_config
 from sse_backend import get_sse_backend
 from .schemas import SeatLLMEnvelope, SeatMessage, DebateSnapshot, RoundSummary
-from .prompts import build_messages_for_seat, transcript_to_text, PARLIAMENT_CHARTER
+from .prompts import build_messages_for_seat, transcript_to_text
+from .config import PARLIAMENT_CHARTER
 from .roles import ROLE_PROFILES
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ROUNDS: List[dict[str, str]] = [
-    {"index": 1, "phase": "explore", "task_for_seat": "Share your strongest arguments, opportunities, or risks."},
-    {"index": 2, "phase": "rebuttal", "task_for_seat": "Respond to concerns raised by other seats. Strengthen or challenge prior claims."},
-    {"index": 3, "phase": "converge", "task_for_seat": "Converge on recommendations, clear risks, and success criteria."},
-]
+from .config import DEFAULT_ROUNDS
 
 
 @dataclass
