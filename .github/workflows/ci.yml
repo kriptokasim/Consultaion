@@ -26,19 +26,28 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
-      - name: Run smoke tests
+      - name: Run ruff
+        run: |
+          cd ../..
+          ruff check apps/api
+
+      - name: Run mypy
+        run: |
+          cd ../..
+          mypy apps/api
+
+      - name: Run tests with coverage
         env:
           ENV: test
           USE_MOCK: "1"
           REQUIRE_REAL_LLM: "0"
           STRIPE_WEBHOOK_VERIFY: "0"
           JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
-          # Minimal defaults for other vars
           DATABASE_URL: "sqlite:///./ci_test.db"
         run: |
-          # Run a subset of tests that don't require external services
-          pytest tests/test_provider_health.py tests/test_pii_scrub.py tests/test_config_validation.py -q
+          pytest -q
 
   frontend-build:
     runs-on: ubuntu-latest
