@@ -13,7 +13,7 @@ type Props = {
 
 export function DebateReplay({ debateId }: Props) {
   const { t } = useI18n();
-  const { data, loading, error, statusCode } = useDebateTimeline(debateId);
+  const { data, loading, error } = useDebateTimeline(debateId);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
 
@@ -51,14 +51,6 @@ export function DebateReplay({ debateId }: Props) {
     return (
       <div className="glass-card space-y-2 rounded-2xl border border-amber-200/70 bg-white/70 p-6 shadow-lg">
         <p className="text-sm text-stone-600">{t("replay.loading")}</p>
-      </div>
-    );
-  }
-
-  if (statusCode === 404 || statusCode === 409) {
-    return (
-      <div className="glass-card space-y-2 rounded-2xl border border-amber-200/70 bg-white/70 p-6 shadow-lg">
-        <p className="text-sm text-stone-600">{t("replay.noReplay")}</p>
       </div>
     );
   }

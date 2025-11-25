@@ -14,15 +14,12 @@ export type DebateTimelineEvent = {
   meta?: Record<string, unknown> | null;
 };
 
+import { fetchWithAuth } from "../auth";
+
 export async function fetchDebateTimeline(debateId: string): Promise<DebateTimelineEvent[]> {
-  const res = await fetch(`/api/debates/${debateId}/timeline`, {
-    credentials: "include",
-    cache: "no-store",
-  });
+  const res = await fetchWithAuth(`/debates/${debateId}/timeline`);
   if (!res.ok) {
-    const error = new Error("Failed to load debate timeline");
-    (error as any).status = res.status;
-    throw error;
+    throw new Error("Failed to fetch timeline");
   }
   return res.json();
 }

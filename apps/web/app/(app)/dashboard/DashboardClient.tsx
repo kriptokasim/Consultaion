@@ -44,13 +44,20 @@ function statusTone(status?: string | null) {
   }
 }
 
-export default function DashboardClient({ initialDebates, email }: { initialDebates: DebateSummary[]; email?: string | null }) {
+import { useQueryClient } from "@tanstack/react-query";
+import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
+
+export default function DashboardClient({ email }: { email?: string | null }) {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debates, setDebates] = useState<DebateSummary[]>(initialDebates);
+
+  const { data: debatesData } = useDebatesList({ limit: 8, offset: 0 });
+  const debates = debatesData?.items ?? [];
+
   const [models, setModels] = useState<ModelOption[]>([]);
   const [modelError, setModelError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -96,13 +103,9 @@ export default function DashboardClient({ initialDebates, email }: { initialDeba
     setError(null);
     try {
       const { id } = await startDebate({ prompt: prompt.trim(), model_id: selectedModel });
-      const entry: DebateSummary = {
-        id,
-        prompt: prompt.trim(),
-        status: "queued",
-        created_at: new Date().toISOString(),
-      };
-      setDebates((prev) => [entry, ...prev].slice(0, 12));
+      // Invalidate queries to refresh list
+      queryClient.invalidateQueries({ queryKey: ['debates'] });
+
       setShowModal(false);
       setPrompt("");
       window.location.href = `/runs/${id}`;

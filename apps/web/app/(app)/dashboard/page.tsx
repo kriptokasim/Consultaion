@@ -12,8 +12,5 @@ export default async function DashboardPage() {
     redirect("/login?next=/dashboard");
   }
 
-  const payload = await getMyDebates({ limit: 8, offset: 0 }).catch(() => ({ items: [] }));
-  const items = Array.isArray(payload?.items) ? (payload.items as DebateSummary[]) : [];
-
-  return <DashboardClient initialDebates={items} email={profile?.email} />;
+  return <DashboardClient email={profile?.email} />;
 }

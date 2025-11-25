@@ -34,6 +34,27 @@ export interface ApiRequestOptions<TBody = unknown> {
   headers?: Record<string, string>;
 }
 
+import { ApiListResponse, DebateDetail, DebateSummary, LeaderboardEntry } from './api/types';
+
+// Helper function to make authenticated GET requests
+async function fetchWithAuth<TResponse = unknown>(path: string): Promise<TResponse> {
+  return apiRequest<TResponse>({ path, method: "GET" });
+}
+
+export async function getDebate(id: string): Promise<DebateDetail> {
+  return fetchWithAuth(`/debates/${id}`);
+}
+
+export async function getDebatesList(params?: Record<string, any>): Promise<ApiListResponse<DebateSummary>> {
+  const query = params ? new URLSearchParams(params).toString() : "";
+  return fetchWithAuth(`/debates${query ? `?${query}` : ""}`);
+}
+
+export async function getLeaderboard(params?: Record<string, any>): Promise<{ items: LeaderboardEntry[] }> {
+  const query = params ? new URLSearchParams(params).toString() : "";
+  return fetchWithAuth(`/leaderboard${query ? `?${query}` : ""}`);
+}
+
 export async function apiRequest<TResponse = unknown, TBody = unknown>(
   opts: ApiRequestOptions<TBody>,
 ): Promise<TResponse> {

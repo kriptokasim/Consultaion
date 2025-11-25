@@ -1,38 +1,12 @@
-import { useEffect, useState } from "react";
-import { fetchDebateTimeline, type DebateTimelineEvent } from "../api/debates";
+import { useQuery } from "@tanstack/react-query";
+import { fetchDebateTimeline } from "../api/debates";
 
 export function useDebateTimeline(debateId: string) {
-  const [data, setData] = useState<DebateTimelineEvent[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [statusCode, setStatusCode] = useState<number | null>(null);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["debate-timeline", debateId],
+    queryFn: () => fetchDebateTimeline(debateId),
+    enabled: !!debateId,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setStatusCode(null);
-
-    fetchDebateTimeline(debateId)
-      .then((events) => {
-        if (cancelled) return;
-        setData(events);
-      })
-      .catch((err: any) => {
-        if (cancelled) return;
-        setError(err);
-        if (typeof err?.status === "number") {
-          setStatusCode(err.status);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debateId]);
-
-  return { data, loading, error, statusCode };
+  return { data, loading: isLoading, error };
 }
