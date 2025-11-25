@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,7 +11,8 @@ from models import Debate
 
 @pytest.fixture
 def mock_llm_responses():
-    with open("apps/api/tests/fixtures/debate_simulation.json") as f:
+    fixture_path = Path(__file__).parent / "fixtures" / "debate_simulation.json"
+    with open(fixture_path) as f:
         return json.load(f)
 
 @pytest.mark.anyio
