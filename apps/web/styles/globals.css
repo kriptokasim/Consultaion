@@ -11,13 +11,13 @@
     --font-body: "Inter", "Open Sans", system-ui, -apple-system, sans-serif;
 
     --background: 39 65% 96%;
-    --foreground: 26 33% 16%;
+    --foreground: 26 33% 10%; /* Darker for better contrast */
 
     --card: 38 52% 97%;
-    --card-foreground: 26 33% 16%;
+    --card-foreground: 26 33% 10%;
 
     --popover: 38 52% 97%;
-    --popover-foreground: 26 33% 16%;
+    --popover-foreground: 26 33% 10%;
 
     --primary: 45 100% 50%;
     --primary-foreground: 34 69% 12%;
@@ -26,7 +26,7 @@
     --secondary-foreground: 26 33% 20%;
 
     --muted: 28 30% 88%;
-    --muted-foreground: 26 20% 36%;
+    --muted-foreground: 26 20% 30%; /* Darker for readability */
 
     --accent: 45 92% 48%;
     --accent-foreground: 34 69% 12%;
@@ -34,8 +34,8 @@
     --destructive: 4 72% 48%;
     --destructive-foreground: 44 100% 97%;
 
-    --border: 32 32% 80%;
-    --input: 32 32% 82%;
+    --border: 32 32% 70%; /* Darker for better definition */
+    --input: 32 32% 75%;
     --ring: 42 88% 52%;
 
     --sidebar: 36 55% 95%;
@@ -57,23 +57,23 @@
   }
 
   .dark {
-    --background: 26 32% 26%;
-    --foreground: 38 70% 94%;
+    --background: 26 20% 10%; /* Much darker for high contrast */
+    --foreground: 38 60% 98%; /* Brighter/Whiter */
 
-    --card: 26 30% 30%;
-    --card-foreground: 38 72% 95%;
+    --card: 26 20% 14%;
+    --card-foreground: 38 60% 98%;
 
-    --popover: 26 30% 30%;
-    --popover-foreground: 38 72% 95%;
+    --popover: 26 20% 14%;
+    --popover-foreground: 38 60% 98%;
 
     --primary: 42 98% 60%;
-    --primary-foreground: 24 25% 16%;
+    --primary-foreground: 24 25% 10%;
 
-    --secondary: 24 26% 34%;
+    --secondary: 24 26% 25%;
     --secondary-foreground: 38 70% 92%;
 
-    --muted: 26 20% 36%;
-    --muted-foreground: 38 50% 85%;
+    --muted: 26 20% 25%;
+    --muted-foreground: 38 30% 80%;
 
     --accent: 42 98% 60%;
     --accent-foreground: 24 25% 16%;
@@ -81,8 +81,8 @@
     --destructive: 4 72% 54%;
     --destructive-foreground: 38 72% 95%;
 
-    --border: 26 24% 40%;
-    --input: 26 24% 42%;
+    --border: 26 20% 25%;
+    --input: 26 20% 25%;
     --ring: 42 98% 60%;
 
     --sidebar: 24 26% 32%;
@@ -129,8 +129,8 @@
   }
 
   .dark .app-surface {
-    background: radial-gradient(circle at 25% 12%, rgba(255, 190, 92, 0.14), transparent 50%),
-      linear-gradient(180deg, #3a281c 0%, #2f2017 60%, #27180f 100%);
+    background: radial-gradient(circle at 25% 12%, rgba(255, 190, 92, 0.08), transparent 50%),
+      linear-gradient(180deg, #1a120d 0%, #140e0a 60%, #0f0a07 100%);
   }
 
   .sidebar-surface {
@@ -138,7 +138,7 @@
   }
 
   .dark .sidebar-surface {
-    background: radial-gradient(circle at 30% 20%, rgba(255, 190, 92, 0.12), rgba(0, 0, 0, 0)) #2c1d14;
+    background: radial-gradient(circle at 30% 20%, rgba(255, 190, 92, 0.05), rgba(0, 0, 0, 0)) #16100c;
   }
 
   .card-elevated {
@@ -146,9 +146,9 @@
   }
 
   .dark .card-elevated {
-    background: linear-gradient(180deg, rgba(60, 42, 30, 0.9), rgba(36, 24, 18, 0.92));
-    border-color: rgba(255, 205, 135, 0.38);
-    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.34);
+    background: linear-gradient(180deg, rgba(30, 22, 18, 0.9), rgba(20, 14, 10, 0.92));
+    border-color: rgba(255, 205, 135, 0.2);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
   }
 
   @keyframes pulse-soft {
