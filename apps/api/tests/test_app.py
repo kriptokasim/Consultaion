@@ -66,10 +66,13 @@ def test_jwt_secret_default_rejected(monkeypatch):
     import auth as auth_module
 
     monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
+    # Must set IS_LOCAL_ENV to False to trigger the error
+    monkeypatch.setattr(settings, "IS_LOCAL_ENV", False)
     settings.reload()
     with pytest.raises(RuntimeError):
         importlib.reload(auth_module)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setattr(settings, "IS_LOCAL_ENV", True)
     settings.reload()
     importlib.reload(auth_module)
 

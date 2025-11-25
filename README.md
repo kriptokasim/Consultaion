@@ -19,6 +19,44 @@ Progress against the audit plan lives in `IMPROVEMENT_PLAN.md` / `IMPROVEMENTS_S
 
 > **Python runtime:** The FastAPI backend and its pytest suite currently target **Python 3.11.x**. Running under newer interpreters (3.12/3.13) causes ASGI/TestClient hangs on POST requests, so stick to 3.11 for local dev, CI, and Docker builds until upstream fixes land.
 
+### Local Database Setup
+
+**Prerequisites**
+```bash
+cd infra
+docker compose up -d db redis
+```
+
+**First‑time setup**
+```bash
+cd apps/api
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+
+export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/consultaion_dev
+
+# One‑shot dev DB reset + migrations
+make api-dev-db-reset
+
+# Optional: seed demo data
+make api-dev-db-seed
+```
+
+**After pulling new code that changes models**
+```bash
+cd apps/api
+. .venv/bin/activate
+make api-dev-db-migrate
+# or, if schema is badly out of sync and you're okay losing dev data:
+make api-dev-db-reset
+```
+
+**Important notes**
+- `api-dev-db-reset` is **destructive** and intended only for local/dev environments.
+- The startup check will fail fast with a clear log if required tables (e.g. `auditlog`, `api_keys`, `usagequota`, `teammember`) are missing.
+
+
 ### Environment Flags
 
 | Variable | Purpose |

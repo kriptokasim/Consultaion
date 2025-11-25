@@ -14,6 +14,8 @@ from billing.routes import billing_router
 from promotions.routes import promotions_router
 from database import engine, init_db
 from config import settings
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import ProgrammingError, OperationalError
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
 from ratelimit import ensure_rate_limiter_ready
 from model_registry import list_enabled_models, get_default_model
@@ -122,6 +124,35 @@ async def lifespan(app: FastAPI):
         yield
         return
     init_db()
+    # Verify that critical tables exist; fail fast if missing
+    try:
+        from sqlalchemy import create_engine, text
+        from sqlalchemy.exc import ProgrammingError, OperationalError
+        engine = create_engine(settings.DATABASE_URL)
+        critical_tables = [
+            "user",
+            "team_member",
+            "usage_quota",
+            "usage_counter",
+            "api_keys",
+            "audit_log",
+            "debate",
+        ]
+        missing = []
+        # Use autocommit to avoid transaction issues during verification
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            for tbl in critical_tables:
+                try:
+                    conn.execute(text(f"SELECT 1 FROM {tbl} LIMIT 1;"))
+                except (ProgrammingError, OperationalError):
+                    missing.append(tbl)
+        if missing:
+            msg = f"Missing critical tables: {', '.join(missing)}"
+            logger.error(msg)
+            raise RuntimeError(msg)
+    except Exception as e:
+        logger.error("Database schema verification failed: %s", e)
+        raise
     _warn_on_multi_worker()
     try:
         ensure_rate_limiter_ready(raise_on_failure=settings.RATE_LIMIT_BACKEND == "redis")
