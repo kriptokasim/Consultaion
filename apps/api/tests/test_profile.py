@@ -34,9 +34,11 @@ os.environ.setdefault("FASTAPI_TEST_MODE", "1")
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import config as config_module  # noqa: E402
+
 config_module.settings.reload()
 
 import database  # noqa: E402
+
 database.reset_engine()
 from database import init_db  # noqa: E402
 from main import app  # noqa: E402

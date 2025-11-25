@@ -3,26 +3,26 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel
-from sqlalchemy import func
-from sqlmodel import Session, select
-
 from auth import get_current_admin, get_optional_user
 from config import settings
 from deps import get_session
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from metrics import get_metrics_snapshot
-from models import Debate, DebateRound, Message, RatingPersona, Score
 from model_registry import list_enabled_models
+from models import Debate, Score
+from pydantic import BaseModel
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
+from schemas import DebateConfig, default_debate_config, default_panel_config
+from sqlalchemy import func
+from sqlmodel import Session, select
+from sse_backend import get_sse_backend
+
 from routes.common import (
     avg_scores_for_debate,
     champion_for_debate,
     excerpt,
     members_from_config,
 )
-from schemas import DebateConfig, default_debate_config, default_panel_config
-from sse_backend import get_sse_backend
 
 router = APIRouter(tags=["stats"])
 

@@ -3,17 +3,11 @@ from typing import Any, Optional
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import RedirectResponse, JSONResponse
-from sqlmodel import Session, select
-
-from pydantic import BaseModel
-
 from audit import record_audit
 from auth import (
-    ENABLE_CSRF,
     COOKIE_SAMESITE,
     COOKIE_SECURE,
+    ENABLE_CSRF,
     clear_auth_cookie,
     clear_csrf_cookie,
     create_access_token,
@@ -24,12 +18,16 @@ from auth import (
     set_csrf_cookie,
     verify_password,
 )
-from deps import get_session
-from models import TeamMember, User, utcnow
 from config import settings
+from deps import get_session
+from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi.responses import RedirectResponse
+from models import User, utcnow
 from ratelimit import increment_ip_bucket, record_429
+from schemas import AuthRequest, UserProfile as UserProfileSchema, UserProfileUpdate
+from sqlmodel import Session, select
+
 from routes.common import AUTH_MAX_CALLS, AUTH_WINDOW, serialize_user, user_team_role
-from schemas import UserProfile as UserProfileSchema, UserProfileUpdate, AuthRequest
 
 router = APIRouter(tags=["auth"])
 
@@ -104,7 +102,8 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
     return trimmed or None
 
 
-from exceptions import AuthError, ValidationError, RateLimitError, ProviderCircuitOpenError
+from exceptions import AuthError, ProviderCircuitOpenError, RateLimitError, ValidationError
+
 
 def _google_config() -> tuple[str, str, str]:
     client_id = settings.GOOGLE_CLIENT_ID

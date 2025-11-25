@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks
 from starlette.requests import Request
 
 os.environ.setdefault("JWT_SECRET", "test-secret")
@@ -16,19 +16,16 @@ os.environ["AUTH_RL_MAX_CALLS"] = "1000"
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+import agents as agents_module  # noqa: E402
+import database  # noqa: E402
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from billing.routes import get_model_usage  # noqa: E402
 from billing.service import _current_period  # noqa: E402
-import database  # noqa: E402
-from main import app  # noqa: E402
 from model_registry import ModelConfig, ModelProvider, list_enabled_models  # noqa: E402
 from models import User  # noqa: E402
-from config import settings  # noqa: E402
 from routes.debates import create_debate  # noqa: E402
-import agents as agents_module  # noqa: E402
 from schemas import DebateCreate  # noqa: E402
 from sqlmodel import Session, select  # noqa: E402
-from auth import get_optional_user  # noqa: E402
 
 
 def _dummy_request(path: str = "/debates") -> Request:

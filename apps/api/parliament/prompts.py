@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from models import Debate
-from .roles import ROLE_PROFILES
 
 from .config import PARLIAMENT_CHARTER, SEAT_OUTPUT_CONTRACT
+from .roles import ROLE_PROFILES
+
 
 def seat_output_contract_instructions() -> str:
     return SEAT_OUTPUT_CONTRACT

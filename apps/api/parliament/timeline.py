@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, List
-
-from sqlmodel import Session, select
+from typing import List
 
 from models import Debate, Message
+from sqlmodel import Session, select
+
 from parliament.schemas import TimelineEvent
 
 

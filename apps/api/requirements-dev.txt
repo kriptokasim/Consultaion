@@ -1,0 +1,6 @@
+mypy==1.13.0
+ruff==0.8.0
+pytest-cov==6.0.0
+pre-commit==4.0.1
+sqlalchemy2-stubs==0.0.2a38
+types-requests==2.32.0.20241016

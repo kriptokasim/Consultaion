@@ -1,10 +1,10 @@
 import asyncio
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import sys
 
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("USE_MOCK", "1")
@@ -12,7 +12,6 @@ os.environ.setdefault("SSE_BACKEND", "memory")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-import pytest
 
 pytestmark = pytest.mark.anyio("asyncio")
 

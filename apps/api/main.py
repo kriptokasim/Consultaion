@@ -2,41 +2,55 @@ import asyncio
 import logging.config
 import uuid
 from contextlib import asynccontextmanager, suppress
-import os
-
-from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
 from billing.routes import billing_router
-from promotions.routes import promotions_router
-from database import engine, init_db
 from config import settings
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import ProgrammingError, OperationalError
+from database import init_db
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
+from model_registry import get_default_model, list_enabled_models
+from promotions.routes import promotions_router
 from ratelimit import ensure_rate_limiter_ready
-from model_registry import list_enabled_models, get_default_model
+from routes.admin import (
+    admin_logs,
+    admin_ops_summary,
+    admin_router,
+    admin_users,
+    update_ratings_endpoint,
+)
+from routes.api_keys import api_keys_router
 from routes.auth import (
-    auth_router,
     AuthRequest,
+    auth_router,
     get_me,
+    google_callback,
+    google_login,
     login_user,
     logout_user,
     register_user,
-    google_login,
-    google_callback,
+)
+from routes.debates import (
+    DebateUpdate,
+    create_debate,
+    debates_router,
+    export_debate_report,
+    export_scores_csv,
+    get_debate,
+    get_debate_events,
+    get_debate_judges,
+    get_debate_report,
+    get_leaderboard,
+    get_leaderboard_persona,
+    list_debates,
+    start_debate_run,
+    stream_events,
+    update_debate,
 )
 from routes.models import models_router
 from routes.stats import (
-    stats_router,
-    DebateSummary,
-    HealthSnapshot,
-    ModelStatsDetail,
-    ModelStatsSummary,
-    RateLimitSnapshot,
     get_debate_summary,
     get_hall_of_fame_stats,
     get_model_detail,
@@ -45,30 +59,20 @@ from routes.stats import (
     get_system_health,
     healthz,
     readyz,
+    stats_router,
 )
-from sqlmodel import select, Session
-from routes.debates import (
-    debates_router,
-    DebateUpdate,
-    create_debate,
-    list_debates,
-    get_debate,
-    start_debate_run,
-    export_scores_csv,
-    get_debate_report,
-    export_debate_report,
-    get_debate_events,
-    get_debate_judges,
-    stream_events,
-    update_debate,
-    get_leaderboard,
-    get_leaderboard_persona,
+from routes.teams import (
+    TeamCreate,
+    TeamMemberCreate,
+    add_team_member,
+    create_team,
+    list_team_members,
+    list_teams,
+    teams_router,
 )
-from routes.teams import teams_router, TeamCreate, TeamMemberCreate, create_team, list_teams, list_team_members, add_team_member
-from routes.admin import admin_ops_summary, admin_router, admin_logs, admin_users, update_ratings_endpoint
-from routes.api_keys import api_keys_router
 from schemas import DebateCreate
 from sse_backend import get_sse_backend
+from starlette.middleware.base import BaseHTTPMiddleware
 
 root_level = settings.LOG_LEVEL.upper()
 LOGGING_CONFIG["loggers"][""]["level"] = root_level
@@ -127,7 +131,7 @@ async def lifespan(app: FastAPI):
     # Verify that critical tables exist; fail fast if missing
     try:
         from sqlalchemy import create_engine, text
-        from sqlalchemy.exc import ProgrammingError, OperationalError
+        from sqlalchemy.exc import OperationalError, ProgrammingError
         engine = create_engine(settings.DATABASE_URL)
         critical_tables = [
             "user",
@@ -241,6 +245,7 @@ if settings.ENV != "test":
     )
 
 from exceptions import AppError
+
 
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError):

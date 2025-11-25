@@ -4,17 +4,16 @@ Tests for provider health tracking and circuit breaker.
 Patchset 28.0
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from parliament.provider_health import (
     ProviderHealthState,
+    clear_all_health_states,
     get_health_state,
     record_call_result,
     reset_health_state,
-    clear_all_health_states,
 )
-from exceptions import ProviderCircuitOpenError
 
 
 @pytest.fixture(autouse=True)

@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import Session
-
 from database import session_scope
 from models import AuditLog, utcnow
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session
 
 
 def record_audit(

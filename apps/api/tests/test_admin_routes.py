@@ -34,6 +34,7 @@ os.environ["AUTH_RL_MAX_CALLS"] = "1000"
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import config as config_module  # noqa: E402
+
 config_module.settings.reload()
 
 from auth import get_current_admin, hash_password  # noqa: E402

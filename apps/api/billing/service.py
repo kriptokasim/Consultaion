@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import uuid
-import os
 from datetime import datetime, timezone
 from typing import Dict, Optional, Union
 
+from config import settings
 from fastapi import HTTPException, status
+from integrations.events import emit_event
 from sqlmodel import Session, select
 
-from config import settings
 from billing.models import BillingPlan, BillingSubscription, BillingUsage
-from integrations.events import emit_event
 
 UserID = Union[str, uuid.UUID]
 
@@ -93,9 +92,7 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
         )
 
     exports_flag = limits.get("exports_enabled", True)
-    exports_allowed = not (
-        exports_flag in {False, "false", "False", "0", 0}
-    )
+    exports_allowed = exports_flag not in {False, "false", "False", "0"}
     if not exports_allowed and usage.exports_count > 0:
         log_event("billing.limit_exceeded", user_id=str(user_id), metric="exports", reason="disabled")
         emit_event(
@@ -120,6 +117,7 @@ def _maybe_emit_nearing(user_id: UserID, metric: str, used: int, limit: Optional
 
 
 from log_config import log_event
+
 
 def increment_debate_usage(db: Session, user_id: UserID) -> BillingUsage:
     usage = get_or_create_usage(db, user_id)

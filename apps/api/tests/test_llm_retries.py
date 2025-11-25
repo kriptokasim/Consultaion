@@ -1,8 +1,6 @@
-import asyncio
-
-import pytest
 
 import agents
+import pytest
 from agents import UsageCall, call_llm_with_retry
 from config import settings
 from llm_errors import TransientLLMError

@@ -5,13 +5,12 @@ import time
 from typing import Any, Dict, Optional
 
 import jwt
-from fastapi import Depends, HTTPException, Request, Response, status
-from sqlmodel import Session
-
-from deps import get_session
 from config import settings
+from deps import get_session
+from fastapi import Depends, HTTPException, Request, Response, status
 from log_config import update_log_context
 from models import User
+from sqlmodel import Session, select
 
 COOKIE_NAME = settings.COOKIE_NAME
 JWT_SECRET = settings.JWT_SECRET
@@ -191,9 +190,10 @@ def get_user_from_api_key(
     Checks both Authorization: Bearer and X-API-Key headers.
     Returns None if no valid API key is found.
     """
-    from api_key_utils import verify_api_key, extract_prefix
-    from models import APIKey
     from datetime import datetime, timezone
+
+    from api_key_utils import extract_prefix, verify_api_key
+    from models import APIKey
     
     # Check Authorization: Bearer header
     auth_header = request.headers.get("Authorization", "")

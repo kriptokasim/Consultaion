@@ -1,7 +1,6 @@
 import threading
 
 import pytest
-
 from integrations import events as events_module
 
 

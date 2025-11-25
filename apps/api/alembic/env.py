@@ -1,17 +1,23 @@
 from logging.config import fileConfig
 from pathlib import Path
-import os
 
 from alembic import context
+from billing.models import BillingPlan, BillingSubscription, BillingUsage  # noqa: F401
+from config import settings
+from dotenv import load_dotenv
+from models import (  # noqa: F401
+    APIKey,
+    Debate,
+    DebateRound,
+    Message,
+    PairwiseVote,
+    RatingPersona,
+    Score,
+    User,
+)
+from promotions.models import Promotion  # noqa: F401
 from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
-
-from billing.models import BillingPlan, BillingSubscription, BillingUsage  # noqa: F401
-from models import User, APIKey, Debate, DebateRound, Message, Score, PairwiseVote, RatingPersona  # noqa: F401
-from promotions.models import Promotion  # noqa: F401
-
-from dotenv import load_dotenv
-from config import settings
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")

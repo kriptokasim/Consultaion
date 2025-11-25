@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from datetime import timedelta, timezone
 from typing import Optional
-import os
-
-from sqlmodel import Session, select
 
 from config import settings
 from database import session_scope
 from models import UsageCounter, UsageQuota, utcnow
+from sqlmodel import Session, select
 
 
 def _default_max_runs_per_hour() -> int:

@@ -1,5 +1,6 @@
-import pytest
 import os
+
+import pytest
 
 # Simplify ASGI middleware for test stability
 os.environ.setdefault("FASTAPI_TEST_MODE", "1")
@@ -46,12 +47,13 @@ def test_database_url():
     6. Seeds initial billing plans
     7. Cleans up the database file after all tests complete
     """
-    from tests.utils import make_test_database_url, init_test_database, cleanup_test_database
-    from config import settings
-    from database import reset_engine, init_db
-    from sqlmodel import Session, select
-    from billing.models import BillingPlan
     from decimal import Decimal
+
+    from billing.models import BillingPlan
+    from config import settings
+    from database import init_db, reset_engine
+    from sqlmodel import Session, select
+    from tests.utils import cleanup_test_database, init_test_database, make_test_database_url
     
     # Generate unique test database URL
     db_url = make_test_database_url("session")
@@ -119,10 +121,10 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     This ensures complete isolation between tests even when application code
     creates its own database sessions.
     """
-    from tests.utils import reset_provider_health, truncate_all_tables
-    from sse_backend import reset_sse_backend_for_tests
     from config import settings
     from database import reset_engine
+    from sse_backend import reset_sse_backend_for_tests
+    from tests.utils import reset_provider_health, truncate_all_tables
 
     # Force the shared settings/engine to the session database even if other tests mutated env.
     if settings.DATABASE_URL != test_database_url:
@@ -133,10 +135,10 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     # Truncate all tables to ensure clean state before each test
     truncate_all_tables()
     # Defensive cleanup for rate-limit counters/quotas in case a test swaps metadata
-    from sqlmodel import Session
-    from sqlalchemy import delete
     from database import engine
     from models import UsageCounter, UsageQuota
+    from sqlalchemy import delete
+    from sqlmodel import Session
     with Session(engine) as session:
         session.exec(delete(UsageCounter))
         session.exec(delete(UsageQuota))
@@ -165,10 +167,11 @@ def seed_billing_plans(test_database_url):
     Args:
         test_database_url: Ensures database is initialized before this fixture
     """
-    from sqlmodel import Session, select
-    from database import engine
-    from billing.models import BillingPlan
     from decimal import Decimal
+
+    from billing.models import BillingPlan
+    from database import engine
+    from sqlmodel import Session, select
     
     def _seed():
         with Session(engine) as session:
@@ -205,8 +208,8 @@ def db_session(test_database_url):
     Note: We no longer use transaction-based isolation because application code
     creates its own sessions. Instead, we truncate tables between tests.
     """
-    from sqlmodel import Session
     from database import engine
+    from sqlmodel import Session
     
     session = Session(engine)
     

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import builtins
 import logging
 from pathlib import Path
-import builtins
 from typing import Literal
 
 from pydantic import Field
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)

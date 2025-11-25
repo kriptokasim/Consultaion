@@ -1,33 +1,47 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta
-from io import StringIO
 from typing import Any, Optional
-import os
 
 import sqlalchemy as sa
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
-from sqlalchemy import func
-from sqlmodel import Session, select
-
-from pydantic import BaseModel
-
 from audit import record_audit
-from billing.service import increment_debate_usage, increment_export_usage
 from auth import get_current_user, get_optional_user
+from billing.service import increment_debate_usage, increment_export_usage
 from channels import debate_channel_id
 from config import settings
-from deps import get_session
-from models import Debate, DebateRound, Message, PairwiseVote, Score, Team, User
-from model_registry import get_default_model, get_model, list_enabled_models
 from debate_dispatch import dispatch_debate_run
-from parliament.timeline import build_debate_timeline
+from deps import get_session
+from exceptions import (
+    AppError,
+    NotFoundError,
+    PermissionError,
+    ProviderCircuitOpenError,
+    RateLimitError,
+    ValidationError,
+)
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
+from fastapi.responses import PlainTextResponse, StreamingResponse
+from model_registry import get_default_model, list_enabled_models
+from models import Debate, Message, PairwiseVote, Score, Team, User
+from parliament.providers import PROVIDERS
+from parliament.roles import ROLE_PROFILES
 from parliament.schemas import TimelineEvent
+from parliament.timeline import build_debate_timeline
+from pydantic import BaseModel
+from ratelimit import increment_ip_bucket, record_429
+from schemas import (
+    DebateConfig,
+    DebateCreate,
+    PanelConfig,
+    default_debate_config,
+    default_panel_config,
+)
+from sqlalchemy import func
+from sqlmodel import Session, select
+from sse_backend import get_sse_backend
+from usage_limits import reserve_run_slot
+
 from routes.common import (
-    avg_scores_for_debate,
-    can_access_debate,
     champion_for_debate,
     members_from_config,
     require_debate_access,
@@ -35,14 +49,6 @@ from routes.common import (
     track_metric,
     user_is_team_member,
 )
-from schemas import DebateConfig, DebateCreate, PanelConfig, default_debate_config, default_panel_config
-from usage_limits import RateLimitError, reserve_run_slot
-from ratelimit import increment_ip_bucket, record_429
-from sse_backend import get_sse_backend
-from parliament.roles import ROLE_PROFILES
-from parliament.providers import PROVIDERS
-
-from exceptions import NotFoundError, ValidationError, RateLimitError, PermissionError, ProviderCircuitOpenError, AppError
 
 router = APIRouter(tags=["debates"])
 

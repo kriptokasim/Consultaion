@@ -1,13 +1,14 @@
 import os
 import tempfile
-from pathlib import Path
-import pytest
-from datetime import datetime, timezone, timedelta
 import uuid
-from sqlmodel import Session
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import database
+import pytest
 from models import Debate, Message
 from parliament.timeline import build_debate_timeline
-import database
+from sqlmodel import Session
 
 # Setup test DB
 fd, temp_path = tempfile.mkstemp(prefix="timeline_test_", suffix=".db")
@@ -16,10 +17,11 @@ test_db_path = Path(temp_path)
 os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 
 import config as config_module
+
 config_module.settings.reload()
 
-import database
 from database import init_db, reset_engine
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():

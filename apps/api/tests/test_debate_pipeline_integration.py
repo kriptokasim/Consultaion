@@ -1,13 +1,14 @@
 import json
 from pathlib import Path
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from models import Debate
+from orchestration.engine import DebateRunner
 from orchestration.interfaces import DebateContext
 from orchestration.pipeline import StandardDebatePipeline
-from orchestration.engine import DebateRunner
 from orchestration.state import DebateStateManager
-from models import Debate
+
 
 @pytest.fixture
 def mock_llm_responses():

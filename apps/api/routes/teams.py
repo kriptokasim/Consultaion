@@ -1,13 +1,12 @@
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
 
 from audit import record_audit
 from auth import get_current_user
 from deps import get_session
+from fastapi import APIRouter, Depends, HTTPException
 from models import Team, TeamMember, User
-from routes.common import serialize_team, user_is_team_member, user_is_team_editor
+from sqlmodel import Session, select
+
+from routes.common import serialize_team, user_is_team_editor, user_is_team_member
 
 router = APIRouter(tags=["teams"])
 

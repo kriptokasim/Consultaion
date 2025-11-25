@@ -11,11 +11,10 @@ import uuid
 from decimal import Decimal
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy import JSON
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision: str = "fb386f1f3bb4"

@@ -9,14 +9,13 @@ Patchset 36.0
 
 from typing import Optional
 
-from fastapi import Depends, HTTPException
-from sqlmodel import Session
-
 from auth import get_current_user, get_optional_user
 from deps import get_session
 from exceptions import NotFoundError, PermissionError
+from fastapi import Depends
 from models import Debate, Team, User
 from routes.common import can_access_debate, user_is_team_member
+from sqlmodel import Session
 
 
 async def get_debate_with_read_access(

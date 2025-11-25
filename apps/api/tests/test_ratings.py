@@ -1,19 +1,14 @@
-import os
 import sys
 import uuid
 from pathlib import Path
 
 import pytest
-from sqlmodel import Session, select
-
+from sqlmodel import select
 from tests.utils import settings_context
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-import config as config_module  # noqa: E402
 
-import database  # noqa: E402
-from database import init_db  # noqa: E402
 from models import Debate, PairwiseVote, RatingPersona, Score  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 

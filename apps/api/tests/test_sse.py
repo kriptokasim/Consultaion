@@ -17,7 +17,11 @@ from database import engine, init_db  # noqa: E402
 from models import Debate  # noqa: E402
 from routes.debates import stream_events  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
-from sse_backend import MemoryChannelBackend, get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
+from sse_backend import (  # noqa: E402
+    MemoryChannelBackend,
+    get_sse_backend,
+    reset_sse_backend_for_tests,
+)
 
 init_db()
 

@@ -1,24 +1,21 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Optional
+from typing import Any, Dict, List, Sequence, Tuple
 
 from agents import (
+    UsageAccumulator,
     criticize_and_revise,
     judge_scores,
     produce_candidate,
-    synthesize,
-    UsageAccumulator,
 )
+from config import settings
 from database import session_scope
 from models import Debate, DebateRound, Message, Score, Vote
-from ratings import update_ratings_for_debate
-from schemas import DebateConfig, default_agents, default_judges
 from parliament.engine import run_parliament_debate
-from usage_limits import record_token_usage
-from billing.service import add_tokens_usage
-from config import settings
+from schemas import DebateConfig, default_agents, default_judges
 from sse_backend import get_sse_backend
+from usage_limits import record_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +214,7 @@ async def _run_draft_round(
     )
     candidates: list[Dict[str, Any]] = []
     failures: list[SeatExecutionError] = []
-    for agent, result in zip(agent_configs, candidate_results):
+    for agent, result in zip(agent_configs, candidate_results, strict=False):
         if isinstance(result, Exception):
             error = SeatExecutionError(agent.name, "draft", result)
             failures.append(error)
@@ -411,9 +408,9 @@ async def run_debate(
                 return
 
         # 3. Standard Pipeline Execution
+        from orchestration.engine import DebateRunner
         from orchestration.interfaces import DebateContext
         from orchestration.pipeline import StandardDebatePipeline
-        from orchestration.engine import DebateRunner
 
         context = DebateContext(
             debate_id=debate_id,

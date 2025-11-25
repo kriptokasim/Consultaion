@@ -8,7 +8,7 @@ from pathlib import Path
 import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 fd, temp_path = tempfile.mkstemp(prefix="consultaion_auth_flows_", suffix=".db")
 os.close(fd)
@@ -126,11 +126,11 @@ async def test_google_login_sets_state_and_redirect(client: AsyncClient):
     assert res.status_code in (302, 307)
     assert "accounts.google.com" in res.headers["location"]
     assert client.cookies.get(OAUTH_STATE_COOKIE)
-    assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('\"') == "/dashboard"
+    assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('"') == "/dashboard"
 
     evil = await client.get("/auth/google/login?next=https://evil.example/phish", follow_redirects=False)
     assert evil.status_code in (302, 307)
-    assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('\"') == "/dashboard"
+    assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('"') == "/dashboard"
 
 
 async def test_google_callback_creates_user_and_sets_cookie(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
@@ -146,7 +146,7 @@ async def test_google_callback_creates_user_and_sets_cookie(client: AsyncClient,
     monkeypatch.setattr(auth_routes, "_fetch_google_profile", fake_profile)
     login = await client.get("/auth/google/login?next=/dashboard", follow_redirects=False)
     assert login.status_code in (302, 307)
-    state = (client.cookies.get(OAUTH_STATE_COOKIE) or "").strip('\"')
+    state = (client.cookies.get(OAUTH_STATE_COOKIE) or "").strip('"')
     assert state
     res = await client.get(f"/auth/google/callback?code=abc&state={state}", follow_redirects=False)
     assert res.status_code in (302, 303, 307)

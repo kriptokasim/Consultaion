@@ -24,13 +24,13 @@ def _cleanup():
 
 atexit.register(_cleanup)
 
+from agents import UsageCall  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from models import Debate  # noqa: E402
-from parliament.engine import run_parliament_debate, parse_seat_llm_output  # noqa: E402
+from parliament.engine import run_parliament_debate  # noqa: E402
 from parliament.prompts import build_messages_for_seat  # noqa: E402
 from schemas import default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
-from agents import UsageCall  # noqa: E402
 
 init_db()
 

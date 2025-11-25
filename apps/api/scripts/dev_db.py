@@ -1,6 +1,6 @@
 import argparse
-import sys
 import os
+import sys
 from urllib.parse import urlparse, urlunparse
 
 # Ensure the PostgreSQL driver is available
@@ -10,11 +10,12 @@ except ImportError:
     print("⚠️  psycopg2 driver not installed. Install it with 'pip install psycopg2-binary' before using dev_db utilities.")
     sys.exit(1)
 
-from config import settings
 from alembic import command
 from alembic.config import Config
+from config import settings
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import ProgrammingError, OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
+
 
 # Helper to build Alembic config
 def get_alembic_config() -> Config:
@@ -110,9 +111,10 @@ def verify_schema():
 
 def seed_demo():
     # Simple demo seeding: create a demo user and a demo API key if not exists.
-    from sqlmodel import Session, select
-    from models import User, APIKey
     from datetime import datetime
+
+    from models import APIKey, User
+    from sqlmodel import Session, select
     engine = create_engine(settings.DATABASE_URL)
     demo_email = "demo@example.com"
     demo_password_hash = "demo"  # In real code you'd hash; this is placeholder.

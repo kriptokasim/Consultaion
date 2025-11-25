@@ -4,10 +4,9 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime
-
 from models import utcnow
+from sqlalchemy import Column, DateTime
+from sqlmodel import Field, SQLModel
 
 
 class Promotion(SQLModel, table=True):

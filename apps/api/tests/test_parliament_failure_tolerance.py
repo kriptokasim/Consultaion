@@ -1,17 +1,13 @@
-import os
 import uuid
-from pathlib import Path
-
-import pytest
-from sqlmodel import Session
-
 
 import agents  # noqa: E402
+import pytest
 from agents import UsageCall  # noqa: E402
 from database import engine  # noqa: E402
 from models import Debate  # noqa: E402
 from parliament.engine import ParliamentResult, run_parliament_debate  # noqa: E402
 from schemas import PanelSeat, default_panel_config  # noqa: E402
+from sqlmodel import Session
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 
 

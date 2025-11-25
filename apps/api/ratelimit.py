@@ -6,7 +6,6 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
-import os
 
 from config import settings
 
@@ -143,6 +142,7 @@ def increment_ip_bucket(ip: str, window_seconds: int, max_requests: int) -> bool
 
 
 from log_config import log_event
+
 
 def record_429(ip: str, path: str) -> None:
     backend = get_rate_limiter_backend()

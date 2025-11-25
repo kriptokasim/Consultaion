@@ -5,9 +5,8 @@ Revises: 4b1b303e55a8
 Create Date: 2025-02-14 12:05:00.000000
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "5c2a4761c5d9"
 down_revision = "4b1b303e55a8"

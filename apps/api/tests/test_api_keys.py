@@ -5,9 +5,8 @@ Patchset 37.0
 """
 
 import pytest
-from fastapi.testclient import TestClient
-
 from api_key_utils import generate_api_key, verify_api_key
+from fastapi.testclient import TestClient
 from models import APIKey, User
 
 

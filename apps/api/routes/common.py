@@ -1,17 +1,15 @@
+import logging
 import uuid
 from typing import Any, Optional
 
-import sqlalchemy as sa
-from sqlalchemy import func
-from sqlmodel import Session, select
-
 from config import settings
+from log_config import update_log_context
 from metrics import increment_metric
 from models import Debate, RatingPersona, Score, Team, TeamMember, User
 from schemas import DebateConfig, PanelConfig
-from log_config import update_log_context
+from sqlalchemy import func
 from sqlalchemy.exc import ProgrammingError
-import logging
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 

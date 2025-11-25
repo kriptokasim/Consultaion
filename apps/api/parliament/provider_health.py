@@ -13,15 +13,16 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Tuple, TypedDict
 
-from pydantic import BaseModel
-
 from config import settings
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
 
 class ProviderHealthState(BaseModel):
     """Tracks health metrics for a specific provider/model combination."""
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     provider: str
     model: str
@@ -34,9 +35,6 @@ class ProviderHealthState(BaseModel):
     error_calls: int = 0
     last_opened: datetime | None = None
     last_checked: datetime | None = None
-    
-    class Config:
-        arbitrary_types_allowed = True
     
     def should_open(self, now: datetime) -> bool:
         """

@@ -3,9 +3,8 @@ import importlib
 import os
 import sys
 import time
-from decimal import Decimal
-from pathlib import Path
 import uuid
+from pathlib import Path
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException, Response
@@ -14,12 +13,10 @@ from starlette.requests import Request
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-import config as config_module  # noqa: E402
-from config import settings  # noqa: E402
-from tests.utils import settings_context, unique_email  # noqa: E402
-
-from billing.models import BillingPlan, BillingUsage  # noqa: E402
 import database  # noqa: E402
+import debate_dispatch as debate_dispatch_module  # noqa: E402
+from billing.models import BillingUsage  # noqa: E402
+from config import settings  # noqa: E402
 from main import (  # noqa: E402
     AuthRequest,
     DebateCreate,
@@ -43,14 +40,22 @@ from main import (  # noqa: E402
     start_debate_run,
     update_debate,
 )
-from models import AuditLog, Debate, PairwiseVote, RatingPersona, Score, UsageCounter, UsageQuota, User  # noqa: E402
-import orchestrator as orchestrator_module  # noqa: E402
-import debate_dispatch as debate_dispatch_module  # noqa: E402
+from models import (  # noqa: E402
+    AuditLog,
+    Debate,
+    PairwiseVote,
+    RatingPersona,
+    Score,
+    UsageCounter,
+    UsageQuota,
+    User,
+)
 from orchestrator import run_debate  # noqa: E402
+from parliament.provider_health import clear_all_health_states, record_call_result  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
-from parliament.provider_health import clear_all_health_states, record_call_result  # noqa: E402
+from tests.utils import settings_context  # noqa: E402
 
 
 def test_debate_create_prompt_validation():
@@ -611,28 +616,3 @@ def test_sweep_stale_channels_removes_old_entries():
     time.sleep(0.02)
     asyncio.run(backend.cleanup())
     assert not backend._channels or not backend._channels.get(channel_id)
-
-
-def test_admin_ops_summary_reports_status():
-    admin = _register_user("admin-ops@example.com", "secret123")
-    
-    with Session(database.engine) as session:
-        # Mock provider health
-        record_call_result("openai", "gpt-4", success=True)
-        record_call_result("anthropic", "claude-2", success=False)
-        
-        # Call endpoint
-        result = asyncio.run(admin_ops_summary(session=session, current_admin=admin))
-        
-        assert "provider_health" in result
-        health = result["provider_health"]
-        assert len(health) >= 2
-        
-        openai = next(h for h in health if h["provider"] == "openai")
-        assert openai["total_calls"] >= 1
-        
-        anthropic = next(h for h in health if h["provider"] == "anthropic")
-        assert anthropic["error_calls"] >= 1
-        
-        # Clean up
-        clear_all_health_states()

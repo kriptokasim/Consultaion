@@ -37,12 +37,13 @@ os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "1000")
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import config as config_module  # noqa: E402
+
 config_module.settings.reload()
 
+import ratelimit as ratelimit_module  # noqa: E402
 from auth import hash_password  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from models import UsageCounter, UsageQuota, User  # noqa: E402
-import ratelimit as ratelimit_module  # noqa: E402
 from usage_limits import RateLimitError, record_token_usage, reserve_run_slot  # noqa: E402
 
 init_db()

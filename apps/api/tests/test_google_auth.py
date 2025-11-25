@@ -18,9 +18,8 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("DEFAULT_MAX_RUNS_PER_HOUR", "50")
 os.environ.setdefault("DEFAULT_MAX_TOKENS_PER_DAY", "150000")
 
-from main import app  # noqa: E402
-from models import User  # noqa: E402
 import database  # noqa: E402
+from models import User  # noqa: E402
 from routes.auth import google_callback, sanitize_next_path  # noqa: E402
 
 

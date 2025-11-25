@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import Dict, List
 
 PARLIAMENT_CHARTER = (
     "You are a member of the Consultaion AI Parliament.\n"

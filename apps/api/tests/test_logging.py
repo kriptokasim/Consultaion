@@ -1,7 +1,9 @@
 import json
 import logging
-from unittest.mock import MagicMock, patch
-from log_config import JsonFormatter, DevFormatter, log_event
+from unittest.mock import patch
+
+from log_config import DevFormatter, JsonFormatter, log_event
+
 
 def test_json_formatter():
     formatter = JsonFormatter()

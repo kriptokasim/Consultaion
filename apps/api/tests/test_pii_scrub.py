@@ -4,10 +4,8 @@ Tests for PII scrubbing functionality.
 Patchset 36.0: Added tests for extended patterns and metrics.
 """
 
-import os
-import pytest
 
-from safety.pii import scrub_text, scrub_messages, get_scrub_metrics, reset_scrub_metrics
+from safety.pii import get_scrub_metrics, reset_scrub_metrics, scrub_messages, scrub_text
 
 
 def test_scrub_email():

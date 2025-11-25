@@ -4,12 +4,12 @@ import asyncio
 import logging
 
 from celery.utils.log import get_task_logger
-
+from channels import debate_channel_id
 from database import session_scope
 from models import Debate
 from orchestrator import run_debate
-from channels import debate_channel_id
 from sse_backend import get_sse_backend
+
 from worker.celery_app import celery_app
 
 logger = get_task_logger(__name__)
@@ -39,4 +39,4 @@ def run_debate_task(self, debate_id: str) -> None:
         asyncio.run(_execute_debate_run(debate_id))
     except Exception as exc:  # pragma: no cover - Celery handles retries/logging
         logger.exception("Error while running debate %s", debate_id)
-        raise self.retry(exc=exc, countdown=10)
+        raise self.retry(exc=exc, countdown=10) from exc

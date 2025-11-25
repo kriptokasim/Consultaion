@@ -1,6 +1,6 @@
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 from sqlmodel import Session, create_engine, text
 
@@ -10,6 +10,7 @@ DB_URL = f"sqlite:///{SQLITE_PATH}"
 
 
 import sys
+
 
 def _run_alembic(database_url: str):
   env = os.environ.copy()

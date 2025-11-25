@@ -61,6 +61,7 @@ def clear_log_context() -> None:
 
 from config import settings
 
+
 class DevFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         request_id = getattr(record, "request_id", "-")

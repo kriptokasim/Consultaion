@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
-import uuid
 
-from sqlalchemy import Column, DateTime, Index, JSON, Text
+from sqlalchemy import JSON, Column, DateTime, Index, Text
 from sqlmodel import Field, SQLModel
 
 

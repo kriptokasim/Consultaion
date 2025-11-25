@@ -5,15 +5,15 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Literal
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
-from litellm import acompletion
 from config import settings
-from llm_errors import TransientLLMError
-from schemas import AgentConfig, JudgeConfig
 from exceptions import ProviderCircuitOpenError
+from litellm import acompletion
+from llm_errors import TransientLLMError
 from parliament.provider_health import get_health_state, record_call_result
 from safety.pii import scrub_messages
+from schemas import AgentConfig, JudgeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ async def _raw_llm_call(
     target_model = model_override or model_cfg.litellm_model
     
     # Extract provider name for health tracking
-    provider_name = model_cfg.provider.value if hasattr(model_cfg, 'provider') else "unknown"
+    provider_name = model_cfg.provider.value if hasattr(model_cfg, "provider") else "unknown"
     
     # Patchset 28.0: Check circuit breaker
     now = datetime.now(timezone.utc)
@@ -577,7 +577,7 @@ async def synthesize(
     debate_id: str | None = None,
 ) -> Tuple[str, UsageAccumulator]:
     if USE_MOCK:
-        best = max(zip(revised, scores), key=lambda rs: rs[1]["score"])[0]
+        best = max(zip(revised, scores, strict=False), key=lambda rs: rs[1]["score"])[0]
         return f"Final Answer (Consultaion):\n\n{best['text']}\n\n— automatic synthesis", UsageAccumulator()
     _log_injection_hints(prompt)
 

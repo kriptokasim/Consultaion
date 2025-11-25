@@ -9,9 +9,10 @@ try:
 except ImportError:  # pragma: no cover
     stripe = None
 
-from billing.models import BillingPlan
 from config import settings
 from integrations.events import emit_event
+
+from billing.models import BillingPlan
 
 from .base import BillingProvider
 

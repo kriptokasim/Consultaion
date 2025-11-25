@@ -2,7 +2,7 @@ import logging
 from typing import List
 
 from .interfaces import DebateContext, DebatePipeline, DebateStage, DebateState
-from .stages import DraftStage, CritiqueStage, JudgeStage, SynthesisStage
+from .stages import CritiqueStage, DraftStage, JudgeStage, SynthesisStage
 from .state import DebateStateManager
 
 logger = logging.getLogger(__name__)

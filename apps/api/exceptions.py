@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 
+
 class AppError(Exception):
     """Base class for all application errors."""
     def __init__(

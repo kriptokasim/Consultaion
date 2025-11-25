@@ -37,7 +37,7 @@ def generate_api_key() -> Tuple[str, str, str]:
     prefix = full_key[:10]
     
     # Hash the full key with bcrypt
-    hashed_key = bcrypt.hashpw(full_key.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    hashed_key = bcrypt.hashpw(full_key.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     
     return full_key, prefix, hashed_key
 
@@ -54,7 +54,7 @@ def verify_api_key(full_key: str, hashed_key: str) -> bool:
         True if the key matches the hash, False otherwise
     """
     try:
-        return bcrypt.checkpw(full_key.encode('utf-8'), hashed_key.encode('utf-8'))
+        return bcrypt.checkpw(full_key.encode("utf-8"), hashed_key.encode("utf-8"))
     except Exception:
         return False
 

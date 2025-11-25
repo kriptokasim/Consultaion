@@ -26,14 +26,16 @@ def _cleanup():
 atexit.register(_cleanup)
 
 import config as config_module
+
 config_module.settings.reload()
 
-from agents import UsageAccumulator  # noqa: E402
 import database  # noqa: E402
+from agents import UsageAccumulator  # noqa: E402
+
 database.reset_engine()
+import orchestrator  # noqa: E402
 from database import init_db  # noqa: E402
 from models import Debate  # noqa: E402
-import orchestrator  # noqa: E402
 from parliament.engine import ParliamentResult  # noqa: E402
 from schemas import default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402

@@ -119,12 +119,47 @@ make api-dev-db-reset
 - Backend smoke: `cd apps/api && pytest -q`
 - Web E2E (app must be running): `cd apps/web && npm run test:e2e`
 
+### Dev Tooling & Quality Gates
+
+The backend enforces code quality through automated linting, type checking, and coverage requirements.
+
+**Install dev dependencies:**
+```bash
+cd apps/api
+pip install -r requirements-dev.txt
+```
+
+**Run quality checks:**
+```bash
+# From repo root
+ruff check apps/api          # Linting (auto-fix with --fix)
+mypy apps/api                # Type checking
+
+# From apps/api
+pytest                       # Tests with 75% coverage requirement
+```
+
+**Pre-commit hooks:**
+```bash
+# From repo root
+pre-commit install           # One-time setup
+pre-commit run --all-files   # Manual run
+
+# Hooks run automatically on git commit:
+# - ruff (linting + formatting)
+# - mypy (type checking)
+# - pytest (fast subset)
+```
+
+**CI enforcement:**
+- All PRs must pass ruff, mypy, and pytest with ≥75% coverage
+- Configuration: `ruff.toml`, `mypy.ini`, `pytest.ini`, `.pre-commit-config.yaml`
+
 ### API Router Layout
 - `apps/api/routes/auth.py`: login/register/session endpoints.
 - `apps/api/routes/stats.py`: health/ready/metrics plus model/hall-of-fame stats.
 - `apps/api/routes/debates.py`: debate/run lifecycle, exports, and streams.
 - `apps/api/routes/teams.py`: team creation and membership/sharing.
-- `apps/api/routes/admin.py`: admin-only listings and rating maintenance.
 
 ### Teams & Sharing
 - Create teams, invite collaborators, and assign debates to a team via the `/runs` “Share” control.

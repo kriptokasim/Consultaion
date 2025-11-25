@@ -1,7 +1,7 @@
-import os
 import pytest
-from pydantic import ValidationError as PydanticValidationError
 from config import AppSettings
+from pydantic import ValidationError as PydanticValidationError
+
 
 def test_config_local_env_defaults(monkeypatch):
     # ENV=local -> COOKIE_SECURE=False, ENABLE_SEC_HEADERS=False

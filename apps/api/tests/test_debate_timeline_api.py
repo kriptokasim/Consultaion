@@ -1,13 +1,14 @@
-import pytest
-import uuid
-from datetime import datetime, timezone, timedelta
-from fastapi.testclient import TestClient
-from sqlmodel import Session
-from models import Debate, User, Message
 # Setup test DB
 import os
 import tempfile
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from models import Debate, User
+from sqlmodel import Session
 
 fd, temp_path = tempfile.mkstemp(prefix="timeline_api_test_", suffix=".db")
 os.close(fd)
@@ -16,13 +17,14 @@ os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 os.environ["JWT_SECRET"] = "test-secret"
 
 import config as config_module
+
 config_module.settings.reload()
 
 import database
 from auth import create_access_token
-
 from database import init_db, reset_engine
 from main import app
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():

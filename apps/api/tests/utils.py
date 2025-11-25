@@ -1,11 +1,11 @@
-import os
 import contextlib
-from typing import Dict, Optional, Generator
-from uuid import uuid4
+import os
 from pathlib import Path
+from typing import Dict, Generator, Optional
+from uuid import uuid4
 
 from config import settings
-from parliament.provider_health import reset_health_state, clear_all_health_states
+from parliament.provider_health import clear_all_health_states, reset_health_state
 
 
 @contextlib.contextmanager
@@ -107,7 +107,7 @@ def init_test_database(database_url: str) -> None:
     Args:
         database_url: The database URL to initialize
     """
-    from sqlmodel import create_engine, SQLModel
+    from sqlmodel import SQLModel, create_engine
     
     # Create engine for this specific database
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
@@ -155,8 +155,8 @@ def truncate_all_tables() -> None:
     This is more reliable than transaction-based isolation when application code
     creates its own database sessions.
     """
-    from sqlmodel import SQLModel
     from database import engine
+    from sqlmodel import SQLModel
     
     # Get all table names from SQLModel metadata
     tables = SQLModel.metadata.sorted_tables

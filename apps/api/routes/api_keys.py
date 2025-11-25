@@ -6,22 +6,20 @@ Provides endpoints for creating, listing, and revoking API keys.
 Patchset 37.0
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlmodel import Session, select
-
 from api_key_utils import generate_api_key
-from auth import get_current_user
 from audit import record_audit
+from auth import get_current_user
 from deps import get_session
 from exceptions import NotFoundError, PermissionError, ValidationError
-from exceptions import NotFoundError, PermissionError, ValidationError
+from fastapi import APIRouter, Depends
 from models import APIKey, User
+from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
-import logging
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,29 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: ["check", "apps/api", "--fix"]
+      - id: ruff-format
+        args: ["apps/api"]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        files: ^apps/api/
+        additional_dependencies:
+          - sqlalchemy2-stubs
+          - types-requests
+          - pydantic
+          - pydantic-settings
+        args: ["--config-file=mypy.ini"]
+
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (fast subset)
+        entry: bash -c 'cd apps/api && .venv/bin/python -m pytest -q tests/test_app.py::test_health tests/test_api_keys.py::test_generate_api_key'
+        language: system
+        pass_filenames: false
+        always_run: true

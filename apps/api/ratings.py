@@ -1,17 +1,15 @@
 from __future__ import annotations
 
+import logging
 import math
 from collections import defaultdict
-import logging
 from typing import Dict, Iterable, List, Optional, Tuple
-import os
 
+from config import settings
+from database import session_scope
+from models import Debate, PairwiseVote, RatingPersona, Score, utcnow
 from sqlalchemy import delete
 from sqlmodel import Session, select
-
-from database import session_scope
-from config import settings
-from models import Debate, PairwiseVote, RatingPersona, Score, utcnow
 
 logger = logging.getLogger(__name__)
 

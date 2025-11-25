@@ -1,6 +1,3 @@
-from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
-from sqlmodel import Session, select
 import uuid
 
 from auth import (
@@ -8,16 +5,25 @@ from auth import (
     CSRF_COOKIE_NAME,
     create_access_token,
     decode_access_token,
+    generate_csrf_token,
     hash_password,
     verify_password,
-    generate_csrf_token,
 )
-from routes.auth import sanitize_next_path, OAUTH_STATE_COOKIE, OAUTH_NEXT_COOKIE, _profile_payload, _clean_optional
-from routes.common import serialize_user
-from models import User
-from schemas import UserProfile as UserProfileSchema, UserProfileUpdate, AuthRequest
-from database import engine
 from config import settings
+from database import engine
+from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import JSONResponse, RedirectResponse
+from models import User
+from routes.auth import (
+    OAUTH_NEXT_COOKIE,
+    OAUTH_STATE_COOKIE,
+    _clean_optional,
+    _profile_payload,
+    sanitize_next_path,
+)
+from routes.common import serialize_user
+from schemas import AuthRequest, UserProfile as UserProfileSchema, UserProfileUpdate
+from sqlmodel import Session, select
 
 test_router = APIRouter()
 
@@ -134,7 +140,7 @@ async def test_google_login(next: str = "/dashboard"):
 @test_router.get("/auth/google/callback")
 async def test_google_callback(code: str, state: str, request: Request):
     expected = request.cookies.get(OAUTH_STATE_COOKIE)
-    if not expected or expected.strip('\"') != state:
+    if not expected or expected.strip('"') != state:
         raise HTTPException(status_code=400, detail="invalid state")
     # generate a user email per callback
     email = f"google-{uuid.uuid4().hex[:6]}@example.com"

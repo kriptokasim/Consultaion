@@ -1,9 +1,9 @@
-import pytest
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
 from fastapi.testclient import TestClient
 from main import app
 from routes.debates import Debate, Score
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 client = TestClient(app)
 

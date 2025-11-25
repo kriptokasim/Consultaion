@@ -1,8 +1,8 @@
 from contextlib import contextmanager
 
+from config import settings
 from sqlmodel import Session, SQLModel, create_engine
 
-from config import settings
 
 def _create_engine():
     database_url = settings.DATABASE_URL

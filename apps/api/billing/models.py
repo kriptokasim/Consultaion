@@ -5,11 +5,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Optional
 
-from pydantic import ConfigDict
-from sqlalchemy import Column, DateTime, JSON, Numeric, UniqueConstraint, text
-from sqlmodel import Field, SQLModel
-
 from models import utcnow
+from pydantic import ConfigDict
+from sqlalchemy import JSON, Column, DateTime, Numeric, UniqueConstraint, text
+from sqlmodel import Field, SQLModel
 
 
 class BillingPlan(SQLModel, table=True):

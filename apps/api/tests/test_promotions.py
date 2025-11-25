@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from sqlmodel import Session, select as sql_select, delete
+from sqlmodel import Session, delete, select as sql_select
 
 fd, temp_path = tempfile.mkstemp(prefix="consultaion_promotions_", suffix=".db")
 os.close(fd)
@@ -19,9 +19,9 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from billing.models import BillingPlan, BillingSubscription  # noqa: E402
 from database import engine, init_db  # noqa: E402
+from models import User  # noqa: E402
 from promotions.models import Promotion  # noqa: E402
 from promotions.routes import list_promotions  # noqa: E402
-from models import User  # noqa: E402
 
 
 def _cleanup():

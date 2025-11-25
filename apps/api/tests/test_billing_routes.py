@@ -21,9 +21,14 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from billing.models import BillingPlan, BillingUsage  # noqa: E402
 import billing.routes as billing_routes_module  # noqa: E402
-from billing.routes import CheckoutRequest, create_checkout, get_billing_me, list_billing_plans  # noqa: E402
+from billing.models import BillingPlan  # noqa: E402
+from billing.routes import (  # noqa: E402
+    CheckoutRequest,
+    create_checkout,
+    get_billing_me,
+    list_billing_plans,
+)
 from billing.service import get_or_create_usage  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from models import User  # noqa: E402

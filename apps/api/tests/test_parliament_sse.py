@@ -1,5 +1,5 @@
-from parliament.engine import SeatTurn, _build_seat_message_event
 from agents import UsageCall
+from parliament.engine import SeatTurn, _build_seat_message_event
 
 
 def test_build_seat_message_event_includes_seat_metadata():

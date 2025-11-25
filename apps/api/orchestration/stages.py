@@ -1,14 +1,15 @@
 import asyncio
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from agents import (
-    produce_candidate,
     criticize_and_revise,
     judge_scores,
+    produce_candidate,
     synthesize,
 )
 from sse_backend import get_sse_backend
+
 from .interfaces import DebateContext, DebateStage, DebateState
 from .state import DebateStateManager
 
@@ -44,7 +45,7 @@ class DraftStage(BaseStage):
         candidates: List[Dict[str, Any]] = []
         failures = []
         
-        for agent, result in zip(agent_configs, candidate_results):
+        for agent, result in zip(agent_configs, candidate_results, strict=False):
             if isinstance(result, Exception):
                 logger.error("Debate %s: draft seat %s failed: %s", context.debate_id, agent.name, result)
                 failures.append(agent.name)

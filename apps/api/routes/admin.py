@@ -4,24 +4,24 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
-from sqlmodel import Session, select
-
 from auth import get_current_admin
 from billing.models import BillingPlan, BillingSubscription, BillingUsage
 from billing.routes import MODEL_COST_PER_1K
 from billing.service import _current_period, get_active_plan
 from config import settings
 from deps import get_session
+from fastapi import APIRouter, Depends, HTTPException, Query
 from model_registry import get_default_model, list_enabled_models
 from models import AuditLog, Debate, User
-from promotions.models import Promotion
-from ratings import update_ratings_for_debate
-from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
-from routes.common import serialize_user
 from parliament.provider_health import get_provider_health_snapshot
+from promotions.models import Promotion
+from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
+from ratings import update_ratings_for_debate
+from sqlalchemy import func
+from sqlmodel import Session, select
 from sse_backend import get_sse_backend
+
+from routes.common import serialize_user
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

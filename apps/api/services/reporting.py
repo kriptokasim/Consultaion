@@ -2,11 +2,10 @@ import csv
 from io import StringIO
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func
-from sqlmodel import Session, select
-
 from models import Debate, DebateRound, Message, Score, User
 from routes.common import require_debate_access
+from sqlalchemy import func
+from sqlmodel import Session, select
 
 
 def build_report(session: Session, debate_id: str, current_user: Optional[User]) -> Dict[str, Any]:

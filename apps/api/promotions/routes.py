@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
-
 from auth import get_optional_user
-from deps import get_session
 from billing.service import get_active_plan
+from deps import get_session
+from fastapi import APIRouter, Depends, Query
 from models import User
+from sqlmodel import Session, select
 
 from .models import Promotion
 

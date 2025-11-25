@@ -1,12 +1,11 @@
 import logging
-import asyncio
 from datetime import datetime, timezone
-from typing import Optional
 
+from log_config import log_event
 from sse_backend import get_sse_backend
+
 from .interfaces import DebateContext, DebatePipeline, DebateState
 from .state import DebateStateManager
-from log_config import log_event
 
 logger = logging.getLogger(__name__)
 
