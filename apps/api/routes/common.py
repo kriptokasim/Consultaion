@@ -10,6 +10,10 @@ from metrics import increment_metric
 from models import Debate, RatingPersona, Score, Team, TeamMember, User
 from schemas import DebateConfig, PanelConfig
 from log_config import update_log_context
+from sqlalchemy.exc import ProgrammingError
+import logging
+
+logger = logging.getLogger(__name__)
 
 ENABLE_METRICS = settings.ENABLE_METRICS
 
@@ -122,8 +126,15 @@ def user_is_team_editor(session: Session, user: User, team_id: str) -> bool:
 
 
 def user_team_ids(session: Session, user_id: str) -> list[str]:
-    rows = session.exec(select(TeamMember.team_id).where(TeamMember.user_id == user_id)).all()
-    return [row[0] if isinstance(row, tuple) else row for row in rows]
+    try:
+        rows = session.exec(select(TeamMember.team_id).where(TeamMember.user_id == user_id)).all()
+        return [row[0] if isinstance(row, tuple) else row for row in rows]
+    except ProgrammingError as exc:
+        msg = str(exc)
+        if "UndefinedTable" in msg or 'relation "teammember" does not exist' in msg:
+            logger.warning("TeamMember table missing; running in single-user/no-team mode.")
+            return []
+        raise
 
 
 def can_access_debate(debate: Debate, user: Optional[User], session: Session) -> bool:

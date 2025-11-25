@@ -18,7 +18,12 @@ from auth import get_current_user
 from audit import record_audit
 from deps import get_session
 from exceptions import NotFoundError, PermissionError, ValidationError
+from exceptions import NotFoundError, PermissionError, ValidationError
 from models import APIKey, User
+from sqlalchemy.exc import SQLAlchemyError
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["api_keys"])
@@ -112,14 +117,19 @@ async def create_api_key(
     session.commit()
     session.refresh(api_key)
     
-    record_audit(
-        "api_key_created",
-        user_id=current_user.id,
-        target_type="api_key",
-        target_id=api_key.id,
-        meta={"name": api_key.name, "prefix": prefix},
-        session=session,
-    )
+    try:
+        record_audit(
+            "api_key_created",
+            user_id=current_user.id,
+            target_type="api_key",
+            target_id=api_key.id,
+            meta={"name": api_key.name, "prefix": prefix},
+            session=session,
+        )
+    except SQLAlchemyError as e:
+        logger.warning(f"Failed to write audit log for API key {api_key.id}: {e}")
+        # Do not rollback the API key creation; it's already committed and valid.
+        # Just swallow the error so the user gets their key.
     
     return APIKeyCreateResponse(
         id=api_key.id,
