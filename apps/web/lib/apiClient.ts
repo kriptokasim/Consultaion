@@ -3,11 +3,32 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export class ApiClientError extends Error {
   status?: number;
   body: any;
+  code?: string;
 
   constructor(message: string, status?: number, body?: any) {
     super(message);
     this.status = status;
     this.body = body ?? null;
+    this.code = body?.code;
+  }
+
+  /**
+   * Check if this error is a rate limit error.
+   */
+  isRateLimitError(): boolean {
+    return this.status === 429 || this.code?.startsWith('rate_limit') || false;
+  }
+
+  /**
+   * Get rate limit details if available.
+   */
+  getRateLimitDetails(): { detail?: string; reset_at?: string; reason?: string } | null {
+    if (!this.isRateLimitError()) return null;
+    return {
+      detail: this.body?.detail,
+      reset_at: this.body?.reset_at,
+      reason: this.body?.reason || this.body?.code,
+    };
   }
 }
 

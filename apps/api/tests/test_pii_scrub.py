@@ -1,12 +1,13 @@
 """
 Tests for PII scrubbing functionality.
 
-Patchset 29.0
+Patchset 36.0: Added tests for extended patterns and metrics.
 """
 
+import os
 import pytest
 
-from safety.pii import scrub_text, scrub_messages
+from safety.pii import scrub_text, scrub_messages, get_scrub_metrics, reset_scrub_metrics
 
 
 def test_scrub_email():
@@ -88,9 +89,7 @@ def test_scrub_messages_user_content():
 
 
 def test_scrub_messages_disabled():
-    """Message scrubbing should be byp
-
-assed when disabled."""
+    """Message scrubbing should be bypassed when disabled."""
     messages = [
         {"role": "user", "content": "Email: test@example.com"}
     ]
@@ -126,3 +125,91 @@ def test_scrub_email_various_formats():
         scrubbed = scrub_text(text)
         assert "[redacted_email]" in scrubbed
         assert email not in scrubbed
+
+
+# Patchset 36.0: Extended pattern tests
+
+def test_scrub_name_extended():
+    """Names should be redacted when extended mode is enabled."""
+    text = "John Smith is a great developer"
+    scrubbed = scrub_text(text, extended=True)
+    
+    assert "[redacted_name]" in scrubbed
+    assert "John Smith" not in scrubbed
+
+
+def test_scrub_name_not_extended():
+    """Names should NOT be redacted when extended mode is disabled."""
+    text = "John Smith is a great developer"
+    scrubbed = scrub_text(text, extended=False)
+    
+    assert "[redacted_name]" not in scrubbed
+    assert "John Smith" in scrubbed
+
+
+def test_scrub_address_extended():
+    """Addresses should be redacted when extended mode is enabled."""
+    text = "I live at 123 Main Street in the city"
+    scrubbed = scrub_text(text, extended=True)
+    
+    assert "[redacted_address]" in scrubbed
+    assert "123 Main Street" not in scrubbed
+
+
+def test_scrub_address_not_extended():
+    """Addresses should NOT be redacted when extended mode is disabled."""
+    text = "I live at 123 Main Street in the city"
+    scrubbed = scrub_text(text, extended=False)
+    
+    assert "[redacted_address]" not in scrubbed
+    assert "123 Main Street" in scrubbed
+
+
+def test_scrub_extended_env_var(monkeypatch):
+    """Extended scrubbing should respect PII_SCRUB_EXTENDED env var."""
+    monkeypatch.setenv("PII_SCRUB_EXTENDED", "1")
+    
+    text = "John Doe lives at 456 Oak Avenue"
+    scrubbed = scrub_text(text)  # extended=None should read from env
+    
+    assert "[redacted_name]" in scrubbed
+    assert "[redacted_address]" in scrubbed
+
+
+def test_scrub_metrics_tracking():
+    """Metrics should track scrubbed items."""
+    reset_scrub_metrics()
+    
+    scrub_text("Email: test@example.com")
+    scrub_text("Phone: 555-123-4567")
+    scrub_text("Contact John Smith at 789 Pine Road", extended=True)
+    
+    metrics = get_scrub_metrics()
+    assert metrics["email_count"] >= 1
+    assert metrics["phone_count"] >= 1
+    assert metrics["name_count"] >= 1
+    assert metrics["address_count"] >= 1
+
+
+def test_scrub_metrics_reset():
+    """Metrics should be resettable."""
+    scrub_text("test@example.com")
+    reset_scrub_metrics()
+    
+    metrics = get_scrub_metrics()
+    assert metrics["email_count"] == 0
+    assert metrics["phone_count"] == 0
+    assert metrics["name_count"] == 0
+    assert metrics["address_count"] == 0
+
+
+def test_scrub_messages_extended():
+    """Messages should support extended scrubbing."""
+    messages = [
+        {"role": "user", "content": "I'm Jane Doe from 100 Elm Street"}
+    ]
+    
+    scrubbed = scrub_messages(messages, extended=True)
+    
+    assert "[redacted_name]" in scrubbed[0]["content"]
+    assert "[redacted_address]" in scrubbed[0]["content"]
