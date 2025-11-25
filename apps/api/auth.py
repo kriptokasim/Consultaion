@@ -177,3 +177,95 @@ def clear_csrf_cookie(response: Response) -> None:
 
 def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+# Patchset 37.0: API Key Authentication
+
+def get_user_from_api_key(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> Optional[User]:
+    """
+    Authenticate user via API key from headers.
+    
+    Checks both Authorization: Bearer and X-API-Key headers.
+    Returns None if no valid API key is found.
+    """
+    from api_key_utils import verify_api_key, extract_prefix
+    from models import APIKey
+    from datetime import datetime, timezone
+    
+    # Check Authorization: Bearer header
+    auth_header = request.headers.get("Authorization", "")
+    api_key_value = None
+    
+    if auth_header.startswith("Bearer "):
+        api_key_value = auth_header[7:]  # Remove "Bearer " prefix
+    else:
+        # Check X-API-Key header
+        api_key_value = request.headers.get("X-API-Key")
+    
+    if not api_key_value:
+        return None
+    
+    # Extract prefix and look up key
+    prefix = extract_prefix(api_key_value)
+    
+    stmt = select(APIKey).where(APIKey.prefix == prefix)
+    api_key_record = session.exec(stmt).first()
+    
+    if not api_key_record:
+        return None
+    
+    # Verify key is not revoked
+    if api_key_record.revoked:
+        return None
+    
+    # Verify the full key matches the hash
+    if not verify_api_key(api_key_value, api_key_record.hashed_key):
+        return None
+    
+    # Update last_used_at
+    api_key_record.last_used_at = datetime.now(timezone.utc)
+    session.add(api_key_record)
+    session.commit()
+    
+    # Get the user
+    user = session.get(User, api_key_record.user_id)
+    if user:
+        update_log_context(user_id=user.id, api_key_id=api_key_record.id)
+    
+    return user
+
+
+def get_user_flexible(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> Optional[User]:
+    """
+    Get user from either cookie (JWT) or API key.
+    
+    Tries API key first, then falls back to cookie auth.
+    """
+    # Try API key first
+    user = get_user_from_api_key(request, session)
+    if user:
+        return user
+    
+    # Fall back to cookie auth
+    return get_optional_user(request, session)
+
+
+def get_current_user_flexible(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> User:
+    """
+    Get current user from either cookie or API key, requiring authentication.
+    """
+    user = get_user_flexible(request, session)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    if hasattr(user, "is_active") and not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    return user

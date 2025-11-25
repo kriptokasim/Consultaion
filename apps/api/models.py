@@ -27,12 +27,23 @@ class User(SQLModel, table=True):
 
 
 class APIKey(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    """
+    API Key model for programmatic access.
+    
+    Patchset 37.0: Enhanced with prefix, revoked, and team support.
+    """
+    __tablename__ = "api_keys"
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
-    key_hash: str = Field(nullable=False)
-    label: Optional[str] = Field(default=None)
+    team_id: Optional[str] = Field(default=None, foreign_key="team.id", index=True)
+    name: str = Field(nullable=False)  # User-defined label
+    prefix: str = Field(nullable=False, index=True)  # Short public prefix (e.g., "pk_abc123")
+    hashed_key: str = Field(nullable=False)  # Full key hashed with bcrypt
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     last_used_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    revoked: bool = Field(default=False, nullable=False, index=True)
+
 
 
 class Debate(SQLModel, table=True):

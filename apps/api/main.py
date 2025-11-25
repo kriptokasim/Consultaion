@@ -64,6 +64,7 @@ from routes.debates import (
 )
 from routes.teams import teams_router, TeamCreate, TeamMemberCreate, create_team, list_teams, list_team_members, add_team_member
 from routes.admin import admin_ops_summary, admin_router, admin_logs, admin_users, update_ratings_endpoint
+from routes.api_keys import api_keys_router
 from schemas import DebateCreate
 from sse_backend import get_sse_backend
 
@@ -239,6 +240,7 @@ app.include_router(teams_router)
 app.include_router(admin_router)
 app.include_router(billing_router)
 app.include_router(promotions_router)
+app.include_router(api_keys_router)
 
 
 # Lifespan helpers
