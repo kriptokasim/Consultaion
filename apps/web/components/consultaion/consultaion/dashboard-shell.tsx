@@ -152,6 +152,13 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
               <p className="heading-serif text-lg font-semibold text-amber-900">Parliament</p>
             </div>
           </Link>
+          <button
+            type="button"
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-gray-100 px-3 py-1 text-sm font-medium text-gray-800 hover:bg-gray-200"
+            onClick={() => router.back()}
+          >
+            ← Go Back
+          </button>
           <nav className="mt-4 flex-1 space-y-1" role="navigation">
             {navItems.map((item) => {
               const isActive = pathname === item.href
