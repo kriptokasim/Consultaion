@@ -14,13 +14,37 @@ Logging is configured in `apps/api/log_config.py`. The format is automatically s
 ### Structured Events
 Critical lifecycle events are logged with the `log_event` helper, producing structured JSON payloads.
 
-**Key Events:**
-- `debate.created`: When a new debate is initialized.
-- `debate.started_manually`: When a user manually triggers a debate run.
-- `billing.usage.increment`: When usage quotas (debates, exports, tokens) are consumed.
-- `billing.limit_exceeded`: When a user hits a plan limit.
-- `rate_limit.exceeded`: When an API rate limit is hit.
-- `circuit_breaker.opened`: When an LLM provider is marked as unhealthy.
+### Debate Lifecycle
+- `debate.created`: When a debate is created.
+- `debate.started_manually`: When a debate is manually triggered.
+- `debate.completed`: When a debate finishes successfully.
+  - `duration_seconds`: Total execution time.
+  - `tokens_total`: Total tokens consumed.
+  - `status`: Final status (e.g., `completed`, `completed_budget`).
+- `debate.failed`: When a debate fails.
+  - `duration_seconds`: Execution time until failure.
+  - `error`: Error message.
+  - `error_type`: Exception class name.
+
+### Billing & Limits
+- `billing.usage.increment`: When usage is recorded.
+- `billing.limit_exceeded`: When a user hits a billing limit.
+- `rate_limit.exceeded`: When a request is blocked by rate limiting.
+
+### Infrastructure
+- `circuit_breaker.opened`: When a provider circuit breaker opens.
+
+## Correlation Fields
+The `log_event` helper automatically injects the following correlation fields when available:
+- `request_id`: The unique ID of the HTTP request (via `contextvars`).
+- `user_id`: The ID of the authenticated user (passed explicitly).
+- `debate_id`: The ID of the debate being processed (passed explicitly).
+
+## Dashboard Caching
+To optimize the `list_debates` endpoint, the total count of debates is cached in Redis for **30 seconds**.
+- **Cache Key Pattern**: `count:debates:<hash(user_id + status + query)>`
+- **TTL**: 30 seconds
+- **Invalidation**: Automatic via TTL. No manual invalidation is currently implemented as the count is eventually consistent.
 
 ## Telemetry
 

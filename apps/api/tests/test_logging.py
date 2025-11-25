@@ -32,3 +32,4 @@ def test_log_event(mock_log):
         payload = json.loads(args[0][1])
         assert payload["event"] == "test.event"
         assert payload["user_id"] == "123"
+        assert "request_id" in payload

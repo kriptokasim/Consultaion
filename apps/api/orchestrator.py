@@ -337,6 +337,7 @@ async def run_debate(
 
     usage_tracker = UsageAccumulator()
     debate_user_id: str | None = None
+    start_time = datetime.now(timezone.utc)
     
     # State variables
     aggregate_scores: List[Dict[str, Any]] = []
@@ -516,6 +517,17 @@ async def run_debate(
                 except Exception:
                     logger.exception("Failed to record billing token usage for debate %s", debate_id)
 
+        from log_config import log_event
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+        log_event(
+            "debate.completed",
+            debate_id=debate_id,
+            user_id=debate_user_id,
+            duration_seconds=duration,
+            tokens_total=tokens_total,
+            status="completed" if not budget_reason else "completed_budget",
+        )
+
         # Rating Updates (Async)
         logger.debug("Debate %s: finalized, triggering rating update", debate_id)
         loop = asyncio.get_running_loop()
@@ -538,6 +550,18 @@ async def run_debate(
                 debate.final_meta = {"error": str(exc)}
                 session.add(debate)
                 session.commit()
+        
+        from log_config import log_event
+        duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+        log_event(
+            "debate.failed",
+            debate_id=debate_id,
+            user_id=debate_user_id,
+            duration_seconds=duration,
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+
         await backend.publish(
             channel_id,
             {"type": "error", "debate_id": debate_id, "message": str(exc)},

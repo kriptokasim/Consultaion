@@ -336,6 +336,8 @@ async def list_debates(
             redis_client = redis.Redis.from_url(settings.REDIS_URL)
             # Create a simple cache key based on filters (this is a simplification)
             # For strict correctness, we'd hash the compiled query params, but here we rely on user_id/status/q
+            # Cache Key Pattern: count:debates:<hash(user_id + status + q)>
+            # TTL: 30 seconds
             key_parts = [str(current_user.id), str(status), str(q)]
             cache_key = f"count:debates:{hash(''.join(key_parts))}"
             cached = redis_client.get(cache_key)

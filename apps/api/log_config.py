@@ -76,7 +76,8 @@ def log_event(event_name: str, level: int = logging.INFO, **kwargs: Any) -> None
     Usage: log_event("debate.created", debate_id="123", user_id="456")
     """
     logger = logging.getLogger("apps.event")
-    payload = {"event": event_name, **kwargs}
+    req_id = get_request_id()
+    payload = {"event": event_name, "request_id": req_id, **kwargs}
     # In dev, we might want to see the event name clearly
     if settings.IS_LOCAL_ENV:
         logger.log(level, f"Event: {event_name} {json.dumps(kwargs, default=str)}")
