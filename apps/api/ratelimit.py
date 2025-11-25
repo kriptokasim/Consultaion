@@ -142,9 +142,12 @@ def increment_ip_bucket(ip: str, window_seconds: int, max_requests: int) -> bool
     return backend.allow(ip, window_seconds, max_requests)
 
 
+from log_config import log_event
+
 def record_429(ip: str, path: str) -> None:
     backend = get_rate_limiter_backend()
     backend.record_429(ip, path)
+    log_event("rate_limit.exceeded", ip=ip, path=path, backend=settings.RATE_LIMIT_BACKEND)
 
 
 def get_recent_429_events() -> list[dict]:

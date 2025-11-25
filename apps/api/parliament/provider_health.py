@@ -104,6 +104,14 @@ class ProviderHealthState(BaseModel):
                 f"(error_rate={self.error_calls/self.total_calls:.2%} "
                 f"threshold={self.error_threshold:.2%})"
             )
+            from log_config import log_event
+            log_event(
+                "circuit_breaker.opened",
+                provider=self.provider,
+                model=self.model,
+                error_rate=self.error_calls/self.total_calls,
+                threshold=self.error_threshold,
+            )
 
 
 # Global registry of health states

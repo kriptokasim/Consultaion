@@ -82,6 +82,7 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
 
     max_debates = _as_int(limits.get("max_debates_per_month"))
     if max_debates is not None and usage.debates_created > max_debates:
+        log_event("billing.limit_exceeded", user_id=str(user_id), metric="debates", limit=max_debates, current=usage.debates_created)
         emit_event(
             "usage_limit_exceeded",
             {"user_id": _normalize_user_id(user_id), "metric": "debates", "limit": max_debates},
@@ -96,6 +97,7 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
         exports_flag in {False, "false", "False", "0", 0}
     )
     if not exports_allowed and usage.exports_count > 0:
+        log_event("billing.limit_exceeded", user_id=str(user_id), metric="exports", reason="disabled")
         emit_event(
             "usage_limit_exceeded",
             {"user_id": _normalize_user_id(user_id), "metric": "exports"},
@@ -117,10 +119,13 @@ def _maybe_emit_nearing(user_id: UserID, metric: str, used: int, limit: Optional
         )
 
 
+from log_config import log_event
+
 def increment_debate_usage(db: Session, user_id: UserID) -> BillingUsage:
     usage = get_or_create_usage(db, user_id)
     usage.debates_created += 1
     usage.last_updated_at = _now()
+    log_event("billing.usage.increment", user_id=str(user_id), metric="debates", value=1, total=usage.debates_created)
     check_limits_and_raise(db, user_id, usage)
     plan = get_active_plan(db, user_id)
     max_debates = plan.limits.get("max_debates_per_month")
@@ -136,6 +141,7 @@ def increment_export_usage(db: Session, user_id: UserID) -> BillingUsage:
     usage = get_or_create_usage(db, user_id)
     usage.exports_count += 1
     usage.last_updated_at = _now()
+    log_event("billing.usage.increment", user_id=str(user_id), metric="exports", value=1, total=usage.exports_count)
     check_limits_and_raise(db, user_id, usage)
     return usage
 
@@ -147,4 +153,5 @@ def add_tokens_usage(db: Session, user_id: UserID, model_id: str, tokens: int) -
     model_totals[model_id] = int(model_totals.get(model_id, 0)) + int(tokens)
     usage.model_tokens = model_totals
     usage.last_updated_at = _now()
+    log_event("billing.usage.increment", user_id=str(user_id), metric="tokens", value=tokens, model_id=model_id, total=usage.tokens_used)
     return usage

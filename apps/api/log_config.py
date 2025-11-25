@@ -59,6 +59,38 @@ def clear_log_context() -> None:
     log_context_ctx.set({})
 
 
+from config import settings
+
+class DevFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        request_id = getattr(record, "request_id", "-")
+        msg = record.getMessage()
+        if record.exc_info:
+            msg += "\n" + self.formatException(record.exc_info)
+        return f"[{datetime.now().strftime('%H:%M:%S')}] {record.levelname} [{request_id}] {record.name}: {msg}"
+
+
+def log_event(event_name: str, level: int = logging.INFO, **kwargs: Any) -> None:
+    """
+    Log a structured event.
+    Usage: log_event("debate.created", debate_id="123", user_id="456")
+    """
+    logger = logging.getLogger("apps.event")
+    payload = {"event": event_name, **kwargs}
+    # In dev, we might want to see the event name clearly
+    if settings.IS_LOCAL_ENV:
+        logger.log(level, f"Event: {event_name} {json.dumps(kwargs, default=str)}")
+    else:
+        # In prod, the JsonFormatter will pick up the extra fields if we pass them via extra
+        # But standard python logging 'extra' merges into the record, which JsonFormatter can read.
+        # However, our JsonFormatter reads from record.__dict__ or we can pass a dict as message.
+        # Let's stick to passing a dict as message for simplicity if we want strict JSON structure,
+        # OR update JsonFormatter to merge 'extra'.
+        # For now, let's update the context or just log the dict.
+        # Better approach: update log context temporarily or just log the payload.
+        logger.log(level, json.dumps(payload, default=str))
+
+
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -70,12 +102,15 @@ LOGGING_CONFIG = {
     "formatters": {
         "json": {
             "()": "log_config.JsonFormatter",
-        }
+        },
+        "dev": {
+            "()": "log_config.DevFormatter",
+        },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "json",
+            "formatter": "dev" if settings.IS_LOCAL_ENV else "json",
             "filters": ["request_id"],
         }
     },
@@ -83,7 +118,7 @@ LOGGING_CONFIG = {
         "uvicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
         "uvicorn.error": {"handlers": ["console"], "level": "INFO", "propagate": False},
         "uvicorn.access": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "apps": {"handlers": ["console"], "level": settings.LOG_LEVEL, "propagate": False},
         "": {"handlers": ["console"], "level": "INFO"},
     },
 }

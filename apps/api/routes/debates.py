@@ -226,6 +226,16 @@ async def create_debate(
             config_payload,
             chosen_model_id,
         )
+    
+    from log_config import log_event
+    log_event(
+        "debate.created",
+        debate_id=debate_id,
+        user_id=current_user.id,
+        model_id=chosen_model_id,
+        autorun=not settings.DISABLE_AUTORUN,
+    )
+
     record_audit(
         "debate_created",
         user_id=current_user.id,
@@ -266,6 +276,15 @@ async def start_debate_run(
     debate.status = "scheduled"
     session.add(debate)
     session.commit()
+    
+    from log_config import log_event
+    log_event(
+        "debate.started_manually",
+        debate_id=debate_id,
+        user_id=current_user.id if current_user else None,
+        model_id=debate.model_id,
+    )
+
     record_audit(
         "debate_manual_start",
         user_id=current_user.id if current_user else None,
@@ -307,11 +326,36 @@ async def list_debates(
     if filters:
         base_query = base_query.where(*filters)
 
-    total_stmt = select(func.count()).select_from(base_query.subquery())
-    total_result = session.exec(total_stmt).one()
-    if isinstance(total_result, tuple):
-        total_result = total_result[0]
-    total = int(total_result or 0)
+    # Caching for total count
+    total = None
+    cache_key = None
+    redis_client = None
+    if settings.REDIS_URL:
+        try:
+            import redis
+            redis_client = redis.Redis.from_url(settings.REDIS_URL)
+            # Create a simple cache key based on filters (this is a simplification)
+            # For strict correctness, we'd hash the compiled query params, but here we rely on user_id/status/q
+            key_parts = [str(current_user.id), str(status), str(q)]
+            cache_key = f"count:debates:{hash(''.join(key_parts))}"
+            cached = redis_client.get(cache_key)
+            if cached:
+                total = int(cached)
+        except Exception:
+            pass
+
+    if total is None:
+        total_stmt = select(func.count()).select_from(base_query.subquery())
+        total_result = session.exec(total_stmt).one()
+        if isinstance(total_result, tuple):
+            total_result = total_result[0]
+        total = int(total_result or 0)
+        
+        if redis_client and cache_key:
+            try:
+                redis_client.setex(cache_key, 30, total)  # Cache for 30 seconds
+            except Exception:
+                pass
 
     items_stmt = base_query.order_by(Debate.created_at.desc()).offset(offset).limit(limit)
     debates = session.exec(items_stmt).all()
@@ -405,8 +449,14 @@ async def export_debate_report(
     current_user: User = Depends(get_current_user),
 ):
     increment_export_usage(session, current_user.id)
-    data = _build_report(session, debate_id, current_user)
-    content = _report_to_markdown(data)
+    
+    # Run heavy export generation in thread pool
+    loop = asyncio.get_running_loop()
+    content = await loop.run_in_executor(
+        None, 
+        lambda: _report_to_markdown(_build_report(session, debate_id, current_user))
+    )
+    
     track_metric("exports_generated")
     record_audit(
         "export_markdown",
@@ -537,18 +587,7 @@ async def get_debate_judges(
     return {"judges": judges}
 
 
-@router.get("/debates/{debate_id}/scores.csv")
-async def export_scores_csv(
-    debate_id: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    increment_export_usage(session, current_user.id)
-    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
-    scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())).all()
-    if not scores:
-        raise NotFoundError(message="No scores found", code="scores.not_found")
-
+def _generate_csv_content(scores: list[Score]) -> str:
     header = ["persona", "judge", "score", "rationale", "timestamp"]
     with StringIO() as output:
         writer = csv_writer(output)
@@ -563,7 +602,24 @@ async def export_scores_csv(
                     score.created_at.isoformat() if score.created_at else "",
                 ]
             )
-        content = output.getvalue()
+        return output.getvalue()
+
+
+@router.get("/debates/{debate_id}/scores.csv")
+async def export_scores_csv(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    increment_export_usage(session, current_user.id)
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())).all()
+    if not scores:
+        raise NotFoundError(message="No scores found", code="scores.not_found")
+
+    loop = asyncio.get_running_loop()
+    content = await loop.run_in_executor(None, lambda: _generate_csv_content(scores))
+    
     filename = f"scores_{debate_id}.csv"
     record_audit(
         "export_scores_csv",
