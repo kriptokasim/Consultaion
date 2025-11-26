@@ -252,6 +252,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   type="search"
                   placeholder={t("dashboardShell.search.placeholder")}
                   className="search-elevated w-full rounded-xl border-stone-200 bg-white pl-10 text-sm text-stone-800 placeholder:text-stone-500 shadow-inner shadow-amber-900/5 focus-visible:ring-amber-500 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card dark:border-amber-900/50 dark:bg-stone-900 dark:text-amber-50 dark:placeholder:text-amber-200/70"
+                  suppressHydrationWarning
                 />
               </div>
             </div>
