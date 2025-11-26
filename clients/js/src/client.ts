@@ -30,11 +30,11 @@ export class ConsultaionClient {
         });
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ message: response.statusText }));
+            const error = await response.json().catch(() => ({ message: response.statusText })) as { message?: string };
             throw new Error(`Failed to create debate: ${error.message || response.statusText}`);
         }
 
-        return response.json();
+        return response.json() as Promise<Debate>;
     }
 
     /**
@@ -47,11 +47,11 @@ export class ConsultaionClient {
         });
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ message: response.statusText }));
+            const error = await response.json().catch(() => ({ message: response.statusText })) as { message?: string };
             throw new Error(`Failed to get debate: ${error.message || response.statusText}`);
         }
 
-        return response.json();
+        return response.json() as Promise<Debate>;
     }
 
     /**
@@ -81,7 +81,7 @@ export class ConsultaionClient {
             eventSource.onmessage = (e) => {
                 try {
                     const data = JSON.parse(e.data);
-                    onEvent({ type: e.type || 'message', data });
+                    onEvent({ type: 'message', data });
                 } catch (err) {
                     if (onError) onError(err as Error);
                 }
