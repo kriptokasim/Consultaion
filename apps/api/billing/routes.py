@@ -10,8 +10,8 @@ from auth import get_current_user
 from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from model_registry import ALL_MODELS
 from models import User
+from parliament.model_registry import get_model_info
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -53,7 +53,7 @@ MODEL_COST_PER_1K = {
 
 
 def _resolve_model_meta(model_id: str) -> Dict[str, object]:
-    cfg = ALL_MODELS.get(model_id)
+    cfg = get_model_info(model_id)
     return {
         "model_id": model_id,
         "display_name": cfg.display_name if cfg else model_id,

@@ -21,9 +21,10 @@ from exceptions import (
 )
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
-from model_registry import get_default_model, list_enabled_models
 from models import Debate, Message, PairwiseVote, Score, Team, User
+from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.providers import PROVIDERS
+from parliament.router_v2 import RouteContext, choose_model
 from parliament.roles import ROLE_PROFILES
 from parliament.schemas import TimelineEvent
 from parliament.timeline import build_debate_timeline
@@ -189,8 +190,9 @@ async def create_debate(
     enabled_models = {m.id: m for m in list_enabled_models()}
     if not enabled_models:
         raise ProviderCircuitOpenError(message="No models available; configure provider keys.", code="models.unavailable")
-    chosen_model_id = body.model_id or get_default_model().id
-    if chosen_model_id not in enabled_models:
+    
+    # Validate requested model if provided
+    if body.model_id and body.model_id not in enabled_models:
         raise ValidationError(message="Invalid or unavailable model_id", code="debate.invalid_model")
 
     panel_config = body.panel_config or default_panel_config()
@@ -204,6 +206,16 @@ async def create_debate(
         if seat.role_profile not in ROLE_PROFILES:
             raise ValidationError(message=f"Unknown role_profile '{seat.role_profile}'", code="debate.invalid_role")
 
+    # Routing decision
+    route_ctx = RouteContext(
+        user_id=current_user.id,
+        requested_model=body.model_id,
+        routing_policy=body.routing_policy,
+        debate_type="standard",
+        priority="normal",
+    )
+    best_model_id, candidates = choose_model(route_ctx)
+    
     debate_id = str(uuid.uuid4())
     config_payload = config.model_dump()
     debate = Debate(
@@ -212,7 +224,13 @@ async def create_debate(
         status="queued",
         config=config_payload,
         user_id=current_user.id,
-        model_id=chosen_model_id,
+        model_id=best_model_id,
+        routed_model=best_model_id,
+        routing_policy=body.routing_policy,
+        routing_meta={
+            "candidates": [c.model_dump() for c in candidates],
+            "requested_model": body.model_id,
+        },
         panel_config=panel.model_dump(),
         engine_version=panel.engine_version,
     )
@@ -230,7 +248,7 @@ async def create_debate(
             body.prompt,
             channel_id,
             config_payload,
-            chosen_model_id,
+            best_model_id,
         )
     
     from log_config import log_event
@@ -238,7 +256,7 @@ async def create_debate(
         "debate.created",
         debate_id=debate_id,
         user_id=current_user.id,
-        model_id=chosen_model_id,
+        model_id=best_model_id,
         autorun=not settings.DISABLE_AUTORUN,
     )
 

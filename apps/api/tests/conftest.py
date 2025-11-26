@@ -227,3 +227,26 @@ def setup_test_routes():
     from tests.fake_routes import test_router
     
     app.include_router(test_router)
+
+
+@pytest.fixture
+def client():
+    from fastapi.testclient import TestClient
+    from main import app
+    return TestClient(app)
+
+
+@pytest.fixture
+def authenticated_client(client, db_session):
+    from auth import hash_password, create_access_token, COOKIE_NAME
+    from models import User
+    
+    email = "normal@example.com"
+    password = "password"
+    user = User(email=email, password_hash=hash_password(password))
+    db_session.add(user)
+    db_session.commit()
+    
+    access_token = create_access_token(user_id=user.id, email=user.email, role=user.role)
+    client.cookies.set(COOKIE_NAME, access_token)
+    return client

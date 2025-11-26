@@ -160,7 +160,7 @@ async def _raw_llm_call(
     model_id: str | None = None,
     debate_id: str | None = None,
 ) -> Tuple[str, UsageCall]:
-    from model_registry import get_default_model, get_model
+    from parliament.model_registry import get_default_model, get_model
 
     try:
         model_cfg = get_model(model_id) if model_id else get_default_model()
@@ -302,7 +302,7 @@ async def _call_llm(
     model_id: str | None = None,
     debate_id: str | None = None,
 ) -> Tuple[str, UsageCall]:
-    from model_registry import get_default_model, get_model
+    from parliament.model_registry import get_default_model, get_model
 
     try:
         model_cfg = get_model(model_id) if model_id else get_default_model()

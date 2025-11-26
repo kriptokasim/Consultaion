@@ -63,6 +63,7 @@ class DebateCreate(BaseModel):
     prompt: str
     config: Optional[DebateConfig] = None
     model_id: Optional[str] = None
+    routing_policy: Optional[str] = None
     panel_config: Optional[PanelConfig] = None
 
     @field_validator("prompt")
@@ -151,9 +152,13 @@ class ModelPublic(BaseModel):
     id: str
     display_name: str
     provider: str
-    tags: List[str] = Field(default_factory=list)
-    max_context: Optional[int] = None
+    capabilities: List[str] = Field(default_factory=list)
+    cost_tier: str
+    latency_class: str
+    quality_tier: str
+    safety_profile: str
     recommended: bool = False
+    enabled: bool = True
 
 
 class AuthRequest(BaseModel):

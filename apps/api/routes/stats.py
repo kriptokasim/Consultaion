@@ -8,8 +8,8 @@ from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from metrics import get_metrics_snapshot
-from model_registry import list_enabled_models
 from models import Debate, Score
+from parliament.model_registry import list_enabled_models
 from pydantic import BaseModel
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from schemas import DebateConfig, default_debate_config, default_panel_config

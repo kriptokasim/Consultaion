@@ -1,0 +1,179 @@
+from typing import List, Literal, Optional, Set
+
+from config import settings
+from pydantic import BaseModel, Field
+
+
+class ModelInfo(BaseModel):
+    id: str = Field(..., description="The unique identifier for the model (e.g. 'gpt4o-mini')")
+    display_name: str = Field(..., description="Human-readable name")
+    provider: str = Field(..., description="The provider identifier (e.g. 'openai', 'anthropic')")
+    litellm_model: str = Field(..., description="The model string passed to litellm")
+    
+    # Capabilities
+    capabilities: Set[str] = Field(default_factory=set, description="Set of capabilities like 'chat', 'tools', 'vision'")
+    
+    # Tiers & Classifications
+    cost_tier: Literal["low", "medium", "high"]
+    latency_class: Literal["fast", "normal", "slow"]
+    quality_tier: Literal["baseline", "advanced", "flagship"]
+    safety_profile: Literal["strict", "normal", "experimental"]
+    
+    # Status
+    enabled: bool = True
+    recommended: bool = False
+    
+    # Legacy/Optional
+    tags: Optional[List[str]] = None
+
+
+# Define the registry
+ALL_MODELS: List[ModelInfo] = [
+    ModelInfo(
+        id="router-smart",
+        display_name="Smart Router (OpenRouter)",
+        provider="openrouter",
+        litellm_model="openrouter/router",
+        capabilities={"chat", "routing"},
+        cost_tier="medium",
+        latency_class="normal",
+        quality_tier="advanced",
+        safety_profile="normal",
+        recommended=True,
+    ),
+    ModelInfo(
+        id="router-deep",
+        display_name="Deep Router (OpenRouter)",
+        provider="openrouter",
+        litellm_model="openrouter/auto",
+        capabilities={"chat", "routing", "reasoning"},
+        cost_tier="high",
+        latency_class="slow",
+        quality_tier="flagship",
+        safety_profile="normal",
+    ),
+    ModelInfo(
+        id="gpt4o-mini",
+        display_name="GPT-4o Mini (OpenAI)",
+        provider="openai",
+        litellm_model="openai/gpt-4o-mini",
+        capabilities={"chat", "tools", "vision"},
+        cost_tier="low",
+        latency_class="fast",
+        quality_tier="baseline",
+        safety_profile="strict",
+    ),
+    ModelInfo(
+        id="gpt4o-deep",
+        display_name="GPT-4o (OpenAI)",
+        provider="openai",
+        litellm_model="openai/gpt-4o",
+        capabilities={"chat", "tools", "vision", "reasoning"},
+        cost_tier="high",
+        latency_class="normal",
+        quality_tier="flagship",
+        safety_profile="strict",
+    ),
+    ModelInfo(
+        id="claude-sonnet",
+        display_name="Claude 3.5 Sonnet (Anthropic)",
+        provider="anthropic",
+        litellm_model="anthropic/claude-3-5-sonnet-20240620",
+        capabilities={"chat", "tools", "vision", "reasoning"},
+        cost_tier="medium",
+        latency_class="normal",
+        quality_tier="flagship",
+        safety_profile="strict",
+    ),
+    ModelInfo(
+        id="claude-haiku",
+        display_name="Claude 3 Haiku (Anthropic)",
+        provider="anthropic",
+        litellm_model="anthropic/claude-3-haiku-20240307",
+        capabilities={"chat", "tools"},
+        cost_tier="low",
+        latency_class="fast",
+        quality_tier="baseline",
+        safety_profile="strict",
+    ),
+    ModelInfo(
+        id="gemini-flash",
+        display_name="Gemini 1.5 Flash",
+        provider="gemini",
+        litellm_model="gemini/gemini-1.5-flash",
+        capabilities={"chat", "tools", "vision", "long_context"},
+        cost_tier="low",
+        latency_class="fast",
+        quality_tier="baseline",
+        safety_profile="normal",
+    ),
+    ModelInfo(
+        id="gemini-pro",
+        display_name="Gemini 1.5 Pro",
+        provider="gemini",
+        litellm_model="gemini/gemini-1.5-pro",
+        capabilities={"chat", "tools", "vision", "long_context", "reasoning"},
+        cost_tier="medium",
+        latency_class="normal",
+        quality_tier="flagship",
+        safety_profile="normal",
+    ),
+]
+
+
+def _provider_enabled(provider: str) -> bool:
+    if settings.USE_MOCK:
+        return True
+    if provider == "openrouter":
+        return bool(settings.OPENROUTER_API_KEY)
+    if provider == "openai":
+        return bool(settings.OPENAI_API_KEY)
+    if provider == "anthropic":
+        return bool(settings.ANTHROPIC_API_KEY)
+    if provider == "gemini":
+        return bool(settings.GEMINI_API_KEY)
+    return False
+
+
+def list_enabled_models() -> List[ModelInfo]:
+    """Return a list of models that are enabled in config and have their provider keys set."""
+    enabled_models: List[ModelInfo] = []
+    for model in ALL_MODELS:
+        if not model.enabled:
+            continue
+        if not _provider_enabled(model.provider):
+            continue
+        enabled_models.append(model)
+    return enabled_models
+
+
+def get_model_info(name: str) -> Optional[ModelInfo]:
+    """Get model info by ID. Returns None if not found."""
+    for model in ALL_MODELS:
+        if model.id == name:
+            return model
+    return None
+
+
+def get_default_model() -> ModelInfo:
+    """Get the default recommended model from enabled models."""
+    enabled = list_enabled_models()
+    for model in enabled:
+        if model.recommended:
+            return model
+    if enabled:
+        return enabled[0]
+    
+    # Fallback if no models enabled (shouldn't happen in valid config)
+    raise RuntimeError("No models are enabled; configure at least one provider API key.")
+
+
+def get_model(model_id: str) -> ModelInfo:
+    """Get model info by ID, raising ValueError if not found.
+    
+    This is a helper for backward compatibility and strict lookups.
+    """
+    info = get_model_info(model_id)
+    if not info:
+        raise ValueError(f"Unknown model: {model_id}")
+    return info

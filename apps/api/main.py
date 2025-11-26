@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
-from model_registry import get_default_model, list_enabled_models
+from parliament.model_registry import get_default_model, list_enabled_models
 from promotions.routes import promotions_router
 from ratelimit import ensure_rate_limiter_ready
 from routes.admin import (

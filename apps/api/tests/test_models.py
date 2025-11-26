@@ -21,8 +21,8 @@ import database  # noqa: E402
 from billing.models import BillingPlan, BillingUsage  # noqa: E402
 from billing.routes import get_model_usage  # noqa: E402
 from billing.service import _current_period  # noqa: E402
-from model_registry import ModelConfig, ModelProvider, list_enabled_models  # noqa: E402
 from models import User  # noqa: E402
+from parliament.model_registry import ModelInfo, list_enabled_models  # noqa: E402
 from routes.debates import create_debate  # noqa: E402
 from schemas import DebateCreate  # noqa: E402
 from sqlmodel import Session, select  # noqa: E402
@@ -107,14 +107,17 @@ def test_call_llm_uses_registry_model(monkeypatch):
     monkeypatch.setattr(agents_module, "acompletion", fake_completion)
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     monkeypatch.setattr(
-        "model_registry.get_model",
-        lambda model_id=None: ModelConfig(
+        "parliament.model_registry.get_model",
+        lambda model_id=None: ModelInfo(
             id="custom-model",
             display_name="Custom Model",
-            provider=ModelProvider.OPENAI,
+            provider="openai",
             litellm_model="openai/custom-model",
-            tags=[],
-            max_context=None,
+            capabilities=set(),
+            cost_tier="medium",
+            latency_class="normal",
+            quality_tier="advanced",
+            safety_profile="normal",
             recommended=True,
         ),
     )

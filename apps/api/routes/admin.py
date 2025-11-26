@@ -11,8 +11,8 @@ from billing.service import _current_period, get_active_plan
 from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
-from model_registry import get_default_model, list_enabled_models
 from models import AuditLog, Debate, User
+from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.provider_health import get_provider_health_snapshot
 from promotions.models import Promotion
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
@@ -338,11 +338,18 @@ def admin_models(
             {
                 "id": cfg.id,
                 "display_name": cfg.display_name,
-                "provider": cfg.provider.value,
+                "provider": cfg.provider,
                 "is_default": default_model.id == cfg.id if default_model else False,
+                "recommended": cfg.recommended,
                 "tokens_used": tokens_used,
                 "approx_cost_usd": approx_cost,
-                "tags": cfg.tags,
+                "tags": list(cfg.capabilities) if not cfg.tags else cfg.tags,
+                "tiers": {
+                    "cost": cfg.cost_tier,
+                    "latency": cfg.latency_class,
+                    "quality": cfg.quality_tier,
+                    "safety": cfg.safety_profile,
+                },
             }
         )
     return {

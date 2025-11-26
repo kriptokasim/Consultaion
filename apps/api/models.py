@@ -62,6 +62,9 @@ class Debate(SQLModel, table=True):
     final_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
     team_id: Optional[str] = Field(foreign_key="team.id", default=None, index=True, nullable=True)
+    routed_model: Optional[str] = Field(default=None, index=True, nullable=True)
+    routing_policy: Optional[str] = Field(default=None, nullable=True)
+    routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 
 class DebateRound(SQLModel, table=True):
@@ -113,6 +116,7 @@ class Team(SQLModel, table=True):
 
 
 class TeamMember(SQLModel, table=True):
+    __tablename__ = "team_member"
     id: Optional[int] = Field(default=None, primary_key=True)
     team_id: str = Field(foreign_key="team.id", nullable=False, index=True)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
@@ -121,6 +125,7 @@ class TeamMember(SQLModel, table=True):
 
 
 class UsageQuota(SQLModel, table=True):
+    __tablename__ = "usage_quota"
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
     period: str = Field(nullable=False, index=True)
@@ -130,6 +135,7 @@ class UsageQuota(SQLModel, table=True):
 
 
 class UsageCounter(SQLModel, table=True):
+    __tablename__ = "usage_counter"
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
     period: str = Field(nullable=False, index=True)
@@ -139,6 +145,7 @@ class UsageCounter(SQLModel, table=True):
 
 
 class AuditLog(SQLModel, table=True):
+    __tablename__ = "audit_log"
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
     action: str = Field(nullable=False)
@@ -149,6 +156,7 @@ class AuditLog(SQLModel, table=True):
 
 
 class PairwiseVote(SQLModel, table=True):
+    __tablename__ = "pairwise_vote"
     id: Optional[int] = Field(default=None, primary_key=True)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
     category: Optional[str] = Field(default=None, index=True)
@@ -161,6 +169,7 @@ class PairwiseVote(SQLModel, table=True):
 
 
 class RatingPersona(SQLModel, table=True):
+    __tablename__ = "rating_persona"
     id: Optional[int] = Field(default=None, primary_key=True)
     persona: str = Field(nullable=False, index=True)
     category: Optional[str] = Field(default=None, index=True)

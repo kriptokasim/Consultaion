@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from model_registry import get_default_model, list_enabled_models
+from parliament.model_registry import get_default_model, list_enabled_models
 from schemas import ModelPublic
 
 router = APIRouter(prefix="/models", tags=["models"])

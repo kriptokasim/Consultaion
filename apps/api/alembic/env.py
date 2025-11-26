@@ -7,13 +7,19 @@ from config import settings
 from dotenv import load_dotenv
 from models import (  # noqa: F401
     APIKey,
+    AuditLog,
     Debate,
     DebateRound,
     Message,
     PairwiseVote,
     RatingPersona,
     Score,
+    Team,
+    TeamMember,
+    UsageCounter,
+    UsageQuota,
     User,
+    Vote,
 )
 from promotions.models import Promotion  # noqa: F401
 from sqlalchemy import engine_from_config, pool
