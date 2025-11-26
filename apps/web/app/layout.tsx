@@ -6,6 +6,9 @@ import { Providers } from './providers';
 export const metadata: Metadata = {
   title: 'Consultaion',
   description: 'AI Parliament for multi-agent deliberation',
+  icons: {
+    icon: '/icon.png',
+  },
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

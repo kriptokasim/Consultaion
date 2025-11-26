@@ -38,6 +38,13 @@ const config: Config = {
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        brand: {
+          bg: '#F9FAFB',
+          primary: '#0F172A',
+          accent: '#F59E0B',
+          success: '#22C55E',
+          border: '#E5E7EB',
+        },
         amberParliament: {
           amber: '#FFBF00',
           accent: '#FF9E0F',

@@ -14,6 +14,7 @@ import { ToastProvider } from "@/components/ui/toast"
 import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
 import { useI18n } from "@/lib/i18n/client"
+import { BrandWordmark } from "@/components/brand"
 
 // NOTE: Marketing-only routes (pricing, leaderboard, hall-of-fame, models, methodology)
 // live under (marketing) and are not linked from the authenticated sidebar to avoid
@@ -148,7 +149,9 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           <Link href="/dashboard" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
             <RosettaChamberLogo size={32} className="drop-shadow" />
             <div className="leading-tight">
-              <p className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700">Consultaion</p>
+              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700">
+                <BrandWordmark size="sm" className="text-[0.65rem]" />
+              </div>
               <p className="heading-serif text-lg font-semibold text-amber-900">Parliament</p>
             </div>
           </Link>
@@ -239,7 +242,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
               <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
                 <RosettaChamberLogo size={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-amber-900">
-                  Consultaion
+                  <BrandWordmark size="md" inline />
                 </span>
               </Link>
               <div className="relative hidden min-w-[180px] flex-1 sm:block lg:max-w-xl">

@@ -2,6 +2,7 @@
 
 import { Moon, Sun } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
+import { BrandWordmark } from "@/components/brand"
 
 interface AuthShellProps {
   title: string
@@ -50,7 +51,9 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <header className="mb-6 space-y-2 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800 dark:text-amber-100">Consultaion</p>
+              <div className="flex justify-center">
+                <BrandWordmark size="sm" className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800 dark:text-amber-100" />
+              </div>
               <h1 className="heading-serif text-2xl font-semibold text-amber-950 dark:text-amber-50 sm:text-3xl">{title}</h1>
               {subtitle ? <p className="text-sm auth-muted">{subtitle}</p> : null}
             </header>

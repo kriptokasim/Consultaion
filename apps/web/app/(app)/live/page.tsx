@@ -7,8 +7,6 @@ import LivePanel from "@/components/consultaion/consultaion/live-panel";
 import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
-import PromptSuggestions from "@/components/parliament/PromptSuggestions";
-import PanelConfigurator from "@/components/parliament/PanelConfigurator";
 import type { Member, ScoreItem } from "@/components/parliament/types";
 import { ApiError, getRateLimitInfo, startDebate, startDebateRun } from "@/lib/api";
 import { useEventSource } from "@/lib/sse";
@@ -18,6 +16,7 @@ import { useToast } from "@/components/ui/toast";
 import { getMe } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n/client";
 import { DebateReplay } from "@/components/debate/DebateReplay";
+import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar } from "@/components/prompt";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -55,6 +54,7 @@ export default function Page() {
   const [latestScores, setLatestScores] = useState<ScoreItem[]>([])
   const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
   const [authStatus, setAuthStatus] = useState<'unknown' | 'authed' | 'guest'>('unknown')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const router = useRouter()
   const { pushToast } = useToast()
@@ -280,6 +280,10 @@ export default function Page() {
     }
   }, [events])
 
+  const handlePresetSelected = (template: string) => {
+    setPrompt((prev) => (prev ? `${prev.trim()}\n\n${template}` : template))
+  }
+
   const handleCopyId = () => {
     if (!currentDebateId) return
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -333,24 +337,50 @@ export default function Page() {
         activePersona={activePersona}
         onCopy={handleCopyId}
       />
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
-        <LivePanel
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          onStart={onStart}
-          onStop={stopStream}
-          running={running}
-          events={events}
-          activePersona={activePersona}
-          speakerTime={speakerTime}
-          vote={vote}
-          loading={eventsLoading}
+
+      {/* New centered prompt workspace */}
+      <div className="space-y-4">
+        <DebateProgressBar active={running} />
+
+        <PromptPanel
+          value={prompt}
+          onChange={setPrompt}
+          onSubmit={onStart}
+          status={running ? 'running' : sessionStatus === 'error' ? 'error' : 'idle'}
+          disabled={running || authStatus === 'guest'}
+          isSubmitLoading={running}
+          submitLabel={t("live.start")}
+          onAdvancedSettingsClick={() => setAdvancedOpen(true)}
         />
-        <div className="space-y-4">
-          <PanelConfigurator seats={panelConfig.seats} onChange={handlePanelChange} />
-          <PromptSuggestions onSelect={setPrompt} />
-        </div>
+
+        <PromptPresets onPresetSelected={handlePresetSelected} />
       </div>
+
+      {/* Keep existing LivePanel for events display */}
+      {events.length > 0 && (
+        <div className="mt-6">
+          <LivePanel
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onStart={onStart}
+            onStop={stopStream}
+            running={running}
+            events={events}
+            activePersona={activePersona}
+            speakerTime={speakerTime}
+            vote={vote}
+            loading={eventsLoading}
+          />
+        </div>
+      )}
+
+      {/* Advanced settings drawer */}
+      <AdvancedSettingsDrawer
+        open={advancedOpen}
+        onOpenChange={setAdvancedOpen}
+        panelConfig={panelConfig.seats}
+        onPanelConfigChange={handlePanelChange}
+      />
       {currentDebateId ? (
         <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/70">
           <DebateReplay debateId={currentDebateId} />
