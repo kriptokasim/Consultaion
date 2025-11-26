@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "consultaion-sdk"
+version = "0.1.0"
+description = "Official Python SDK for Consultaion API"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Consultaion", email = "hello@consultaion.com" }
+]
+keywords = ["consultaion", "ai", "debate", "routing", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.0.0",
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/kriptokasim/Consultaion"
+Repository = "https://github.com/kriptokasim/Consultaion"
+Documentation = "https://github.com/kriptokasim/Consultaion/tree/main/clients/python"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["consultaion*"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
