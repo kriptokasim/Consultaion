@@ -216,6 +216,29 @@ async def create_debate(
     )
     best_model_id, candidates = choose_model(route_ctx)
     
+    # Structured logging for routing decisions
+    logger.info(
+        "Routing decision made",
+        extra={
+            "selected_model": best_model_id,
+            "routing_policy": body.routing_policy or "router-smart",
+            "explicit_override": body.model_id is not None,
+            "candidate_count": len(candidates),
+            "top_candidates": [
+                {"model": c.model, "score": round(c.total_score, 3)}
+                for c in candidates[:3]
+            ] if candidates else [],
+            "user_id": current_user.id,
+        },
+    )
+    
+    # Track routing metrics
+    from routes.common import track_metric
+    track_metric(f"routing.policy.{body.routing_policy or 'router-smart'}")
+    track_metric(f"routing.model.{best_model_id}")
+    if body.model_id:
+        track_metric("routing.explicit_override")
+    
     debate_id = str(uuid.uuid4())
     config_payload = config.model_dump()
     debate = Debate(

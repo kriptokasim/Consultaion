@@ -274,6 +274,11 @@ app.include_router(models_router)
 app.include_router(debates_router)
 app.include_router(teams_router)
 app.include_router(admin_router)
+
+# Import and add routing admin router
+from routes.routing_admin import router as routing_admin_router
+app.include_router(routing_admin_router)
+
 app.include_router(billing_router)
 app.include_router(promotions_router)
 app.include_router(api_keys_router)

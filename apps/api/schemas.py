@@ -59,12 +59,23 @@ class PanelConfig(BaseModel):
 
 
 class DebateCreate(BaseModel):
+    """Request schema for creating a new debate.
+    
+    Supports both explicit model selection and intelligent routing based on policies.
+    """
     model_config = ConfigDict(protected_namespaces=())
-    prompt: str
-    config: Optional[DebateConfig] = None
-    model_id: Optional[str] = None
-    routing_policy: Optional[str] = None
-    panel_config: Optional[PanelConfig] = None
+    
+    prompt: str = Field(..., description="The question or topic for the debate. Must be 10-5000 characters.")
+    config: Optional[DebateConfig] = Field(None, description="Optional debate configuration with agents and judges.")
+    model_id: Optional[str] = Field(
+        None, 
+        description="Explicit model ID to use. If provided, bypasses routing engine. Examples: 'gpt4o-mini', 'claude-sonnet'"
+    )
+    routing_policy: Optional[str] = Field(
+        None,
+        description="Routing policy for model selection. Options: 'router-smart' (balanced), 'router-deep' (quality-focused). Defaults to 'router-smart'."
+    )
+    panel_config: Optional[PanelConfig] = Field(None, description="Optional Parliament-style panel configuration.")
 
     @field_validator("prompt")
     @classmethod
