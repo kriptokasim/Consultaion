@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   },
 }
 
+import { AnalyticsProvider } from '@/components/analytics-provider'
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await resolveLocale()
   const messages = loadMessages(locale)
@@ -28,6 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to content
         </a>
         <Providers>
+          <AnalyticsProvider />
           <I18nProvider locale={locale} messages={messages}>
             {children}
           </I18nProvider>

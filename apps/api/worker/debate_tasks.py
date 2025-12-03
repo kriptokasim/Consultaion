@@ -16,7 +16,7 @@ logger = get_task_logger(__name__)
 module_logger = logging.getLogger(__name__)
 
 
-async def _execute_debate_run(debate_id: str) -> None:
+async def _execute_debate_run(debate_id: str, trace_id: str | None = None) -> None:
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
         if not debate:
@@ -29,14 +29,14 @@ async def _execute_debate_run(debate_id: str) -> None:
     channel_id = debate_channel_id(debate_id)
     backend = get_sse_backend()
     await backend.create_channel(channel_id)
-    await run_debate(debate_id, prompt, channel_id, config, model_id)
+    await run_debate(debate_id, prompt, channel_id, config, model_id, trace_id=trace_id)
 
 
 @celery_app.task(name="debates.run", bind=True, max_retries=3)
-def run_debate_task(self, debate_id: str) -> None:
+def run_debate_task(self, debate_id: str, trace_id: str | None = None) -> None:
     """Celery task that executes a debate orchestration by ID."""
     try:
-        asyncio.run(_execute_debate_run(debate_id))
+        asyncio.run(_execute_debate_run(debate_id, trace_id=trace_id))
     except Exception as exc:  # pragma: no cover - Celery handles retries/logging
         logger.exception("Error while running debate %s", debate_id)
         raise self.retry(exc=exc, countdown=10) from exc

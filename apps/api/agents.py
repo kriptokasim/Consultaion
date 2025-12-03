@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
+import time
 from config import settings
 from exceptions import ProviderCircuitOpenError
 from litellm import acompletion
@@ -14,6 +15,7 @@ from llm_errors import TransientLLMError
 from parliament.provider_health import get_health_state, record_call_result
 from safety.pii import scrub_messages
 from schemas import AgentConfig, JudgeConfig
+from integrations.langfuse import log_model_observation, current_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +171,7 @@ async def _raw_llm_call(
     target_model = model_override or model_cfg.litellm_model
     
     # Extract provider name for health tracking
-    provider_name = model_cfg.provider.value if hasattr(model_cfg, "provider") else "unknown"
+    provider_name = getattr(model_cfg.provider, "value", str(model_cfg.provider)) if hasattr(model_cfg, "provider") else "unknown"
     
     # Patchset 28.0: Check circuit breaker
     now = datetime.now(timezone.utc)
@@ -191,6 +193,7 @@ async def _raw_llm_call(
     # Patchset 29.0: Scrub PII from messages
     scrubbed_messages = scrub_messages(messages, enable=settings.ENABLE_PII_SCRUB)
     
+    start_ts = time.monotonic()
     try:
         response = await acompletion(
             model=target_model,
@@ -198,6 +201,8 @@ async def _raw_llm_call(
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        latency_ms = (time.monotonic() - start_ts) * 1000
+        
         content = response.choices[0].message["content"]
         if not content:
             raise ValueError("LLM response contained no content")
@@ -229,7 +234,7 @@ async def _raw_llm_call(
             "llm_usage",
             extra={
                 "model_id": model_cfg.id,
-                "provider": model_cfg.provider.value,
+                "provider": getattr(model_cfg.provider, "value", str(model_cfg.provider)),
                 "debate_id": debate_id,
                 "tokens_in": token_counts.get("prompt"),
                 "tokens_out": token_counts.get("completion"),
@@ -238,14 +243,37 @@ async def _raw_llm_call(
         
         # Patchset 28.0: Record successful call
         record_call_result(provider_name, target_model, success=True, now=now)
+
+        # Patchset 41.0: Log observation
+        log_model_observation(
+            trace_id=current_trace_id.get(),
+            model_name=model_cfg.id,
+            input_tokens=int(token_counts["prompt"]),
+            output_tokens=int(token_counts["completion"]),
+            latency_ms=latency_ms,
+            success=True,
+            extra={"provider": provider_name, "model_used": model_used, "debate_id": debate_id},
+        )
         
         return content.strip(), call_usage
     except ProviderCircuitOpenError:
         # Don't track circuit breaker blocks as errors
         raise
     except Exception as exc:  # pragma: no cover - handled by retry/fallback
+        latency_ms = (time.monotonic() - start_ts) * 1000
         # Patchset 28.0: Record failed call
         record_call_result(provider_name, target_model, success=False, now=now)
+        
+        # Patchset 41.0: Log failure observation
+        log_model_observation(
+            trace_id=current_trace_id.get(),
+            model_name=model_cfg.id,
+            latency_ms=latency_ms,
+            success=False,
+            error_message=str(exc),
+            extra={"provider": provider_name, "debate_id": debate_id},
+        )
+
         raise TransientLLMError(f"LLM call failed for role {role}: {exc}", cause=exc)
 
 

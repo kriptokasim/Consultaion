@@ -33,6 +33,7 @@ async def dispatch_debate_run(
     channel_id: str,
     config_data: dict,
     model_id: str | None,
+    trace_id: str | None = None,
 ) -> None:
     mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
     if mode == "celery":
@@ -40,9 +41,10 @@ async def dispatch_debate_run(
             raise RuntimeError("Celery dispatch selected but worker tasks are unavailable")
         queue_name = choose_queue_for_debate(config_data, settings)
         if hasattr(run_debate_task, "apply_async"):
-            run_debate_task.apply_async(args=[debate_id], queue=queue_name)
+            # Pass trace_id to the task
+            run_debate_task.apply_async(args=[debate_id, trace_id], queue=queue_name)
         else:  # pragma: no cover - fall back for unusual task shims
-            run_debate_task.delay(debate_id)
+            run_debate_task.delay(debate_id, trace_id)
         return
 
     await run_debate(
@@ -51,4 +53,5 @@ async def dispatch_debate_run(
         channel_id,
         config_data,
         model_id,
+        trace_id=trace_id,
     )

@@ -16,6 +16,7 @@ from parliament.engine import run_parliament_debate
 from schemas import DebateConfig, default_agents, default_judges
 from sse_backend import get_sse_backend
 from usage_limits import record_token_usage
+from integrations.langfuse import current_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -324,7 +325,11 @@ async def run_debate(
     channel_id: str,
     config_data: Dict[str, Any],
     model_id: str | None = None,
+    trace_id: str | None = None,
 ):
+    if trace_id:
+        current_trace_id.set(trace_id)
+
     config = DebateConfig.model_validate(config_data or {})
     agent_configs = config.agents or default_agents()
     judge_configs = config.judges or default_judges()

@@ -17,6 +17,7 @@ import { getMe } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n/client";
 import { DebateReplay } from "@/components/debate/DebateReplay";
 import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar } from "@/components/prompt";
+import { track } from "@/lib/analytics";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -106,6 +107,10 @@ export default function Page() {
             ranking: msg.meta.ranking,
           })
         }
+        track('debate_completed', {
+          debate_id: currentDebateId,
+          duration_ms: elapsedSeconds * 1000,
+        })
         stopStreamRef.current?.('completed')
       }
     },
@@ -195,6 +200,9 @@ export default function Page() {
     (seats: PanelSeatConfig[]) => {
       setPanelConfig((prev) => ({ ...prev, seats }))
       setMembers(seatsToMembers(seats))
+      track('model_config_saved', {
+        seat_count: seats.length,
+      })
     },
     [],
   )
@@ -248,6 +256,10 @@ export default function Page() {
       setSessionStatus('running')
       timerRef.current = setInterval(() => setSpeakerTime((t) => t + 1), 1000)
       startElapsed()
+      track('debate_started', {
+        prompt_length: prompt.length,
+        seat_count: panelConfig.seats.length,
+      })
     } catch (error) {
       if (error instanceof ApiError) {
         const info = getRateLimitInfo(error)
@@ -350,7 +362,10 @@ export default function Page() {
           disabled={running || authStatus === 'guest'}
           isSubmitLoading={running}
           submitLabel={t("live.start")}
-          onAdvancedSettingsClick={() => setAdvancedOpen(true)}
+          onAdvancedSettingsClick={() => {
+            setAdvancedOpen(true)
+            track('settings_opened', { source: 'prompt_panel' })
+          }}
         />
 
         <PromptPresets onPresetSelected={handlePresetSelected} />

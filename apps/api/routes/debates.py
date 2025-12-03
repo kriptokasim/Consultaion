@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import uuid
 from typing import Any, Optional
 
@@ -11,6 +12,7 @@ from channels import debate_channel_id
 from config import settings
 from debate_dispatch import dispatch_debate_run
 from deps import get_session
+from integrations.langfuse import start_debate_trace
 from exceptions import (
     AppError,
     NotFoundError,
@@ -41,6 +43,8 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 from sse_backend import get_sse_backend
 from usage_limits import reserve_run_slot
+
+logger = logging.getLogger(__name__)
 
 from routes.common import (
     champion_for_debate,
@@ -240,6 +244,15 @@ async def create_debate(
         track_metric("routing.explicit_override")
     
     debate_id = str(uuid.uuid4())
+
+    # Patchset 41.0: Start Langfuse trace
+    trace_id = start_debate_trace(
+        debate_id=debate_id,
+        user_id=str(current_user.id),
+        routed_model=best_model_id,
+        routing_policy=body.routing_policy,
+    )
+
     config_payload = config.model_dump()
     debate = Debate(
         id=debate_id,
@@ -272,6 +285,7 @@ async def create_debate(
             channel_id,
             config_payload,
             best_model_id,
+            trace_id=trace_id,
         )
     
     from log_config import log_event
