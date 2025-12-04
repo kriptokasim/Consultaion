@@ -43,7 +43,7 @@ OAUTH_NEXT_COOKIE = "google_oauth_next"
 SAFE_NEXT_DEFAULT = "/dashboard"
 SAFE_NEXT_PREFIXES = ("/dashboard", "/runs", "/live", "/leaderboard", "/")
 
-WEB_APP_ORIGIN = (settings.WEB_APP_ORIGIN or "http://localhost:3000").rstrip("/")
+WEB_APP_ORIGIN = settings.WEB_APP_ORIGIN
 
 
 def sanitize_next_path(raw_next: Optional[str]) -> str:

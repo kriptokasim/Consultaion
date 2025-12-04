@@ -52,6 +52,8 @@ class AppSettings(BaseSettings):
     NEXT_PUBLIC_WEB_ORIGIN: str | None = None
     NEXT_PUBLIC_APP_ORIGIN: str | None = None
     NEXT_PUBLIC_SITE_URL: str | None = None
+    VERCEL_URL: str | None = None
+    NEXT_PUBLIC_VERCEL_URL: str | None = None
 
     SSE_BACKEND: Literal["memory", "redis"] = "memory"
     SSE_REDIS_URL: str | None = None
@@ -236,8 +238,15 @@ class AppSettings(BaseSettings):
                     "SSE events may not be delivered correctly (OK for local dev)."
                 )
 
+        if self.VERCEL_URL and not self.VERCEL_URL.startswith("http"):
+            object.__setattr__(self, "VERCEL_URL", f"https://{self.VERCEL_URL}")
+        if self.NEXT_PUBLIC_VERCEL_URL and not self.NEXT_PUBLIC_VERCEL_URL.startswith("http"):
+             object.__setattr__(self, "NEXT_PUBLIC_VERCEL_URL", f"https://{self.NEXT_PUBLIC_VERCEL_URL}")
+
         web_candidates = [
             self.WEB_APP_ORIGIN,
+            self.VERCEL_URL,
+            self.NEXT_PUBLIC_VERCEL_URL,
             self.NEXT_PUBLIC_WEB_URL,
             self.NEXT_PUBLIC_APP_URL,
             self.NEXT_PUBLIC_WEB_ORIGIN,
