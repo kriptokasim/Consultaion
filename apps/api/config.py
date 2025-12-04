@@ -150,6 +150,7 @@ class AppSettings(BaseSettings):
         else:
             object.__setattr__(self, "ENABLE_SEC_HEADERS", True)
             object.__setattr__(self, "COOKIE_SECURE", True)
+            object.__setattr__(self, "COOKIE_SAMESITE", "none")
         
         # Production secret validation
         if not is_local:
@@ -242,6 +243,11 @@ class AppSettings(BaseSettings):
             object.__setattr__(self, "VERCEL_URL", f"https://{self.VERCEL_URL}")
         if self.NEXT_PUBLIC_VERCEL_URL and not self.NEXT_PUBLIC_VERCEL_URL.startswith("http"):
              object.__setattr__(self, "NEXT_PUBLIC_VERCEL_URL", f"https://{self.NEXT_PUBLIC_VERCEL_URL}")
+
+        # If running on Vercel (VERCEL_URL is set), ignore localhost WEB_APP_ORIGIN
+        # This prevents local .env or default values from overriding the Vercel URL
+        if self.VERCEL_URL and self.WEB_APP_ORIGIN and "localhost" in self.WEB_APP_ORIGIN:
+             object.__setattr__(self, "WEB_APP_ORIGIN", None)
 
         web_candidates = [
             self.WEB_APP_ORIGIN,
