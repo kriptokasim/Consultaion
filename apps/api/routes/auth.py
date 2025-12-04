@@ -81,7 +81,7 @@ def build_frontend_redirect(path: str) -> str:
     return f"{WEB_APP_ORIGIN}{cleaned}"
 
 
-def _profile_payload(user: User) -> UserProfileSchema:
+def _profile_payload(user: User, debate_count: int = 0) -> UserProfileSchema:
     created = user.created_at.isoformat() if getattr(user, "created_at", None) else utcnow().isoformat()
     return UserProfileSchema(
         id=user.id,
@@ -92,6 +92,8 @@ def _profile_payload(user: User) -> UserProfileSchema:
         timezone=user.timezone,
         is_admin=bool(getattr(user, "is_admin", False) or user.role == "admin"),
         created_at=created,
+        email_summaries_enabled=getattr(user, "email_summaries_enabled", False),
+        debate_count=debate_count,
     )
 
 
@@ -103,6 +105,8 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
 
 
 from exceptions import AuthError, ProviderCircuitOpenError, RateLimitError, ValidationError
+from models import Debate
+from sqlalchemy import func
 
 
 def _google_config() -> tuple[str, str, str]:
@@ -112,6 +116,51 @@ def _google_config() -> tuple[str, str, str]:
     if not client_id or not client_secret or not redirect_url:
         raise ProviderCircuitOpenError(message="Google auth not configured", code="auth.google_not_configured")
     return client_id, client_secret, redirect_url
+
+
+# ... (skipping unchanged parts)
+
+@router.get("/me/profile", response_model=UserProfileSchema)
+async def get_my_profile(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    count = session.exec(select(func.count()).select_from(Debate).where(Debate.user_id == current_user.id)).one()
+    return _profile_payload(current_user, count)
+
+
+@router.put("/me/profile", response_model=UserProfileSchema)
+async def update_my_profile(
+    body: UserProfileUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    updated = False
+
+    if body.display_name is not None:
+        current_user.display_name = _clean_optional(body.display_name)
+        updated = True
+    if body.avatar_url is not None:
+        current_user.avatar_url = _clean_optional(body.avatar_url)
+        updated = True
+    if body.bio is not None:
+        current_user.bio = _clean_optional(body.bio)
+        updated = True
+    if body.timezone is not None:
+        current_user.timezone = _clean_optional(body.timezone)
+        updated = True
+    if body.email_summaries_enabled is not None:
+        current_user.email_summaries_enabled = body.email_summaries_enabled
+        updated = True
+
+    if updated:
+        session.add(current_user)
+        session.commit()
+        session.refresh(current_user)
+
+    # For update, we can fetch count again or just pass 0 if we don't want extra query, but let's be correct
+    count = session.exec(select(func.count()).select_from(Debate).where(Debate.user_id == current_user.id)).one()
+    return _profile_payload(current_user, count)
 
 
 async def _exchange_code_for_token(code: str, client_id: str, client_secret: str, redirect_url: str) -> dict[str, Any]:
@@ -312,41 +361,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return serialize_user(current_user)
 
 
-@router.get("/me/profile", response_model=UserProfileSchema)
-async def get_my_profile(current_user: User = Depends(get_current_user)):
-    return _profile_payload(current_user)
 
-
-@router.put("/me/profile", response_model=UserProfileSchema)
-async def update_my_profile(
-    body: UserProfileUpdate,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    updated = False
-
-    if body.display_name is not None:
-        current_user.display_name = _clean_optional(body.display_name)
-        updated = True
-    if body.avatar_url is not None:
-        current_user.avatar_url = _clean_optional(body.avatar_url)
-        updated = True
-    if body.bio is not None:
-        current_user.bio = _clean_optional(body.bio)
-        updated = True
-    if body.timezone is not None:
-        current_user.timezone = _clean_optional(body.timezone)
-        updated = True
-    if body.email_summaries_enabled is not None:
-        current_user.email_summaries_enabled = body.email_summaries_enabled
-        updated = True
-
-    if updated:
-        session.add(current_user)
-        session.commit()
-        session.refresh(current_user)
-
-    return _profile_payload(current_user)
 
 
 def _user_team_role(session: Session, user_id: str, team_id: str) -> Optional[str]:

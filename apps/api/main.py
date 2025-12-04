@@ -283,6 +283,9 @@ app.include_router(billing_router)
 app.include_router(promotions_router)
 app.include_router(api_keys_router)
 
+from routes.gifs import router as gifs_router
+app.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
+
 
 # Lifespan helpers
 async def _sse_cleanup_loop() -> None:

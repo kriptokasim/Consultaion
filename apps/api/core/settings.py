@@ -31,8 +31,19 @@ class NotificationSettings(BaseSettings):
         extra = "ignore"
 
 
+class GiphySettings(BaseSettings):
+    enable_giphy: bool = Field(default=False, alias="ENABLE_GIPHY")
+    giphy_api_key: str | None = Field(default=None, alias="GIPHY_API_KEY")
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+
 class Settings(BaseSettings):
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
+    giphy: GiphySettings = Field(default_factory=GiphySettings)
 
 settings = Settings()

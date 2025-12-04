@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Brain, MessageSquare, Vote } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
+import { MarketingHero } from "@/components/hero/marketing-hero";
 
 const featureCards = [
   {
@@ -112,44 +113,46 @@ export default function HomeContent() {
           </div>
         </header>
 
-        <section className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-6">
-            <h1 className="text-5xl font-display font-bold tracking-tight text-[#3a2a1a] leading-[1.1] sm:text-6xl md:leading-[1.05]">
-              {t("landing.hero.title")}
-              <span className="block bg-gradient-to-r from-amber-600 to-amber-400 bg-clip-text text-transparent">
-                {t("landing.hero.accent")}
-              </span>
-            </h1>
-            <p className="max-w-2xl text-lg text-[#5a4a3a]">{t("landing.hero.description")}</p>
-            <div className="flex flex-col gap-2">
-              <Button variant="amber" size="lg" className="w-fit px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
-                {t("landing.hero.primaryCta")}
-              </Button>
-              {!user ? (
-                <>
-                  <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline">
-                    {t("landing.hero.secondaryCta")}
-                  </Link>
-                  <p className="text-xs text-amber-900/70">{t("landing.hero.secondaryHint")}</p>
-                </>
-              ) : null}
+        <MarketingHero>
+          <div className="grid gap-12 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-6">
+              <h1 className="text-5xl font-display font-bold tracking-tight text-[#3a2a1a] leading-[1.1] sm:text-6xl md:leading-[1.05]">
+                {t("landing.hero.title")}
+                <span className="block bg-gradient-to-r from-amber-600 to-amber-400 bg-clip-text text-transparent">
+                  {t("landing.hero.accent")}
+                </span>
+              </h1>
+              <p className="max-w-2xl text-lg text-[#5a4a3a]">{t("landing.hero.description")}</p>
+              <div className="flex flex-col gap-2">
+                <Button variant="amber" size="lg" className="w-fit px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
+                  {t("landing.hero.primaryCta")}
+                </Button>
+                {!user ? (
+                  <>
+                    <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline">
+                      {t("landing.hero.secondaryCta")}
+                    </Link>
+                    <p className="text-xs text-amber-900/70">{t("landing.hero.secondaryHint")}</p>
+                  </>
+                ) : null}
+              </div>
             </div>
-          </div>
 
-          <div className="relative rounded-3xl border border-amber-100/80 bg-white/80 p-8 shadow-[0_20px_50px_rgba(112,73,28,0.12)] backdrop-blur">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">{t("landing.snapshot.caption")}</p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <HeroStat label={t("landing.stats.agents")} value={8} animate />
-              <HeroStat label={t("landing.stats.judges")} value={3} animate />
-              <HeroStat label={t("landing.stats.rounds")} value={4} animate />
-              <HeroStat label={t("landing.stats.synthesizer")} value={t("landing.stats.online")} />
-            </div>
-            <div className="mt-8 flex flex-col items-center gap-3">
-              <ArcDots />
-              <p className="max-w-sm text-center text-sm text-[#5a4a3a]">{t("landing.snapshot.description")}</p>
+            <div className="relative rounded-3xl border border-amber-100/80 bg-white/80 p-8 shadow-[0_20px_50px_rgba(112,73,28,0.12)] backdrop-blur">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">{t("landing.snapshot.caption")}</p>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <HeroStat label={t("landing.stats.agents")} value={8} animate />
+                <HeroStat label={t("landing.stats.judges")} value={3} animate />
+                <HeroStat label={t("landing.stats.rounds")} value={4} animate />
+                <HeroStat label={t("landing.stats.synthesizer")} value={t("landing.stats.online")} />
+              </div>
+              <div className="mt-8 flex flex-col items-center gap-3">
+                <ArcDots />
+                <p className="max-w-sm text-center text-sm text-[#5a4a3a]">{t("landing.snapshot.description")}</p>
+              </div>
             </div>
           </div>
-        </section>
+        </MarketingHero>
 
         <section className="grid gap-6 md:grid-cols-3">
           {featureCards.map((card) => (

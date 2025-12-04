@@ -196,6 +196,7 @@ class UserProfile(BaseModel):
     is_admin: bool = False
     created_at: str
     email_summaries_enabled: bool = False
+    debate_count: int = 0
 
 
 class UserProfileUpdate(BaseModel):

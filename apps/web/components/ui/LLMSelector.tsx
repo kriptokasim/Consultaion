@@ -5,6 +5,7 @@ import { ArrowRight, Brain, Sparkles, Zap } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
+import { getModelAvatarUrl } from "@/lib/avatar"
 
 type ModelCard = {
   id: string
@@ -75,10 +76,10 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
                 "group relative overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/50 p-6 text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
                 isSelected
                   ? cn(
-                      "scale-105 border-white/30 shadow-2xl",
-                      model.glow,
-                      "bg-neutral-900/90",
-                    )
+                    "scale-105 border-white/30 shadow-2xl",
+                    model.glow,
+                    "bg-neutral-900/90",
+                  )
                   : "hover:-translate-y-1 hover:bg-neutral-900/80",
               )}
             >
@@ -97,7 +98,15 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
                     `bg-gradient-to-br ${model.gradient}`,
                   )}
                 >
-                  <Icon className="h-6 w-6" />
+                  {getModelAvatarUrl(model.name) ? (
+                    <img
+                      src={getModelAvatarUrl(model.name)!}
+                      alt={model.name}
+                      className="h-8 w-8 rounded-full bg-white/10 p-0.5"
+                    />
+                  ) : (
+                    <Icon className="h-6 w-6" />
+                  )}
                 </div>
                 <div>
                   <p className="text-lg font-semibold">{model.name}</p>
