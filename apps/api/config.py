@@ -262,6 +262,13 @@ class AppSettings(BaseSettings):
         resolved = next((candidate for candidate in web_candidates if candidate), "http://localhost:3000")
         object.__setattr__(self, "WEB_APP_ORIGIN", resolved.rstrip("/"))
 
+        # Ensure CORS_ORIGINS includes the resolved WEB_APP_ORIGIN
+        # This is critical for cross-domain authentication to work
+        cors_origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        if resolved not in cors_origins:
+            cors_origins.append(resolved)
+        object.__setattr__(self, "CORS_ORIGINS", ",".join(cors_origins))
+
 
 class SettingsProxy:
     def __init__(self) -> None:
