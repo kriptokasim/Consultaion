@@ -1,13 +1,11 @@
 """Test routing admin endpoints"""
-from unittest.mock import patch
 
-import pytest
 from sqlmodel import Session, select
 
 
 def test_routing_preview(authenticated_client, db_session: Session):
     # Create admin user
-    from auth import create_access_token, hash_password, COOKIE_NAME
+    from auth import COOKIE_NAME, create_access_token, hash_password
     from models import User
     
     admin_email = "admin@example.com"
@@ -48,7 +46,7 @@ def test_routing_preview(authenticated_client, db_session: Session):
 
 def test_routing_preview_with_explicit_model(authenticated_client, db_session: Session):
     # Create admin user
-    from auth import create_access_token, hash_password, COOKIE_NAME
+    from auth import COOKIE_NAME, create_access_token, hash_password
     from models import User
     
     admin_email = "admin@example.com"
@@ -73,7 +71,7 @@ def test_routing_preview_with_explicit_model(authenticated_client, db_session: S
 
 def test_routing_preview_with_deep_policy(authenticated_client, db_session: Session):
     # Create admin user
-    from auth import create_access_token, hash_password, COOKIE_NAME
+    from auth import COOKIE_NAME, create_access_token, hash_password
     from models import User
     
     admin_email = "admin@example.com"

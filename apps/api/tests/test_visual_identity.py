@@ -1,9 +1,8 @@
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
-from httpx import Response
 from models import User
 from routes.auth import _profile_payload
-
 
 
 @pytest.mark.asyncio

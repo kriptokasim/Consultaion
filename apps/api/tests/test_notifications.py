@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from integrations.email import send_debate_summary_email
 from integrations.slack import send_slack_alert
 from schemas import DebateSummary
+
 
 @pytest.mark.asyncio
 async def test_send_debate_summary_email_enabled():

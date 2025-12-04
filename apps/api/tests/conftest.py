@@ -53,6 +53,7 @@ def test_database_url():
     from config import settings
     from database import init_db, reset_engine
     from sqlmodel import Session, select
+
     from tests.utils import cleanup_test_database, init_test_database, make_test_database_url
     
     # Generate unique test database URL
@@ -124,6 +125,7 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     from config import settings
     from database import reset_engine
     from sse_backend import reset_sse_backend_for_tests
+
     from tests.utils import reset_provider_health, truncate_all_tables
 
     # Force the shared settings/engine to the session database even if other tests mutated env.
@@ -224,6 +226,7 @@ def setup_test_routes():
     Mount test-only routes to the FastAPI app for the duration of the test session.
     """
     from main import app
+
     from tests.fake_routes import test_router
     
     app.include_router(test_router)
@@ -238,7 +241,7 @@ def client():
 
 @pytest.fixture
 def authenticated_client(client, db_session):
-    from auth import hash_password, create_access_token, COOKIE_NAME
+    from auth import COOKIE_NAME, create_access_token, hash_password
     from models import User
     
     email = "normal@example.com"

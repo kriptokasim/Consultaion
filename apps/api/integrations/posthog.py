@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from typing import Any, Optional
-from loguru import logger
+
 from core.settings import settings
+from loguru import logger
 
 _posthog_client: Optional[Any] = None  # type: ignore[assignment]
 

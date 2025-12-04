@@ -3,19 +3,19 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
-import time
 from config import settings
 from exceptions import ProviderCircuitOpenError
+from integrations.langfuse import current_trace_id, log_model_observation
 from litellm import acompletion
 from llm_errors import TransientLLMError
 from parliament.provider_health import get_health_state, record_call_result
 from safety.pii import scrub_messages
 from schemas import AgentConfig, JudgeConfig
-from integrations.langfuse import log_model_observation, current_trace_id
 
 logger = logging.getLogger(__name__)
 

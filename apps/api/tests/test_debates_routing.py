@@ -1,9 +1,11 @@
 
-import pytest
 from unittest.mock import MagicMock, patch
-from sqlmodel import Session, select
-from models import Debate, User
+
+import pytest
+from models import Debate
 from parliament.router_v2 import CandidateDecision
+from sqlmodel import Session
+
 
 @pytest.fixture
 def mock_choose_model():

@@ -12,7 +12,6 @@ from channels import debate_channel_id
 from config import settings
 from debate_dispatch import dispatch_debate_run
 from deps import get_session
-from integrations.langfuse import start_debate_trace
 from exceptions import (
     AppError,
     NotFoundError,
@@ -23,11 +22,12 @@ from exceptions import (
 )
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
+from integrations.langfuse import start_debate_trace
 from models import Debate, Message, PairwiseVote, Score, Team, User
-from parliament.model_registry import get_default_model, list_enabled_models
+from parliament.model_registry import list_enabled_models
 from parliament.providers import PROVIDERS
-from parliament.router_v2 import RouteContext, choose_model
 from parliament.roles import ROLE_PROFILES
+from parliament.router_v2 import RouteContext, choose_model
 from parliament.schemas import TimelineEvent
 from parliament.timeline import build_debate_timeline
 from pydantic import BaseModel
@@ -44,8 +44,6 @@ from sqlmodel import Session, select
 from sse_backend import get_sse_backend
 from usage_limits import reserve_run_slot
 
-logger = logging.getLogger(__name__)
-
 from routes.common import (
     champion_for_debate,
     members_from_config,
@@ -54,6 +52,10 @@ from routes.common import (
     track_metric,
     user_is_team_member,
 )
+
+logger = logging.getLogger(__name__)
+
+
 
 router = APIRouter(tags=["debates"])
 

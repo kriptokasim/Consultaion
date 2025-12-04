@@ -1,8 +1,6 @@
-from typing import Optional
 import httpx
-from loguru import logger
-
 from core.settings import settings
+from loguru import logger
 from schemas import DebateSummary
 
 RESEND_API_BASE = "https://api.resend.com"

@@ -1,5 +1,6 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
-from functools import lru_cache
+
 
 class ObservabilitySettings(BaseSettings):
     enable_langfuse: bool = False
@@ -16,7 +17,8 @@ class ObservabilitySettings(BaseSettings):
         case_sensitive = False
         extra = "ignore"
 
-from pydantic import Field
+
+
 
 class NotificationSettings(BaseSettings):
     enable_email_summaries: bool = Field(default=False, alias="ENABLE_EMAIL_SUMMARIES")

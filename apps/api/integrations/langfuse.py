@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Optional
 from contextvars import ContextVar
-from langfuse import Langfuse
-from loguru import logger
+from typing import Any, Optional
 
 from core.settings import settings
+from langfuse import Langfuse
+from loguru import logger
 
 _langfuse_client: Optional[Langfuse] = None
 current_trace_id: ContextVar[Optional[str]] = ContextVar("current_trace_id", default=None)

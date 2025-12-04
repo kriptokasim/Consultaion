@@ -1,8 +1,9 @@
 
-import pytest
-from sqlmodel import Session, select
-from models import Debate, User
 from uuid import uuid4
+
+from models import Debate, User
+from sqlmodel import Session, select
+
 
 def test_get_debate(authenticated_client, db_session: Session):
     # Get the user created by the fixture
@@ -104,7 +105,7 @@ def test_start_debate_run(authenticated_client, db_session: Session):
     assert debate.status == "scheduled"
 
 def test_get_debate_report(authenticated_client, db_session: Session):
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     debate = Debate(id=str(uuid4()), prompt="Report me", user_id=user.id, status="completed")
     db_session.add(debate)
@@ -124,7 +125,7 @@ def test_get_debate_report(authenticated_client, db_session: Session):
         assert data["status"] == "completed"
 
 def test_export_debate_report(authenticated_client, db_session: Session):
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     debate = Debate(id=str(uuid4()), prompt="Export me", user_id=user.id, status="completed")
     db_session.add(debate)
@@ -142,7 +143,7 @@ def test_export_debate_report(authenticated_client, db_session: Session):
 
 def test_admin_models_metadata(authenticated_client, db_session: Session):
     # We need to be an admin to access this endpoint
-    from auth import create_access_token, hash_password, COOKIE_NAME
+    from auth import COOKIE_NAME, create_access_token, hash_password
     from models import User
     
     # Create admin user

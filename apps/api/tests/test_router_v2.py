@@ -1,9 +1,8 @@
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+import pytest
 from parliament.model_registry import ModelInfo
-from parliament.router_v2 import RouteContext, choose_model, CandidateDecision
+from parliament.router_v2 import RouteContext, choose_model
 
 
 @pytest.fixture

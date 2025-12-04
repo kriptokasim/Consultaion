@@ -1,6 +1,6 @@
 from fastapi import APIRouter
+from integrations.giphy import GIPHY_CELEBRATION_TAG, GIPHY_EMPTY_STATE_TAG, fetch_giphy_gif
 from pydantic import BaseModel
-from integrations.giphy import fetch_giphy_gif, GIPHY_EMPTY_STATE_TAG, GIPHY_CELEBRATION_TAG
 
 router = APIRouter()
 

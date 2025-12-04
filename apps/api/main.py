@@ -277,6 +277,7 @@ app.include_router(admin_router)
 
 # Import and add routing admin router
 from routes.routing_admin import router as routing_admin_router
+
 app.include_router(routing_admin_router)
 
 app.include_router(billing_router)
@@ -284,6 +285,7 @@ app.include_router(promotions_router)
 app.include_router(api_keys_router)
 
 from routes.gifs import router as gifs_router
+
 app.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
 
 

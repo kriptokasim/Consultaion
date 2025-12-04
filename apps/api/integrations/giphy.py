@@ -1,8 +1,8 @@
 from typing import Optional
-import httpx
-from loguru import logger
 
+import httpx
 from core.settings import settings
+from loguru import logger
 
 GIPHY_EMPTY_STATE_TAG = "thinking"
 GIPHY_CELEBRATION_TAG = "celebration"

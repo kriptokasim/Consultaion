@@ -55,6 +55,7 @@ from parliament.provider_health import clear_all_health_states, record_call_resu
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
 from schemas import default_debate_config, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
+
 from tests.utils import settings_context  # noqa: E402
 
 

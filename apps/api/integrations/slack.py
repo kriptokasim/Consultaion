@@ -1,8 +1,8 @@
 from typing import Literal
-import httpx
-from loguru import logger
 
+import httpx
 from core.settings import settings
+from loguru import logger
 
 AlertLevel = Literal["info", "warning", "error"]
 
