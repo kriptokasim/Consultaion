@@ -17,6 +17,9 @@ from schemas import DebateConfig, default_agents, default_judges
 from sse_backend import get_sse_backend
 from usage_limits import record_token_usage
 from integrations.langfuse import current_trace_id
+from integrations.email import send_debate_summary_email
+from integrations.slack import send_slack_alert
+from schemas import DebateSummary
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +28,57 @@ class DebateEngineError(RuntimeError):
     """Base class for orchestration errors."""
 
 
+
 class SeatExecutionError(DebateEngineError):
     def __init__(self, seat: str, stage: str, original: Exception):
         self.seat = seat
         self.stage = stage
         self.original = original
         super().__init__(f"{stage} failed for {seat}: {original}")
+
+
+async def _build_and_send_summary(debate_id: str, user_id: str | None) -> None:
+    if not user_id:
+        return
+    
+    with session_scope() as session:
+        user = session.get(User, user_id)
+        if not user or not user.email_summaries_enabled or not user.email:
+            return
+        
+        debate = session.get(Debate, debate_id)
+        if not debate:
+            return
+            
+        # Collect models used
+        models = set()
+        if debate.model_id:
+            models.add(debate.model_id)
+        if debate.routed_model:
+            models.add(debate.routed_model)
+        
+        # Best effort to get winner
+        winner = None
+        if debate.final_meta and "ranking" in debate.final_meta:
+            ranking = debate.final_meta["ranking"]
+            if ranking and isinstance(ranking, list):
+                winner = ranking[0]
+        
+        summary_text = debate.final_content or "No summary available."
+        url = f"{settings.WEB_APP_ORIGIN}/debates/{debate.id}" if settings.WEB_APP_ORIGIN else None
+        
+        summary = DebateSummary(
+            debate_id=str(debate.id),
+            title=debate.prompt[:100] if debate.prompt else "Unnamed Debate",
+            models_used=list(models),
+            winner=winner,
+            summary_text=summary_text[:2000], # Truncate for email
+            url=url,
+        )
+    
+    # Fire and forget
+    asyncio.create_task(send_debate_summary_email(user.email, summary))
+
 
 
 def _start_round(debate_id: str, index: int, label: str, note: str) -> int:
@@ -430,9 +478,24 @@ async def run_debate(
         runner = DebateRunner(pipeline, state_manager)
         
         await runner.run(context)
+        
+        # Success path for Standard Pipeline
+        await _build_and_send_summary(debate_id, debate_user_id)
 
     except Exception as exc:
         logger.exception("Debate %s failed: %s", debate_id, exc)
+        
+        # Slack Alert
+        await send_slack_alert(
+            message="[Consultaion] Debate execution failed",
+            level="error",
+            meta={
+                "debate_id": debate_id,
+                "user_id": str(debate_user_id) if debate_user_id else "unknown",
+                "error": str(exc)[:500],
+            },
+        )
+
         # Fallback error handling if Runner didn't catch it (though it should)
         # But we need to ensure DB status is updated if Runner failed completely
         try:

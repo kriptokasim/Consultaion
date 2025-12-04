@@ -1,6 +1,7 @@
 import { getMe } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { getServerTranslations } from "@/lib/i18n/server"
+import { NotificationSettings } from "@/components/settings/notification-settings"
 
 export default async function SettingsPage() {
   const { t } = await getServerTranslations()
@@ -26,6 +27,8 @@ export default async function SettingsPage() {
           {t("settings.overview.cardParagraph2")}
         </p>
       </div>
+
+      <NotificationSettings initialEnabled={profile.email_summaries_enabled} />
     </div>
   )
 }

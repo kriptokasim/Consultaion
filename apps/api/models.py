@@ -24,6 +24,7 @@ class User(SQLModel, table=True):
     avatar_url: Optional[str] = Field(default=None)
     bio: Optional[str] = Field(default=None, sa_column=Column(Text))
     timezone: Optional[str] = Field(default=None)
+    email_summaries_enabled: bool = Field(default=False, nullable=False)
 
 
 class APIKey(SQLModel, table=True):

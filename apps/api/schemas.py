@@ -11,6 +11,15 @@ class BudgetConfig(BaseModel):
     early_stop_delta: Optional[float] = 1.0
 
 
+class DebateSummary(BaseModel):
+    debate_id: str
+    title: str
+    models_used: List[str]
+    winner: str | None = None
+    summary_text: str
+    url: str | None = None  # deep link to debate in Consultaion UI
+
+
 class AgentConfig(BaseModel):
     name: str
     persona: str
@@ -186,6 +195,7 @@ class UserProfile(BaseModel):
     timezone: Optional[str] = None
     is_admin: bool = False
     created_at: str
+    email_summaries_enabled: bool = False
 
 
 class UserProfileUpdate(BaseModel):
@@ -193,3 +203,4 @@ class UserProfileUpdate(BaseModel):
     avatar_url: Optional[str] = Field(default=None)
     bio: Optional[str] = Field(default=None, max_length=1000)
     timezone: Optional[str] = Field(default=None)
+    email_summaries_enabled: Optional[bool] = Field(default=None)

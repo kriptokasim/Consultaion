@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any, Optional
 from loguru import logger
-from core.settings import get_observability_settings
+from core.settings import settings
 
 _posthog_client: Optional[Any] = None  # type: ignore[assignment]
 
@@ -12,13 +12,13 @@ def get_posthog():
   if _posthog_client is not None:
       return _posthog_client
 
-  settings = get_observability_settings()
-  if not settings.enable_posthog or not settings.posthog_api_key:
+  obs_settings = settings.observability
+  if not obs_settings.enable_posthog or not obs_settings.posthog_api_key:
       return None
 
   try:
       from posthog import Posthog  # type: ignore[import]
-      _posthog_client = Posthog(api_key=settings.posthog_api_key, host=settings.posthog_host)
+      _posthog_client = Posthog(api_key=obs_settings.posthog_api_key, host=obs_settings.posthog_host)
   except Exception as exc:  # pragma: no cover - defensive
       logger.exception("Failed to init PostHog client: {}", exc)
       _posthog_client = None

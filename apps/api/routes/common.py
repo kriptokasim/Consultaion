@@ -35,6 +35,7 @@ def serialize_user(user: User) -> dict[str, Any]:
         "timezone": getattr(user, "timezone", None),
         "is_admin": bool(getattr(user, "is_admin", False) or user.role == "admin"),
         "is_active": getattr(user, "is_active", True),
+        "email_summaries_enabled": getattr(user, "email_summaries_enabled", False),
     }
 
 

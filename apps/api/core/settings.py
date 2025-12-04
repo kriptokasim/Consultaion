@@ -16,6 +16,23 @@ class ObservabilitySettings(BaseSettings):
         case_sensitive = False
         extra = "ignore"
 
-@lru_cache()
-def get_observability_settings() -> ObservabilitySettings:
-    return ObservabilitySettings()  # type: ignore[call-arg]
+from pydantic import Field
+
+class NotificationSettings(BaseSettings):
+    enable_email_summaries: bool = Field(default=False, alias="ENABLE_EMAIL_SUMMARIES")
+    resend_api_key: str | None = Field(default=None, alias="RESEND_API_KEY")
+
+    enable_slack_alerts: bool = Field(default=False, alias="ENABLE_SLACK_ALERTS")
+    slack_webhook_url: str | None = Field(default=None, alias="SLACK_WEBHOOK_URL")
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+
+class Settings(BaseSettings):
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+    notifications: NotificationSettings = Field(default_factory=NotificationSettings)
+
+settings = Settings()

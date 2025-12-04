@@ -337,6 +337,9 @@ async def update_my_profile(
     if body.timezone is not None:
         current_user.timezone = _clean_optional(body.timezone)
         updated = True
+    if body.email_summaries_enabled is not None:
+        current_user.email_summaries_enabled = body.email_summaries_enabled
+        updated = True
 
     if updated:
         session.add(current_user)
