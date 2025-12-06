@@ -121,6 +121,27 @@ async def readyz(session: Session = Depends(get_session)):
     }
 
 
+@router.get("/debug/cookie-config")
+async def debug_cookie_config():
+    """
+    Debug endpoint to check cookie configuration.
+    Helps diagnose cross-domain auth issues.
+    """
+    from auth import COOKIE_SECURE, COOKIE_SAMESITE, COOKIE_DOMAIN
+    import os
+    
+    return {
+        "is_local_env": settings.IS_LOCAL_ENV,
+        "cookie_secure": COOKIE_SECURE,
+        "cookie_samesite": COOKIE_SAMESITE,
+        "cookie_domain": COOKIE_DOMAIN or "(not set)",
+        "render_env_var": os.environ.get("RENDER", "(not set)"),
+        "env": settings.ENV,
+        "cors_origins": settings.CORS_ORIGINS,
+        "web_app_origin": settings.WEB_APP_ORIGIN,
+    }
+
+
 if settings.ENABLE_METRICS:
 
     @router.get("/metrics")

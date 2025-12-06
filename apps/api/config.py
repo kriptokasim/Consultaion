@@ -159,9 +159,11 @@ class AppSettings(BaseSettings):
         env_label = (self.ENV or "development").lower()
         local_envs = {"development", "dev", "local", "test"}
         
+        
         # Patchset 51.0: Auto-detect Render environment
-        # Render sets 'RENDER' env var to 'true'
-        is_render = os.environ.get("RENDER") == "true"
+        # Render sets 'RENDER' env var (value can be "true", "True", "1", etc.)
+        render_var = os.environ.get("RENDER", "").lower()
+        is_render = render_var in ("true", "1", "yes")
         
         is_local = env_label in local_envs and not is_render
         object.__setattr__(self, "IS_LOCAL_ENV", is_local)
