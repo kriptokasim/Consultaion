@@ -127,8 +127,9 @@ async def debug_cookie_config():
     Debug endpoint to check cookie configuration.
     Helps diagnose cross-domain auth issues.
     """
-    from auth import COOKIE_SECURE, COOKIE_SAMESITE, COOKIE_DOMAIN
     import os
+
+    from auth import COOKIE_DOMAIN, COOKIE_SAMESITE, COOKIE_SECURE
     
     return {
         "is_local_env": settings.IS_LOCAL_ENV,
