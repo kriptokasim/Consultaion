@@ -26,7 +26,7 @@ def upgrade() -> None:
     if is_postgres:
         op.execute("""
             UPDATE billing_plans 
-            SET limits = jsonb_set(limits, '{max_debates_per_month}', '5') 
+            SET limits = jsonb_set(limits::jsonb, '{max_debates_per_month}', '5')::json 
             WHERE slug = 'free';
         """)
     else:
@@ -49,7 +49,7 @@ def downgrade() -> None:
     if is_postgres:
         op.execute("""
             UPDATE billing_plans 
-            SET limits = jsonb_set(limits, '{max_debates_per_month}', '10') 
+            SET limits = jsonb_set(limits::jsonb, '{max_debates_per_month}', '10')::json 
             WHERE slug = 'free';
         """)
     else:
