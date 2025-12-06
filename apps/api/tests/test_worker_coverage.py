@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from worker.debate_tasks import _execute_debate_run, run_debate_task
 from models import Debate
+from worker.debate_tasks import _execute_debate_run, run_debate_task
+
 
 @pytest.mark.asyncio
 async def test_execute_debate_run_success():

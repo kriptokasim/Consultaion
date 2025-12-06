@@ -223,7 +223,8 @@ async def create_debate(
             allowed_tiers = ["standard", "advanced"]
             
     # Check the model's tier
-    target_model_id = body.model_id or best_model_id
+    from parliament.model_registry import get_default_model
+    target_model_id = body.model_id or get_default_model().id
     target_model_info = enabled_models.get(target_model_id)
     if target_model_info:
         model_tier = getattr(target_model_info, "tier", "standard")

@@ -10,13 +10,13 @@ from agents import (
     produce_candidate,
 )
 from config import settings
+from conversation.engine import run_conversation_debate
 from database import session_scope
 from integrations.email import send_debate_summary_email
 from integrations.langfuse import current_trace_id
 from integrations.slack import send_slack_alert
 from models import Debate, DebateRound, Message, Score, User, Vote
 from parliament.engine import run_parliament_debate
-from conversation.engine import run_conversation_debate
 from schemas import DebateConfig, DebateSummary, default_agents, default_judges
 from sse_backend import get_sse_backend
 from usage_limits import record_token_usage

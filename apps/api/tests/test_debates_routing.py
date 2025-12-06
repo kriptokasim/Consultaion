@@ -32,7 +32,14 @@ def test_create_debate_uses_routing(authenticated_client, db_session: Session, m
         "routing_policy": "router-deep"
     }
     
-    response = authenticated_client.post("/debates", json=payload)
+    # Patchset 49.2: Validation requires checking model tier, so we must mock enabled models
+    with patch("routes.debates.list_enabled_models") as mock_list:
+        mock_model = MagicMock()
+        mock_model.id = "routed-model-id"
+        mock_model.tier = "standard"
+        mock_list.return_value = [mock_model]
+        
+        response = authenticated_client.post("/debates", json=payload)
     assert response.status_code == 200
     data = response.json()
     debate_id = data["id"]
@@ -78,6 +85,7 @@ def test_create_debate_explicit_model_routing(authenticated_client, db_session: 
     with patch("routes.debates.list_enabled_models") as mock_list:
         mock_model = MagicMock()
         mock_model.id = "gpt-4o"
+        mock_model.tier = "standard"  # Patchset 49.2: Required for validation
         mock_list.return_value = [mock_model]
         
         response = authenticated_client.post("/debates", json=payload)

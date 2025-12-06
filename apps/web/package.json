@@ -8,7 +8,8 @@
     "dev": "TMPDIR=./.tmp next dev -p 3000",
     "build": "TMPDIR=./.tmp next build",
     "start": "next start -p 3000",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint": "next lint"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",

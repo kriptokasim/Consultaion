@@ -16,7 +16,7 @@ SEAT_OUTPUT_CONTRACT = (
     "Do not add extra keys, no markdown, no commentary outside the JSON."
 )
 
-DEFAULT_ROUNDS: List[Dict[str, str]] = [
+DEFAULT_ROUNDS: List[Dict[str, object]] = [
     {"index": 1, "phase": "explore", "task_for_seat": "Share your strongest arguments, opportunities, or risks."},
     {"index": 2, "phase": "rebuttal", "task_for_seat": "Respond to concerns raised by other seats. Strengthen or challenge prior claims."},
     {"index": 3, "phase": "converge", "task_for_seat": "Converge on recommendations, clear risks, and success criteria."},

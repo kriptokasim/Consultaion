@@ -1,8 +1,8 @@
 import os
 import tempfile
-from pathlib import Path
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
 from sqlmodel import Session
 
 # Setup temp DB
@@ -11,18 +11,20 @@ os.close(fd)
 os.environ["DATABASE_URL"] = f"sqlite:///{temp_path}"
 
 import config
+
 config.settings.reload()
 
 import database
-from models import User, UsageQuota, UsageCounter
+from models import User
 from usage_limits import (
+    RateLimitError,
+    _ensure_daily_token_headroom,
     _get_or_create_quota,
     _get_or_reset_counter,
-    _ensure_daily_token_headroom,
-    reserve_run_slot,
     record_token_usage,
-    RateLimitError
+    reserve_run_slot,
 )
+
 
 @pytest.fixture(autouse=True)
 def setup_db():

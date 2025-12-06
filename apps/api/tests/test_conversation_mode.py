@@ -1,12 +1,12 @@
 import pytest
-from sqlmodel import Session, select
-from database import engine
-from models import Debate, Message
-from conversation.engine import run_conversation_debate
-from schemas import default_panel_config
-from sse_backend import get_sse_backend, reset_sse_backend_for_tests
 from config import settings
+from conversation.engine import run_conversation_debate
+from models import Debate, Message
 from orchestrator import run_debate
+from schemas import default_panel_config
+from sqlmodel import select
+from sse_backend import get_sse_backend, reset_sse_backend_for_tests
+
 
 @pytest.mark.anyio("asyncio")
 async def test_conversation_engine_runs_with_mock_llm(db_session):

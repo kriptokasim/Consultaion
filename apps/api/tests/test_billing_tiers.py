@@ -1,7 +1,8 @@
-from sqlmodel import Session, select
-from models import User
 from billing.models import BillingPlan
+from models import User
 from parliament.model_registry import ModelInfo
+from sqlmodel import Session, select
+
 
 def test_free_plan_restrictions(authenticated_client, db_session: Session, monkeypatch):
     # Ensure we are using the Free plan
@@ -66,8 +67,9 @@ def test_pro_plan_access(authenticated_client, db_session: Session, monkeypatch)
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     pro_plan = db_session.exec(select(BillingPlan).where(BillingPlan.slug == "pro")).first()
     
-    from billing.models import BillingSubscription
     from datetime import datetime, timedelta, timezone
+
+    from billing.models import BillingSubscription
     
     sub = BillingSubscription(
         user_id=user.id,

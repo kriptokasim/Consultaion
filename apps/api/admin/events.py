@@ -1,7 +1,8 @@
 from typing import Any, Optional
-from datetime import datetime
-from sqlmodel import Session
+
 from models import AdminEvent
+from sqlmodel import Session
+
 
 def record_admin_event(
     session: Session,

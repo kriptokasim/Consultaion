@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, List
 
 from agents import UsageAccumulator, call_llm_for_role
 from config import settings
 from database import session_scope
+from integrations.langfuse import update_trace_metadata
 from models import Debate, Message
-from schemas import PanelConfig, default_panel_config
-from sse_backend import get_sse_backend
 from prompts.conversation import (
-    CONVERSATION_SYSTEM_PROMPT,
     CONVERSATION_SCRIBE_PROMPT,
     CONVERSATION_SYNTHESIS_PROMPT,
+    CONVERSATION_SYSTEM_PROMPT,
 )
-from integrations.langfuse import update_trace_metadata
+from schemas import PanelConfig, default_panel_config
+from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
 
