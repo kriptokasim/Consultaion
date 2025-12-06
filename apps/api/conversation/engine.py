@@ -15,6 +15,7 @@ from prompts.conversation import (
     CONVERSATION_SCRIBE_PROMPT,
     CONVERSATION_SYNTHESIS_PROMPT,
 )
+from integrations.langfuse import update_trace_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,10 @@ async def run_conversation_debate(
     transcript: List[dict] = []
     
     # Configuration
-    num_rounds = 2  # Could be configurable
+    num_rounds = settings.CONVERSATION_MAX_ROUNDS
+    max_tokens = settings.CONVERSATION_MAX_TOTAL_TOKENS
+    truncated = False
+    truncate_reason = None
     
     # Notify start
     await backend.publish(
@@ -47,6 +51,13 @@ async def run_conversation_debate(
     )
 
     for round_idx in range(1, num_rounds + 1):
+        # Check token limits
+        if usage.total_tokens >= max_tokens:
+            truncated = True
+            truncate_reason = "token_limit"
+            logger.info(f"Conversation {debate.id} truncated due to token limit ({usage.total_tokens} >= {max_tokens})")
+            break
+
         # Notify round start
         await backend.publish(
             f"debate:{debate.id}",
@@ -75,7 +86,7 @@ async def run_conversation_debate(
                     model_override=seat.model,
                     model_id=model_id,
                     debate_id=debate.id,
-                    extra_tags={"mode": "conversation"},
+                    extra_tags={"mode": "conversation", "round": round_idx},
                 )
                 usage.add_call(call_usage)
                 
@@ -115,6 +126,7 @@ async def run_conversation_debate(
                 
             except Exception as e:
                 logger.error(f"Error in conversation round {round_idx} for seat {seat.display_name}: {e}")
+                # Fallback or continue - for now continue to keep flow going
                 continue
 
         # Scribe Summary (Optional, but good for context)
@@ -133,7 +145,7 @@ async def run_conversation_debate(
                 temperature=0.3,
                 model_id=model_id, # Use default or specific model
                 debate_id=debate.id,
-                extra_tags={"mode": "conversation"},
+                extra_tags={"mode": "conversation", "round": round_idx},
             )
             usage.add_call(summary_usage)
             
@@ -167,7 +179,7 @@ async def run_conversation_debate(
             temperature=0.4,
             model_id=model_id,
             debate_id=debate.id,
-            extra_tags={"mode": "conversation"},
+            extra_tags={"mode": "conversation", "phase": "synthesis"},
         )
         usage.add_call(final_usage)
     except Exception as e:
@@ -181,8 +193,20 @@ async def run_conversation_debate(
         "rounds": num_rounds,
         "transcript_count": len(transcript),
         "usage": usage.snapshot(),
-        "mode": "conversation"
+        "mode": "conversation",
+        "truncated": truncated,
+        "truncate_reason": truncate_reason,
     }
+
+    # Update trace metadata
+    update_trace_metadata({
+        "conversation.rounds_total": num_rounds,
+        "conversation.rounds_completed": round_idx if not truncated else round_idx - 1, # Approx
+        "conversation.transcript_count": len(transcript),
+        "conversation.truncated": truncated,
+        "conversation.truncate_reason": truncate_reason,
+        "conversation.mode": "conversation"
+    })
     
     return type("ConversationResult", (), {
         "final_answer": final_content,

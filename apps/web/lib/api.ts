@@ -16,6 +16,15 @@ export type ErrorBody = {
   code?: string;
   message?: string;
   reset_at?: string;
+  hint?: string;
+  retryable?: boolean;
+  error?: {
+    code: string;
+    message: string;
+    hint?: string;
+    retryable?: boolean;
+    details?: any;
+  };
   [key: string]: any;
 };
 
@@ -293,4 +302,20 @@ export function getRateLimitInfo(error: unknown): { detail: string; resetAt?: st
   const resetAt =
     body && typeof body === "object" && typeof body.reset_at === "string" ? body.reset_at : undefined;
   return { detail, resetAt };
+}
+
+export async function getAdminEvents(params: { limit?: number; offset?: number; level?: string } = {}) {
+  const search = new URLSearchParams();
+  if (params.limit) search.set("limit", String(params.limit));
+  if (params.offset) search.set("offset", String(params.offset));
+  if (params.level) search.set("level", params.level);
+  const suffix = search.size ? `?${search.toString()}` : "";
+  return request<{ items: any[]; total: number }>(`/admin/events${suffix}`, undefined, { auth: true });
+}
+
+export async function sendTestAlert() {
+  return apiRequest({
+    method: "POST",
+    path: "/admin/test-alert",
+  });
 }

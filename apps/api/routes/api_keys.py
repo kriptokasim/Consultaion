@@ -93,7 +93,11 @@ async def create_api_key(
     Returns the full secret exactly once. Store it securely!
     """
     if not body.name or not body.name.strip():
-        raise ValidationError(message="Key name is required", code="api_key.name_required")
+        raise ValidationError(
+            message="Key name is required", 
+            code="api_key.name_required",
+            hint="Please provide a descriptive name for your API key."
+        )
     
     # TODO: Validate team_id if provided and check membership
     # For now, we'll just accept it
@@ -159,7 +163,11 @@ async def revoke_api_key(
         raise PermissionError(message="Insufficient permissions", code="permission.denied")
     
     if api_key.revoked:
-        raise ValidationError(message="Key already revoked", code="api_key.already_revoked")
+        raise ValidationError(
+            message="Key already revoked", 
+            code="api_key.already_revoked",
+            hint="This key has already been revoked and cannot be used."
+        )
     
     api_key.revoked = True
     session.add(api_key)

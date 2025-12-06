@@ -8,6 +8,7 @@ import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import type { Member, ScoreItem } from "@/components/parliament/types";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { ApiError, getRateLimitInfo, startDebate, startDebateRun } from "@/lib/api";
 import { useEventSource } from "@/lib/sse";
 import { defaultPanelConfig, type PanelSeatConfig } from "@/lib/panels";
@@ -59,56 +60,57 @@ export default function Page() {
   const [authStatus, setAuthStatus] = useState<'unknown' | 'authed' | 'guest'>('unknown')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [mode, setMode] = useState<'debate' | 'conversation'>('debate')
+  const [truncated, setTruncated] = useState(false)
+  const [truncateReason, setTruncateReason] = useState<string | null>(null)
+  const [errorState, setErrorState] = useState<{ title?: string; message: string; hint?: string; retryable?: boolean } | null>(null)
 
-  const router = useRouter()
   const { pushToast } = useToast()
   const { t } = useI18n()
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const currentDebateIdRef = useRef<string | null>(null)
+  const router = useRouter()
+
   const runningRef = useRef(false)
+  const currentDebateIdRef = useRef<string | null>(null)
   const manualStartAttemptedRef = useRef(false)
-  const stopStreamRef = useRef<((nextStatus: 'idle' | 'completed' | 'error') => void) | null>(null)
-  const manualStartMode = (process.env.NEXT_PUBLIC_AUTORUN_HINT ?? "on") === "off"
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "")
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const elapsedTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const stopStreamRef = useRef<((status?: 'idle' | 'completed' | 'error') => void) | null>(null)
 
-  const streamUrl = useMemo(() => {
-    if (!currentDebateId) return null
-    const path = `/debates/${currentDebateId}/stream`
-    return apiBase ? `${apiBase}${path}` : path
-  }, [apiBase, currentDebateId])
-
-  const shouldStream = Boolean(streamUrl) && running
+  const manualStartMode = !ENABLE_CONVERSATION_MODE
+  const shouldStream = running && !!currentDebateId
+  const streamUrl = currentDebateId ? `/debates/${currentDebateId}/stream` : null
 
   const handleStreamEvent = useCallback(
     (msg: any) => {
+      if (msg.type === 'error') {
+        console.error('Stream error:', msg)
+        stopStreamRef.current?.('error')
+        return
+      }
       setEvents((prev) => [...prev, msg])
-      setEventsLoading(false)
-      if (msg.type === 'seat_message') {
-        if (msg.seat_name || msg.seat_id) {
-          setActivePersona(msg.seat_name ?? msg.seat_id)
-        }
-      } else if (msg.type === 'message') {
-        const persona = msg.revised?.[0]?.persona ?? msg.candidates?.[0]?.persona
-        if (persona) setActivePersona(persona)
+
+      if (msg.type === 'seat_message' || msg.type === 'message') {
+        setActivePersona(msg.seat_name || msg.actor)
+        setSpeakerTime(0)
+      } else if (msg.type === 'round_started') {
+        setActivePersona(undefined)
+        setSpeakerTime(0)
+      } else if (msg.type === 'score') {
+        setLatestScores((prev) => {
+          const newScores = [...prev, { persona: msg.persona, score: msg.score }]
+          return newScores.slice(-5) // Keep last 5
+        })
       }
-      if (msg.type === 'score' && Array.isArray(msg.scores)) {
-        const ranking = [...msg.scores].sort((a: any, b: any) => b.score - a.score).map((s: any) => s.persona)
-        setVote({ method: 'borda', ranking })
-        setLatestScores(
-          msg.scores.map((score: any) => ({
-            persona: score.persona,
-            score: Number(score.score) || 0,
-            rationale: score.rationale,
-          })),
-        )
-      }
+
       if (msg.type === 'final') {
         if (msg.meta?.ranking) {
           setVote({
             method: msg.meta?.vote?.method ?? 'borda',
             ranking: msg.meta.ranking,
           })
+        }
+        if (msg.meta?.truncated) {
+          setTruncated(true)
+          setTruncateReason(msg.meta.truncate_reason)
         }
         track('debate_completed', {
           debate_id: currentDebateId,
@@ -249,6 +251,7 @@ export default function Page() {
     }
     reset()
     setRateLimitNotice(null)
+    setErrorState(null)
     setRunning(true)
     runningRef.current = true
     manualStartAttemptedRef.current = false
@@ -272,11 +275,22 @@ export default function Page() {
           pushToast({ title: info.detail, variant: "error" })
         } else {
           console.error(error)
-          pushToast({ title: t("live.startError"), variant: "error" })
+          const body = error.body as any;
+          const errData = body?.error || {};
+          setErrorState({
+            title: t("live.startError"),
+            message: errData.message || error.message || "An unexpected error occurred.",
+            hint: errData.hint,
+            retryable: errData.retryable
+          });
         }
       } else {
         console.error(error)
-        pushToast({ title: t("live.startError"), variant: "error" })
+        setErrorState({
+          title: t("live.startError"),
+          message: "An unexpected client-side error occurred.",
+          retryable: true
+        });
       }
       stopStream('error')
     }
@@ -358,6 +372,16 @@ export default function Page() {
       <div className="space-y-4">
         <DebateProgressBar active={running} />
 
+        {errorState && (
+          <ErrorBanner
+            title={errorState.title}
+            message={errorState.message}
+            variant="error"
+            retryAction={errorState.retryable ? onStart : undefined}
+            onDismiss={() => setErrorState(null)}
+          />
+        )}
+
         <PromptPanel
           value={prompt}
           onChange={setPrompt}
@@ -392,6 +416,8 @@ export default function Page() {
             vote={vote}
             loading={eventsLoading}
             mode={mode}
+            truncated={truncated}
+            truncateReason={truncateReason}
           />
         </div>
       )}

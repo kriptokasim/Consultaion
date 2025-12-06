@@ -261,6 +261,8 @@ async def app_error_handler(request: Request, exc: AppError):
                 "code": exc.code,
                 "message": exc.message,
                 "details": exc.details,
+                "hint": exc.hint,
+                "retryable": exc.retryable,
             }
         },
     )

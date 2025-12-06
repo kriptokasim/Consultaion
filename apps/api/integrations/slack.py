@@ -14,6 +14,8 @@ async def send_slack_alert(
     message: str,
     level: AlertLevel = "info",
     meta: dict | None = None,
+    trace_id: str | None = None,
+    mode: str | None = None,
 ) -> None:
     if not is_slack_enabled():
         return
@@ -29,14 +31,20 @@ async def send_slack_alert(
         "error": "#EF4444",  # red
     }[level]
 
+    fields = [
+        {"title": k, "value": str(v), "short": True}
+        for k, v in (meta or {}).items()
+    ]
+    if trace_id:
+        fields.append({"title": "Trace ID", "value": trace_id, "short": True})
+    if mode:
+        fields.append({"title": "Mode", "value": mode, "short": True})
+
     attachment = {
         "fallback": message,
         "color": color,
         "text": message,
-        "fields": [
-            {"title": k, "value": str(v), "short": True}
-            for k, v in (meta or {}).items()
-        ],
+        "fields": fields,
     }
 
     try:

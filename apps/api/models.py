@@ -184,6 +184,17 @@ class RatingPersona(SQLModel, table=True):
     last_updated: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class AdminEvent(SQLModel, table=True):
+    __tablename__ = "admin_event"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    level: str = Field(index=True)  # error, warning, info
+    message: str = Field(sa_column=Column(Text, nullable=False))
+    trace_id: Optional[str] = Field(default=None, index=True)
+    debate_id: Optional[str] = Field(default=None, index=True)
+    meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 Index("ix_message_debate_round", Message.debate_id, Message.round_index)
 Index("ix_score_debate_persona", Score.debate_id, Score.persona)
 Index("ix_round_debate_index", DebateRound.debate_id, DebateRound.index)
@@ -199,3 +210,4 @@ Index("ix_usage_quota_user_period", UsageQuota.user_id, UsageQuota.period, uniqu
 Index("ix_audit_log_created_at", AuditLog.created_at)
 Index("ix_pairwise_vote_candidates", PairwiseVote.candidate_a, PairwiseVote.candidate_b)
 Index("ix_rating_persona_unique", RatingPersona.persona, RatingPersona.category, unique=True)
+Index("ix_admin_event_created_at", AdminEvent.created_at)

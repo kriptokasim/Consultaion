@@ -139,7 +139,10 @@ export default function APIKeyManager() {
                 {!keys || keys.length === 0 ? (
                     <div className="p-8 text-center text-stone-500">
                         <Key className="mx-auto h-12 w-12 text-stone-300 mb-3" />
-                        <p>No API keys yet. Create one to get started.</p>
+                        <p className="mb-4">No API keys yet. Create one to get started.</p>
+                        <Button onClick={() => setShowCreateModal(true)} variant="outline">
+                            Create Key
+                        </Button>
                     </div>
                 ) : (
                     <div className="divide-y divide-stone-200 dark:divide-stone-800">

@@ -9,11 +9,15 @@ class AppError(Exception):
         code: str = "error",
         status_code: int = 500,
         details: Optional[Dict[str, Any]] = None,
+        hint: Optional[str] = None,
+        retryable: bool = False,
     ):
         self.message = message
         self.code = code
         self.status_code = status_code
         self.details = details or {}
+        self.hint = hint
+        self.retryable = retryable
         super().__init__(message)
 
 class AuthError(AppError):
@@ -68,8 +72,10 @@ class RateLimitError(AppError):
         code: str = "rate_limit.exceeded",
         status_code: int = 429,
         details: Optional[Dict[str, Any]] = None,
+        hint: Optional[str] = "Please wait a moment before trying again.",
+        retryable: bool = True,
     ):
-        super().__init__(message, code, status_code, details)
+        super().__init__(message, code, status_code, details, hint, retryable)
 
 class ProviderCircuitOpenError(AppError):
     """Circuit breaker open error."""
@@ -79,5 +85,7 @@ class ProviderCircuitOpenError(AppError):
         code: str = "service.circuit_open",
         status_code: int = 503,
         details: Optional[Dict[str, Any]] = None,
+        hint: Optional[str] = "The service is temporarily unavailable. Please try again later.",
+        retryable: bool = True,
     ):
-        super().__init__(message, code, status_code, details)
+        super().__init__(message, code, status_code, details, hint, retryable)

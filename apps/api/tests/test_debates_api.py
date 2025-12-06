@@ -175,3 +175,24 @@ def test_admin_models_metadata(authenticated_client, db_session: Session):
     assert "tags" in model
 
 
+def test_create_debate_rate_limit(authenticated_client, monkeypatch):
+    monkeypatch.setenv("RL_DEBATE_CREATE_WINDOW", "60")
+    monkeypatch.setenv("RL_DEBATE_CREATE_MAX_CALLS", "2")
+    import config as config_module
+    config_module.settings.reload()
+    
+    # Reset backend
+    import ratelimit
+    ratelimit.reset_rate_limiter_backend_for_tests()
+    
+    payload = {"prompt": "Rate limit test"}
+    
+    # First 2 calls should succeed
+    assert authenticated_client.post("/debates", json=payload).status_code == 200
+    assert authenticated_client.post("/debates", json=payload).status_code == 200
+    
+    # 3rd call should fail
+    response = authenticated_client.post("/debates", json=payload)
+    assert response.status_code == 429
+    data = response.json()
+    assert data["error"]["code"] == "rate_limit.exceeded"

@@ -28,7 +28,9 @@ class AppSettings(BaseSettings):
 
     RATE_LIMIT_BACKEND: Literal["redis", "memory"] | None = None
     RL_WINDOW: int = 60
-    RL_MAX_CALLS: int = 5
+    RL_MAX_CALLS: int = 60
+    RL_DEBATE_CREATE_WINDOW: int = 60
+    RL_DEBATE_CREATE_MAX_CALLS: int = 10
     AUTH_RL_WINDOW: int = 300
     AUTH_RL_MAX_CALLS: int = 10
 
@@ -42,6 +44,12 @@ class AppSettings(BaseSettings):
     DISABLE_RATINGS: bool = False
     ENABLE_METRICS: bool = True
     ENABLE_CONVERSATION_MODE: bool = Field(False, description="Enable new conversation mode")
+    
+    # Conversation Mode Limits
+    CONVERSATION_MAX_ROUNDS: int = Field(4, ge=1, description="Maximum number of conversation rounds")
+    CONVERSATION_MAX_TOKENS_PER_ROUND: int = Field(2048, ge=100, description="Max tokens per round")
+    CONVERSATION_MAX_TOTAL_TOKENS: int = Field(8000, ge=1000, description="Max total tokens for conversation")
+
     APP_VERSION: str = "0.2.0"
 
     LOG_LEVEL: str = "INFO"

@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { KeyboardEvent } from 'react'
+import { Scale, MessageCircle } from 'lucide-react'
 
 export type PromptPanelStatus = 'idle' | 'running' | 'error'
 
@@ -63,6 +64,10 @@ export function PromptPanel({
                     status === 'error' ? 'border-red-300' : 'border-brand-border/60'
                 )}
             >
+
+
+                // ... (inside component)
+
                 {/* Header: Mode Toggle or Status */}
                 <div className="mb-3 flex items-center justify-between">
                     {onModeChange && status !== 'running' ? (
@@ -71,20 +76,26 @@ export function PromptPanel({
                                 type="button"
                                 onClick={() => onModeChange('debate')}
                                 className={cn(
-                                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                                    mode === 'debate' ? "bg-white shadow-sm text-slate-900 font-semibold" : "text-slate-500 hover:text-slate-700"
+                                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                                    mode === 'debate'
+                                        ? "bg-white shadow-sm text-slate-900 font-semibold ring-1 ring-black/5"
+                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                 )}
                             >
+                                <Scale className="h-3.5 w-3.5" />
                                 Debate
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onModeChange('conversation')}
                                 className={cn(
-                                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                                    mode === 'conversation' ? "bg-white shadow-sm text-slate-900 font-semibold" : "text-slate-500 hover:text-slate-700"
+                                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                                    mode === 'conversation'
+                                        ? "bg-white shadow-sm text-indigo-700 font-semibold ring-1 ring-indigo-100"
+                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                 )}
                             >
+                                <MessageCircle className="h-3.5 w-3.5" />
                                 Conversation
                             </button>
                         </div>

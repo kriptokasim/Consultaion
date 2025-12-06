@@ -168,7 +168,7 @@ async def create_debate(
     current_user: User = Depends(get_current_user),
 ):
     ip = request.client.host if request.client else "anonymous"
-    allowed = increment_ip_bucket(ip, settings.RL_WINDOW, settings.RL_MAX_CALLS)
+    allowed = increment_ip_bucket(ip, settings.RL_DEBATE_CREATE_WINDOW, settings.RL_DEBATE_CREATE_MAX_CALLS)
     if not allowed:
         record_429(ip, request.url.path)
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
@@ -195,11 +195,19 @@ async def create_debate(
     config = body.config or default_debate_config()
     enabled_models = {m.id: m for m in list_enabled_models()}
     if not enabled_models:
-        raise ProviderCircuitOpenError(message="No models available; configure provider keys.", code="models.unavailable")
+        raise ProviderCircuitOpenError(
+            message="No models available; configure provider keys.", 
+            code="models.unavailable",
+            hint="Please contact the administrator to configure model providers."
+        )
     
     # Validate requested model if provided
     if body.model_id and body.model_id not in enabled_models:
-        raise ValidationError(message="Invalid or unavailable model_id", code="debate.invalid_model")
+        raise ValidationError(
+            message="Invalid or unavailable model_id", 
+            code="debate.invalid_model",
+            hint="Please select a different model from the list."
+        )
 
     panel_config = body.panel_config or default_panel_config()
     try:

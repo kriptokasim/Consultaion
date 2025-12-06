@@ -4,58 +4,111 @@ import { useMemo } from "react"
 interface ConversationTimelineProps {
     events: any[]
     activePersona?: string
+    truncated?: boolean
+    truncateReason?: string | null
 }
 
-export function ConversationTimeline({ events, activePersona }: ConversationTimelineProps) {
-    const rounds = useMemo(() => {
+export function ConversationTimeline({ events, activePersona, truncated, truncateReason }: ConversationTimelineProps) {
+    const { rounds, roundPhases } = useMemo(() => {
         const grouped: Record<number, any[]> = {}
+        const phases: Record<number, string> = {}
+
         events.forEach(event => {
+            if (event.type === 'round_started') {
+                phases[event.round] = event.phase
+                return
+            }
             if (event.type !== 'seat_message' && event.type !== 'conversation_summary' && event.type !== 'message') return
             const round = event.round ?? 0
             if (!grouped[round]) grouped[round] = []
             grouped[round].push(event)
         })
-        return grouped
+        return { rounds: grouped, roundPhases: phases }
     }, [events])
 
+    const getRoundLabel = (round: number, phase?: string) => {
+        if (round === 0) return "Opening"
+        if (phase === 'synthesis') return "Final Synthesis"
+        if (phase) return `Round ${round} – ${phase.replace(/_/g, ' ')}`
+        return `Round ${round}`
+    }
+
     return (
-        <div className="space-y-8">
-            {Object.entries(rounds).map(([round, messages]) => (
-                <div key={round} className="space-y-4">
-                    <div className="flex items-center gap-4">
-                        <div className="h-px flex-1 bg-slate-200" />
-                        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Round {round}</span>
-                        <div className="h-px flex-1 bg-slate-200" />
-                    </div>
+        <div className="space-y-8 pb-12">
+            {Object.entries(rounds).map(([roundStr, messages]) => {
+                const round = parseInt(roundStr)
+                const phase = roundPhases[round]
 
-                    <div className="space-y-6">
-                        {messages.map((msg, idx) => {
-                            const isScribe = msg.type === 'conversation_summary' || msg.seat_name === 'Scribe'
-                            return (
-                                <div key={idx} className={cn("flex gap-4", isScribe ? "justify-center" : "")}>
-                                    {!isScribe && (
-                                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold border border-indigo-200">
-                                            {msg.seat_name?.[0] || '?'}
-                                        </div>
-                                    )}
+                return (
+                    <div key={round} className="space-y-4">
+                        <div className="flex items-center gap-4 py-2">
+                            <div className="h-px flex-1 bg-slate-200" />
+                            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                                {getRoundLabel(round, phase)}
+                            </span>
+                            <div className="h-px flex-1 bg-slate-200" />
+                        </div>
 
-                                    <div className={cn(
-                                        "p-4 rounded-2xl max-w-[85%]",
-                                        isScribe
-                                            ? "bg-amber-50 border border-amber-100 text-amber-900 w-full text-center italic"
-                                            : "bg-white border border-slate-200 shadow-sm text-slate-800"
-                                    )}>
-                                        {!isScribe && <div className="text-xs font-semibold text-slate-500 mb-1">{msg.seat_name}</div>}
-                                        <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                                            {msg.content}
+                        <div className="space-y-6">
+                            {messages.map((msg, idx) => {
+                                const isScribe = msg.type === 'conversation_summary' || msg.seat_name === 'Scribe'
+                                const isFacilitator = msg.seat_name === 'Facilitator'
+
+                                return (
+                                    <div key={idx} className={cn("flex gap-4", isScribe || isFacilitator ? "justify-center" : "")}>
+                                        {!isScribe && !isFacilitator && (
+                                            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold border border-indigo-200 shadow-sm">
+                                                {msg.seat_name?.[0] || '?'}
+                                            </div>
+                                        )}
+
+                                        <div className={cn(
+                                            "p-4 rounded-2xl max-w-[85%] relative group transition-all",
+                                            isScribe
+                                                ? "bg-amber-50 border border-amber-100 text-amber-900 w-full text-center italic"
+                                                : isFacilitator
+                                                    ? "bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 text-slate-800 w-full shadow-md"
+                                                    : "bg-white border border-slate-200 shadow-sm text-slate-800 hover:shadow-md"
+                                        )}>
+                                            {!isScribe && !isFacilitator && (
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <span className="text-xs font-bold text-slate-700">{msg.seat_name}</span>
+                                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                                                        Delegate
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {isFacilitator && (
+                                                <div className="mb-2 flex justify-center">
+                                                    <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                                                        Final Synthesis
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            <div className="prose prose-sm max-w-none whitespace-pre-wrap leading-relaxed">
+                                                {msg.content}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            )
-                        })}
+                                )
+                            })}
+                        </div>
                     </div>
+                )
+            })}
+
+            {truncated && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center">
+                    <p className="text-sm font-medium text-amber-800">
+                        Conversation shortened due to {truncateReason === 'token_limit' ? 'length limits' : 'round limits'}.
+                    </p>
+                    <p className="text-xs text-amber-600 mt-1">
+                        The Facilitator has synthesized the available discussion.
+                    </p>
                 </div>
-            ))}
+            )}
         </div>
     )
 }

@@ -24,81 +24,11 @@ type LivePanelProps = {
   vote?: { method?: string; ranking?: string[] }
   loading?: boolean
   mode?: 'debate' | 'conversation'
+  truncated?: boolean
+  truncateReason?: string | null
 }
 
-type EventRow = {
-  type: string
-  round?: number
-  title: string
-  text: string
-  ts?: string
-  data: any
-}
-
-const roundColors = [
-  "bg-amber-50 text-amber-700 border-amber-100",
-  "bg-emerald-50 text-emerald-700 border-emerald-100",
-  "bg-blue-50 text-blue-700 border-blue-100",
-  "bg-rose-50 text-rose-700 border-rose-100",
-]
-
-function toEventRow(event: any): EventRow {
-  const ts = event.ts ?? event.timestamp ?? new Date().toISOString()
-  switch (event.type) {
-    case "round_started":
-      return {
-        type: "round",
-        round: event.round,
-        title: `Round ${event.round ?? ""} started`,
-        text: event.note ?? "New round kicked off",
-        ts,
-        data: event,
-      }
-    case "message":
-      return {
-        type: "message",
-        round: event.round,
-        title: event.revised ? "Revision Update" : "Candidate Draft",
-        text: event.revised ? "Agents are revising their drafts" : "Agents produced initial drafts",
-        ts,
-        data: event,
-      }
-    case "seat_message":
-      return {
-        type: "message",
-        round: event.round,
-        title: `${event.seat_name ?? event.seat_id ?? "Seat"} responded`,
-        text: event.content ?? "Seat contribution",
-        ts,
-        data: event,
-      }
-    case "score":
-      return {
-        type: "score",
-        round: event.round,
-        title: "Judges submitted scores",
-        text: "Aggregated scores are available",
-        ts,
-        data: event,
-      }
-    case "final":
-      return {
-        type: "final",
-        title: "Synthesis complete",
-        text: "Final answer is ready",
-        ts,
-        data: event,
-      }
-    default:
-      return {
-        type: event.type ?? "event",
-        title: event.type?.toString() ?? "Event",
-        text: "Received new event",
-        ts,
-        data: event,
-      }
-  }
-}
+// ...
 
 export default function LivePanel({
   prompt,
@@ -112,126 +42,66 @@ export default function LivePanel({
   vote,
   loading = false,
   mode = 'debate',
+  truncated,
+  truncateReason,
 }: LivePanelProps) {
-  const mappedEvents = useMemo(() => events.map(toEventRow), [events])
 
-  const getRoundBadgeColor = (round?: number) => {
-    if (!round) return "bg-stone-100 text-stone-500 border-stone-200"
-    return roundColors[(round - 1) % roundColors.length]
+  const mappedEvents = useMemo(() => {
+    return events.map((event) => {
+      let title = "Unknown Event"
+      let text = ""
+      let round = undefined
+      let ts = event.at || event.timestamp || new Date().toISOString()
+      let data = event
+
+      if (event.type === 'seat_message') {
+        title = event.seat_name || "Debater"
+        text = event.text
+        round = event.round
+      } else if (event.type === 'message') {
+        title = event.actor || "System"
+        text = event.text
+        round = event.round
+      } else if (event.type === 'round_started') {
+        title = `Round ${event.round} Started`
+        text = event.topic || ""
+        round = event.round
+      } else if (event.type === 'score') {
+        title = `Score from ${event.judge}`
+        text = `${event.persona}: ${event.score}/10 - ${event.rationale}`
+      } else if (event.type === 'final') {
+        title = "Debate Concluded"
+        text = "Final synthesis available."
+      }
+
+      return { ...event, title, text, round, ts, data }
+    })
+  }, [events])
+
+  const getRoundBadgeColor = (round: number) => {
+    const colors = [
+      "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+      "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-900/30 dark:text-rose-300",
+      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    ]
+    return colors[(round - 1) % colors.length] || colors[0]
   }
-
-  const disabled = !prompt.trim() || running
-
-  useKeyboardShortcuts(
-    [
-      {
-        combo: "ctrl+enter",
-        handler: () => {
-          if (!disabled) {
-            onStart()
-          }
-        },
-        enabled: !running,
-      },
-    ],
-    [disabled, running, onStart],
-  )
 
   return (
     <div className="space-y-6">
-      <Card className="border border-amber-200/70 bg-gradient-to-br from-amber-50/90 via-white to-amber-50/70 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/60 dark:from-[#7b5b40] dark:via-[#4f3727] dark:to-[#38261a]">
-        <CardHeader>
-          <CardTitle className="heading-serif text-2xl font-semibold text-amber-900 dark:text-amber-50">Start New Debate</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ValidatedTextarea
-            placeholder="Enter your debate prompt or question..."
-            value={prompt}
-            onChange={(e) => onPromptChange(e.target.value)}
-            minLength={10}
-            maxLength={5000}
-            aria-label="Debate prompt"
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="font-mono text-sm text-amber-800 dark:text-amber-200">{prompt.length} characters</div>
-            <div className="flex items-center gap-2">
-              {running && (
-                <Button variant="ghost" className="gap-2 text-amber-800 dark:text-amber-100" onClick={onStop}>
-                  <StopCircle className="h-4 w-4" />
-                  Stop
-                </Button>
-              )}
-              <Button
-                onClick={onStart}
-                disabled={disabled}
-                aria-busy={running}
-                aria-disabled={disabled}
-                className="gap-2 rounded-full shadow-[0_16px_30px_rgba(255,190,92,0.35)]"
-              >
-                {running ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Running...
-                  </>
-                ) : (
-                  <>
-                    <PlayCircle className="h-4 w-4" />
-                    Run Debate
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {(activePersona || vote?.ranking?.length) && mode !== 'conversation' && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {activePersona && (
-            <Card className="border border-amber-200/70 bg-white/90 shadow-[0_12px_24px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-stone-800">
-                  <UsersRound className="h-4 w-4 text-amber-700" />
-                  Active Speaker
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex items-baseline justify-between">
-                <div className="text-lg font-semibold text-amber-900 dark:text-amber-50">{activePersona}</div>
-                <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-100">
-                  <Timer className="h-4 w-4 text-amber-600" />
-                  {speakerTime}s
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {vote?.ranking?.length ? (
-            <Card className="border border-amber-200/70 bg-white/90 shadow-[0_12px_24px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-amber-900 dark:text-amber-50">Current Ranking</CardTitle>
-              </CardHeader>
-              <CardContent className="flex gap-2">
-                {vote.ranking.slice(0, 3).map((persona, idx) => (
-                  <Badge
-                    key={persona}
-                    variant="outline"
-                    className="font-mono text-xs border-amber-200 bg-amber-50 text-amber-700"
-                  >
-                    #{idx + 1} {persona}
-                  </Badge>
-                ))}
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
-      )}
-
       {mode === 'conversation' ? (
         <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
           <CardHeader>
             <CardTitle className="heading-serif text-lg font-semibold text-amber-900 dark:text-amber-50">Conversation Transcript</CardTitle>
           </CardHeader>
           <CardContent>
-            <ConversationTimeline events={events} activePersona={activePersona} />
+            <ConversationTimeline
+              events={events}
+              activePersona={activePersona}
+              truncated={truncated}
+              truncateReason={truncateReason}
+            />
           </CardContent>
         </Card>
       ) : (

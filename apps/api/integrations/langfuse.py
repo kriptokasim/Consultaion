@@ -65,6 +65,19 @@ def start_debate_trace(
         return None
 
 
+def update_trace_metadata(metadata: dict[str, Any]) -> None:
+    client = get_langfuse()
+    trace_id = current_trace_id.get()
+    if not client or not trace_id:
+        return
+
+    try:
+        # Langfuse upserts, so calling trace with same ID updates it
+        client.trace(id=trace_id, metadata=metadata)
+    except Exception as exc:
+        logger.warning("Failed to update Langfuse trace metadata: {}", exc)
+
+
 def log_model_observation(
     trace_id: str | None,
     model_name: str,

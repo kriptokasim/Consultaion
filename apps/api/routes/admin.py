@@ -11,7 +11,7 @@ from billing.service import _current_period, get_active_plan
 from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models import AuditLog, Debate, User
+from models import AdminEvent, AuditLog, Debate, User
 from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.provider_health import get_provider_health_snapshot
 from promotions.models import Promotion
@@ -403,6 +403,47 @@ async def admin_logs(
             for log in rows
         ]
     }
+
+
+@router.get("/events")
+def admin_events(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    level: Optional[str] = Query(None),
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    query = select(AdminEvent).order_by(AdminEvent.created_at.desc())
+    if level:
+        query = query.where(AdminEvent.level == level)
+    
+    # Count total matches
+    count_query = select(func.count()).select_from(query.subquery())
+    total = session.exec(count_query).one()
+    
+    rows = session.exec(query.offset(offset).limit(limit)).all()
+    
+    return {
+        "items": rows,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.post("/test-alert")
+async def admin_test_alert(
+    _: User = Depends(get_current_admin),
+):
+    from integrations.slack import send_slack_alert
+    await send_slack_alert(
+        message="Test alert from Admin Console",
+        level="info",
+        meta={"source": "admin_console", "user": _.email},
+        trace_id="test-trace-id",
+        mode="test"
+    )
+    return {"ok": True}
 
 
 @router.post("/ratings/update/{debate_id}")
