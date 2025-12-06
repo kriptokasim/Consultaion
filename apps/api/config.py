@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -153,6 +153,14 @@ class AppSettings(BaseSettings):
     N8N_WEBHOOK_URL: str | None = None
 
     EXPORT_DIR: str = "exports"
+
+    @field_validator("WEB_CONCURRENCY", "GUNICORN_WORKERS", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v):
+        """Convert empty strings to None for optional integer fields."""
+        if v == "":
+            return None
+        return v
 
     def model_post_init(self, __context):
         # Patchset 29.0: Validate production secrets

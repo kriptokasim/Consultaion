@@ -105,6 +105,8 @@ SSE_BACKEND=memory
 WEB_CONCURRENCY=1
 ```
 
+**Note**: `WEB_CONCURRENCY=1` is the recommended default. Only increase if using Redis for SSE_BACKEND.
+
 ## Optional: Observability
 
 ### Sentry Error Tracking
