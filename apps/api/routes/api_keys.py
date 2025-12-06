@@ -99,8 +99,15 @@ async def create_api_key(
             hint="Please provide a descriptive name for your API key."
         )
     
-    # TODO: Validate team_id if provided and check membership
-    # For now, we'll just accept it
+    
+    # Validate team_id if provided - user must be a member of the team
+    if body.team_id:
+        from routes.common import user_is_team_member
+        if not user_is_team_member(session, current_user.id, body.team_id):
+            raise PermissionError(
+                message="You are not a member of this team",
+                code="team.not_member"
+            )
     
     # Generate key
     full_key, prefix, hashed_key = generate_api_key()
