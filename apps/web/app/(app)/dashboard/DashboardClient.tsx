@@ -22,6 +22,7 @@ type ModelOption = {
   tags: string[];
   max_context?: number | null;
   recommended: boolean;
+  tier?: "standard" | "advanced";
 };
 
 function formatTimestamp(ts?: string | null) {
@@ -44,8 +45,9 @@ function statusTone(status?: string | null) {
   }
 }
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
+import { getBillingMe } from "@/lib/api";
 
 export default function DashboardClient({ email }: { email?: string | null }) {
   const { t } = useI18n();
@@ -57,6 +59,20 @@ export default function DashboardClient({ email }: { email?: string | null }) {
 
   const { data: debatesData } = useDebatesList({ limit: 8, offset: 0 });
   const debates = debatesData?.items ?? [];
+
+  const { data: billing } = useQuery({
+    queryKey: ["billing-me"],
+    queryFn: getBillingMe,
+  });
+
+  const usage = billing?.usage;
+  const limits = billing?.plan.limits;
+  const maxDebates = limits?.max_debates_per_month as number | undefined;
+  const debatesUsed = usage?.debates_created || 0;
+
+  // Determine allowed tiers
+  const isFree = billing?.plan.is_default_free;
+  const allowedTiers = (limits?.allowed_model_tiers as string[]) || (isFree ? ["standard"] : ["standard", "advanced"]);
 
   const [models, setModels] = useState<ModelOption[]>([]);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -78,7 +94,9 @@ export default function DashboardClient({ email }: { email?: string | null }) {
         if (cancelled) return;
         const items: ModelOption[] = Array.isArray(data?.models) ? data.models : [];
         setModels(items);
-        const recommended = items.find((m) => m.recommended) || items[0];
+        // Filter recommended based on allowed tiers if possible, else just pick first allowed
+        const allowedItems = items.filter(m => allowedTiers.includes(m.tier || "standard"));
+        const recommended = allowedItems.find((m) => m.recommended) || allowedItems[0] || items[0];
         setSelectedModel(recommended ? recommended.id : null);
         if (!items.length) {
           setModelError(t("dashboard.errors.noModelsAdmin"));
@@ -91,7 +109,7 @@ export default function DashboardClient({ email }: { email?: string | null }) {
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [t, billing]);
 
   const handleCreate = async () => {
     if (!prompt.trim()) return;
@@ -139,7 +157,29 @@ export default function DashboardClient({ email }: { email?: string | null }) {
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => setShowModal(true)} />
           <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
-          <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title={t("dashboard.cards.leaderboard.title")} description={t("dashboard.cards.leaderboard.description")} />
+          {maxDebates ? (
+            <div className="flex flex-col justify-between rounded-2xl border border-amber-100/80 bg-white/90 p-5 shadow-[0_18px_36px_rgba(112,73,28,0.12)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg">
+              <div className="flex items-start gap-3">
+                <span className="rounded-xl bg-amber-50 p-2 text-amber-800">
+                  <Trophy className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-lg font-semibold text-[#3a2a1a]">Usage</p>
+                  <p className="text-sm text-[#5a4a3a]">
+                    {debatesUsed} / {maxDebates} debates used
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-amber-100">
+                <div
+                  className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-red-500" : "bg-amber-500"}`}
+                  style={{ width: `${Math.min((debatesUsed / maxDebates) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title={t("dashboard.cards.leaderboard.title")} description={t("dashboard.cards.leaderboard.description")} />
+          )}
         </div>
       </section>
 
@@ -236,11 +276,16 @@ export default function DashboardClient({ email }: { email?: string | null }) {
                   value={selectedModel ?? ""}
                   onChange={(e) => setSelectedModel(e.target.value)}
                 >
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.display_name} {m.recommended ? `(${t("dashboard.modal.recommendedTag")})` : ""}
-                    </option>
-                  ))}
+                  {models.map((m) => {
+                    const isAllowed = allowedTiers.includes(m.tier || "standard");
+                    return (
+                      <option key={m.id} value={m.id} disabled={!isAllowed}>
+                        {m.display_name}
+                        {m.recommended ? ` (${t("dashboard.modal.recommendedTag")})` : ""}
+                        {!isAllowed ? " (Pro only)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               ) : models.length === 1 ? (
                 <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">

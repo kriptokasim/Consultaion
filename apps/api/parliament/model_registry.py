@@ -14,6 +14,7 @@ class ModelInfo(BaseModel):
     capabilities: Set[str] = Field(default_factory=set, description="Set of capabilities like 'chat', 'tools', 'vision'")
     
     # Tiers & Classifications
+    tier: Literal["standard", "advanced"] = Field(default="standard", description="The billing tier for this model")
     cost_tier: Literal["low", "medium", "high"]
     latency_class: Literal["fast", "normal", "slow"]
     quality_tier: Literal["baseline", "advanced", "flagship"]
@@ -35,6 +36,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="openrouter",
         litellm_model="openrouter/router",
         capabilities={"chat", "routing"},
+        tier="standard",
         cost_tier="medium",
         latency_class="normal",
         quality_tier="advanced",
@@ -47,6 +49,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="openrouter",
         litellm_model="openrouter/auto",
         capabilities={"chat", "routing", "reasoning"},
+        tier="advanced",
         cost_tier="high",
         latency_class="slow",
         quality_tier="flagship",
@@ -58,6 +61,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="openai",
         litellm_model="openai/gpt-4o-mini",
         capabilities={"chat", "tools", "vision"},
+        tier="standard",
         cost_tier="low",
         latency_class="fast",
         quality_tier="baseline",
@@ -69,6 +73,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="openai",
         litellm_model="openai/gpt-4o",
         capabilities={"chat", "tools", "vision", "reasoning"},
+        tier="advanced",
         cost_tier="high",
         latency_class="normal",
         quality_tier="flagship",
@@ -80,6 +85,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="anthropic",
         litellm_model="anthropic/claude-3-5-sonnet-20240620",
         capabilities={"chat", "tools", "vision", "reasoning"},
+        tier="advanced",
         cost_tier="medium",
         latency_class="normal",
         quality_tier="flagship",
@@ -91,6 +97,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="anthropic",
         litellm_model="anthropic/claude-3-haiku-20240307",
         capabilities={"chat", "tools"},
+        tier="standard",
         cost_tier="low",
         latency_class="fast",
         quality_tier="baseline",
@@ -102,6 +109,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="gemini",
         litellm_model="gemini/gemini-1.5-flash",
         capabilities={"chat", "tools", "vision", "long_context"},
+        tier="standard",
         cost_tier="low",
         latency_class="fast",
         quality_tier="baseline",
@@ -113,6 +121,7 @@ ALL_MODELS: List[ModelInfo] = [
         provider="gemini",
         litellm_model="gemini/gemini-1.5-pro",
         capabilities={"chat", "tools", "vision", "long_context", "reasoning"},
+        tier="advanced",
         cost_tier="medium",
         latency_class="normal",
         quality_tier="flagship",

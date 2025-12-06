@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import logging
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -101,6 +102,7 @@ class AppSettings(BaseSettings):
     COOKIE_SECURE: bool = True
     COOKIE_SAMESITE: str = "lax"
     COOKIE_PATH: str = "/"
+    COOKIE_DOMAIN: str | None = None
     ENABLE_CSRF: bool = True
     CSRF_COOKIE_NAME: str = "csrf_token"
 
@@ -152,8 +154,14 @@ class AppSettings(BaseSettings):
         # Patchset 29.0: Validate production secrets
         env_label = (self.ENV or "development").lower()
         local_envs = {"development", "dev", "local", "test"}
-        is_local = env_label in local_envs
+        
+        # Patchset 51.0: Auto-detect Render environment
+        # Render sets 'RENDER' env var to 'true'
+        is_render = os.environ.get("RENDER") == "true"
+        
+        is_local = env_label in local_envs and not is_render
         object.__setattr__(self, "IS_LOCAL_ENV", is_local)
+        
         if is_local:
             object.__setattr__(self, "COOKIE_SECURE", False)
         else:

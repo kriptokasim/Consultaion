@@ -83,7 +83,11 @@ def test_database_url():
                     slug="free",
                     name="Free",
                     is_default_free=True,
-                    limits={"max_debates_per_month": 5, "exports_enabled": True},
+                    limits={
+                        "max_debates_per_month": 5, 
+                        "exports_enabled": False,
+                        "allowed_model_tiers": ["standard"]
+                    },
                 )
             )
             session.add(
@@ -92,7 +96,11 @@ def test_database_url():
                     name="Pro",
                     price_monthly=Decimal("29.00"),
                     currency="USD",
-                    limits={"max_debates_per_month": 100, "exports_enabled": True},
+                    limits={
+                        "max_debates_per_month": 100, 
+                        "exports_enabled": True,
+                        "allowed_model_tiers": ["standard", "advanced"]
+                    },
                 )
             )
             session.commit()
@@ -184,7 +192,11 @@ def seed_billing_plans(test_database_url):
                         slug="free",
                         name="Free",
                         is_default_free=True,
-                        limits={"max_debates_per_month": 5, "exports_enabled": True},
+                        limits={
+                            "max_debates_per_month": 5, 
+                            "exports_enabled": False,
+                            "allowed_model_tiers": ["standard"]
+                        },
                     )
                 )
                 session.add(
@@ -193,7 +205,11 @@ def seed_billing_plans(test_database_url):
                         name="Pro",
                         price_monthly=Decimal("29.00"),
                         currency="USD",
-                        limits={"max_debates_per_month": 100, "exports_enabled": True},
+                        limits={
+                            "max_debates_per_month": 100, 
+                            "exports_enabled": True,
+                            "allowed_model_tiers": ["standard", "advanced"]
+                        },
                     )
                 )
                 session.commit()

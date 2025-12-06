@@ -208,6 +208,31 @@ async def create_debate(
             code="debate.invalid_model",
             hint="Please select a different model from the list."
         )
+    
+    # Patchset 49.2: Enforce model tier limits
+    from billing.service import get_active_plan
+    plan = get_active_plan(session, current_user.id)
+    allowed_tiers = plan.limits.get("allowed_model_tiers")
+    
+    # If allowed_tiers is not set, default to ["standard"] for Free plans (is_default_free=True)
+    # and ["standard", "advanced"] for others, unless explicitly configured.
+    if allowed_tiers is None:
+        if plan.is_default_free:
+            allowed_tiers = ["standard"]
+        else:
+            allowed_tiers = ["standard", "advanced"]
+            
+    # Check the model's tier
+    target_model_id = body.model_id or best_model_id
+    target_model_info = enabled_models.get(target_model_id)
+    if target_model_info:
+        model_tier = getattr(target_model_info, "tier", "standard")
+        if model_tier not in allowed_tiers:
+             raise ValidationError(
+                message=f"Model '{target_model_info.display_name}' is not available on your plan.",
+                code="debate.model_tier_restricted",
+                hint="Please upgrade to Pro to use advanced models."
+            )
 
     panel_config = body.panel_config or default_panel_config()
     try:

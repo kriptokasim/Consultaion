@@ -30,6 +30,7 @@ if _SAMESITE_VALUE not in {"lax", "strict", "none"}:
     _SAMESITE_VALUE = "lax"
 COOKIE_SAMESITE = "None" if _SAMESITE_VALUE == "none" else _SAMESITE_VALUE.capitalize()
 COOKIE_PATH = settings.COOKIE_PATH
+COOKIE_DOMAIN = settings.COOKIE_DOMAIN
 ENABLE_CSRF = settings.ENABLE_CSRF
 CSRF_COOKIE_NAME = settings.CSRF_COOKIE_NAME
 
@@ -151,6 +152,7 @@ def set_auth_cookie(response: Response, token: str) -> None:
         samesite=COOKIE_SAMESITE,
         max_age=JWT_TTL_SECONDS,
         path=COOKIE_PATH,
+        domain=COOKIE_DOMAIN,
     )
 
 
@@ -163,15 +165,16 @@ def set_csrf_cookie(response: Response, token: str) -> None:
         samesite=COOKIE_SAMESITE,
         max_age=JWT_TTL_SECONDS,
         path=COOKIE_PATH,
+        domain=COOKIE_DOMAIN,
     )
 
 
 def clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH)
+    response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH, domain=COOKIE_DOMAIN)
 
 
 def clear_csrf_cookie(response: Response) -> None:
-    response.delete_cookie(CSRF_COOKIE_NAME, path=COOKIE_PATH)
+    response.delete_cookie(CSRF_COOKIE_NAME, path=COOKIE_PATH, domain=COOKIE_DOMAIN)
 
 
 def generate_csrf_token() -> str:

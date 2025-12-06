@@ -61,8 +61,10 @@ class ValidationError(AppError):
         code: str = "validation_error",
         status_code: int = 400,
         details: Optional[Dict[str, Any]] = None,
+        hint: Optional[str] = None,
+        retryable: bool = False,
     ):
-        super().__init__(message, code, status_code, details)
+        super().__init__(message, code, status_code, details, hint, retryable)
 
 class RateLimitError(AppError):
     """Rate limit exceeded errors."""
