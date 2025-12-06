@@ -46,6 +46,10 @@ class AppSettings(BaseSettings):
     ENABLE_METRICS: bool = True
     ENABLE_CONVERSATION_MODE: bool = Field(False, description="Enable new conversation mode")
     
+    # Patchset 50.3: Beta Access Control
+    ENABLE_BETA_ACCESS: bool = Field(False, description="Enable beta access restrictions")
+    BETA_WHITELIST: str = Field("", description="Comma-separated list of beta user emails")
+    
     # Conversation Mode Limits
     CONVERSATION_MAX_ROUNDS: int = Field(4, ge=1, description="Maximum number of conversation rounds")
     CONVERSATION_MAX_TOKENS_PER_ROUND: int = Field(2048, ge=100, description="Max tokens per round")
