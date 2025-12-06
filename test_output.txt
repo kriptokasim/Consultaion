@@ -1,50 +1,82 @@
+STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET not set (OK for local env)
+/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/pytest_asyncio/plugin.py:247: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
 ============================= test session starts ==============================
-platform linux -- Python 3.11.9, pytest-8.3.3, pluggy-1.6.0 -- /home/durmusahm/.pyenv/versions/3.11.9/bin/python3.11
-cachedir: .pytest_cache
+platform linux -- Python 3.11.9, pytest-8.3.3, pluggy-1.6.0
 rootdir: /home/durmusahm/Consultaion/apps/api
 configfile: pytest.ini
-plugins: anyio-4.11.0, cov-6.0.0
-collecting ... collected 2 items
+plugins: asyncio-1.3.0, anyio-4.11.0, cov-6.0.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 2 items
 
-apps/api/tests/test_debates_routing.py::test_create_debate_uses_routing ERROR [ 50%]
-apps/api/tests/test_debates_routing.py::test_create_debate_explicit_model_routing ERROR [100%]/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/pytest_cov/plugin.py:355: CovFailUnderWarning: Coverage failure: total of 41 is less than fail-under=75
+apps/api/tests/test_conversation_mode.py [06:30:47] WARNING [-] config: STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET not set (OK for local env)
+[06:30:47] INFO [-] parliament.provider_health: Cleared all provider health states
+.[06:30:49] INFO [-] parliament.provider_health: Cleared all provider health states
+[06:30:49] ERROR [-] orchestrator: Debate conv-flag-test failed: Conversation mode is disabled by configuration.
+Traceback (most recent call last):
+  File "/home/durmusahm/Consultaion/apps/api/orchestrator.py", line 426, in run_debate
+    raise ValueError("Conversation mode is disabled by configuration.")
+ValueError: Conversation mode is disabled by configuration.
+DEBUG: Found debate conv-flag-test: prompt='Collaborative discussion on AI safety' status='running' engine_version=None created_at=datetime.datetime(2025, 12, 6, 11, 30, 49, 204453) final_content=None final_meta=None team_id=None routing_policy=None mode='conversation' panel_config={'engine_version': 'parliament-v1', 'seats': [{'seat_id': 'optimist', 'display_name': 'Optimist', 'provider_key': 'openai', 'model': 'gpt-4o-mini', 'role_profile': 'optimist', 'temperature': 0.7}, {'seat_id': 'risk_officer', 'display_name': 'Risk Officer', 'provider_key': 'anthropic', 'model': 'claude-3-5-sonnet', 'role_profile': 'risk_officer', 'temperature': 0.4}, {'seat_id': 'architect', 'display_name': 'Systems Architect', 'provider_key': 'openai', 'model': 'gpt-4.1-mini', 'role_profile': 'architect', 'temperature': 0.5}], 'max_seat_fail_ratio': None, 'min_required_seats': None, 'fail_fast': None} id='conv-flag-test' config=None model_id=None updated_at=datetime.datetime(2025, 12, 6, 11, 30, 49, 212939) user_id=None routed_model=None routing_meta=None
+DEBUG: Debate mode: conversation
+F[06:30:49] WARNING [-] config: STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET not set (OK for local env)
+/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/pytest_cov/plugin.py:355: CovFailUnderWarning: Coverage failure: total of 45 is less than fail-under=75
   warnings.warn(CovFailUnderWarning(message), stacklevel=1)
 
-ERROR: Coverage failure: total of 41 is less than fail-under=75
+ERROR: Coverage failure: total of 45 is less than fail-under=75
 
 
-==================================== ERRORS ====================================
-______________ ERROR at setup of test_create_debate_uses_routing _______________
-file /home/durmusahm/Consultaion/apps/api/tests/test_debates_routing.py, line 13
-  def test_create_debate_uses_routing(client, normal_user_token_headers, session: Session, mock_choose_model):
-E       fixture 'client' not found
->       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, cov, db_session, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_choose_model, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_global_state, seed_billing_plans, setup_test_routes, test_database_url, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
->       use 'pytest --fixtures [testpath]' for help on them.
+=================================== FAILURES ===================================
+_______________ test_conversation_engine_respects_flag[asyncio] ________________
 
-/home/durmusahm/Consultaion/apps/api/tests/test_debates_routing.py:13
----------------------------- Captured stderr setup -----------------------------
-[14:02:18] WARNING [-] config: STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET not set (OK for local env)
-[14:02:18] INFO [-] parliament.provider_health: Cleared all provider health states
------------------------------- Captured log setup ------------------------------
-WARNING  agents:agents.py:106 Running with USE_MOCK=1. This is intended for development only; set REQUIRE_REAL_LLM=1 in production.
-_________ ERROR at setup of test_create_debate_explicit_model_routing __________
-file /home/durmusahm/Consultaion/apps/api/tests/test_debates_routing.py, line 51
-  def test_create_debate_explicit_model_routing(client, normal_user_token_headers, session: Session, mock_choose_model):
-E       fixture 'client' not found
->       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, cov, db_session, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_choose_model, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_global_state, seed_billing_plans, setup_test_routes, test_database_url, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
->       use 'pytest --fixtures [testpath]' for help on them.
+db_session = <sqlmodel.orm.session.Session object at 0x7f42d5046090>
 
-/home/durmusahm/Consultaion/apps/api/tests/test_debates_routing.py:51
----------------------------- Captured stderr setup -----------------------------
-[14:02:18] INFO [-] parliament.provider_health: Cleared all provider health states
+    @pytest.mark.anyio("asyncio")
+    async def test_conversation_engine_respects_flag(db_session):
+        panel = default_panel_config()
+        debate_id = "conv-flag-test"
+    
+        debate = Debate(
+            id=debate_id,
+            prompt="Collaborative discussion on AI safety",
+            status="queued",
+            panel_config=panel.model_dump(),
+            mode="conversation"
+        )
+        db_session.add(debate)
+        db_session.commit()
+        db_session.refresh(debate)
+    
+        # Disable mode
+        settings.ENABLE_CONVERSATION_MODE = False
+        settings.FAST_DEBATE = False
+    
+        # run_conversation_debate itself doesn't check the flag, the orchestrator does.
+>       with pytest.raises(ValueError, match="Conversation mode is disabled"):
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+apps/api/tests/test_conversation_mode.py:67: Failed
 ------------------------------ Captured log setup ------------------------------
 INFO     parliament.provider_health:provider_health.py:224 Cleared all provider health states
+------------------------------ Captured log call -------------------------------
+ERROR    orchestrator:orchestrator.py:519 Debate conv-flag-test failed: Conversation mode is disabled by configuration.
+Traceback (most recent call last):
+  File "/home/durmusahm/Consultaion/apps/api/orchestrator.py", line 426, in run_debate
+    raise ValueError("Conversation mode is disabled by configuration.")
+ValueError: Conversation mode is disabled by configuration.
+---------------------------- Captured log teardown -----------------------------
+WARNING  config:config.py:186 STRIPE_WEBHOOK_VERIFY enabled but STRIPE_WEBHOOK_SECRET not set (OK for local env)
 =============================== warnings summary ===============================
-tests/test_debates_routing.py::test_create_debate_uses_routing
+../.pyenv/versions/3.11.9/lib/python3.11/site-packages/pydantic/_internal/_config.py:291
+../.pyenv/versions/3.11.9/lib/python3.11/site-packages/pydantic/_internal/_config.py:291
+../.pyenv/versions/3.11.9/lib/python3.11/site-packages/pydantic/_internal/_config.py:291
+../.pyenv/versions/3.11.9/lib/python3.11/site-packages/pydantic/_internal/_config.py:291
   /home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/pydantic/_internal/_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.9/migration/
     warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
 
-tests/test_debates_routing.py::test_create_debate_uses_routing
+../.pyenv/versions/3.11.9/lib/python3.11/site-packages/litellm/utils.py:165
   /home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/litellm/utils.py:165: DeprecationWarning: open_text is deprecated. Use files() instead. Refer to https://importlib-resources.readthedocs.io/en/latest/using.html#migrating-from-legacy for migration advice.
     with resources.open_text(
 
@@ -53,7 +85,7 @@ tests/test_debates_routing.py::test_create_debate_uses_routing
 ---------- coverage: platform linux, python 3.11.9-final-0 -----------
 Name                                            Stmts   Miss  Cover   Missing
 -----------------------------------------------------------------------------
-apps/api/agents.py                                260    194    25%   48, 71-79, 82-83, 86, 102, 120-124, 135-138, 142-143, 148-150, 163-245, 262-292, 305-345, 361, 373-376, 388-397, 409-431, 440-471, 475-476, 486-569, 579-613
+apps/api/agents.py                                265    168    37%   36, 84-85, 104, 138, 150-152, 166-262, 292-323, 341-342, 355-378, 408-411, 423-432, 444-466, 475-506, 510-511, 521-604, 614-648
 apps/api/api_key_utils.py                          16     10    38%   31-42, 56-59, 72
 apps/api/audit.py                                  17     10    41%   20-45
 apps/api/auth.py                                  138     94    32%   18, 20-21, 23, 30, 38-40, 44-49, 53-55, 64-73, 77-95, 102-114, 121-122, 129-134, 138-141, 146, 158, 170, 174, 178, 193-238, 251-256, 266-271
@@ -65,23 +97,32 @@ apps/api/billing/providers/stripe_provider.py      39     24    38%   24-28, 33-
 apps/api/billing/routes.py                        103     65    37%   35, 56-57, 68-88, 93-111, 123-125, 149-158, 163-209
 apps/api/billing/service.py                       102     81    21%   18, 22, 26, 30-51, 55-63, 67-102, 109-113, 123-135, 139-144, 148-155
 apps/api/channels.py                                2      1    50%   2
-apps/api/config.py                                179     33    82%   149-150, 155-173, 180, 191-193, 199, 202-203, 207, 210, 214, 216-222, 228-234, 265-266
-apps/api/database.py                               36     15    58%   16, 36-40, 45-53, 60-61
-apps/api/debate_dispatch.py                        25     18    28%   18-27, 37-48
+apps/api/config.py                                193     38    80%   152-154, 159-177, 184, 195-197, 203, 206-207, 211, 214, 218, 220-226, 232-238, 244, 246, 251, 270, 288-289
+apps/api/conversation/engine.py                    57     10    82%   33-34, 116-118, 153-154, 173-175
+apps/api/core/__init__.py                           0      0   100%
+apps/api/core/settings.py                          35      0   100%
+apps/api/database.py                               36     10    72%   16, 36-40, 49-51, 60-61
+apps/api/debate_dispatch.py                        25     18    28%   18-27, 38-50
 apps/api/deps.py                                    4      1    75%   6
 apps/api/exceptions.py                             26     11    58%   13-17, 28, 39, 50, 61, 72, 83
 apps/api/integrations/__init__.py                   0      0   100%
+apps/api/integrations/email.py                     25     18    28%   9-10, 16-50
 apps/api/integrations/events.py                    25     15    40%   15-16, 21-36
+apps/api/integrations/giphy.py                     21     14    33%   11-33
+apps/api/integrations/langfuse.py                  49     38    22%   16-39, 48-65, 78-138
+apps/api/integrations/slack.py                     24     13    46%   21-48
 apps/api/llm_errors.py                              4      2    50%   5-6
-apps/api/log_config.py                             52     23    56%   12, 20, 31-41, 45, 49-55, 59, 70, 79-93
-apps/api/main.py                                  161     96    40%   90-91, 95-99, 112-119, 127-186, 198-205, 210-219, 224-233, 238-239, 252-257, 284-290
+apps/api/log_config.py                             52     22    58%   12, 20, 31-41, 45, 49-55, 59, 79-93
+apps/api/main.py                                  165     96    42%   90-91, 95-99, 112-119, 127-186, 198-205, 210-219, 224-233, 238-239, 252-257, 294-300
 apps/api/metrics.py                                11      4    64%   10-11, 15-16
-apps/api/models.py                                158      0   100%
-apps/api/orchestrator.py                          214    186    13%   29-32, 36-41, 45-50, 54-66, 70-78, 82-114, 118-122, 134-148, 158-188, 210-247, 259-268, 281-318, 328-445
+apps/api/models.py                                160      0   100%
+apps/api/orchestration/__init__.py                  0      0   100%
+apps/api/orchestration/state.py                    65     39    40%   29, 35-45, 49-54, 58-70, 74-85, 89-99, 109-124
+apps/api/orchestrator.py                          261    181    31%   34-37, 41-80, 85-90, 94-99, 103-115, 119-127, 131-163, 167-171, 183-197, 207-237, 259-296, 308-317, 330-367, 379, 406, 420, 428-516, 543-544
 apps/api/parliament/__init__.py                     0      0   100%
 apps/api/parliament/config.py                       4      0   100%
 apps/api/parliament/engine.py                     119     67    44%   61-66, 70, 78, 103-237, 248-326, 342-355
-apps/api/parliament/model_registry.py              55     34    38%   122-132, 137-144, 149-152, 157-165, 173-176
+apps/api/parliament/model_registry.py              56     22    61%   127-135, 143, 145, 152-155, 164-168, 176-179
 apps/api/parliament/prompts.py                     22     14    36%   12, 22-43, 50-57
 apps/api/parliament/provider_health.py             81     42    48%   49-53, 65-69, 73-76, 88-106, 140-153, 166-174, 184, 189-204, 215-218
 apps/api/parliament/providers.py                   22      7    68%   16-20, 24, 28, 32, 58
@@ -92,35 +133,38 @@ apps/api/parliament/timeline.py                    40     33    18%   14-147
 apps/api/promotions/__init__.py                     0      0   100%
 apps/api/promotions/models.py                      20      0   100%
 apps/api/promotions/routes.py                      29     16    45%   23-52
+apps/api/prompts/conversation.py                    3      0   100%
 apps/api/ratelimit.py                             106     70    34%   23, 26, 29, 36, 41-42, 45-51, 54, 57, 66-67, 70-75, 81-84, 89-99, 105-106, 115, 120-131, 136, 140-141, 148-150, 154-155, 159-169
 apps/api/ratings.py                               154    131    15%   22-30, 34, 38, 42-67, 71-74, 78-94, 98-158, 162-225
 apps/api/routes/__init__.py                         6      0   100%
-apps/api/routes/admin.py                          190    147    23%   30, 38-40, 50-52, 63-82, 94-129, 138-162, 176-188, 199-281, 317-348, 363-375, 384-385, 406-407
+apps/api/routes/admin.py                          190    147    23%   30, 38-40, 50-52, 63-82, 94-129, 138-162, 176-188, 199-281, 317-355, 370-382, 391-392, 413-414
 apps/api/routes/api_keys.py                        66     27    59%   64-70, 95-132, 152-177
-apps/api/routes/auth.py                           215    164    24%   50-76, 80-81, 85-86, 99-102, 109-114, 118-132, 136-144, 149-187, 198-241, 246-274, 279-299, 304-307, 312, 317, 326-346, 350
-apps/api/routes/common.py                         113     81    28%   24-25, 29, 42-76, 80, 89-90, 104-109, 113-116, 120-123, 127-135, 139-149, 153-158, 162-172, 176-181, 185-190, 194
-apps/api/routes/debates.py                        314    246    22%   62, 66, 71, 82-95, 105-117, 126-138, 146-153, 164-272, 282-319, 331-389, 404-405, 414-416, 435-454, 467-557, 566-573, 582-600, 613-625, 639-669
+apps/api/routes/auth.py                           222    169    24%   50-76, 80-81, 85-86, 101-104, 113-118, 128-129, 138-163, 167-181, 185-193, 198-236, 247-290, 295-323, 328-348, 353-356, 361, 368
+apps/api/routes/common.py                         113     81    28%   24-25, 29, 43-77, 81, 90-91, 105-110, 114-117, 121-124, 128-136, 140-150, 154-159, 163-173, 177-182, 186-191, 195
+apps/api/routes/debates.py                        324    253    22%   68, 72, 77, 88-101, 111-123, 132-144, 152-159, 170-311, 321-358, 370-428, 443-444, 453-455, 474-493, 506-596, 605-612, 621-639, 652-664, 678-708
+apps/api/routes/gifs.py                            14      4    71%   12-13, 17-18
 apps/api/routes/models.py                          13      4    69%   10-11, 28-29
+apps/api/routes/routing_admin.py                   13      3    77%   33-46
 apps/api/routes/stats.py                          230    139    40%   92-100, 105, 110-115, 128-130, 135, 140-190, 199-243, 257-261, 274-315, 323-329, 341-342, 353-373
 apps/api/routes/teams.py                           64     39    39%   31-34, 43-60, 68-75, 84-93, 115-140
 apps/api/safety/__init__.py                         0      0   100%
 apps/api/safety/pii.py                             52     38    27%   61, 67, 100-143, 170-180
-apps/api/schemas.py                                87     11    87%   72-77, 81, 101, 108, 112, 120
-apps/api/sse_backend.py                            85     57    33%   36-39, 42-45, 48-53, 56-60, 63-67, 70, 75-79, 82-83, 86-87, 90-102, 105, 108, 116-127
-apps/api/tests/conftest.py                        101     10    90%   33, 105, 131-133, 211-218
+apps/api/schemas.py                                98      8    92%   96-101, 132, 136
+apps/api/sse_backend.py                            85     38    55%   56-60, 63-67, 70, 75-79, 82-83, 86-87, 90-102, 105, 108, 120-123
+apps/api/tests/__init__.py                          0      0   100%
+apps/api/tests/conftest.py                        118     17    86%   106, 133-135, 237-239, 244-255
 apps/api/tests/fake_routes.py                     114     84    26%   31-42, 45-54, 66-80, 84-92, 96-99, 103-104, 108-109, 113-127, 131-138, 142-159
-apps/api/tests/test_debates_routing.py             41     32    22%   10-11, 15-49, 53-92
+apps/api/tests/test_conversation_mode.py           41      0   100%
 apps/api/tests/utils.py                            74     27    64%   19-37, 53-60, 72, 93, 134-135, 148, 187-191
 apps/api/usage_limits.py                           91     72    21%   13, 17, 21, 25-29, 34-37, 41-66, 70-94, 98-101, 109-122, 126-132, 142-149
 apps/api/worker/__init__.py                         2      0   100%
 apps/api/worker/celery_app.py                       9      0   100%
 apps/api/worker/debate_tasks.py                    29     14    52%   20-32, 38-39
 -----------------------------------------------------------------------------
-TOTAL                                            4303   2530    41%
+TOTAL                                            4727   2590    45%
 Coverage XML written to file coverage.xml
 
-FAIL Required test coverage of 75% not reached. Total coverage: 41.20%
+FAIL Required test coverage of 75% not reached. Total coverage: 45.21%
 =========================== short test summary info ============================
-ERROR apps/api/tests/test_debates_routing.py::test_create_debate_uses_routing
-ERROR apps/api/tests/test_debates_routing.py::test_create_debate_explicit_model_routing
-======================== 2 warnings, 2 errors in 5.72s =========================
+FAILED apps/api/tests/test_conversation_mode.py::test_conversation_engine_respects_flag[asyncio]
+=================== 1 failed, 1 passed, 5 warnings in 8.57s ====================

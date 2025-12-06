@@ -41,6 +41,7 @@ class AppSettings(BaseSettings):
     REQUIRE_REAL_LLM: bool = False
     DISABLE_RATINGS: bool = False
     ENABLE_METRICS: bool = True
+    ENABLE_CONVERSATION_MODE: bool = Field(False, description="Enable new conversation mode")
     APP_VERSION: str = "0.2.0"
 
     LOG_LEVEL: str = "INFO"

@@ -10,6 +10,18 @@ const withBundleAnalyzer = bundleAnalyzer({
 const workspaceRoot = path.join(__dirname, '..', '..')
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.dicebear.com',
+      },
+    ],
+  },
   outputFileTracingRoot: workspaceRoot,
   webpack: (config, { isServer }) => {
     if (!isServer) {

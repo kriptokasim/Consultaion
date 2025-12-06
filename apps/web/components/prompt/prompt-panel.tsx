@@ -16,6 +16,8 @@ interface PromptPanelProps {
     submitLabel?: string
     isSubmitLoading?: boolean
     onAdvancedSettingsClick?: () => void
+    mode?: 'debate' | 'conversation'
+    onModeChange?: (mode: 'debate' | 'conversation') => void
 }
 
 /**
@@ -37,6 +39,8 @@ export function PromptPanel({
     submitLabel = 'Start debate',
     isSubmitLoading = false,
     onAdvancedSettingsClick,
+    mode = 'debate',
+    onModeChange,
 }: PromptPanelProps) {
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
         // Enter submits (without Shift), Shift+Enter adds newline
@@ -59,15 +63,40 @@ export function PromptPanel({
                     status === 'error' ? 'border-red-300' : 'border-brand-border/60'
                 )}
             >
-                {/* Running status badge */}
-                {status === 'running' && (
-                    <div className="mb-3 flex items-center justify-end">
+                {/* Header: Mode Toggle or Status */}
+                <div className="mb-3 flex items-center justify-between">
+                    {onModeChange && status !== 'running' ? (
+                        <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+                            <button
+                                type="button"
+                                onClick={() => onModeChange('debate')}
+                                className={cn(
+                                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                                    mode === 'debate' ? "bg-white shadow-sm text-slate-900 font-semibold" : "text-slate-500 hover:text-slate-700"
+                                )}
+                            >
+                                Debate
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onModeChange('conversation')}
+                                className={cn(
+                                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                                    mode === 'conversation' ? "bg-white shadow-sm text-slate-900 font-semibold" : "text-slate-500 hover:text-slate-700"
+                                )}
+                            >
+                                Conversation
+                            </button>
+                        </div>
+                    ) : <div />}
+
+                    {status === 'running' && (
                         <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
                             <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
-                            Debate in progress…
+                            {mode === 'conversation' ? 'Conversation in progress…' : 'Debate in progress…'}
                         </span>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* Textarea */}
                 <textarea
@@ -75,7 +104,7 @@ export function PromptPanel({
                     onChange={(e) => onChange(e.target.value)}
                     onKeyDown={handleKeyDown}
                     disabled={disabled || status === 'running'}
-                    placeholder="What should the AI Parliament debate?"
+                    placeholder={mode === 'conversation' ? "What topic should the panel explore collaboratively?" : "What should the AI Parliament debate?"}
                     className={cn(
                         'w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-400 sm:text-base',
                         'min-h-[120px] text-slate-900 sm:min-h-[160px]',
@@ -86,14 +115,18 @@ export function PromptPanel({
                 {/* Error message */}
                 {status === 'error' && (
                     <p className="mt-2 text-sm text-red-600">
-                        Failed to start debate. Please try again.
+                        Failed to start. Please try again.
                     </p>
                 )}
 
                 {/* Footer row */}
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                     {/* Helper text */}
-                    <p className="text-xs text-slate-500">{helperText}</p>
+                    <p className="text-xs text-slate-500">
+                        {mode === 'conversation'
+                            ? 'Collaborative discussion to synthesize an answer.'
+                            : 'Adversarial debate to find the best argument.'}
+                    </p>
 
                     {/* Right side controls */}
                     <div className="flex items-center gap-2">
@@ -116,7 +149,7 @@ export function PromptPanel({
                             onClick={onSubmit}
                             className="bg-brand-accent text-white hover:bg-brand-accent/90"
                         >
-                            {isSubmitLoading || status === 'running' ? 'Running…' : submitLabel}
+                            {isSubmitLoading || status === 'running' ? 'Running…' : (mode === 'conversation' ? 'Start Conversation' : submitLabel)}
                         </Button>
                     </div>
                 </div>

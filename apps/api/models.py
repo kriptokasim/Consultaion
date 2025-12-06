@@ -66,6 +66,7 @@ class Debate(SQLModel, table=True):
     routed_model: Optional[str] = Field(default=None, index=True, nullable=True)
     routing_policy: Optional[str] = Field(default=None, nullable=True)
     routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    mode: str = Field(default="debate", nullable=False, index=True)
 
 
 class DebateRound(SQLModel, table=True):

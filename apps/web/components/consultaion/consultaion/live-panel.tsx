@@ -10,6 +10,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
+import { ConversationTimeline } from "@/components/conversation/ConversationTimeline"
+
 type LivePanelProps = {
   prompt: string
   onPromptChange: (value: string) => void
@@ -21,6 +23,7 @@ type LivePanelProps = {
   speakerTime: number
   vote?: { method?: string; ranking?: string[] }
   loading?: boolean
+  mode?: 'debate' | 'conversation'
 }
 
 type EventRow = {
@@ -108,6 +111,7 @@ export default function LivePanel({
   speakerTime,
   vote,
   loading = false,
+  mode = 'debate',
 }: LivePanelProps) {
   const mappedEvents = useMemo(() => events.map(toEventRow), [events])
 
@@ -181,7 +185,7 @@ export default function LivePanel({
         </CardContent>
       </Card>
 
-      {(activePersona || vote?.ranking?.length) && (
+      {(activePersona || vote?.ranking?.length) && mode !== 'conversation' && (
         <div className="grid gap-4 sm:grid-cols-2">
           {activePersona && (
             <Card className="border border-amber-200/70 bg-white/90 shadow-[0_12px_24px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
@@ -221,21 +225,31 @@ export default function LivePanel({
         </div>
       )}
 
-      {(mappedEvents.length > 0 || loading) && (
+      {mode === 'conversation' ? (
         <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
           <CardHeader>
-            <CardTitle className="heading-serif text-lg font-semibold text-amber-900 dark:text-amber-50">Live Stream</CardTitle>
+            <CardTitle className="heading-serif text-lg font-semibold text-amber-900 dark:text-amber-50">Conversation Transcript</CardTitle>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-96">
-              <div
-                className="space-y-3"
-                role="feed"
-                aria-live="polite"
-                aria-busy={loading && mappedEvents.length === 0}
-              >
-                {loading && mappedEvents.length === 0
-                  ? Array.from({ length: 3 }).map((_, idx) => (
+            <ConversationTimeline events={events} activePersona={activePersona} />
+          </CardContent>
+        </Card>
+      ) : (
+        (mappedEvents.length > 0 || loading) && (
+          <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
+            <CardHeader>
+              <CardTitle className="heading-serif text-lg font-semibold text-amber-900 dark:text-amber-50">Live Stream</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-96">
+                <div
+                  className="space-y-3"
+                  role="feed"
+                  aria-live="polite"
+                  aria-busy={loading && mappedEvents.length === 0}
+                >
+                  {loading && mappedEvents.length === 0
+                    ? Array.from({ length: 3 }).map((_, idx) => (
                       <div
                         key={`skeleton-${idx}`}
                         className="flex animate-pulse items-start gap-3 rounded-lg border border-amber-100 bg-amber-50/70 p-4"
@@ -249,50 +263,51 @@ export default function LivePanel({
                         <div className="h-8 w-8 rounded-full bg-amber-100/80" />
                       </div>
                     ))
-                  : null}
-                {mappedEvents.map((event, index) => (
-                  <div
-                    key={`${event.type}-${index}`}
-                    className="flex items-start gap-3 rounded-lg border border-amber-100 bg-amber-50/70 p-4 transition-colors hover:bg-white hover:shadow-md dark:border-amber-900/40 dark:bg-amber-950/20"
-                  >
-                    {event.round && (
-                      <Badge variant="outline" className={`${getRoundBadgeColor(event.round)} font-mono text-xs`}>
-                        R{event.round}
-                      </Badge>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="mb-1 text-sm font-semibold text-amber-900 dark:text-amber-50">{event.title}</div>
-                      <p className="text-sm text-amber-900/80 dark:text-amber-50/70 line-clamp-2">{event.text}</p>
-                      {event.ts && (
-                        <div className="mt-2 font-mono text-xs text-amber-700 dark:text-amber-100/70">
-                          {new Date(event.ts).toLocaleTimeString()}
-                        </div>
+                    : null}
+                  {mappedEvents.map((event, index) => (
+                    <div
+                      key={`${event.type}-${index}`}
+                      className="flex items-start gap-3 rounded-lg border border-amber-100 bg-amber-50/70 p-4 transition-colors hover:bg-white hover:shadow-md dark:border-amber-900/40 dark:bg-amber-950/20"
+                    >
+                      {event.round && (
+                        <Badge variant="outline" className={`${getRoundBadgeColor(event.round)} font-mono text-xs`}>
+                          R{event.round}
+                        </Badge>
                       )}
+                      <div className="flex-1 min-w-0">
+                        <div className="mb-1 text-sm font-semibold text-amber-900 dark:text-amber-50">{event.title}</div>
+                        <p className="text-sm text-amber-900/80 dark:text-amber-50/70 line-clamp-2">{event.text}</p>
+                        {event.ts && (
+                          <div className="mt-2 font-mono text-xs text-amber-700 dark:text-amber-100/70">
+                            {new Date(event.ts).toLocaleTimeString()}
+                          </div>
+                        )}
+                      </div>
+                      <Sheet>
+                        <SheetTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="View event JSON">
+                            <FileJson className="h-4 w-4" />
+                          </Button>
+                        </SheetTrigger>
+                        <SheetContent className="w-full sm:max-w-xl">
+                          <SheetHeader>
+                            <SheetTitle>Event Data</SheetTitle>
+                            <SheetDescription>Raw payload from the orchestrator</SheetDescription>
+                          </SheetHeader>
+                          <ScrollArea className="mt-6 h-full">
+                            <pre className="overflow-x-auto rounded-lg bg-stone-900 p-4 font-mono text-xs text-amber-200">
+                              {JSON.stringify(event.data, null, 2)}
+                            </pre>
+                          </ScrollArea>
+                        </SheetContent>
+                      </Sheet>
                     </div>
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="View event JSON">
-                          <FileJson className="h-4 w-4" />
-                        </Button>
-                      </SheetTrigger>
-                      <SheetContent className="w-full sm:max-w-xl">
-                        <SheetHeader>
-                          <SheetTitle>Event Data</SheetTitle>
-                          <SheetDescription>Raw payload from the orchestrator</SheetDescription>
-                        </SheetHeader>
-                    <ScrollArea className="mt-6 h-full">
-                      <pre className="overflow-x-auto rounded-lg bg-stone-900 p-4 font-mono text-xs text-amber-200">
-                            {JSON.stringify(event.data, null, 2)}
-                          </pre>
-                        </ScrollArea>
-                      </SheetContent>
-                    </Sheet>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )
       )}
     </div>
   )

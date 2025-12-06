@@ -161,6 +161,7 @@ async def _raw_llm_call(
     model_override: str | None = None,
     model_id: str | None = None,
     debate_id: str | None = None,
+    extra_tags: Dict[str, Any] | None = None,
 ) -> Tuple[str, UsageCall]:
     from parliament.model_registry import get_default_model, get_model
 
@@ -252,7 +253,7 @@ async def _raw_llm_call(
             output_tokens=int(token_counts["completion"]),
             latency_ms=latency_ms,
             success=True,
-            extra={"provider": provider_name, "model_used": model_used, "debate_id": debate_id},
+            extra={"provider": provider_name, "model_used": model_used, "debate_id": debate_id, **(extra_tags or {})},
         )
         
         return content.strip(), call_usage
@@ -271,7 +272,7 @@ async def _raw_llm_call(
             latency_ms=latency_ms,
             success=False,
             error_message=str(exc),
-            extra={"provider": provider_name, "debate_id": debate_id},
+            extra={"provider": provider_name, "debate_id": debate_id, **(extra_tags or {})},
         )
 
         raise TransientLLMError(f"LLM call failed for role {role}: {exc}", cause=exc)
@@ -286,6 +287,7 @@ async def call_llm_with_retry(
     model_override: str | None = None,
     model_id: str | None = None,
     debate_id: str | None = None,
+    extra_tags: Dict[str, Any] | None = None,
 ) -> Tuple[str, UsageCall]:
     max_attempts = settings.LLM_RETRY_MAX_ATTEMPTS if settings.LLM_RETRY_ENABLED else 1
     delay = settings.LLM_RETRY_INITIAL_DELAY_SECONDS or 0.0
@@ -301,6 +303,7 @@ async def call_llm_with_retry(
                 model_override=model_override,
                 model_id=model_id,
                 debate_id=debate_id,
+                extra_tags=extra_tags,
             )
         except TransientLLMError as exc:
             last_exc = exc
@@ -329,6 +332,7 @@ async def _call_llm(
     model_override: str | None = None,
     model_id: str | None = None,
     debate_id: str | None = None,
+    extra_tags: Dict[str, Any] | None = None,
 ) -> Tuple[str, UsageCall]:
     from parliament.model_registry import get_default_model, get_model
 
@@ -357,6 +361,7 @@ async def _call_llm(
             model_override=model_override,
             model_id=model_id,
             debate_id=debate_id,
+            extra_tags=extra_tags,
         )
     except TransientLLMError as exc:
         logger.error("LLM call failed for role %s: %s", role, exc)
@@ -382,6 +387,7 @@ async def call_llm_for_role(
     model_override: str | None = None,
     model_id: str | None = None,
     debate_id: str | None = None,
+    extra_tags: Dict[str, Any] | None = None,
 ) -> Tuple[str, UsageCall]:
     """
     Public helper for parliament orchestration to invoke a specific provider/model override.
@@ -394,6 +400,7 @@ async def call_llm_for_role(
         model_override=model_override,
         model_id=model_id,
         debate_id=debate_id,
+        extra_tags=extra_tags,
     )
 
 

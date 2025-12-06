@@ -16,6 +16,7 @@ from integrations.langfuse import current_trace_id
 from integrations.slack import send_slack_alert
 from models import Debate, DebateRound, Message, Score, User, Vote
 from parliament.engine import run_parliament_debate
+from conversation.engine import run_conversation_debate
 from schemas import DebateConfig, DebateSummary, default_agents, default_judges
 from sse_backend import get_sse_backend
 from usage_limits import record_token_usage
@@ -413,6 +414,34 @@ async def run_debate(
         with session_scope() as session:
             debate = session.get(Debate, debate_id)
             is_parliament = bool(debate and debate.panel_config)
+            debate_mode = debate.mode if debate else "debate"
+
+        if debate_mode == "conversation":
+            if not settings.ENABLE_CONVERSATION_MODE:
+                raise ValueError("Conversation mode is disabled by configuration.")
+
+            with session_scope() as session:
+                debate = session.get(Debate, debate_id)
+            if debate:
+                result = await run_conversation_debate(debate, model_id=model_id)
+                
+                state_manager.complete_debate(
+                    final_content=result.final_answer,
+                    final_meta=result.final_meta,
+                    status=result.status,
+                    tokens_total=float(result.usage_tracker.total_tokens)
+                )
+                
+                await backend.publish(
+                    channel_id,
+                    {
+                        "type": "final",
+                        "debate_id": debate_id,
+                        "content": result.final_answer,
+                        "meta": result.final_meta,
+                    },
+                )
+                return
 
         if is_parliament:
              # Legacy Parliament Path (for now, or wrap in a pipeline later)

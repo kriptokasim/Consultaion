@@ -39,6 +39,8 @@ type VoteMeta = {
   ranking?: string[]
 }
 
+const ENABLE_CONVERSATION_MODE = process.env.NEXT_PUBLIC_ENABLE_CONVERSATION_MODE === 'true' || process.env.NEXT_PUBLIC_ENABLE_CONVERSATION_MODE === '1'
+
 export default function Page() {
   const [prompt, setPrompt] = useState('Draft a national EV policy')
   const [panelConfig, setPanelConfig] = useState(() => defaultPanelConfig())
@@ -56,6 +58,7 @@ export default function Page() {
   const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
   const [authStatus, setAuthStatus] = useState<'unknown' | 'authed' | 'guest'>('unknown')
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [mode, setMode] = useState<'debate' | 'conversation'>('debate')
 
   const router = useRouter()
   const { pushToast } = useToast()
@@ -250,7 +253,7 @@ export default function Page() {
     runningRef.current = true
     manualStartAttemptedRef.current = false
     try {
-      const { id } = await startDebate({ prompt, panel_config: panelConfig })
+      const { id } = await startDebate({ prompt, panel_config: panelConfig, mode })
       currentDebateIdRef.current = id
       setCurrentDebateId(id)
       setSessionStatus('running')
@@ -259,6 +262,7 @@ export default function Page() {
       track('debate_started', {
         prompt_length: prompt.length,
         seat_count: panelConfig.seats.length,
+        mode,
       })
     } catch (error) {
       if (error instanceof ApiError) {
@@ -366,6 +370,8 @@ export default function Page() {
             setAdvancedOpen(true)
             track('settings_opened', { source: 'prompt_panel' })
           }}
+          mode={mode}
+          onModeChange={ENABLE_CONVERSATION_MODE ? setMode : undefined}
         />
 
         <PromptPresets onPresetSelected={handlePresetSelected} />
@@ -385,6 +391,7 @@ export default function Page() {
             speakerTime={speakerTime}
             vote={vote}
             loading={eventsLoading}
+            mode={mode}
           />
         </div>
       )}
