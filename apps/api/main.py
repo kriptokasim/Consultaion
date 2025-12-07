@@ -91,18 +91,24 @@ if TEST_FAST_APP:
         pass
 
 SENTRY_DSN = settings.SENTRY_DSN
-# Only initialize Sentry if DSN is set to a non-empty value
-if SENTRY_DSN and SENTRY_DSN.strip():
-    import sentry_sdk
-    from sentry_sdk.integrations.fastapi import FastApiIntegration
-    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+# Only initialize Sentry if DSN is set to a valid, non-empty value
+if SENTRY_DSN and SENTRY_DSN.strip() and SENTRY_DSN.strip().startswith("http"):
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        environment=settings.SENTRY_ENV,
-        traces_sample_rate=float(settings.SENTRY_SAMPLE_RATE),
-        integrations=[FastApiIntegration(), SqlalchemyIntegration()],
-    )
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            environment=settings.SENTRY_ENV,
+            traces_sample_rate=float(settings.SENTRY_SAMPLE_RATE),
+            integrations=[FastApiIntegration(), SqlalchemyIntegration()],
+        )
+        logger.info("Sentry initialized successfully")
+    except Exception as e:
+        logger.warning("Failed to initialize Sentry: %s. Continuing without Sentry.", e)
+else:
+    logger.info("Sentry DSN not configured or invalid. Skipping Sentry initialization.")
 
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
