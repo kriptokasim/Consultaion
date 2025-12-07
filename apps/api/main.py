@@ -276,14 +276,17 @@ async def app_error_handler(request: Request, exc: AppError):
     )
 
 # Domain routers live in apps/api/routes/*
+from routes.debug import router as debug_router  # Patchset 53.0
 
-# Domain routers live in apps/api/routes/*
 app.include_router(auth_router)
 app.include_router(stats_router)
 app.include_router(models_router)
 app.include_router(debates_router)
 app.include_router(teams_router)
 app.include_router(admin_router)
+
+# Patchset 53.0: Debug routes (only active when AUTH_DEBUG=True)
+app.include_router(debug_router)
 
 # Import and add routing admin router
 from routes.routing_admin import router as routing_admin_router

@@ -407,6 +407,12 @@ async def run_debate(
 
         # 1. Initialize State Manager
         from orchestration.state import DebateStateManager
+        
+        # Load debate to get user_id for token tracking and email summaries
+        with session_scope() as session:
+            debate = session.get(Debate, debate_id)
+            debate_user_id = debate.user_id if debate else None
+        
         state_manager = DebateStateManager(debate_id, debate_user_id)
         state_manager.set_status("running")
 

@@ -98,6 +98,9 @@ class AppSettings(BaseSettings):
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None
 
+    # Patchset 53.0: Auth Debug Mode
+    AUTH_DEBUG: bool = Field(False, description="Enable verbose auth logging & debug endpoint")
+
     JWT_SECRET: str = "change_me_in_prod"
     JWT_EXPIRE_MINUTES: int = 1440
     JWT_TTL_SECONDS: int | None = None

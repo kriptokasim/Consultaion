@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import logging
 import secrets
 import time
 from typing import Any, Dict, Optional
@@ -11,6 +12,8 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from log_config import update_log_context
 from models import User
 from sqlmodel import Session, select
+
+logger = logging.getLogger(__name__)
 
 COOKIE_NAME = settings.COOKIE_NAME
 JWT_SECRET = settings.JWT_SECRET
@@ -129,6 +132,19 @@ def get_current_user(
 ) -> User:
     user = get_optional_user(request=request, session=session)
     if not user:
+        # [AUTH_DEBUG] Patchset 53.0: Log unauthorized access attempt
+        if settings.AUTH_DEBUG:
+            has_cookie = COOKIE_NAME in request.cookies
+            logger.warning(
+                "[AUTH_DEBUG] Protected endpoint unauthorized",
+                extra={
+                    "reason": "no_valid_token",
+                    "has_auth_cookie": has_cookie,
+                    "cookie_count": len(request.cookies),
+                    "path": request.url.path,
+                },
+            )
+        
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     if hasattr(user, "is_active") and not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")

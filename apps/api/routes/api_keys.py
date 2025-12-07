@@ -103,7 +103,7 @@ async def create_api_key(
     # Validate team_id if provided - user must be a member of the team
     if body.team_id:
         from routes.common import user_is_team_member
-        if not user_is_team_member(session, current_user.id, body.team_id):
+        if not user_is_team_member(session, current_user, body.team_id):
             raise PermissionError(
                 message="You are not a member of this team",
                 code="team.not_member"

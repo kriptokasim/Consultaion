@@ -3,8 +3,11 @@ from typing import Any, Optional
 from urllib.parse import urlencode, urlparse
 
 import httpx
+import logging
 from audit import record_audit
 from auth import (
+    COOKIE_DOMAIN,
+    COOKIE_NAME,
     COOKIE_SAMESITE,
     COOKIE_SECURE,
     ENABLE_CSRF,
@@ -30,6 +33,7 @@ from sqlmodel import Session, select
 from routes.common import AUTH_MAX_CALLS, AUTH_WINDOW, serialize_user, user_team_role
 
 router = APIRouter(tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -271,10 +275,38 @@ async def google_callback(
         session.commit()
         session.refresh(user)
         audit_action = "register_google"
+    
+    # [AUTH_DEBUG] Patchset 53.0: Log before token creation
+    if settings.AUTH_DEBUG:
+        logger.info(
+            "[AUTH_DEBUG] Google login success, creating token",
+            extra={
+                "user_id": user.id,
+                "email": user.email,
+                "provider": "google",
+                "remote_addr": request.client.host if request.client else None,
+            },
+        )
+    
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     redirect_target = sanitize_next_path(request.cookies.get(OAUTH_NEXT_COOKIE))
     redirect_resp = RedirectResponse(url=build_frontend_redirect(redirect_target), status_code=status.HTTP_302_FOUND)
     set_auth_cookie(redirect_resp, token)
+    
+    # [AUTH_DEBUG] Patchset 53.0: Log after cookie set
+    if settings.AUTH_DEBUG:
+        logger.info(
+            "[AUTH_DEBUG] Auth cookie set for Google login",
+            extra={
+                "user_id": user.id,
+                "cookie_name": COOKIE_NAME,
+                "cookie_secure": COOKIE_SECURE,
+                "cookie_samesite": COOKIE_SAMESITE,
+                "cookie_domain": COOKIE_DOMAIN or "<not_set>",
+                "redirect_target": redirect_target,
+            },
+        )
+    
     if ENABLE_CSRF:
         set_csrf_cookie(redirect_resp, generate_csrf_token())
     redirect_resp.delete_cookie(OAUTH_STATE_COOKIE, path="/auth/google")
@@ -333,8 +365,35 @@ async def login_user(body: AuthRequest, response: Response, session: Session = D
     user = session.exec(select(User).where(User.email == email)).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise AuthError(message="Invalid credentials", code="auth.invalid_credentials")
+    
+    # [AUTH_DEBUG] Patchset 53.0: Log before token creation
+    if settings.AUTH_DEBUG:
+        logger.info(
+            "[AUTH_DEBUG] Email login success, creating token",
+            extra={
+                "user_id": user.id,
+                "email": user.email,
+                "provider": "password",
+                "remote_addr": request.client.host if request and request.client else None,
+            },
+        )
+    
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
+    
+    # [AUTH_DEBUG] Patchset 53.0: Log after cookie set
+    if settings.AUTH_DEBUG:
+        logger.info(
+            "[AUTH_DEBUG] Auth cookie set for email login",
+            extra={
+                "user_id": user.id,
+                "cookie_name": COOKIE_NAME,
+                "cookie_secure": COOKIE_SECURE,
+                "cookie_samesite": COOKIE_SAMESITE,
+                "cookie_domain": COOKIE_DOMAIN or "<not_set>",
+            },
+        )
+    
     if ENABLE_CSRF:
         set_csrf_cookie(response, generate_csrf_token())
     record_audit(
@@ -357,7 +416,17 @@ async def logout_user(response: Response):
 
 
 @router.get("/me")
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    # [AUTH_DEBUG] Patchset 53.0: Log successful /me call
+    if settings.AUTH_DEBUG:
+        logger.info(
+            "[AUTH_DEBUG] /me success",
+            extra={"user_id": current_user.id, "email": current_user.email},
+        )
+    
     return serialize_user(current_user)
 
 

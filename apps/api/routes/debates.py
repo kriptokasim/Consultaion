@@ -510,8 +510,6 @@ async def export_debate_report(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    increment_export_usage(session, current_user.id)
-    
     from services.reporting import build_report, report_to_markdown
     
     # Run heavy export generation in thread pool
@@ -520,6 +518,10 @@ async def export_debate_report(
         None, 
         lambda: report_to_markdown(build_report(session, debate_id, current_user))
     )
+    
+    # Only increment and commit if export succeeded
+    increment_export_usage(session, current_user.id)
+    session.commit()
     
     track_metric("exports_generated")
     record_audit(
@@ -657,7 +659,6 @@ async def export_scores_csv(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    increment_export_usage(session, current_user.id)
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())).all()
     if not scores:
@@ -666,6 +667,10 @@ async def export_scores_csv(
     from services.reporting import generate_csv_content
     loop = asyncio.get_running_loop()
     content = await loop.run_in_executor(None, lambda: generate_csv_content(scores))
+    
+    # Increment and commit after successful generation
+    increment_export_usage(session, current_user.id)
+    session.commit()
     
     filename = f"scores_{debate_id}.csv"
     record_audit(

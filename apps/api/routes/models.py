@@ -13,10 +13,16 @@ async def list_models():
             ModelPublic(
                 id=cfg.id,
                 display_name=cfg.display_name,
-                provider=cfg.provider.value,
-                tags=cfg.tags,
-                max_context=cfg.max_context,
+                provider=cfg.provider,  # Direct string, not enum
+                capabilities=sorted(list(cfg.capabilities)),  # Convert set to list
+                tier=cfg.tier,
+                cost_tier=cfg.cost_tier,
+                latency_class=cfg.latency_class,
+                quality_tier=cfg.quality_tier,
+                safety_profile=cfg.safety_profile,
                 recommended=cfg.recommended,
+                enabled=cfg.enabled,
+                tags=cfg.tags,  # Optional field
             )
             for cfg in models
         ]
@@ -29,10 +35,16 @@ async def default_model():
     return ModelPublic(
         id=cfg.id,
         display_name=cfg.display_name,
-        provider=cfg.provider.value,
-        tags=cfg.tags,
-        max_context=cfg.max_context,
+        provider=cfg.provider,
+        capabilities=sorted(list(cfg.capabilities)),
+        tier=cfg.tier,
+        cost_tier=cfg.cost_tier,
+        latency_class=cfg.latency_class,
+        quality_tier=cfg.quality_tier,
+        safety_profile=cfg.safety_profile,
         recommended=cfg.recommended,
+        enabled=cfg.enabled,
+        tags=cfg.tags,
     )
 
 

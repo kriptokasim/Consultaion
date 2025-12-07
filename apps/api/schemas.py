@@ -175,14 +175,16 @@ def default_panel_config() -> PanelConfig:
 class ModelPublic(BaseModel):
     id: str
     display_name: str
-    provider: str
+    provider: str  # Direct string, not enum
     capabilities: List[str] = Field(default_factory=list)
+    tier: str
     cost_tier: str
     latency_class: str
     quality_tier: str
     safety_profile: str
     recommended: bool = False
     enabled: bool = True
+    tags: Optional[List[str]] = None
 
 
 class AuthRequest(BaseModel):
