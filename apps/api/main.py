@@ -91,7 +91,8 @@ if TEST_FAST_APP:
         pass
 
 SENTRY_DSN = settings.SENTRY_DSN
-if SENTRY_DSN:
+# Only initialize Sentry if DSN is set to a non-empty value
+if SENTRY_DSN and SENTRY_DSN.strip():
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
@@ -102,6 +103,7 @@ if SENTRY_DSN:
         traces_sample_rate=float(settings.SENTRY_SAMPLE_RATE),
         integrations=[FastApiIntegration(), SqlalchemyIntegration()],
     )
+
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 ENABLE_SEC_HEADERS = settings.ENABLE_SEC_HEADERS

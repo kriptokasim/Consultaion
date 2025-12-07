@@ -1,0 +1,13 @@
+# Prevent local development files from being copied to production
+.env
+.env.*
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+.git/
+.gitignore
+README.md
+tests/
+*.md
