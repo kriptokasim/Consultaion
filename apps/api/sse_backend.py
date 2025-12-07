@@ -118,9 +118,18 @@ def get_sse_backend() -> BaseSSEBackend:
 
     if settings.SSE_BACKEND.lower() == "redis":
         url = settings.SSE_REDIS_URL or settings.REDIS_URL
-        if not url:
-            raise RuntimeError("SSE_BACKEND=redis but no SSE_REDIS_URL or REDIS_URL configured")
-        _sse_backend = RedisChannelBackend(url=url, ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
+        # Validate Redis URL format before attempting to use it
+        if url and url.strip() and (url.startswith("redis://") or url.startswith("rediss://") or url.startswith("unix://")):
+            _sse_backend = RedisChannelBackend(url=url, ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
+        else:
+            # Fall back to memory if Redis URL is missing or invalid
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "SSE_BACKEND=redis but REDIS_URL is invalid or missing (%s). Falling back to memory backend.",
+                url or "<not set>"
+            )
+            _sse_backend = MemoryChannelBackend(ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
     else:
         _sse_backend = MemoryChannelBackend(ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
 

@@ -4,6 +4,7 @@ from auth import get_current_user
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Team, TeamMember, User
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from routes.common import serialize_team, user_is_team_editor, user_is_team_member
@@ -11,14 +12,7 @@ from routes.common import serialize_team, user_is_team_editor, user_is_team_memb
 router = APIRouter(tags=["teams"])
 
 
-class TeamCreatePayload(Team := object):  # type: ignore
-    ...
-
-
-from pydantic import BaseModel  # noqa: E402
-
-
-class TeamCreate(BaseModel):  # type: ignore[no-redef]
+class TeamCreate(BaseModel):
     name: str
 
 
