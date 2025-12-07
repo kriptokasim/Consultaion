@@ -1,6 +1,10 @@
 import { apiRequest } from "@/lib/apiClient";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Use /api prefix in browser (proxied by Vercel to Render)
+const API_BASE =
+  typeof window !== 'undefined' && process.env.NODE_ENV === 'production'
+    ? '/api'
+    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function buildHeaders(init?: HeadersInit): Promise<Headers> {
   const headers = new Headers(init);
