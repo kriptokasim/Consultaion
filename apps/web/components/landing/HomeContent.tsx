@@ -10,6 +10,7 @@ import { useI18n } from "@/lib/i18n/client";
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import { MarketingHero } from "@/components/hero/marketing-hero";
 import { trackEvent } from "@/lib/analytics";
+import { SocialProof } from "@/components/landing/SocialProof";
 
 const featureCards = [
   {
@@ -178,17 +179,8 @@ export default function HomeContent() {
           </p>
         </section>
 
-        {/* Social Proof Section - Placeholder */}
-        <section className="space-y-6 text-center">
-          <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("landing.socialProof.title")}</h2>
-          {/* TODO: Add real logos/testimonials */}
-          <div className="flex flex-wrap items-center justify-center gap-8 rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 p-8">
-            <p className="text-sm text-amber-700">
-              {/* Placeholder for logos */}
-              Testimonials and logos coming soon
-            </p>
-          </div>
-        </section>
+        {/* Social Proof Section */}
+        <SocialProof />
 
         <DynamicLLMSelector onStart={handleStartDebate} />
 

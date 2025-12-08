@@ -93,15 +93,15 @@ export default function ParliamentRunView({
   const updatedAt =
     debate?.updated_at && typeof debate.updated_at === "string"
       ? new Date(debate.updated_at).toLocaleString()
-    : "—";
+      : "—";
 
   const methodLabel = vote?.method
     ? {
-        borda: "Borda Count",
-        condorcet: "Condorcet Method",
-        plurality: "Plurality Voting",
-        approval: "Approval Voting",
-      }[vote.method] ?? vote.method
+      borda: "Borda Count",
+      condorcet: "Condorcet Method",
+      plurality: "Plurality Voting",
+      approval: "Approval Voting",
+    }[vote.method] ?? vote.method
     : undefined;
 
   const modelAnswers = buildModelAnswers(events, sortedScores);
@@ -213,11 +213,10 @@ export default function ParliamentRunView({
                   key={entry.persona}
                   type="button"
                   onClick={() => scrollToAnswer(entry.persona)}
-                  className={`group inline-flex min-w-[9rem] items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm shadow-sm transition ${
-                    isChampion
+                  className={`group inline-flex min-w-[9rem] items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm shadow-sm transition ${isChampion
                       ? "border-amber-500 bg-white text-amber-900 ring-2 ring-amber-200"
                       : "border-amber-100 bg-white/70 text-stone-800 hover:border-amber-300"
-                  }`}
+                    }`}
                   aria-label={`View answer from ${entry.persona}`}
                 >
                   <div className="flex flex-col">
@@ -228,11 +227,10 @@ export default function ParliamentRunView({
                   </div>
                   {typeof entry.score === "number" ? (
                     <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-mono ${
-                        isChampion
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-mono ${isChampion
                           ? "bg-amber-100 text-amber-800"
                           : "bg-stone-100 text-stone-700"
-                      }`}
+                        }`}
                     >
                       {entry.score.toFixed(2)}
                     </span>
@@ -271,13 +269,13 @@ export default function ParliamentRunView({
           </ChampionGlow>
         </SummaryCard>
 
-      <SummaryCard
-        title="Judge’s Scoreboard"
-        description="How each persona performed across the debate."
-      >
-        <ScoreboardCard scores={scores} method={vote?.method} />
-        <VoteWave ids={scores.map((s) => `score-pill-${s.persona}`)} triggerKey={id} />
-        <div className="mt-4 flex flex-wrap gap-3">
+        <SummaryCard
+          title="Judge’s Scoreboard"
+          description="How each persona performed across the debate."
+        >
+          <ScoreboardCard scores={scores} method={vote?.method} />
+          <VoteWave ids={scores.map((s) => `score-pill-${s.persona}`)} triggerKey={id} />
+          <div className="mt-4 flex flex-wrap gap-3">
             <ExportButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
             <ExportCSVButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
           </div>
@@ -378,18 +376,16 @@ export default function ParliamentRunView({
             <button
               type="button"
               onClick={() => setTranscriptMode("highlights")}
-              className={`rounded-full px-3 py-1 ${
-                transcriptMode === "highlights" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
-              }`}
+              className={`rounded-full px-3 py-1 ${transcriptMode === "highlights" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
+                }`}
             >
               Highlights
             </button>
             <button
               type="button"
               onClick={() => setTranscriptMode("full")}
-              className={`rounded-full px-3 py-1 ${
-                transcriptMode === "full" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
-              }`}
+              className={`rounded-full px-3 py-1 ${transcriptMode === "full" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
+                }`}
             >
               Full transcript
             </button>
@@ -532,6 +528,9 @@ function ChampionSummary({
           model answers and Hansard transcript below.
         </p>
       )}
+
+      {/* TODO: Add ChampionFeedback component here for app debate pages */}
+      {/* <ChampionFeedback source="app" debateId={id} /> */}
     </div>
   );
 }

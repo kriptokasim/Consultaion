@@ -23,9 +23,17 @@ class AppSettings(BaseSettings):
     )
     ENV: str = "development"
     IS_LOCAL_ENV: bool = True
+    
+    # Standardized environment detection (derived from ENV)
+    # Values: "local", "staging", "production"
+    APP_ENV: str = "local"
 
     DATABASE_URL: str = "sqlite:///./consultaion.db"
     REDIS_URL: str | None = None
+    
+    # LLM Provider Timeouts
+    LLM_TIMEOUT_SECONDS: int = 30  # Timeout for individual model calls
+    LLM_MAX_RETRIES: int = 1  # Max retries on transient failures
 
     RATE_LIMIT_BACKEND: Literal["redis", "memory"] | None = None
     
@@ -199,6 +207,16 @@ class AppSettings(BaseSettings):
         
         is_local = env_label in local_envs and not is_render
         object.__setattr__(self, "IS_LOCAL_ENV", is_local)
+        
+        # Patchset 54.0: Standardize APP_ENV for telemetry and feature gating
+        if is_local:
+            app_env = "local"
+        elif env_label in ("staging", "stage"):
+            app_env = "staging"
+        else:
+            # Production or unknown -> treat as production
+            app_env = "production"
+        object.__setattr__(self, "APP_ENV", app_env)
         
         # Set active rate limits based on environment
         if is_local:

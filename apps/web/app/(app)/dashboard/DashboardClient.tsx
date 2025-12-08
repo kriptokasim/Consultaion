@@ -15,6 +15,7 @@ import { ApiClientError } from "@/lib/apiClient";
 import type { DebateSummary } from "./types";
 import { useI18n } from "@/lib/i18n/client";
 import { trackEvent } from "@/lib/analytics";
+import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 
 type ModelOption = {
   id: string;
@@ -81,6 +82,15 @@ export default function DashboardClient({ email }: { email?: string | null }) {
   const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
   const [templateId, setTemplateId] = useState<string | null>(null);
 
+  // Onboarding checklist state
+  const [templateUsed, setTemplateUsed] = useState(false);
+  const [step3Reviewed, setStep3Reviewed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("consultaion_onboarding_step3_reviewed") === "true";
+    }
+    return false;
+  });
+
   // Template prompt mappings
   const TEMPLATE_PROMPTS: Record<string, string> = {
     "strategy-saas-rollout": "How should our mid-size SaaS company (Series B, 150 employees, $20M ARR) approach integrating AI into our product and operations in 2025?",
@@ -131,8 +141,23 @@ export default function DashboardClient({ email }: { email?: string | null }) {
   // Handle template click
   const handleTemplateClick = (id: string) => {
     setTemplateId(id);
-    setShowModal(true);
+    const text = TEMPLATE_PROMPTS[id];
+    if (text) {
+      setPrompt(text);
+    }
     trackEvent("template_used", { templateId: id });
+    setTemplateUsed(true); // Mark step 1 complete
+    setTimeout(() => {
+      setShowModal(true);
+    }, 100);
+  };
+
+  const handleStep3Mark = () => {
+    setStep3Reviewed(true);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("consultaion_onboarding_step3_reviewed", "true");
+    }
+    trackEvent("onboarding_step_marked_done", { step: 3 });
   };
 
   const handleCreate = async () => {
@@ -209,29 +234,39 @@ export default function DashboardClient({ email }: { email?: string | null }) {
 
       {/* Onboarding Templates - Show only for first-time users */}
       {debates.length === 0 && (
-        <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white to-amber-50/30 p-8 shadow-md">
-          <div className="mb-6 text-center">
-            <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.onboarding.title")}</h2>
-            <p className="mt-2 text-sm text-[#5a4a3a]">{t("dashboard.onboarding.subtitle")}</p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <TemplateCard
-              title={t("dashboard.templates.strategy.title")}
-              description={t("dashboard.templates.strategy.description")}
-              onClick={() => handleTemplateClick("strategy-saas-rollout")}
-            />
-            <TemplateCard
-              title={t("dashboard.templates.governance.title")}
-              description={t("dashboard.templates.governance.description")}
-              onClick={() => handleTemplateClick("risk-bank-governance")}
-            />
-            <TemplateCard
-              title={t("dashboard.templates.product.title")}
-              description={t("dashboard.templates.product.description")}
-              onClick={() => handleTemplateClick("product-roadmap")}
-            />
-          </div>
-        </section>
+        <>
+          {/* Onboarding Checklist */}
+          <OnboardingChecklist
+            step1Complete={templateUsed}
+            step2Complete={debates.length > 0}
+            step3Complete={step3Reviewed}
+            onStep3Mark={handleStep3Mark}
+          />
+
+          <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white to-amber-50/30 p-8 shadow-md">
+            <div className="mb-6 text-center">
+              <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.onboarding.title")}</h2>
+              <p className="mt-2 text-sm text-[#5a4a3a]">{t("dashboard.onboarding.subtitle")}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <TemplateCard
+                title={t("dashboard.templates.strategy.title")}
+                description={t("dashboard.templates.strategy.description")}
+                onClick={() => handleTemplateClick("strategy-saas-rollout")}
+              />
+              <TemplateCard
+                title={t("dashboard.templates.governance.title")}
+                description={t("dashboard.templates.governance.description")}
+                onClick={() => handleTemplateClick("risk-bank-governance")}
+              />
+              <TemplateCard
+                title={t("dashboard.templates.product.title")}
+                description={t("dashboard.templates.product.description")}
+                onClick={() => handleTemplateClick("product-roadmap")}
+              />
+            </div>
+          </section>
+        </>
       )}
 
       <section className="space-y-3">

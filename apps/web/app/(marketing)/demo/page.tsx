@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client"
 import { DEMO_SCENARIOS } from "@/lib/mockDebateData"
 import type { DemoScenario, MockDebateData } from "@/lib/mockDebateData"
 import { trackEvent } from "@/lib/analytics"
+import { ChampionFeedback } from "@/components/feedback/ChampionFeedback"
 
 export default function DemoPage() {
     const { t } = useI18n()
@@ -209,6 +210,9 @@ export default function DemoPage() {
                             </h4>
                             <p className="text-[#5a4a3a]">{debate.championAnswer.reasoning}</p>
                         </div>
+
+                        {/* Champion Feedback */}
+                        <ChampionFeedback source="demo" scenarioId={selectedScenario.id} />
                     </div>
                 </section>
 
