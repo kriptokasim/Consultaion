@@ -459,7 +459,13 @@ async def list_debates(
         if query_text:
             filters.append(sa.func.lower(Debate.prompt).contains(query_text.lower()))
 
-    base_query = select(Debate)
+    # Patchset 59.5: Eager load user and team to avoid N+1 queries during serialization
+    from sqlalchemy.orm import selectinload
+    base_query = select(Debate).options(
+        selectinload(Debate.user),
+        # selectinload(Debate.team) # Team is currently just an ID on Debate, but if we had a relationship:
+        # selectinload(Debate.team_rel) 
+    )
     if filters:
         base_query = base_query.where(*filters)
 

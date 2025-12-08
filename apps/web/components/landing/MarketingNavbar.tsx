@@ -49,6 +49,7 @@ export function MarketingNavbar() {
         { href: "/leaderboard", label: t("nav.leaderboard") },
         { href: "/models", label: t("nav.models") },
         { href: "/methodology", label: t("nav.methodology") },
+        { href: "/docs", label: t("nav.docs") },
         { href: "/contact", label: t("nav.contact") }
     ]
 

@@ -5,15 +5,10 @@ import DebateArena, {
   type ArenaMetrics,
   type ArenaRuntimeLog,
   type ArenaSeat,
-  type ArenaVoteStats,
 } from "@/components/debate/DebateArena";
 import ParliamentRunView from "@/components/parliament/ParliamentRunView";
 import type {
-  DebateEvent,
-  JudgeScoreEvent,
   Member,
-  PairwiseEvent,
-  JudgeVoteFlow,
   ScoreItem,
   VotePayload,
 } from "@/components/parliament/types";
@@ -21,112 +16,18 @@ import { useEventSource } from "@/lib/sse";
 import { useDebate } from "@/lib/api/hooks/useDebate";
 import { useDebateStore } from "@/lib/stores/debateStore";
 import { notFound } from "next/navigation";
+import { normalizeLivePayload } from "@/lib/debateTransforms";
+import { DEFAULT_RUN_MEMBERS, DEFAULT_API_URL, DEFAULT_VOTE_THRESHOLD } from "@/config/debateDefaults";
+import { useDebateVoting } from "@/hooks/useDebateVoting";
 
 type RunDetailClientProps = {
   id: string;
 };
 
-const DEFAULT_API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const THRESHOLD = Number(process.env.NEXT_PUBLIC_VOTE_THRESHOLD ?? "7");
-
-const DEFAULT_RUN_MEMBERS: Member[] = [
-  { id: "Analyst", name: "Analyst", role: "agent" },
-  { id: "Critic", name: "Critic", role: "critic" },
-  { id: "Builder", name: "Builder", role: "agent" },
-];
-
-function normalizeLivePayload(payload: any, timestamp: string): DebateEvent[] {
-  if (!payload || typeof payload !== "object") return [];
-  const type = payload.type;
-  if (type === "seat_message") {
-    if (!payload.content) return []
-    return [
-      {
-        type: "message" as const,
-        actor: payload.seat_name ?? payload.seat_id ?? "Seat",
-        role: "agent",
-        text: payload.content,
-        at: timestamp,
-        provider: payload.provider,
-        model: payload.model,
-        seatId: payload.seat_id,
-      },
-    ]
-  }
-  if (type === "message") {
-    const entries = Array.isArray(payload.revised) && payload.revised.length
-      ? payload.revised
-      : Array.isArray(payload.candidates)
-        ? payload.candidates
-        : [];
-    return entries
-      .filter((entry: any) => entry && entry.text)
-      .map((entry: any) => ({
-        type: "message" as const,
-        actor: entry.persona ?? entry.role ?? payload.actor,
-        role: "agent",
-        text: entry.text,
-        at: timestamp,
-      }));
-  }
-  if (type === "score") {
-    if (Array.isArray(payload.judges) && payload.judges.length) {
-      return payload.judges.map((judge: any) => ({
-        type: "score" as const,
-        persona: judge.persona,
-        judge: judge.judge ?? "Panel",
-        score: typeof judge.score === "number" ? judge.score : Number(judge.score ?? 0),
-        rationale: judge.rationale,
-        at: timestamp,
-        role: "judge",
-      }));
-    }
-    if (Array.isArray(payload.scores)) {
-      return payload.scores.map((score: any) => ({
-        type: "score" as const,
-        persona: score.persona,
-        judge: payload.actor ?? "Panel",
-        score: typeof score.score === "number" ? score.score : Number(score.score ?? 0),
-        rationale: score.rationale,
-        at: timestamp,
-        role: "judge",
-      }));
-    }
-  }
-  if (type === "final") {
-    return [
-      {
-        type: "final" as const,
-        actor: payload.actor ?? "Synthesizer",
-        role: "synthesizer",
-        text: payload.content ?? payload.meta?.final_content ?? "",
-        at: timestamp,
-      },
-    ];
-  }
-  if (type === "notice" || type === "error" || type === "round_started") {
-    const message =
-      payload.message ??
-      payload.detail ??
-      (type === "round_started" ? `Round ${payload.round ?? ''} started` : undefined);
-    if (!message) return [];
-    return [
-      {
-        type: "notice" as const,
-        text: message,
-        at: timestamp,
-        role: "judge",
-      },
-    ];
-  }
-  return [];
-}
-
 export default function RunDetailClient({ id }: RunDetailClientProps) {
   const { data: debate, isLoading, error } = useDebate(id);
   const {
     events,
-    setEvents,
     addEvent,
     connectionStatus,
     setConnectionStatus,
@@ -140,15 +41,6 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     return () => reset();
   }, [id, setActiveDebate, reset]);
 
-  // Initial events load (simulated for now, ideally fetched via hook too)
-  // For now we'll just rely on SSE for new events, but we should probably fetch history.
-  // The previous code fetched /events. We should probably add a useDebateEvents hook.
-  // But for this patchset, let's assume we start empty or fetch via a separate effect if needed.
-  // Actually, the previous code fetched events server-side.
-  // I should probably add useDebateEvents hook.
-
-  // Let's just use the debate data for now.
-
   if (error) {
     throw error; // Let error boundary handle it
   }
@@ -161,7 +53,7 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     notFound();
   }
 
-  const base = DEFAULT_API.replace(/\/$/, '');
+  const base = DEFAULT_API_URL.replace(/\/$/, '');
   const streamUrl = `${base}/debates/${id}/stream`;
   const reportUrl = `${base}/debates/${id}/report`;
   const shouldStream = debate.status === 'running' || debate.status === 'queued';
@@ -173,7 +65,6 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
       if (normalized.length) {
         normalized.forEach(addEvent);
       }
-      // We could update debate status here too but React Query should handle revalidation
     },
     [addEvent]
   );
@@ -193,15 +84,15 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     setConnectionStatus(streamStatus);
   }, [streamStatus, setConnectionStatus]);
 
-  // Derived state
-  const eventScores = useMemo(
-    () => events.filter((event): event is JudgeScoreEvent => event.type === 'score'),
-    [events]
-  );
+  // Use the extracted voting hook
+  const { eventScores, judgeVotes, voteBasis, voteStats } = useDebateVoting({
+    events,
+    threshold: DEFAULT_VOTE_THRESHOLD
+  });
 
   const aggregatedScores: ScoreItem[] = useMemo(() => {
     if (!eventScores.length) return [];
-    const table = new Map<string, JudgeScoreEvent[]>();
+    const table = new Map<string, any[]>();
     for (const entry of eventScores) {
       const list = table.get(entry.persona) ?? [];
       list.push(entry);
@@ -219,50 +110,10 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     });
   }, [eventScores]);
 
-  // Fallback scores from report (we need to fetch report separately or include in debate detail)
-  // For now, let's assume report is not available or we fetch it.
-  // The previous code fetched report.
-  // Let's skip report fallback for now to keep it simple, or add useDebateReport hook.
-
-  const scores = aggregatedScores; // Simplified for now
+  const scores = aggregatedScores;
 
   const ranking = scores.length ? [...scores].sort((a, b) => b.score - a.score).map((s) => s.persona) : [];
   const vote: VotePayload | undefined = ranking.length ? { method: 'borda', ranking } : undefined;
-
-  const pairwiseEvents = useMemo(
-    () => events.filter((event): event is PairwiseEvent => event.type === 'pairwise'),
-    [events]
-  );
-
-  const judgeVotes: JudgeVoteFlow[] = useMemo(() => {
-    if (pairwiseEvents.length) {
-      return pairwiseEvents.map((entry) => ({
-        persona: entry.winner,
-        judge: entry.judge ?? 'division',
-        score: 1,
-        at: entry.at,
-        vote: 'aye' as const,
-      }));
-    }
-    return eventScores.map((entry) => ({
-      persona: entry.persona,
-      judge: entry.judge,
-      score: entry.score,
-      at: entry.at,
-      vote: entry.score >= THRESHOLD ? ('aye' as const) : ('nay' as const),
-    }));
-  }, [eventScores, pairwiseEvents]);
-
-  const voteBasis: 'pairwise' | 'threshold' = pairwiseEvents.length ? 'pairwise' : 'threshold';
-
-  const voteStats: ArenaVoteStats = useMemo(
-    () => ({
-      aye: judgeVotes.filter((entry) => entry.vote === 'aye').length,
-      nay: judgeVotes.filter((entry) => entry.vote === 'nay').length,
-      threshold: THRESHOLD,
-    }),
-    [judgeVotes]
-  );
 
   const latestSpeaker = useMemo(() => {
     const reversed = [...events].reverse();
@@ -292,7 +143,7 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
         model: seat.model,
       }));
     }
-    return DEFAULT_RUN_MEMBERS; // Fallback
+    return DEFAULT_RUN_MEMBERS;
   }, [debate.panel_config]);
 
   const arenaMetrics: ArenaMetrics = useMemo(
@@ -369,9 +220,9 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
         scores={scores}
         vote={vote}
         events={events}
-        members={DEFAULT_RUN_MEMBERS} // Simplified for now
+        members={DEFAULT_RUN_MEMBERS}
         judgeVotes={judgeVotes}
-        threshold={THRESHOLD}
+        threshold={DEFAULT_VOTE_THRESHOLD}
         voteBasis={voteBasis}
         apiBase={base}
       />

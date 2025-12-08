@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import { Brain, MessageSquare, Vote } from "lucide-react";
+import { Brain, MessageSquare, Vote, BookOpen, Github } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import { MarketingHero } from "@/components/hero/marketing-hero";
@@ -124,19 +124,58 @@ export default function HomeContent() {
           </div>
         </MarketingHero>
 
-        <section className="grid gap-6 md:grid-cols-3">
-          {featureCards.map((card) => (
-            <div
-              key={card.titleKey}
-              className="rounded-2xl border border-amber-100/80 bg-white/80 p-6 shadow-sm transition hover:-translate-y-[2px] hover:shadow-md"
-            >
-              <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-100 to-amber-200 text-amber-700">
-                {card.icon}
+        <section className="space-y-8">
+          <div className="text-center">
+            <h2 className="text-3xl font-semibold text-[#3a2a1a]">{t("landing.who.title")}</h2>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="rounded-2xl border border-amber-100/60 bg-white/60 p-6 shadow-sm transition hover:bg-white/80 hover:shadow-md">
+                <h3 className="font-semibold text-[#3a2a1a]">{t(`landing.who.persona${i}.title`)}</h3>
+                <p className="mt-2 text-sm text-[#5a4a3a]">{t(`landing.who.persona${i}.description`)}</p>
               </div>
-              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t(card.titleKey)}</h3>
-              <p className="mt-2 text-sm text-[#5a4a3a]">{t(card.descriptionKey)}</p>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-8">
+          <div className="text-center">
+            <h2 className="text-3xl font-semibold text-[#3a2a1a]">{t("landing.features.title")}</h2>
+          </div>
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <MessageSquare className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t("landing.features.multi.title")}</h3>
+              <p className="mt-2 mb-6 text-sm text-[#5a4a3a]">{t("landing.features.multi.description")}</p>
+              <Link href="/demo" className="text-sm font-semibold text-amber-700 hover:underline">
+                {t("landing.features.multi.cta")} →
+              </Link>
             </div>
-          ))}
+
+            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <Vote className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t("landing.features.templates.title")}</h3>
+              <p className="mt-2 mb-6 text-sm text-[#5a4a3a]">{t("landing.features.templates.description")}</p>
+              <button onClick={handleStartDebate} className="text-sm font-semibold text-amber-700 hover:underline">
+                {t("landing.features.templates.cta")} →
+              </button>
+            </div>
+
+            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <Brain className="h-5 w-5" />
+              </div>
+              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t("landing.features.traces.title")}</h3>
+              <p className="mt-2 mb-6 text-sm text-[#5a4a3a]">{t("landing.features.traces.description")}</p>
+              <Link href={user ? "/dashboard" : "/login?next=/dashboard"} className="text-sm font-semibold text-amber-700 hover:underline">
+                {t("landing.features.traces.cta")} →
+              </Link>
+            </div>
+          </div>
         </section>
 
         {/* How it Works Section */}
@@ -189,6 +228,17 @@ export default function HomeContent() {
           <Button variant="amber" size="lg" className="px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
             {t("landing.selector.cta")}
           </Button>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-6 border-t border-amber-200/50 pt-6">
+            <Link href="/docs" className="flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-600" onClick={() => trackEvent("landing_docs_clicked")}>
+              <BookOpen className="h-4 w-4" />
+              {t("landing.devs.docs")}
+            </Link>
+            <a href="https://github.com/kriptokasim/Consultaion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-600" onClick={() => trackEvent("landing_github_clicked")}>
+              <Github className="h-4 w-4" />
+              {t("landing.devs.github")}
+            </a>
+          </div>
         </section>
         <footer className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs font-semibold uppercase tracking-wide text-[#7a6653]">
           {marketingLinks.map((item) => (

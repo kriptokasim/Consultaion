@@ -16,6 +16,7 @@ import type { DebateSummary } from "./types";
 import { useI18n } from "@/lib/i18n/client";
 import { trackEvent } from "@/lib/analytics";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { OnboardingPanel } from "@/components/dashboard/OnboardingPanel";
 
 type ModelOption = {
   id: string;
@@ -90,6 +91,25 @@ export default function DashboardClient({ email }: { email?: string | null }) {
     }
     return false;
   });
+
+  // Onboarding Panel State
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const seen = localStorage.getItem("consultaion_onboarding_seen");
+      if (!seen) {
+        setShowOnboarding(true);
+      }
+    }
+  }, []);
+
+  const handleDismissOnboarding = () => {
+    setShowOnboarding(false);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("consultaion_onboarding_seen", "true");
+    }
+  };
 
   // Template prompt mappings
   const TEMPLATE_PROMPTS: Record<string, string> = {
@@ -235,6 +255,17 @@ export default function DashboardClient({ email }: { email?: string | null }) {
       {/* Onboarding Templates - Show only for first-time users */}
       {debates.length === 0 && (
         <>
+          {showOnboarding && (
+            <OnboardingPanel
+              onDismiss={handleDismissOnboarding}
+              onOpenTemplates={() => {
+                // Scroll to templates section
+                document.getElementById("templates-section")?.scrollIntoView({ behavior: "smooth" });
+              }}
+              onNewDebate={() => setShowModal(true)}
+            />
+          )}
+
           {/* Onboarding Checklist */}
           <OnboardingChecklist
             step1Complete={templateUsed}
@@ -243,7 +274,7 @@ export default function DashboardClient({ email }: { email?: string | null }) {
             onStep3Mark={handleStep3Mark}
           />
 
-          <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white to-amber-50/30 p-8 shadow-md">
+          <section id="templates-section" className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white to-amber-50/30 p-8 shadow-md">
             <div className="mb-6 text-center">
               <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.onboarding.title")}</h2>
               <p className="mt-2 text-sm text-[#5a4a3a]">{t("dashboard.onboarding.subtitle")}</p>

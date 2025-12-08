@@ -19,6 +19,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { DebateReplay } from "@/components/debate/DebateReplay";
 import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar } from "@/components/prompt";
 import { track } from "@/lib/analytics";
+import { OnboardingHint } from "@/components/ui/onboarding-hint";
 
 const FALLBACK_MEMBERS: Member[] = [
   { id: 'Analyst', name: 'Analyst', role: 'agent' },
@@ -382,6 +383,8 @@ export default function Page() {
           />
         )}
 
+        <OnboardingHint id="live_chamber" text={t("onboarding.live.chamberHint")} className="mb-4" />
+
         <PromptPanel
           value={prompt}
           onChange={setPrompt}
@@ -397,6 +400,8 @@ export default function Page() {
           mode={mode}
           onModeChange={ENABLE_CONVERSATION_MODE ? setMode : undefined}
         />
+
+        <OnboardingHint id="live_prompt" text={t("onboarding.live.promptHint")} className="mt-2" />
 
         <PromptPresets onPresetSelected={handlePresetSelected} />
       </div>
