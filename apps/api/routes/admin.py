@@ -167,6 +167,85 @@ def admin_user_detail(
     }
 
 
+@router.get("/usage")
+def admin_usage_overview(
+    user_id: Optional[str] = Query(None, description="Filter by specific user ID"),
+    email: Optional[str] = Query(None, description="Search by email"),  
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    """Admin endpoint to view user usage statistics (tokens, exports, debates) with 7-day history."""
+    now = datetime.now(timezone.utc)
+    seven_days_ago = now - timedelta(days=7)
+    
+    # Get users to display
+    users_query = select(User)
+    if user_id:
+        users_query = users_query.where(User.id == user_id)
+    elif email:
+        users_query = users_query.where(User.email.contains(email))
+    
+    users = session.exec(users_query.order_by(User.created_at.desc())).all()
+    
+    items = []
+    for user in users:
+        # Get current period usage
+        current_usage = _latest_usage(session, user.id)
+        
+        # Get 7-day usage history
+        usage_history = session.exec(
+            select(BillingUsage)
+            .where(
+                BillingUsage.user_id == user.id,
+                BillingUsage.last_updated_at >= seven_days_ago
+            )
+            .order_by(BillingUsage.period.desc())
+        ).all()
+        
+        # Calculate 7-day totals
+        tokens_7d = sum(u.tokens_used for u in usage_history)
+        exports_7d = sum(u.exports_count for u in usage_history)
+        debates_7d = sum(u.debates_created for u in usage_history)
+        
+        plan = None
+        try:
+            plan = get_active_plan(session, user.id)
+        except HTTPException:
+            plan = None
+        
+        items.append({
+            "user_id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "current_period": {
+                "period": current_usage.period if current_usage else None,
+                "tokens_used": current_usage.tokens_used if current_usage else 0,
+                "exports_count": current_usage.exports_count if current_usage else 0,
+                "debates_created": current_usage.debates_created if current_usage else 0,
+                "model_tokens": current_usage.model_tokens if current_usage else {},
+            },
+            "last_7_days": {
+                "tokens_total": tokens_7d,
+                "exports_total": exports_7d,
+                "debates_total": debates_7d,
+            },
+            "plan": _plan_payload(plan),
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        })
+    
+    total = len(items)
+    paginated = items[offset:offset + limit]
+    
+    return {
+        "items": paginated,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
 @router.get("/users/{user_id}/billing")
 def admin_user_billing(
     user_id: str,

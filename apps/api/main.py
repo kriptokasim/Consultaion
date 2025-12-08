@@ -262,18 +262,22 @@ async def app_error_handler(request: Request, exc: AppError):
         exc.message,
         extra={"code": exc.code, "details": exc.details, "status_code": exc.status_code},
     )
+    error_payload = {
+        "code": exc.code,
+        "message": exc.message,
+        "details": exc.details,
+        "hint": exc.hint,
+        "retryable": exc.retryable,
+    }
+    # Add retry_after_seconds for rate limit errors
+    if hasattr(exc, "retry_after_seconds") and exc.retry_after_seconds is not None:
+        error_payload["retry_after_seconds"] = exc.retry_after_seconds
+    
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "error": {
-                "code": exc.code,
-                "message": exc.message,
-                "details": exc.details,
-                "hint": exc.hint,
-                "retryable": exc.retryable,
-            }
-        },
+        content={"error": error_payload},
     )
+
 
 # Domain routers live in apps/api/routes/*
 from routes.debug import router as debug_router  # Patchset 53.0
@@ -297,9 +301,11 @@ app.include_router(billing_router)
 app.include_router(promotions_router)
 app.include_router(api_keys_router)
 
+from routes.features import router as features_router
 from routes.gifs import router as gifs_router
 
 app.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
+app.include_router(features_router)
 
 
 # Lifespan helpers

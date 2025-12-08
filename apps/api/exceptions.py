@@ -76,8 +76,11 @@ class RateLimitError(AppError):
         details: Optional[Dict[str, Any]] = None,
         hint: Optional[str] = "Please wait a moment before trying again.",
         retryable: bool = True,
+        retry_after_seconds: Optional[int] = None,
     ):
         super().__init__(message, code, status_code, details, hint, retryable)
+        self.retry_after_seconds = retry_after_seconds
+
 
 class ProviderCircuitOpenError(AppError):
     """Circuit breaker open error."""

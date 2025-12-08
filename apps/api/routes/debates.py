@@ -192,8 +192,15 @@ async def create_debate(
         )
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
-    # Patchset 50.3: Check beta access for conversation mode
+    # Patchset 54.0: Check feature flag for conversation mode
     if body.mode == "conversation":
+        if not settings.ENABLE_CONVERSATION_MODE:
+            raise ValidationError(
+                message="Conversation mode is not available",
+                code="feature.disabled",
+                hint="This feature is currently disabled. Please contact support."
+            )
+        # Patchset 50.3: Check beta access for conversation mode
         from beta_access import require_beta_access
         require_beta_access(current_user, "conversation mode")
 

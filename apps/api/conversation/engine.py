@@ -207,6 +207,15 @@ async def run_conversation_debate(
         "conversation.mode": "conversation"
     })
     
+    # Record token usage for quota tracking
+    if hasattr(debate, "user_id") and debate.user_id:
+        try:
+            from usage_limits import record_token_usage
+            with session_scope() as session:
+                record_token_usage(session, debate.user_id, usage.total_tokens, commit=True)
+        except Exception as e:
+            logger.error(f"Failed to record token usage for conversation {debate.id}: {e}")
+    
     return type("ConversationResult", (), {
         "final_answer": final_content,
         "final_meta": final_meta,

@@ -18,7 +18,7 @@ export interface MockRound {
     arguments: MockArgument[]
 }
 
-export MockJudgeComment {
+export interface MockJudgeComment {
     judge: string
     comment: string
     leaning: string

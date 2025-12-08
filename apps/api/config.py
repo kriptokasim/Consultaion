@@ -28,6 +28,24 @@ class AppSettings(BaseSettings):
     REDIS_URL: str | None = None
 
     RATE_LIMIT_BACKEND: Literal["redis", "memory"] | None = None
+    
+    # Production Rate Limits (stricter for public users)
+    PROD_RL_WINDOW: int = 60
+    PROD_RL_MAX_CALLS: int = 60
+    PROD_RL_DEBATE_CREATE_WINDOW: int = 60
+    PROD_RL_DEBATE_CREATE_MAX_CALLS: int = 10
+    PROD_AUTH_RL_WINDOW: int = 300
+    PROD_AUTH_RL_MAX_CALLS: int = 10
+    
+    # Development Rate Limits (relaxed for testing)
+    DEV_RL_WINDOW: int = 60
+    DEV_RL_MAX_CALLS: int = 300  # Much higher for development
+    DEV_RL_DEBATE_CREATE_WINDOW: int = 60
+    DEV_RL_DEBATE_CREATE_MAX_CALLS: int = 50  # Relaxed for testing
+    DEV_AUTH_RL_WINDOW: int = 300
+    DEV_AUTH_RL_MAX_CALLS: int = 50
+    
+    # Active rate limits (set based on ENV in model_post_init)
     RL_WINDOW: int = 60
     RL_MAX_CALLS: int = 60
     RL_DEBATE_CREATE_WINDOW: int = 60
@@ -45,6 +63,9 @@ class AppSettings(BaseSettings):
     DISABLE_RATINGS: bool = False
     ENABLE_METRICS: bool = True
     ENABLE_CONVERSATION_MODE: bool = Field(False, description="Enable new conversation mode")
+    ENABLE_GIPHY: bool = Field(False, description="Enable Giphy integration visual delights")
+    ENABLE_EMAIL_SUMMARIES: bool = Field(False, description="Enable email summary notifications")
+    ENABLE_SLACK_ALERTS: bool = Field(False, description="Enable Slack webhook alerts")
     
     # Patchset 50.3: Beta Access Control
     ENABLE_BETA_ACCESS: bool = Field(False, description="Enable beta access restrictions")
@@ -178,6 +199,22 @@ class AppSettings(BaseSettings):
         
         is_local = env_label in local_envs and not is_render
         object.__setattr__(self, "IS_LOCAL_ENV", is_local)
+        
+        # Set active rate limits based on environment
+        if is_local:
+            object.__setattr__(self, "RL_WINDOW", self.DEV_RL_WINDOW)
+            object.__setattr__(self, "RL_MAX_CALLS", self.DEV_RL_MAX_CALLS)
+            object.__setattr__(self, "RL_DEBATE_CREATE_WINDOW", self.DEV_RL_DEBATE_CREATE_WINDOW)
+            object.__setattr__(self, "RL_DEBATE_CREATE_MAX_CALLS", self.DEV_RL_DEBATE_CREATE_MAX_CALLS)
+            object.__setattr__(self, "AUTH_RL_WINDOW", self.DEV_AUTH_RL_WINDOW)
+            object.__setattr__(self, "AUTH_RL_MAX_CALLS", self.DEV_AUTH_RL_MAX_CALLS)
+        else:
+            object.__setattr__(self, "RL_WINDOW", self.PROD_RL_WINDOW)
+            object.__setattr__(self, "RL_MAX_CALLS", self.PROD_RL_MAX_CALLS)
+            object.__setattr__(self, "RL_DEBATE_CREATE_WINDOW", self.PROD_RL_DEBATE_CREATE_WINDOW)
+            object.__setattr__(self, "RL_DEBATE_CREATE_MAX_CALLS", self.PROD_RL_DEBATE_CREATE_MAX_CALLS)
+            object.__setattr__(self, "AUTH_RL_WINDOW", self.PROD_AUTH_RL_WINDOW)
+            object.__setattr__(self, "AUTH_RL_MAX_CALLS", self.PROD_AUTH_RL_MAX_CALLS)
         
         if is_local:
             object.__setattr__(self, "COOKIE_SECURE", False)
