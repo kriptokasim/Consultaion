@@ -192,9 +192,19 @@ async def create_debate(
         )
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
-    # Patchset 55.0: Check quota before debate creation
-    from usage_limits import check_quota, QuotaExceededError
+    # Patchset 57.0: Check if account is disabled
     from fastapi import HTTPException
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "account_disabled",
+                "message": "Your account has been disabled. Please contact support.",
+            }
+        )
+
+    # Patchset 55.0: Check quota before debate creation
+    from usage_limits import QuotaExceededError, check_quota
     
     estimated_tokens = 5000  # Average debate uses ~5k tokens
     try:
@@ -208,7 +218,7 @@ async def create_debate(
                 "limit": exc.limit,
                 "used": exc.used,
             }
-        )
+        ) from exc
 
     # Patchset 54.0: Check feature flag for conversation mode
     if body.mode == "conversation":

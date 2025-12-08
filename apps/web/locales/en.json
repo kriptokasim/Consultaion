@@ -536,5 +536,9 @@
   "admin.notes.addButton": "Add Note",
   "admin.actions.enableAccount": "Enable Account",
   "admin.actions.disableAccount": "Disable Account",
-  "errors.accountDisabled": "Your account has been disabled. Please contact support."
+  "errors.accountDisabled": "Your account has been disabled. Please contact support.",
+  "debate.degraded.title": "Debate completed with some errors",
+  "debate.degraded.message": "Some AI models encountered issues, but we still produced results. Quality may be affected.",
+  "debate.failed.title": "Debate failed",
+  "debate.failed.message": "We couldn't complete this debate due to technical issues. Please try again later or simplify your question."
 }

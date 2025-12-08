@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -11,12 +12,11 @@ from billing.service import _current_period, get_active_plan
 from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models import AdminEvent, AuditLog, Debate, User
+from models import AdminEvent, AuditLog, Debate, Promotion, SupportNote, User
 from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.provider_health import get_provider_health_snapshot
 from pydantic import BaseModel
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
-from schemas import DebateConfig, default_debate_config, default_panel_config
 from ratings import update_ratings_for_debate
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -24,6 +24,8 @@ from sse_backend import get_sse_backend
 from usage_limits import get_today_usage
 
 from routes.common import serialize_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -544,7 +546,6 @@ Add to the end of routes/admin.py
 """
 
 # Add these classes near the top with other BaseModel imports
-from pydantic import BaseModel
 
 class ChangePlanRequest(BaseModel):
     plan: str
@@ -576,8 +577,9 @@ def change_user_plan(
     Raises:
         HTTPException: 400 if plan invalid, 404 if user not found
     """
-    from plan_config import validate_plan
     import logging
+
+    from plan_config import validate_plan
     
     logger = logging.getLogger(__name__)
     
@@ -665,18 +667,9 @@ def admin_quota_usage(
         })
     
     return {"users": results, "total": len(results)}
-"""
-Patchset 56: Admin User Management Endpoints
 
-Append to apps/api/routes/admin.py
-"""
 
-from typing import Optional
-from pydantic import BaseModel
-from models import SupportNote
-import logging
-
-logger = logging.getLogger(__name__)
+# Patchset 56: Admin User Management Endpoints
 
 
 # Request/Response Models
@@ -773,8 +766,24 @@ def admin_user_summary(
         "not_helpful": 0,
     }
     
-    # Recent errors (stub - would query error table if exists)
-    recent_errors = []
+    # Patchset 57.0: Get recent debate errors from DebateError table
+    from models import DebateError
+    recent_errors_rows = session.exec(
+        select(DebateError)
+        .where(DebateError.user_id == user_id)
+        .order_by(DebateError.created_at.desc())
+        .limit(10)
+    ).all()
+    
+    recent_errors = [
+        {
+            "debate_id": err.debate_id,
+            "created_at": err.created_at.isoformat() if err.created_at else None,
+            "status": err.status,
+            "error_summary": err.error_summary,
+        }
+        for err in recent_errors_rows
+    ]
     
     return {
         "user": {

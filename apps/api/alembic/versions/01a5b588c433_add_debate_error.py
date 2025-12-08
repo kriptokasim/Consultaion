@@ -1,15 +1,15 @@
-"""add_user_plan_field
+"""add_debate_error
 
-Revision ID: f427e86669e2
-Revises: c26f9dd9b7da
-Create Date: 2025-12-08 14:00:09.061472
+Revision ID: 01a5b588c433
+Revises: 49a2773d87a5
+Create Date: 2025-12-08 14:30:56.053129
 
 """
 from typing import Sequence, Union
 
 # revision identifiers, used by Alembic.
-revision: str = "f427e86669e2"
-down_revision: Union[str, None] = "c26f9dd9b7da"
+revision: str = "01a5b588c433"
+down_revision: Union[str, None] = "49a2773d87a5"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

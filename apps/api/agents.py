@@ -196,12 +196,14 @@ async def _raw_llm_call(
     
     start_ts = time.monotonic()
     try:
-        response = await acompletion(
-            model=target_model,
-            messages=scrubbed_messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        # Patchset 57.0: Enforce timeout on LLM call
+        async with asyncio.timeout(settings.LLM_TIMEOUT_SECONDS):
+            response = await acompletion(
+                model=target_model,
+                messages=scrubbed_messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
         latency_ms = (time.monotonic() - start_ts) * 1000
         
         content = response.choices[0].message["content"]
@@ -260,6 +262,25 @@ async def _raw_llm_call(
     except ProviderCircuitOpenError:
         # Don't track circuit breaker blocks as errors
         raise
+    except TimeoutError:
+        # Patchset 57.0: Handle timeout specifically
+        latency_ms = (time.monotonic() - start_ts) * 1000
+        record_call_result(provider_name, target_model, success=False, now=now)
+        log_model_observation(
+            trace_id=current_trace_id.get(),
+            model_name=model_cfg.id,
+            latency_ms=latency_ms,
+            success=False,
+            error_message=f"Timeout after {settings.LLM_TIMEOUT_SECONDS}s",
+            extra={"provider": provider_name, "debate_id": debate_id, "error_type": "timeout", **(extra_tags or {})},
+        )
+        logger.warning(
+            "LLM call timed out after %ss for %s/%s",
+            settings.LLM_TIMEOUT_SECONDS,
+            provider_name,
+            target_model,
+        )
+        raise TransientLLMError(f"LLM call timed out after {settings.LLM_TIMEOUT_SECONDS}s", cause=None)
     except Exception as exc:  # pragma: no cover - handled by retry/fallback
         latency_ms = (time.monotonic() - start_ts) * 1000
         # Patchset 28.0: Record failed call

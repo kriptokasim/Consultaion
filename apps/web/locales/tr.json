@@ -541,5 +541,9 @@
   "admin.notes.addButton": "Not Ekle",
   "admin.actions.enableAccount": "Hesabı Etkinleştir",
   "admin.actions.disableAccount": "Hesabı Devre Dışı Bırak",
-  "errors.accountDisabled": "Hesabınız devre dışı bırakıldı. Lütfen destek ile iletişime geçin."
+  "errors.accountDisabled": "Hesabınız devre dışı bırakıldı. Lütfen destek ile iletişime geçin.",
+  "debate.degraded.title": "Tartışma bazı hatalarla tamamlandı",
+  "debate.degraded.message": "Bazı AI modelleri sorunlarla karşılaştı, ancak yine de sonuçlar ürettik. Kalite etkilenmiş olabilir.",
+  "debate.failed.title": "Tartışma başarısız oldu",
+  "debate.failed.message": "Teknik sorunlar nedeniyle bu tartışmayı tamamlayamadık. Lütfen daha sonra tekrar deneyin veya sorunuzu basitleştirin."
 }

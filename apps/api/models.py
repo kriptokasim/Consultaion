@@ -41,6 +41,25 @@ class SupportNote(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class DebateError(SQLModel, table=True):
+    """
+    Tracks degraded or failed debate runs.
+    
+    Patchset 57.0: Records when debates complete with partial failures
+    (degraded) or completely fail. Stores participant error details for
+    admin investigation and frontend display.
+    """
+    __tablename__ = "debate_error"
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    status: str = Field(nullable=False, index=True)  # "degraded" or "failed"
+    error_summary: str = Field(sa_column=Column(Text, nullable=False))
+    participant_errors: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+
+
 class APIKey(SQLModel, table=True):
     """
     API Key model for programmatic access.
