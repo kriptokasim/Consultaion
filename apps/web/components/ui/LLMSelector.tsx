@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client"
 import { getModelAvatarUrl } from "@/lib/avatar"
 import { MODEL_DETAILS, type ModelDetail } from "@/lib/modelDetails"
 import { ModelDetailsDialog } from "@/components/ui/ModelDetailsDialog"
+import { trackEvent } from "@/lib/analytics"
 
 type ModelCard = {
   id: string

@@ -9,6 +9,7 @@ import { Brain, MessageSquare, Vote } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import { MarketingHero } from "@/components/hero/marketing-hero";
+import { trackEvent } from "@/lib/analytics";
 
 const featureCards = [
   {
@@ -62,6 +63,7 @@ export default function HomeContent() {
 
   const handleStartDebate = () => {
     if (loading) return;
+    trackEvent("landing_hero_cta_clicked");
     if (user) {
       router.push("/dashboard");
     } else {
@@ -96,7 +98,7 @@ export default function HomeContent() {
                 </Button>
                 {!user ? (
                   <>
-                    <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline">
+                    <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline" onClick={() => trackEvent("landing_hero_secondary_cta_clicked")}>
                       {t("landing.hero.secondaryCta")}
                     </Link>
                     <p className="text-xs text-amber-900/70">{t("landing.hero.secondaryHint")}</p>
@@ -160,8 +162,9 @@ export default function HomeContent() {
         {/* Demo CTA */}
         <section className="flex flex-col items-center gap-3 text-center">
           <Link
-            href="/demo"
-            className="inline-flex flex-col items-center gap-1 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 px-8 py-4 transition hover:bg-amber-50 hover:border-amber-400"
+            href="/login?next=/dashboard"
+            onClick={() => trackEvent("landing_demo_cta_clicked")}
+            className="group inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 px-8 py-4 text-lg font-semibold text-white shadow-[0_16px_40px_rgba(255,190,92,0.4)] transition hover:-translate-y-[2px] hover:shadow-[0_20px_50px_rgba(255,190,92,0.5)]"
           >
             <span className="text-lg font-semibold text-[#3a2a1a]">
               {t("landing.demo.cta")}

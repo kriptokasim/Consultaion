@@ -6,6 +6,7 @@ import { Brain, Menu, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
+import { trackEvent } from "@/lib/analytics"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
 
 export function MarketingNavbar() {
@@ -13,11 +14,8 @@ export function MarketingNavbar() {
     const pathname = usePathname()
     const { t } = useI18n()
     const [scrolled, setScrolled] = useState(false)
-    const [user, setUser] = useState<{ email: string } | null>(null)
-    const [loading, setLoading] = useState(true)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-    // Detect scroll for sticky behavior
     useEffect(() => {
         const handleScroll = () => {
             setScrolled(window.scrollY > 20)
@@ -26,69 +24,33 @@ export function MarketingNavbar() {
         return () => window.removeEventListener("scroll", handleScroll)
     }, [])
 
-    // Check user auth status
+    // Close mobile menu on ESC
     useEffect(() => {
-        let cancelled = false
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-        fetch(`${apiBase}/me`, { credentials: "include", cache: "no-store" })
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-                if (!cancelled) setUser(data)
-            })
-            .catch(() => {
-                if (!cancelled) setUser(null)
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false)
-            })
-        return () => {
-            cancelled = true
-        }
-    }, [])
-
-    // Handle ESC key for mobile menu
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
+        const handleEscape = (e: KeyboardEvent) => {
             if (e.key === "Escape" && mobileMenuOpen) {
                 setMobileMenuOpen(false)
             }
         }
-        window.addEventListener("keydown", handleEsc)
-        return () => window.removeEventListener("keydown", handleEsc)
+        document.addEventListener("keydown", handleEscape)
+        return () => document.removeEventListener("keydown", handleEscape)
     }, [mobileMenuOpen])
 
-    // Prevent body scroll when menu is open
+    // Prevent body scroll when mobile menu is open
     useEffect(() => {
         if (mobileMenuOpen) {
             document.body.style.overflow = "hidden"
         } else {
             document.body.style.overflow = ""
         }
-        return () => {
-            document.body.style.overflow = ""
-        }
     }, [mobileMenuOpen])
 
-    const marketingLinks = [
+    const navLinks = [
         { href: "/pricing", label: t("nav.pricing") },
         { href: "/leaderboard", label: t("nav.leaderboard") },
         { href: "/models", label: t("nav.models") },
         { href: "/methodology", label: t("nav.methodology") },
-        { href: "/contact", label: t("footer.contact") },
+        { href: "/contact", label: t("nav.contact") }
     ]
-
-    const handleStartDebate = () => {
-        if (loading) return
-        if (user) {
-            router.push("/dashboard")
-        } else {
-            router.push("/login?next=/dashboard")
-        }
-    }
-
-    const handleMobileLinkClick = () => {
-        setMobileMenuOpen(false)
-    }
 
     return (
         <>
@@ -96,152 +58,122 @@ export function MarketingNavbar() {
                 className={cn(
                     "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
                     scrolled
-                        ? "bg-[#FFF7EB]/95 backdrop-blur-md shadow-sm py-3"
+                        ? "bg-[#fff7eb]/95 backdrop-blur-lg shadow-md py-3"
                         : "bg-transparent py-4"
                 )}
             >
-                <div className="mx-auto flex max-w-6xl items-center justify-between px-6">
-                    {/* Logo */}
-                    <Link
-                        href="/"
-                        className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
-                    >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-200/50 transition-transform hover:scale-105">
-                            <Brain className="h-5 w-5" />
-                        </div>
-                        <span className="text-xl font-display font-bold text-[#3a2a1a]">
-                            Consultaion
-                        </span>
-                    </Link>
+                <div className="container mx-auto px-6">
+                    <div className="flex items-center justify-between">
+                        {/* Logo */}
+                        <Link href="/" className="flex items-center gap-2">
+                            <Brain className="h-7 w-7 text-amber-700" />
+                            <span className="text-xl font-bold text-[#3a2a1a]">Consultaion</span>
+                        </Link>
 
-                    {/* Desktop Navigation */}
-                    <div className="hidden md:flex items-center gap-6">
-                        {marketingLinks.map((item) => (
+                        {/* Desktop Navigation */}
+                        <div className="hidden md:flex items-center gap-6">
+                            {navLinks.map((link) => (
+                                <Link
+                                    key={link.href}
+                                    href={link.href}
+                                    className={cn(
+                                        "text-sm font-semibold transition-colors",
+                                        pathname === link.href
+                                            ? "text-amber-700"
+                                            : "text-[#5a4a3a] hover:text-amber-700"
+                                    )}
+                                >
+                                    {link.label}
+                                </Link>
+                            ))}
+
+                            <LanguageSwitcher />
+
                             <Link
-                                key={item.href}
-                                href={item.href}
-                                className={cn(
-                                    "text-sm font-semibold transition-colors hover:text-amber-700",
-                                    pathname === item.href
-                                        ? "text-amber-700"
-                                        : "text-[#6b5844]"
-                                )}
+                                href="/login?next=/dashboard"
+                                className="rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:-translate-y-[1px] hover:shadow-lg"
                             >
-                                {item.label}
+                                {t("nav.cta")}
                             </Link>
-                        ))}
-                    </div>
+                        </div>
 
-                    {/* Right side: Hamburger (mobile) + Language + CTA (desktop) */}
-                    <div className="flex items-center gap-4">
-                        {/* Hamburger Button - Mobile Only */}
+                        {/* Mobile Menu Button */}
                         <button
-                            onClick={() => setMobileMenuOpen(true)}
-                            className="md:hidden rounded-lg p-2 text-amber-900 transition hover:bg-amber-100"
+                            onClick={() => {
+                                setMobileMenuOpen(true);
+                                trackEvent("mobile_nav_opened");
+                            }}
+                            className="md:hidden rounded-lg border border-amber-200 bg-white/80 p-2 text-amber-900 hover:bg-amber-50 transition"
                             aria-label={t("nav.mobile.open")}
                         >
                             <Menu className="h-6 w-6" />
                         </button>
-
-                        {/* Desktop: Language + CTA */}
-                        <div className="hidden md:flex items-center gap-4">
-                            <LanguageSwitcher />
-
-                            {user ? (
-                                <Link
-                                    href="/dashboard"
-                                    className="rounded-lg border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                                >
-                                    {t("landing.nav.dashboard")}
-                                </Link>
-                            ) : (
-                                <button
-                                    onClick={handleStartDebate}
-                                    disabled={loading}
-                                    className="rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-[1px] hover:shadow-md disabled:opacity-50"
-                                >
-                                    {t("landing.hero.primaryCta")}
-                                </button>
-                            )}
-                        </div>
                     </div>
                 </div>
             </nav>
 
-            {/* Mobile Menu */}
+            {/* Mobile Menu Overlay */}
             {mobileMenuOpen && (
                 <>
                     {/* Backdrop */}
                     <div
-                        className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"
+                        className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
                         onClick={() => setMobileMenuOpen(false)}
-                        aria-hidden="true"
                     />
 
                     {/* Drawer */}
-                    <div className="fixed top-0 right-0 bottom-0 z-[70] w-80 bg-gradient-to-br from-[#FFF7EB] to-[#FFF3DE] shadow-2xl">
-                        <div className="flex h-full flex-col p-6">
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-8">
-                                <span className="text-lg font-display font-bold text-[#3a2a1a]">
-                                    Menu
-                                </span>
+                    <div className="fixed top-0 right-0 bottom-0 z-50 w-80 bg-gradient-to-br from-[#fff7eb] to-amber-50 shadow-2xl overflow-y-auto">
+                        <div className="p-6 space-y-6">
+                            {/* Close Button */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Brain className="h-6 w-6 text-amber-700" />
+                                    <span className="text-lg font-bold text-[#3a2a1a]">Consultaion</span>
+                                </div>
                                 <button
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="rounded-lg p-2 text-amber-900 transition hover:bg-amber-100"
+                                    className="rounded-lg p-2 text-amber-900 hover:bg-amber-100 transition"
                                     aria-label={t("nav.mobile.close")}
                                 >
                                     <X className="h-6 w-6" />
                                 </button>
                             </div>
 
-                            {/* Nav Links */}
-                            <nav className="flex-1 space-y-2">
-                                {marketingLinks.map((item) => (
+                            {/* Navigation Links */}
+                            <nav className="space-y-2">
+                                {navLinks.map((link) => (
                                     <Link
-                                        key={item.href}
-                                        href={item.href}
-                                        onClick={handleMobileLinkClick}
+                                        key={link.href}
+                                        href={link.href}
+                                        onClick={() => {
+                                            setMobileMenuOpen(false);
+                                            trackEvent("mobile_nav_link_clicked", { target: link.label.toLowerCase() });
+                                        }}
                                         className={cn(
-                                            "block rounded-lg px-4 py-3 text-base font-semibold transition-colors",
-                                            pathname === item.href
+                                            "block rounded-lg px-4 py-3 text-lg font-semibold transition-colors",
+                                            pathname === link.href
                                                 ? "bg-amber-100 text-amber-900"
                                                 : "text-[#6b5844] hover:bg-amber-50"
                                         )}
                                     >
-                                        {item.label}
+                                        {link.label}
                                     </Link>
                                 ))}
                             </nav>
 
-                            {/* Language Toggle */}
-                            <div className="mb-4">
+                            {/* Language Switcher */}
+                            <div className="pt-4 border-t border-amber-200">
                                 <LanguageSwitcher />
                             </div>
 
-                            {/* CTA */}
-                            <div className="border-t border-amber-200 pt-4">
-                                {user ? (
-                                    <Link
-                                        href="/dashboard"
-                                        onClick={handleMobileLinkClick}
-                                        className="block w-full rounded-lg border border-amber-200 bg-white px-4 py-3 text-center text-sm font-semibold text-amber-900 shadow-sm transition hover:shadow-md"
-                                    >
-                                        {t("landing.nav.dashboard")}
-                                    </Link>
-                                ) : (
-                                    <button
-                                        onClick={() => {
-                                            handleStartDebate()
-                                            setMobileMenuOpen(false)
-                                        }}
-                                        disabled={loading}
-                                        className="w-full rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:shadow-md disabled:opacity-50"
-                                    >
-                                        {t("landing.hero.primaryCta")}
-                                    </button>
-                                )}
-                            </div>
+                            {/* CTA Button */}
+                            <Link
+                                href="/login?next=/dashboard"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="block w-full rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-3 text-center text-sm font-semibold text-white shadow-md transition hover:shadow-lg"
+                            >
+                                {t("nav.cta")}
+                            </Link>
                         </div>
                     </div>
                 </>
@@ -249,4 +181,3 @@ export function MarketingNavbar() {
         </>
     )
 }
-

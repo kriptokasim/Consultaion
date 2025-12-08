@@ -1,28 +1,101 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Brain, Sparkles, Trophy, MessageSquare } from "lucide-react"
-import { getServerTranslations } from "@/lib/i18n/server"
-import { MOCK_DEBATE } from "@/lib/mockDebateData"
+import { useI18n } from "@/lib/i18n/client"
+import { DEMO_SCENARIOS } from "@/lib/mockDebateData"
+import type { DemoScenario, MockDebateData } from "@/lib/mockDebateData"
+import { trackEvent } from "@/lib/analytics"
 
-export default async function DemoPage() {
-    const { t } = await getServerTranslations()
-    const debate = MOCK_DEBATE
+export default function DemoPage() {
+    const { t } = useI18n()
+    const searchParams = useSearchParams()
+    const router = useRouter()
+
+    // Get scenario from URL or default to first
+    const scenarioParam = searchParams.get("scenario")
+    const [selectedScenarioId, setSelectedScenarioId] = useState<string>(
+        scenarioParam && DEMO_SCENARIOS.find(s => s.id === scenarioParam)
+            ? scenarioParam
+            : DEMO_SCENARIOS[0].id
+    )
+
+    const selectedScenario = DEMO_SCENARIOS.find(s => s.id === selectedScenarioId) || DEMO_SCENARIOS[0]
+    const debate = selectedScenario.data
+
+    // Update URL when scenario changes
+    const handleScenarioSelect = (scenarioId: string) => {
+        setSelectedScenarioId(scenarioId)
+        router.push(`/demo?scenario=${scenarioId}`, { scroll: false })
+        trackEvent("demo_scenario_selected", { scenarioId })
+    }
+
+    // Sync with URL param changes
+    useEffect(() => {
+        if (scenarioParam && DEMO_SCENARIOS.find(s => s.id === scenarioParam)) {
+            setSelectedScenarioId(scenarioParam)
+        }
+    }, [scenarioParam])
 
     return (
         <main className="min-h-screen bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] px-6 py-16">
             <div className="mx-auto max-w-5xl space-y-12">
                 {/* Header */}
-                <header className="space-y-4 text-center">
+                <header className="space-y-6 text-center">
                     <div className="inline-flex items-center gap-2 rounded-full border-2 border-dashed border-amber-300 bg-amber-50 px-4 py-1 text-sm font-semibold text-amber-700">
                         <Sparkles className="h-4 w-4" />
                         {t("demo.badge")}
                     </div>
                     <h1 className="text-4xl font-display font-bold text-[#3a2a1a]">
-                        {t("demo.title")}
+                        {t("demo.gallery.title")}
                     </h1>
                     <p className="mx-auto max-w-2xl text-lg text-[#5a4a3a]">
-                        {t("demo.subtitle")}
+                        {t("demo.gallery.subtitle")}
                     </p>
                 </header>
+
+                {/* Scenario Selector */}
+                <section className="space-y-4">
+                    <h2 className="sr-only">Select a scenario</h2>
+                    <div className="grid gap-4 md:grid-cols-3">
+                        {DEMO_SCENARIOS.map((scenario) => (
+                            <button
+                                key={scenario.id}
+                                onClick={() => handleScenarioSelect(scenario.id)}
+                                className={`group relative overflow-hidden rounded-2xl border-2 p-5 text-left transition-all duration-200 ${selectedScenarioId === scenario.id
+                                    ? "border-amber-500 bg-gradient-to-br from-amber-50 to-white shadow-lg scale-[1.02]"
+                                    : "border-amber-200/70 bg-white/90 hover:border-amber-400 hover:shadow-md hover:-translate-y-[2px]"
+                                    }`}
+                            >
+                                <div className="mb-3">
+                                    <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${selectedScenarioId === scenario.id
+                                        ? "bg-amber-500 text-white"
+                                        : "bg-amber-100 text-amber-700"
+                                        }`}>
+                                        {t(`demo.tags.${scenario.tag.toLowerCase().replace(' & ', '')}`)}
+                                    </span>
+                                </div>
+                                <h3 className="text-lg font-semibold text-[#3a2a1a] mb-2">
+                                    {t(`demo.scenarios.${scenario.id.replace('-', '')}.title`)}
+                                </h3>
+                                <p className="text-sm text-[#5a4a3a]">
+                                    {t(`demo.scenarios.${scenario.id.replace('-', '')}.description`)}
+                                </p>
+                                {selectedScenarioId === scenario.id && (
+                                    <div className="absolute top-3 right-3">
+                                        <div className="h-6 w-6 rounded-full bg-amber-500 flex items-center justify-center">
+                                            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </section>
 
                 {/* Context */}
                 <section className="rounded-2xl border border-amber-100/80 bg-white/90 p-6 shadow-sm">
@@ -147,6 +220,7 @@ export default async function DemoPage() {
                     <div className="flex flex-wrap justify-center gap-4">
                         <Link
                             href="/login?next=/dashboard"
+                            onClick={() => trackEvent("demo_run_own_question_clicked", { scenarioId: selectedScenarioId })}
                             className="rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-8 py-3 font-semibold text-white shadow-md transition hover:-translate-y-[1px] hover:shadow-lg"
                         >
                             {t("demo.cta.primary")}

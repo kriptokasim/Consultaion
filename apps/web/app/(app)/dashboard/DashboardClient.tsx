@@ -14,6 +14,7 @@ import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
 import { ApiClientError } from "@/lib/apiClient";
 import type { DebateSummary } from "./types";
 import { useI18n } from "@/lib/i18n/client";
+import { trackEvent } from "@/lib/analytics";
 
 type ModelOption = {
   id: string;
@@ -78,6 +79,15 @@ export default function DashboardClient({ email }: { email?: string | null }) {
   const [modelError, setModelError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
+  const [templateId, setTemplateId] = useState<string | null>(null);
+
+  // Template prompt mappings
+  const TEMPLATE_PROMPTS: Record<string, string> = {
+    "strategy-saas-rollout": "How should our mid-size SaaS company (Series B, 150 employees, $20M ARR) approach integrating AI into our product and operations in 2025?",
+    "risk-bank-governance": "As a regulated bank, what framework should we adopt for AI governance to balance innovation with compliance requirements (GDPR, Basel III)?",
+    "product-roadmap": "Given our current product velocity and Q2 goals, which 3 features should we prioritize: advanced analytics dashboard, mobile app redesign, or API extensibility platform?"
+  };
+
   const formatTimestamp = (ts?: string | null) => {
     if (!ts) return t("dashboard.time.justNow");
     const date = new Date(ts);
@@ -110,6 +120,20 @@ export default function DashboardClient({ email }: { email?: string | null }) {
       cancelled = true;
     };
   }, [t, billing]);
+
+  // Template prefill logic
+  useEffect(() => {
+    if (templateId && TEMPLATE_PROMPTS[templateId]) {
+      setPrompt(TEMPLATE_PROMPTS[templateId]);
+    }
+  }, [templateId]);
+
+  // Handle template click
+  const handleTemplateClick = (id: string) => {
+    setTemplateId(id);
+    setShowModal(true);
+    trackEvent("template_used", { templateId: id });
+  };
 
   const handleCreate = async () => {
     if (!prompt.trim()) return;
@@ -182,6 +206,33 @@ export default function DashboardClient({ email }: { email?: string | null }) {
           )}
         </div>
       </section>
+
+      {/* Onboarding Templates - Show only for first-time users */}
+      {debates.length === 0 && (
+        <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white to-amber-50/30 p-8 shadow-md">
+          <div className="mb-6 text-center">
+            <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.onboarding.title")}</h2>
+            <p className="mt-2 text-sm text-[#5a4a3a]">{t("dashboard.onboarding.subtitle")}</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <TemplateCard
+              title={t("dashboard.templates.strategy.title")}
+              description={t("dashboard.templates.strategy.description")}
+              onClick={() => handleTemplateClick("strategy-saas-rollout")}
+            />
+            <TemplateCard
+              title={t("dashboard.templates.governance.title")}
+              description={t("dashboard.templates.governance.description")}
+              onClick={() => handleTemplateClick("risk-bank-governance")}
+            />
+            <TemplateCard
+              title={t("dashboard.templates.product.title")}
+              description={t("dashboard.templates.product.description")}
+              onClick={() => handleTemplateClick("product-roadmap")}
+            />
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -343,5 +394,24 @@ function LinkCard({ title, description, icon, href }: { title: string; descripti
         <p className="text-sm text-[#5a4a3a]">{description}</p>
       </div>
     </Link>
+  );
+}
+
+function TemplateCard({ title, description, onClick }: { title: string; description: string; onClick: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col justify-between rounded-2xl border border-amber-200/70 bg-white/90 p-5 shadow-sm">
+      <div>
+        <h3 className="text-lg font-semibold text-[#3a2a1a] mb-2">{title}</h3>
+        <p className="text-sm text-[#5a4a3a] mb-4">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-white px-4 py-2 text-sm font-semibold text-amber-900 transition hover:from-amber-100 hover:to-amber-50 hover:shadow-md"
+      >
+        {t("dashboard.templates.useTemplate")}
+      </button>
+    </div>
   );
 }
