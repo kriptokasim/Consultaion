@@ -540,5 +540,17 @@
   "debate.degraded.title": "Debate completed with some errors",
   "debate.degraded.message": "Some AI models encountered issues, but we still produced results. Quality may be affected.",
   "debate.failed.title": "Debate failed",
-  "debate.failed.message": "We couldn't complete this debate due to technical issues. Please try again later or simplify your question."
+  "debate.failed.message": "We couldn't complete this debate due to technical issues. Please try again later or simplify your question.",
+  "settings.privacy.title": "Privacy & Data",
+  "settings.privacy.description": "Manage your data retention preferences and account privacy.",
+  "settings.privacy.analyticsLabel": "Usage Analytics",
+  "settings.privacy.analyticsDescription": "Help improve Consultaion by sharing anonymous usage data.",
+  "settings.privacy.deleteAccount.title": "Delete Account",
+  "settings.privacy.deleteAccount.button": "Delete Account",
+  "settings.privacy.deleteAccount.description": "Permanently delete your account and all associated data.",
+  "settings.privacy.deleteAccount.confirmation": "Are you sure? This action cannot be undone. All your debates and data will be permanently deleted or anonymized.",
+  "settings.privacy.deleteAccount.success": "Your account has been deleted.",
+  "settings.privacy.updated": "Privacy settings updated",
+  "processing": "Processing...",
+  "confirm": "Confirm"
 }

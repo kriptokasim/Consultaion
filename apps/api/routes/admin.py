@@ -12,7 +12,8 @@ from billing.service import _current_period, get_active_plan
 from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models import AdminEvent, AuditLog, Debate, Promotion, SupportNote, User
+from models import AdminEvent, AuditLog, Debate, SupportNote, User
+from promotions.models import Promotion
 from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.provider_health import get_provider_health_snapshot
 from pydantic import BaseModel
@@ -929,4 +930,36 @@ def admin_update_user_status(
         "email": user.email,
         "is_active": user.is_active,
         "message": f"Account {action} successfully",
+    }
+
+
+# Patchset 58.0: Data Retention Purge Endpoint
+@router.post("/maintenance/purge")
+def admin_purge_old_data(
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Trigger data retention purge jobs.
+    
+    Anonymizes/deletes old data according to RETAIN_*_DAYS settings.
+    Intended to be called by cron job or manually.
+    """
+    from maintenance.retention import run_all_purges
+    from audit import record_audit
+    
+    results = run_all_purges(session)
+    
+    record_audit(
+        "maintenance_purge",
+        user_id=admin.id,
+        target_type="system",
+        target_id=None,
+        meta=results,
+        session=session,
+    )
+    
+    return {
+        "status": "ok",
+        "purged": results,
     }

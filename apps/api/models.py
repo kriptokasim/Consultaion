@@ -28,6 +28,10 @@ class User(SQLModel, table=True):
     
     # Patchset 55.0: Subscription plan for quota enforcement
     plan: str = Field(default="free", max_length=50, nullable=False, index=True)
+    
+    # Patchset 58.0: Privacy controls
+    deleted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True, index=True))
+    analytics_opt_out: bool = Field(default=False, nullable=False)
 
 
 class SupportNote(SQLModel, table=True):

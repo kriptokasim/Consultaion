@@ -203,6 +203,7 @@ class UserProfile(BaseModel):
     created_at: str
     email_summaries_enabled: bool = False
     debate_count: int = 0
+    analytics_opt_out: bool = False
 
 
 class UserProfileUpdate(BaseModel):

@@ -2,6 +2,7 @@ import { getMe } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { getServerTranslations } from "@/lib/i18n/server"
 import { NotificationSettings } from "@/components/settings/notification-settings"
+import { PrivacySettings } from "@/components/settings/privacy-settings"
 import { MilestoneCelebration } from "@/components/settings/milestone-celebration"
 
 export default async function SettingsPage() {
@@ -30,6 +31,7 @@ export default async function SettingsPage() {
       </div>
 
       <NotificationSettings initialEnabled={profile.email_summaries_enabled} />
+      <PrivacySettings initialOptOut={profile.analytics_opt_out} />
       <MilestoneCelebration debateCount={profile.debate_count || 0} />
     </div>
   )

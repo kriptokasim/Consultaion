@@ -40,18 +40,39 @@ export function trackEvent(name: string, payload?: Record<string, any>): void {
 
     // Production: Try PostHog, fall back to beacon
     try {
+        if (isOptedOut()) {
+            return
+        }
+
         if (_initialized) {
             posthog.capture(name, payload)
-        } else if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        } else if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
             // Fallback: send to /api/events if PostHog not available
             const data = JSON.stringify({
                 event: name,
                 timestamp: new Date().toISOString(),
                 ...payload
             })
-            navigator.sendBeacon('/api/events', data)
+            // navigator.sendBeacon('/api/events', data)
         }
-    } catch (err) {
-        // Silently fail - analytics must never break UX
+    } catch (e) {
+        // Ignore analytics errors
     }
+}
+
+export function setAnalyticsOptOut(optOut: boolean) {
+    if (typeof window === 'undefined') return
+
+    if (optOut) {
+        localStorage.setItem('analytics_opt_out', 'true')
+        if (_initialized) posthog.opt_out_capturing()
+    } else {
+        localStorage.removeItem('analytics_opt_out')
+        if (_initialized) posthog.opt_in_capturing()
+    }
+}
+
+function isOptedOut(): boolean {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('analytics_opt_out') === 'true'
 }

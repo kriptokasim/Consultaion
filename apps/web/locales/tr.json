@@ -545,5 +545,17 @@
   "debate.degraded.title": "Tartışma bazı hatalarla tamamlandı",
   "debate.degraded.message": "Bazı AI modelleri sorunlarla karşılaştı, ancak yine de sonuçlar ürettik. Kalite etkilenmiş olabilir.",
   "debate.failed.title": "Tartışma başarısız oldu",
-  "debate.failed.message": "Teknik sorunlar nedeniyle bu tartışmayı tamamlayamadık. Lütfen daha sonra tekrar deneyin veya sorunuzu basitleştirin."
+  "debate.failed.message": "Teknik sorunlar nedeniyle bu tartışmayı tamamlayamadık. Lütfen daha sonra tekrar deneyin veya sorunuzu basitleştirin.",
+  "settings.privacy.title": "Gizlilik ve Veri",
+  "settings.privacy.description": "Veri saklama tercihlerinizi ve hesap gizliliğinizi yönetin.",
+  "settings.privacy.analyticsLabel": "Kullanım Analitiği",
+  "settings.privacy.analyticsDescription": "Anonim kullanım verilerini paylaşarak Consultaion'ı geliştirmemize yardımcı olun.",
+  "settings.privacy.deleteAccount.title": "Hesabı Sil",
+  "settings.privacy.deleteAccount.button": "Hesabı Sil",
+  "settings.privacy.deleteAccount.description": "Hesabınızı ve ilişkili tüm verileri kalıcı olarak silin.",
+  "settings.privacy.deleteAccount.confirmation": "Emin misiniz? Bu işlem geri alınamaz. Tüm tartışmalarınız ve verileriniz kalıcı olarak silinecek veya anonimleştirilecektir.",
+  "settings.privacy.deleteAccount.success": "Hesabınız silindi.",
+  "settings.privacy.updated": "Gizlilik ayarları güncellendi",
+  "processing": "İşleniyor...",
+  "confirm": "Onayla"
 }

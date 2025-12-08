@@ -34,6 +34,13 @@ class AppSettings(BaseSettings):
     # LLM Provider Timeouts
     LLM_TIMEOUT_SECONDS: int = 30  # Timeout for individual model calls
     LLM_MAX_RETRIES: int = 1  # Max retries on transient failures
+    
+    # Patchset 58.0: Data retention settings (days, None = indefinite)
+    # These are configuration knobs, not final legal obligations
+    RETAIN_DEBATES_DAYS: int = 365
+    RETAIN_DEBATE_ERRORS_DAYS: int = 90
+    RETAIN_SUPPORT_NOTES_DAYS: int | None = None  # Indefinite by default
+    RETAIN_USAGE_STATS_DAYS: int = 365
 
     RATE_LIMIT_BACKEND: Literal["redis", "memory"] | None = None
     

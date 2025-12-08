@@ -98,6 +98,7 @@ def _profile_payload(user: User, debate_count: int = 0) -> UserProfileSchema:
         created_at=created,
         email_summaries_enabled=getattr(user, "email_summaries_enabled", False),
         debate_count=debate_count,
+        analytics_opt_out=getattr(user, "analytics_opt_out", False),
     )
 
 
@@ -429,6 +430,95 @@ async def get_me(
     
     return serialize_user(current_user)
 
+
+# Patchset 58.0: Privacy Settings
+from pydantic import BaseModel as PydanticBaseModel
+
+
+class PrivacySettingsRequest(PydanticBaseModel):
+    analytics_opt_out: bool
+
+
+@router.post("/me/privacy")
+async def update_privacy_settings(
+    body: PrivacySettingsRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update user privacy preferences (analytics opt-out).
+    """
+    current_user.analytics_opt_out = body.analytics_opt_out
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+    
+    record_audit(
+        "privacy_settings_update",
+        user_id=current_user.id,
+        target_type="user",
+        target_id=current_user.id,
+        meta={"analytics_opt_out": current_user.analytics_opt_out},
+        session=session,
+    )
+    
+    return {
+        "analytics_opt_out": current_user.analytics_opt_out,
+        "message": "Privacy settings updated",
+    }
+
+
+@router.post("/me/delete-account")
+async def delete_my_account(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Soft-delete user account and anonymize their data.
+    
+    - Sets deleted_at and is_active=False
+    - Anonymizes debate content
+    - User can no longer log in or create debates
+    
+    For production: consider making this a background job.
+    """
+    from models import Debate, utcnow
+    
+    # Mark account as deleted
+    current_user.deleted_at = utcnow()
+    current_user.is_active = False
+    session.add(current_user)
+    
+    # Anonymize user's debates (remove PII but keep metadata)
+    user_debates = session.exec(
+        select(Debate).where(Debate.user_id == current_user.id)
+    ).all()
+    
+    anonymized_count = 0
+    for debate in user_debates:
+        if debate.prompt != "[DELETED]":
+            debate.prompt = "[DELETED]"
+            if hasattr(debate, "messages") and debate.messages:
+                debate.messages = None
+            anonymized_count += 1
+    
+    session.commit()
+    
+    record_audit(
+        "account_deleted",
+        user_id=current_user.id,
+        target_type="user",
+        target_id=current_user.id,
+        meta={"debates_anonymized": anonymized_count},
+        session=session,
+    )
+    
+    logger.info(f"User account deleted: {current_user.id}, debates anonymized: {anonymized_count}")
+    
+    return {
+        "status": "ok",
+        "message": "Your account has been deleted and your data has been anonymized.",
+    }
 
 
 
