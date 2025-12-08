@@ -30,6 +30,17 @@ class User(SQLModel, table=True):
     plan: str = Field(default="free", max_length=50, nullable=False, index=True)
 
 
+class SupportNote(SQLModel, table=True):
+    """Admin support notes for tracking user interactions."""
+    __tablename__ = "support_note"
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    author_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True)
+    note: str = Field(sa_column=Column(Text, nullable=False))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 class APIKey(SQLModel, table=True):
     """
     API Key model for programmatic access.

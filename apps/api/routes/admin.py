@@ -665,3 +665,259 @@ def admin_quota_usage(
         })
     
     return {"users": results, "total": len(results)}
+"""
+Patchset 56: Admin User Management Endpoints
+
+Append to apps/api/routes/admin.py
+"""
+
+from typing import Optional
+from pydantic import BaseModel
+from models import SupportNote
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+# Request/Response Models
+class CreateNoteRequest(BaseModel):
+    note: str
+
+
+class UpdateUserStatusRequest(BaseModel):
+    is_active: bool
+
+
+# User Search Endpoint
+@router.get("/users")
+def admin_search_users(
+    email: Optional[str] = Query(None, description="Search by email substring"),
+    id: Optional[str] = Query(None, description="Search by exact user ID"),
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    """
+    Search for users by email or ID.
+    Returns basic user info for admin listing.
+    """
+    query = select(User)
+    
+    if id:
+        query = query.where(User.id == id)
+    elif email:
+        query = query.where(User.email.contains(email))
+    
+    users = session.exec(query.order_by(User.created_at.desc()).limit(limit)).all()
+    
+    return {
+        "users": [
+            {
+                "id": user.id,
+                "email": user.email,
+                "display_name": user.display_name,
+                "plan": user.plan,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "is_active": user.is_active,
+            }
+            for user in users
+        ],
+        "total": len(users),
+    }
+
+
+# User Summary Endpoint
+@router.get("/users/{user_id}/summary")
+def admin_user_summary(
+    user_id: str,
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    """
+    Get comprehensive user summary including quota, recent debates, and feedback.
+    """
+    from plan_config import get_plan_limits
+    
+    # Get user
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get quota usage
+    usage = get_today_usage(session, user_id)
+    limits = get_plan_limits(user.plan)
+    
+    # Get recent debates
+    recent_debates = session.exec(
+        select(Debate)
+        .where(Debate.user_id == user_id)
+        .order_by(Debate.created_at.desc())
+        .limit(10)
+    ).all()
+    
+    debates_data = [
+        {
+            "id": debate.id,
+            "prompt": debate.prompt[:100] + "..." if len(debate.prompt) > 100 else debate.prompt,
+            "created_at": debate.created_at.isoformat() if debate.created_at else None,
+            "status": debate.status,
+            "mode": debate.mode,
+        }
+        for debate in recent_debates
+    ]
+    
+    # Feedback summary (stub for now - actual implementation would query feedback table)
+    feedback_summary = {
+        "total": 0,
+        "helpful": 0,
+        "not_helpful": 0,
+    }
+    
+    # Recent errors (stub - would query error table if exists)
+    recent_errors = []
+    
+    return {
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "plan": user.plan,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "is_active": user.is_active,
+        },
+        "quota": {
+            "tokens_used_today": usage["tokens_used"],
+            "daily_token_limit": limits.daily_token_limit,
+            "token_usage_pct": round(usage["tokens_used"] / limits.daily_token_limit * 100, 1) if limits.daily_token_limit > 0 else 0,
+            "exports_used_today": usage["exports_used"],
+            "daily_export_limit": limits.daily_export_limit,
+            "export_usage_pct": round(usage["exports_used"] / limits.daily_export_limit * 100, 1) if limits.daily_export_limit > 0 else 0,
+        },
+        "recent_debates": debates_data,
+        "feedback_summary": feedback_summary,
+        "recent_errors": recent_errors,
+    }
+
+
+# Support Notes - List
+@router.get("/users/{user_id}/notes")
+def admin_get_user_notes(
+    user_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    """
+    Get support notes for a user, ordered by newest first.
+    """
+    # Verify user exists
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    notes = session.exec(
+        select(SupportNote)
+        .where(SupportNote.user_id == user_id)
+        .order_by(SupportNote.created_at.desc())
+        .limit(limit)
+    ).all()
+    
+    # Get author emails
+    author_ids = [note.author_id for note in notes if note.author_id]
+    authors = {}
+    if author_ids:
+        author_users = session.exec(select(User).where(User.id.in_(author_ids))).all()
+        authors = {u.id: u.email for u in author_users}
+    
+    return {
+        "notes": [
+            {
+                "id": note.id,
+                "note": note.note,
+                "created_at": note.created_at.isoformat() if note.created_at else None,
+                "author_email": authors.get(note.author_id, "Unknown") if note.author_id else "System",
+            }
+            for note in notes
+        ]
+    }
+
+
+# Support Notes - Create
+@router.post("/users/{user_id}/notes")
+def admin_create_user_note(
+    user_id: str,
+    request: CreateNoteRequest,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Create a support note for a user.
+    """
+    # Verify user exists
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Create note
+    note = SupportNote(
+        user_id=user_id,
+        author_id=admin.id,
+        note=request.note,
+    )
+    session.add(note)
+    session.commit()
+    session.refresh(note)
+    
+    logger.info(f"Support note created by {admin.email} for user {user.email}: {note.id}")
+    
+    return {
+        "id": note.id,
+        "note": note.note,
+        "created_at": note.created_at.isoformat() if note.created_at else None,
+        "author_email": admin.email,
+    }
+
+
+# User Status - Enable/Disable
+@router.post("/users/{user_id}/status")
+def admin_update_user_status(
+    user_id: str,
+    request: UpdateUserStatusRequest,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Enable or disable a user account.
+    Disabled users cannot create debates or use most features.
+    """
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    old_status = user.is_active
+    user.is_active = request.is_active
+    session.commit()
+    
+    action = "enabled" if request.is_active else "disabled"
+    logger.info(
+        f"User account {action} by admin {admin.email}: "
+        f"user={user.email} ({user.id}) old_status={old_status} new_status={request.is_active}"
+    )
+    
+    # Create audit log
+    from audit import record_audit
+    record_audit(
+        f"account_{action}",
+        user_id=admin.id,
+        target_type="user",
+        target_id=user.id,
+        meta={"old_status": old_status, "new_status": request.is_active, "target_email": user.email},
+        session=session,
+    )
+    
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "is_active": user.is_active,
+        "message": f"Account {action} successfully",
+    }
