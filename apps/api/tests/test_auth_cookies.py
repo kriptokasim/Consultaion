@@ -8,8 +8,6 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-
 os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-chars-long")
 os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("COOKIE_SECURE", "0")

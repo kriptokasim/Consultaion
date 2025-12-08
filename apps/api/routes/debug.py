@@ -9,10 +9,8 @@ from typing import Optional
 
 from auth import COOKIE_NAME, get_optional_user
 from config import settings
-from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import User
-from sqlmodel import Session
 
 router = APIRouter(tags=["debug"])
 logger = logging.getLogger(__name__)

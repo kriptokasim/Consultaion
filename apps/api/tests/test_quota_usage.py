@@ -13,8 +13,6 @@ import sys
 import uuid
 from pathlib import Path
 
-import pytest
-
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("COOKIE_SECURE", "0")
@@ -25,8 +23,8 @@ os.environ["DISABLE_AUTORUN"] = "1"
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import database  # noqa: E402
-from billing.models import BillingPlan, BillingUsage  # noqa: E402
-from billing.service import _current_period, get_or_create_usage  # noqa: E402
+from billing.models import BillingPlan  # noqa: E402
+from billing.service import get_or_create_usage  # noqa: E402
 from models import Debate, User  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
 from sqlmodel import Session, select  # noqa: E402

@@ -25,9 +25,9 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import database  # noqa: E402
 from auth import hash_password  # noqa: E402
-from billing.models import BillingPlan, BillingUsage  # noqa: E402
-from billing.service import _current_period, get_or_create_usage  # noqa: E402
-from models import Debate, DebateRound, Message, Score, User  # noqa: E402
+from billing.models import BillingPlan  # noqa: E402
+from billing.service import get_or_create_usage  # noqa: E402
+from models import Debate, Score, User  # noqa: E402
 from sqlmodel import Session, select  # noqa: E402
 
 

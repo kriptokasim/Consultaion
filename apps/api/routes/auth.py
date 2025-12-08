@@ -1,9 +1,9 @@
+import logging
 import secrets
 from typing import Any, Optional
 from urllib.parse import urlencode, urlparse
 
 import httpx
-import logging
 from audit import record_audit
 from auth import (
     COOKIE_DOMAIN,
