@@ -25,6 +25,9 @@ class User(SQLModel, table=True):
     bio: Optional[str] = Field(default=None, sa_column=Column(Text))
     timezone: Optional[str] = Field(default=None)
     email_summaries_enabled: bool = Field(default=False, nullable=False)
+    
+    # Patchset 55.0: Subscription plan for quota enforcement
+    plan: str = Field(default="free", max_length=50, nullable=False, index=True)
 
 
 class APIKey(SQLModel, table=True):

@@ -517,6 +517,11 @@
   "dashboard.onboarding.step3.description": "Kazanan argümanı gözden geçirin ve öngörülerinizi kaydedin",
   "dashboard.onboarding.markReviewed": "İncelendi olarak işaretle",
   "feedback.champion.question": "Bu cevap yardımcı oldu mu?",
-  "feedback.champion.yes": "Evet",
-  "feedback.champion.no": "Hayır",
-  "feedback.champion.thanks": "Geri bildiriminiz için teşekkürler!"
+  "feedback.champion.yes": "Evet, yardımcı oldu",
+  "feedback.champion.no": "Yardımcı olmadı",
+  "feedback.champion.thanks": "Geri bildiriminiz için teşekkürler!",
+  "quota.exceeded.title": "Günlük kota doldu",
+  "quota.exceeded.message": "Günlük {limit} {kind} kotanızın {used} tanesini kullandınız. Yarın tekrar deneyin veya planınızı yükseltin.",
+  "quota.exceeded.tokens": "token",
+  "quota.exceeded.exports": "dışa aktarım"
+}

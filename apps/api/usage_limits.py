@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import timedelta, timezone
-from typing import Optional
+from datetime import date, timedelta, timezone
+from typing import Optional, TypedDict
 
 from config import settings
 from database import session_scope
@@ -35,6 +35,15 @@ class RateLimitError(Exception):
         self.code = code
         self.detail = detail
         self.reset_at = reset_at
+
+
+class QuotaExceededError(Exception):
+    """Raised when user exceeds their quota."""
+    def __init__(self, kind: str, limit: int, used: int):
+        self.kind = kind  # "tokens" or "exports"
+        self.limit = limit
+        self.used = used
+        super().__init__(f"{kind} quota exceeded: {used}/{limit}")
 
 
 def _get_or_create_quota(session: Session, user_id: str, period: str) -> UsageQuota:
@@ -147,3 +156,93 @@ def record_token_usage(
             _apply_token_usage(scoped, user_id, tokens_int, commit=True)
     else:
         _apply_token_usage(session, user_id, tokens_int, commit=commit)
+
+
+class DailyUsage(TypedDict):
+    """Daily usage statistics for a user."""
+    tokens_used: int
+    exports_used: int
+    date: str  # YYYY-MM-DD
+
+
+def get_today_usage(session: Session, user_id: Optional[str]) -> DailyUsage:
+    """
+    Get today's token and export usage for a user.
+    
+    Args:
+        session: Database session
+        user_id: User ID (None for anonymous users)
+    
+    Returns:
+        DailyUsage dict with tokens_used, exports_used, and date
+    """
+    today = date.today().isoformat()
+    
+    if user_id is None:
+        return {"tokens_used": 0, "exports_used": 0, "date": today}
+    
+    # Get today's token counter
+    counter = _get_or_reset_counter(session, user_id, "day", commit=False)
+    tokens_used = counter.tokens_used or 0
+    
+    # Get export count from billing service
+    # NOTE: May need to adapt if billing tracks monthly not daily
+    try:
+        from billing.service import get_billing_usage
+        usage = get_billing_usage(session, user_id)
+        # For now, use month count as proxy; future: add daily export counter
+        exports_used = usage.get("exports_this_month", 0)
+    except Exception:
+        # Gracefully fall back if billing not available
+        exports_used = 0
+    
+    return {
+        "tokens_used": tokens_used,
+        "exports_used": exports_used,
+        "date": today,
+    }
+
+
+def check_quota(
+    session: Session,
+    user: Optional["User"],  # noqa: F821
+    required_tokens: int = 0,
+    required_exports: int = 0,
+) -> None:
+    """
+    Check if user has quota for the requested operation.
+    
+    Raises QuotaExceededError if user would exceed their daily limits.
+    
+    Args:
+        session: Database session
+        user: User object (None for anonymous)
+        required_tokens: Estimated tokens needed for operation
+        required_exports: Number of exports needed (usually 0 or 1)
+    
+    Raises:
+        QuotaExceededError: If quota would be exceeded
+    """
+    from plan_config import get_plan_limits, resolve_plan_for_user
+    
+    plan_name = resolve_plan_for_user(user)
+    limits = get_plan_limits(plan_name)
+    usage = get_today_usage(session, user.id if user else None)
+    
+    # Check token quota
+    if required_tokens > 0:
+        if usage["tokens_used"] + required_tokens > limits.daily_token_limit:
+            raise QuotaExceededError(
+                "tokens",
+                limits.daily_token_limit,
+                usage["tokens_used"]
+            )
+    
+    # Check export quota
+    if required_exports > 0:
+        if usage["exports_used"] + required_exports > limits.daily_export_limit:
+            raise QuotaExceededError(
+                "exports",
+                limits.daily_export_limit,
+                usage["exports_used"]
+            )

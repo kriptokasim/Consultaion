@@ -192,6 +192,24 @@ async def create_debate(
         )
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
+    # Patchset 55.0: Check quota before debate creation
+    from usage_limits import check_quota, QuotaExceededError
+    from fastapi import HTTPException
+    
+    estimated_tokens = 5000  # Average debate uses ~5k tokens
+    try:
+        check_quota(session, current_user, required_tokens=estimated_tokens)
+    except QuotaExceededError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "quota_exceeded",
+                "kind": exc.kind,
+                "limit": exc.limit,
+                "used": exc.used,
+            }
+        )
+
     # Patchset 54.0: Check feature flag for conversation mode
     if body.mode == "conversation":
         if not settings.ENABLE_CONVERSATION_MODE:

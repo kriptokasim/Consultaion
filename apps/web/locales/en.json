@@ -512,7 +512,11 @@
   "dashboard.onboarding.step3.description": "Examine the winning argument and save your insights",
   "dashboard.onboarding.markReviewed": "Mark as reviewed",
   "feedback.champion.question": "Was this answer helpful?",
-  "feedback.champion.yes": "Yes",
-  "feedback.champion.no": "No",
-  "feedback.champion.thanks": "Thanks for your feedback!"
+  "feedback.champion.yes": "Yes, helpful",
+  "feedback.champion.no": "Not helpful",
+  "feedback.champion.thanks": "Thanks for your feedback!",
+  "quota.exceeded.title": "Daily quota reached",
+  "quota.exceeded.message": "You've used {used} of your {limit} daily {kind} quota. Try again tomorrow or upgrade your plan.",
+  "quota.exceeded.tokens": "tokens",
+  "quota.exceeded.exports": "exports"
 }

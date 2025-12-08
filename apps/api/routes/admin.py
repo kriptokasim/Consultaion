@@ -14,12 +14,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from models import AdminEvent, AuditLog, Debate, User
 from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.provider_health import get_provider_health_snapshot
-from promotions.models import Promotion
+from pydantic import BaseModel
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
+from schemas import DebateConfig, default_debate_config, default_panel_config
 from ratings import update_ratings_for_debate
 from sqlalchemy import func
 from sqlmodel import Session, select
 from sse_backend import get_sse_backend
+from usage_limits import get_today_usage
 
 from routes.common import serialize_user
 
@@ -535,3 +537,131 @@ async def update_ratings_endpoint(
 
 
 admin_router = router
+"""
+Patchset 55: Admin plan management endpoints
+
+Add to the end of routes/admin.py
+"""
+
+# Add these classes near the top with other BaseModel imports
+from pydantic import BaseModel
+
+class ChangePlanRequest(BaseModel):
+    plan: str
+
+
+# Add this endpoint at the end of the file before the router export
+
+@router.post("/users/{user_id}/plan")
+def change_user_plan(
+    user_id: str,
+    request: ChangePlanRequest,
+    session: Session = Depends(get_session),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Change a user's subscription plan (admin only).
+    
+    Validates that the plan exists and logs the change for audit purposes.
+    
+    Args:
+        user_id: ID of user to update
+        request: ChangePlanRequest with new plan name
+        session: Database session
+        admin: Current admin user (auth check)
+    
+    Returns:
+        Updated user info with old and new plan
+    
+    Raises:
+        HTTPException: 400 if plan invalid, 404 if user not found
+    """
+    from plan_config import validate_plan
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # Validate plan exists
+    if not validate_plan(request.plan):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid plan: {request.plan}. Must be one of: free, pro, internal"
+        )
+    
+    # Get user
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    old_plan = user.plan
+    user.plan = request.plan
+    session.commit()
+    
+    # Audit log
+    logger.info(
+        f"Plan changed by admin {admin.email} ({admin.id}): "
+        f"user={user.email} ({user.id}) old_plan={old_plan} new_plan={request.plan}"
+    )
+    
+    from audit import record_audit
+    record_audit(
+        "plan_changed",
+        user_id=admin.id,
+        target_type="user",
+        target_id=user.id,
+        meta={"old_plan": old_plan, "new_plan": request.plan, "target_email": user.email},
+        session=session,
+    )
+    
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "old_plan": old_plan,
+        "new_plan": request.plan,
+    }
+
+
+@router.get("/usage/quota")
+def admin_quota_usage(
+    email: Optional[str] = Query(None, description="Filter by email"),
+    plan: Optional[str] = Query(None, description="Filter by plan (free/pro/internal)"),
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    """
+    View user quota usage with plan limits.
+    
+    Shows tokens and exports used today vs daily limits for each user.
+    Useful for monitoring and troubleshooting quota issues.
+    """
+    from plan_config import get_plan_limits
+    
+    # Build query
+    query = select(User)
+    if email:
+        query = query.where(User.email.contains(email))
+    if plan:
+        query = query.where(User.plan == plan)
+    
+    users = session.exec(query.limit(limit)).all()
+    
+    results = []
+    for user in users:
+        usage = get_today_usage(session, user.id)
+        limits = get_plan_limits(user.plan)
+        
+        results.append({
+            "user_id": user.id,
+            "email": user.email,
+            "plan": user.plan,
+            "tokens_used_today": usage["tokens_used"],
+            "daily_token_limit": limits.daily_token_limit,
+            "token_usage_pct": round(usage["tokens_used"] / limits.daily_token_limit * 100, 1),
+            "exports_used_today": usage["exports_used"],
+            "daily_export_limit": limits.daily_export_limit,
+            "export_usage_pct": round(usage["exports_used"] / limits.daily_export_limit * 100, 1) if limits.daily_export_limit > 0 else 0,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        })
+    
+    return {"users": results, "total": len(results)}
