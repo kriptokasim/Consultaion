@@ -5,13 +5,32 @@
 @import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Merriweather:wght@600;700&family=Inter:wght@400;500;600;700&family=Open+Sans:wght@400;600&display=swap");
 
 @layer base {
-  /* Amber-Mocha cockpit palette (cream base with amber gradients) */
+
+  /* Warm parchment + elegant dark slate palette (AI Parliament theme) */
   :root {
     --font-heading: "Playfair Display", "Merriweather", serif;
     --font-body: "Inter", "Open Sans", system-ui, -apple-system, sans-serif;
 
+    /* New semantic color variables */
+    --bg-page: #FFF7EB;
+    --bg-panel: #FFF3DE;
+    --bg-elevated: #FFFFFF;
+    --bg-dark: #161923;
+
+    --text-main: #2B2A33;
+    --text-muted: #5F6470;
+    --text-on-dark: #FFFFFF;
+    --text-on-dark-muted: #E3E7F2;
+
+    --accent-amber: #F4A623;
+    --accent-amber-soft: #FDD28A;
+    --accent-amber-dark: #C87F12;
+
+    --danger: #DC2626;
+
+    /* HSL tokens for shadcn/ui components */
     --background: 39 65% 96%;
-    --foreground: 26 33% 10%; /* Darker for better contrast */
+    --foreground: 26 33% 10%;
 
     --card: 38 52% 97%;
     --card-foreground: 26 33% 10%;
@@ -26,7 +45,7 @@
     --secondary-foreground: 26 33% 20%;
 
     --muted: 28 30% 88%;
-    --muted-foreground: 26 20% 30%; /* Darker for readability */
+    --muted-foreground: 26 20% 30%;
 
     --accent: 45 92% 48%;
     --accent-foreground: 34 69% 12%;
@@ -34,7 +53,7 @@
     --destructive: 4 72% 48%;
     --destructive-foreground: 44 100% 97%;
 
-    --border: 32 32% 70%; /* Darker for better definition */
+    --border: 32 32% 70%;
     --input: 32 32% 75%;
     --ring: 42 88% 52%;
 
@@ -57,8 +76,26 @@
   }
 
   .dark {
-    --background: 26 20% 10%; /* Much darker for high contrast */
-    --foreground: 38 60% 98%; /* Brighter/Whiter */
+    /* Dark mode: Deep slate instead of muddy brown */
+    --bg-page: #161923;
+    --bg-panel: #1E1F2E;
+    --bg-elevated: #252736;
+    --bg-dark: #0D0E14;
+
+    --text-main: #FFFFFF;
+    --text-muted: #E3E7F2;
+    --text-on-dark: #FFFFFF;
+    --text-on-dark-muted: #E3E7F2;
+
+    --accent-amber: #FDD28A;
+    --accent-amber-soft: #F4A623;
+    --accent-amber-dark: #FFE5B4;
+
+    --danger: #EF4444;
+
+    /* HSL tokens for shadcn/ui components */
+    --background: 26 20% 10%;
+    --foreground: 38 60% 98%;
 
     --card: 26 20% 14%;
     --card-foreground: 38 60% 98%;
@@ -130,7 +167,7 @@
 
   .dark .app-surface {
     background: radial-gradient(circle at 25% 12%, rgba(255, 190, 92, 0.08), transparent 50%),
-      linear-gradient(180deg, #1a120d 0%, #140e0a 60%, #0f0a07 100%);
+      linear-gradient(180deg, #1E1F2E 0%, #161923 60%, #0D0E14 100%);
   }
 
   .sidebar-surface {
@@ -138,22 +175,29 @@
   }
 
   .dark .sidebar-surface {
-    background: radial-gradient(circle at 30% 20%, rgba(255, 190, 92, 0.05), rgba(0, 0, 0, 0)) #16100c;
+    background: radial-gradient(circle at 30% 20%, rgba(255, 190, 92, 0.05), rgba(0, 0, 0, 0)) #161923;
   }
 
   .card-elevated {
-    @apply rounded-3xl border border-amber-200/70 bg-white/85 shadow-[0_18px_40px_rgba(112,73,28,0.16)] backdrop-blur-sm;
+    @apply rounded-3xl border border-amber-200/70 bg-white/85 shadow-[0_18px_40px_rgba(112, 73, 28, 0.16)] backdrop-blur-sm;
   }
 
   .dark .card-elevated {
-    background: linear-gradient(180deg, rgba(30, 22, 18, 0.9), rgba(20, 14, 10, 0.92));
+    background: linear-gradient(180deg, rgba(30, 31, 46, 0.9), rgba(22, 25, 35, 0.92));
     border-color: rgba(255, 205, 135, 0.2);
     box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
   }
 
   @keyframes pulse-soft {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35); }
-    50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+    }
+
+    50% {
+      box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+    }
   }
 
   .focus-amber {
@@ -172,13 +216,19 @@
   .search-elevated {
     transition: all 200ms ease;
   }
+
   .search-elevated:focus-visible {
     box-shadow: 0 10px 28px rgba(255, 190, 92, 0.25);
     transform: scale(1.01);
     border-color: rgba(255, 190, 92, 0.7);
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-heading leading-relaxed-tight;
   }
 
@@ -207,7 +257,10 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -221,15 +274,19 @@
 
 @layer components {
   .glass-card {
-    @apply rounded-3xl border border-white/10 bg-white/30 text-foreground shadow-[0_20px_40px_-10px_rgba(0,0,0,0.15)] backdrop-blur-md transition-transform duration-200 dark:bg-white/10;
+    @apply rounded-3xl border border-white/10 bg-white/30 text-foreground shadow-[0_20px_40px_-10px_rgba(0, 0, 0, 0.15)] backdrop-blur-md transition-transform duration-200 dark:bg-white/10;
+  }
+
+  .glass-card-dark {
+    @apply rounded-3xl border border-white/10 bg-white/6 shadow-[0_20px_40px_-10px_rgba(0, 0, 0, 0.3)] backdrop-blur-md transition-all duration-300 hover:bg-white/8;
   }
 
   .gradient-button {
-    @apply inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_-6px_rgba(59,130,246,0.35)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:ring-white/60 active:brightness-95 active:shadow-[0_10px_18px_-8px_rgba(59,130,246,0.3)] bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 hover:-translate-y-[1px] hover:shadow-[0_16px_32px_-8px_rgba(59,130,246,0.5)];
+    @apply inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold text-white shadow-[0_12px_24px_-6px_rgba(59, 130, 246, 0.35)] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:ring-white/60 active:brightness-95 active:shadow-[0_10px_18px_-8px_rgba(59, 130, 246, 0.3)] bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 hover:-translate-y-[1px] hover:shadow-[0_16px_32px_-8px_rgba(59, 130, 246, 0.5)];
   }
 
   .gradient-card {
-    @apply rounded-3xl border border-white/10 bg-gradient-to-br from-blue-50 to-purple-50 p-6 shadow-[0_25px_45px_-20px_rgba(63,81,181,0.45)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_55px_-25px_rgba(99,102,241,0.55)] dark:from-blue-900 dark:to-purple-900;
+    @apply rounded-3xl border border-white/10 bg-gradient-to-br from-blue-50 to-purple-50 p-6 shadow-[0_25px_45px_-20px_rgba(63, 81, 181, 0.45)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_55px_-25px_rgba(99, 102, 241, 0.55)] dark:from-blue-900 dark:to-purple-900;
   }
 
   .auth-muted {
@@ -241,7 +298,7 @@
   }
 
   .auth-card {
-    @apply bg-white/95 border border-amber-200/80 text-amber-950 shadow-[0_25px_70px_-30px_rgba(112,73,28,0.4)] dark:bg-stone-900/90 dark:border-amber-200/30 dark:text-amber-50;
+    @apply bg-white/95 border border-amber-200/80 text-amber-950 shadow-[0_25px_70px_-30px_rgba(112, 73, 28, 0.4)] dark:bg-stone-900/90 dark:border-amber-200/30 dark:text-amber-50;
   }
 
   .floating-label {
@@ -278,9 +335,17 @@
   }
 
   @keyframes shimmer-scan {
-    0% { transform: translateX(-100%); }
-    50% { transform: translateX(40%); }
-    100% { transform: translateX(100%); }
+    0% {
+      transform: translateX(-100%);
+    }
+
+    50% {
+      transform: translateX(40%);
+    }
+
+    100% {
+      transform: translateX(100%);
+    }
   }
 
   .card-hover {

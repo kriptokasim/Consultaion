@@ -78,40 +78,6 @@ export default function HomeContent() {
       </div>
 
       <div className="relative mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-1 items-center gap-4">
-            <Link href="/" className="flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-50">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-200/50">
-                <Brain className="h-6 w-6" />
-              </div>
-              <span className="text-2xl font-display font-bold text-[#3a2a1a]">Consultaion</span>
-            </Link>
-            <nav className="hidden flex-1 items-center gap-6 text-sm font-semibold text-[#6b5844] md:flex">
-              {marketingLinks.map((item) => (
-                <Link key={item.href} href={item.href} className="transition hover:text-amber-700">
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            {user ? (
-              <Link
-                href="/dashboard"
-                className="rounded-lg border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-              >
-                {t("landing.nav.dashboard")}
-              </Link>
-            ) : (
-              <Link
-                href="/login"
-                className="rounded-lg border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-              >
-                {t("landing.nav.signIn")}
-              </Link>
-            )}
-          </div>
-        </header>
 
         <MarketingHero>
           <div className="grid gap-12 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr]">
@@ -122,6 +88,7 @@ export default function HomeContent() {
                   {t("landing.hero.accent")}
                 </span>
               </h1>
+              <p className="text-lg font-semibold text-amber-900">{t("landing.hero.tagline")}</p>
               <p className="max-w-2xl text-lg text-[#5a4a3a]">{t("landing.hero.description")}</p>
               <div className="flex flex-col gap-2">
                 <Button variant="amber" size="lg" className="w-fit px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
@@ -169,6 +136,57 @@ export default function HomeContent() {
           ))}
         </section>
 
+        {/* How it Works Section */}
+        <section className="space-y-6">
+          <div className="text-center">
+            <h2 className="text-3xl font-semibold text-[#3a2a1a]">{t("landing.howItWorks.title")}</h2>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((step) => (
+              <div
+                key={step}
+                className="rounded-2xl border border-amber-100/80 bg-white/80 p-6 shadow-sm transition hover:-translate-y-[2px] hover:shadow-md"
+              >
+                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-lg font-bold text-amber-700">
+                  {step}
+                </div>
+                <h3 className="text-lg font-semibold text-[#3a2a1a]">{t(`landing.howItWorks.step${step}.title`)}</h3>
+                <p className="mt-2 text-sm text-[#5a4a3a]">{t(`landing.howItWorks.step${step}.description`)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Demo CTA */}
+        <section className="flex flex-col items-center gap-3 text-center">
+          <Link
+            href="/demo"
+            className="inline-flex flex-col items-center gap-1 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 px-8 py-4 transition hover:bg-amber-50 hover:border-amber-400"
+          >
+            <span className="text-lg font-semibold text-[#3a2a1a]">
+              {t("landing.demo.cta")}
+            </span>
+            <span className="text-xs text-amber-700">
+              {t("landing.demo.subtitle")}
+            </span>
+          </Link>
+          <p className="text-xs text-amber-900/60">
+            Experience how the AI Parliament debates your questions
+          </p>
+        </section>
+
+        {/* Social Proof Section - Placeholder */}
+        <section className="space-y-6 text-center">
+          <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("landing.socialProof.title")}</h2>
+          {/* TODO: Add real logos/testimonials */}
+          <div className="flex flex-wrap items-center justify-center gap-8 rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 p-8">
+            <p className="text-sm text-amber-700">
+              {/* Placeholder for logos */}
+              Testimonials and logos coming soon
+            </p>
+          </div>
+        </section>
+
         <DynamicLLMSelector onStart={handleStartDebate} />
 
         <section className="relative z-10 mt-12 flex flex-col items-center gap-3 rounded-3xl border border-amber-100/70 bg-white/80 p-8 text-center shadow-[0_20px_50px_rgba(112,73,28,0.08)]">
@@ -183,6 +201,12 @@ export default function HomeContent() {
               {item.label}
             </Link>
           ))}
+          <Link href="/terms" className="transition hover:text-amber-700">
+            {t("footer.terms")}
+          </Link>
+          <Link href="/privacy" className="transition hover:text-amber-700">
+            {t("footer.privacy")}
+          </Link>
         </footer>
       </div>
     </main>

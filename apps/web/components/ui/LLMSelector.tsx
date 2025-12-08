@@ -6,6 +6,8 @@ import { ArrowRight, Brain, Sparkles, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
 import { getModelAvatarUrl } from "@/lib/avatar"
+import { MODEL_DETAILS, type ModelDetail } from "@/lib/modelDetails"
+import { ModelDetailsDialog } from "@/components/ui/ModelDetailsDialog"
 
 type ModelCard = {
   id: string
@@ -45,12 +47,18 @@ const models: ModelCard[] = [
 
 export default function LLMSelector({ onStart }: { onStart?: () => void }) {
   const [selected, setSelected] = useState(models[0].id)
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const { t } = useI18n()
 
+  const selectedModelDetail: ModelDetail | null = selectedModelId
+    ? (MODEL_DETAILS[selectedModelId === 'claude35' ? 'claude-3.5' : selectedModelId === 'gpt4o' ? 'gpt-4o' : 'gemini-pro'] || null)
+    : null
+
   return (
-    <section className="relative mt-12 w-full overflow-hidden rounded-[36px] bg-neutral-950 px-6 py-14 text-white shadow-[0_50px_140px_-80px_rgba(15,15,15,0.9)]">
-      <div className="pointer-events-none absolute inset-0 opacity-40">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.35),_transparent_55%)]" />
+    <section className="relative mt-12 w-full overflow-hidden rounded-[36px] px-6 py-14 text-white shadow-[0_50px_140px_-80px_rgba(15,15,15,0.9)]" style={{ background: 'linear-gradient(180deg, #1E1F2E 0%, #161923 50%, #0D0E14 100%)' }}>
+      {/* Gradient overlay */}
+      <div className="pointer-events-none absolute inset-0 opacity-30">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(244,166,35,0.25),_transparent_55%)]" />
       </div>
 
       <div className="relative mx-auto flex max-w-5xl flex-col items-center text-center">
@@ -61,6 +69,21 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
         <p className="mt-4 max-w-2xl text-base text-white/70">
           {t("landing.selector.description")}
         </p>
+        {/* Multi-LLM Benefits */}
+        <ul className="mt-6 space-y-2 text-left text-sm text-white/80">
+          <li className="flex items-start gap-2">
+            <span className="mt-1 text-amber-400">✓</span>
+            <span>{t("landing.selector.benefit1")}</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-1 text-amber-400">✓</span>
+            <span>{t("landing.selector.benefit2")}</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-1 text-amber-400">✓</span>
+            <span>{t("landing.selector.benefit3")}</span>
+          </li>
+        </ul>
       </div>
 
       <div className="relative mx-auto mt-12 grid w-full max-w-5xl gap-6 md:grid-cols-3">
@@ -73,14 +96,15 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
               type="button"
               onClick={() => setSelected(model.id)}
               className={cn(
-                "group relative overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/50 p-6 text-left transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+                "group relative overflow-hidden rounded-3xl border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+                "glass-card-dark",
+                "p-6 text-left",
                 isSelected
                   ? cn(
                     "scale-105 border-white/30 shadow-2xl",
                     model.glow,
-                    "bg-neutral-900/90",
                   )
-                  : "hover:-translate-y-1 hover:bg-neutral-900/80",
+                  : "hover:-translate-y-1 border-white/10",
               )}
             >
               {isSelected && (
@@ -112,6 +136,16 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
                   <p className="text-lg font-semibold">{model.name}</p>
                   <p className="mt-1 text-sm text-white/70">{t(model.descriptionKey)}</p>
                 </div>
+                {/* Learn More Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedModelId(model.id)
+                  }}
+                  className="mt-4 w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+                >
+                  {t("models.details.learnMore")}
+                </button>
                 <div
                   className={cn(
                     "h-1 rounded-full bg-gradient-to-r transition-all duration-300",
@@ -135,6 +169,13 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
           <ArrowRight className="h-4 w-4 transition-all duration-200 group-hover:translate-x-1" />
         </button>
       </div>
+
+      {/* Model Details Modal */}
+      <ModelDetailsDialog
+        open={!!selectedModelId}
+        onOpenChange={(open) => !open && setSelectedModelId(null)}
+        model={selectedModelDetail}
+      />
     </section>
   )
 }

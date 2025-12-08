@@ -46,11 +46,11 @@ const config: Config = {
           border: '#E5E7EB',
         },
         amberParliament: {
-          amber: '#FFBF00',
+          amber: '#F4A623',
           accent: '#FF9E0F',
-          sepiaDark: '#3C2309',
-          sepia: '#704214',
-          sepiaLight: '#A17B4D',
+          sepiaDark: '#2B2A33',      // Updated: no muddy brown
+          sepia: '#5F6470',           // Updated: cleaner gray-slate
+          sepiaLight: '#e5c49cff',
           softYellow: '#FFFBE6',
         },
         primary: {

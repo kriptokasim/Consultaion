@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { AuthShell } from "@/components/auth/AuthShell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/PasswordInput"
 import { Label } from "@/components/ui/label"
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader"
 import { apiRequest } from "@/lib/apiClient"
@@ -86,21 +87,20 @@ export default function RegisterPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">{t("auth.register.password")}</Label>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               required
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
             />
+            <p className="text-xs text-amber-900/70 dark:text-amber-100/70">{t("auth.register.passwordHelp")}</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-password">{t("auth.register.confirm")}</Label>
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               required
               autoComplete="new-password"
               value={confirm}
@@ -112,6 +112,16 @@ export default function RegisterPage() {
           <Button type="submit" variant="amber" className="mt-2 w-full" disabled={loading}>
             {loading ? t("auth.register.ctaLoading") : t("auth.register.cta")}
           </Button>
+          <p className="text-xs text-center text-amber-900/70 dark:text-amber-100/70">
+            By creating an account, you agree to our{" "}
+            <Link href="/terms" className="underline underline-offset-2 hover:text-amber-700">
+              {t("auth.register.termsLink")}
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-amber-700">
+              {t("auth.register.privacyLink")}
+            </Link>.
+          </p>
         </form>
       )}
     </AuthShell>
