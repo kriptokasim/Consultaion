@@ -36,8 +36,16 @@ class JudgeConfig(BaseModel):
 
 
 class DebateConfig(BaseModel):
-    agents: List[AgentConfig] = Field(default_factory=list)
-    judges: List[JudgeConfig] = Field(default_factory=list)
+    agents: List[AgentConfig] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Maximum 20 agents per debate.",
+    )
+    judges: List[JudgeConfig] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Maximum 10 judges per debate.",
+    )
     budget: Optional[BudgetConfig] = None
 
 

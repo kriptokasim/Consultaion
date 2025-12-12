@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional, List
+from typing import Any, List, Optional
 
 from sqlalchemy import JSON, Column, DateTime, Index, Text
-from sqlmodel import Field, SQLModel, Relationship
+from sqlalchemy.orm import relationship
+from sqlmodel import Field, Relationship, SQLModel
 
 
 def utcnow() -> datetime:
@@ -33,7 +34,10 @@ class User(SQLModel, table=True):
     deleted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True, index=True))
     analytics_opt_out: bool = Field(default=False, nullable=False)
 
-    debates: List["Debate"] = Relationship(back_populates="user")
+    debates: List["Debate"] = Relationship(
+        back_populates="user",
+        sa_relationship=relationship("Debate", back_populates="user"),
+    )
 
 
 class SupportNote(SQLModel, table=True):
@@ -89,6 +93,9 @@ class APIKey(SQLModel, table=True):
 class Debate(SQLModel, table=True):
     model_config = SQLModel.model_config.copy()
     model_config["protected_namespaces"] = ()
+    __table_args__ = (
+        Index("ix_debate_user_status", "user_id", "status"),
+    )
     id: str = Field(primary_key=True)
     prompt: str = Field(sa_column=Column(Text, nullable=False))
     status: str = Field(default="queued", nullable=False, index=True)
@@ -107,10 +114,12 @@ class Debate(SQLModel, table=True):
     routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     mode: str = Field(default="debate", nullable=False, index=True)
 
-    routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
-    mode: str = Field(default="debate", nullable=False, index=True)
 
-    user: Optional[User] = Relationship(back_populates="debates")
+
+    user: Optional[User] = Relationship(
+        back_populates="debates",
+        sa_relationship=relationship("User", back_populates="debates"),
+    )
 
 
 class DebateRound(SQLModel, table=True):
@@ -192,6 +201,9 @@ class UsageCounter(SQLModel, table=True):
 
 class AuditLog(SQLModel, table=True):
     __tablename__ = "audit_log"
+    __table_args__ = (
+        Index("ix_audit_log_user_created", "user_id", "created_at"),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
     action: str = Field(nullable=False)

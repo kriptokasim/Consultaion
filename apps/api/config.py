@@ -186,6 +186,7 @@ class AppSettings(BaseSettings):
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_RECYCLE: int = 3600
+    DB_POOL_TIMEOUT: int = 30
     FORCE_CREATE_ALL: bool = False
 
     RL_BACKOFF_ENABLED: bool = True

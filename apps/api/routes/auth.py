@@ -36,6 +36,9 @@ router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
+DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-guard")
+
+
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
@@ -364,7 +367,15 @@ async def login_user(body: AuthRequest, response: Response, session: Session = D
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
-    if not user or not verify_password(body.password, user.password_hash):
+    
+    # Patchset 63.2: Constant-time verification to prevent timing side-channels
+    # Always hash/verify a password even if user is not found.
+    # We use a module-level dummy hash (computed once) for the "user not found" case.
+    # Note: DUMMY_PASSWORD_HASH should be defined at module level.
+    password_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
+    password_valid = verify_password(body.password, password_hash)
+
+    if not user or not password_valid:
         raise AuthError(message="Invalid credentials", code="auth.invalid_credentials")
     
     # [AUTH_DEBUG] Patchset 53.0: Log before token creation

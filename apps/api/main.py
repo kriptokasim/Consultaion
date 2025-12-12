@@ -83,12 +83,17 @@ logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 TEST_FAST_APP = settings.ENV == "test"
 if TEST_FAST_APP:
+
     try:
         from database import reset_engine as _reset_engine
-
-        _reset_engine()
-    except Exception:
-        pass
+    except ImportError:
+        logger.warning("TEST_FAST_APP enabled but reset_engine is not available")
+    else:
+        try:
+            _reset_engine()
+        except Exception as exc:
+            logger.error("Failed to reset DB engine in TEST_FAST_APP mode", exc_info=exc)
+            raise
 
 SENTRY_DSN = settings.SENTRY_DSN
 # Only initialize Sentry if DSN is set to a valid, non-empty value
@@ -138,10 +143,9 @@ async def lifespan(app: FastAPI):
     init_db()
     # Verify that critical tables exist; fail fast if missing
     try:
-        from sqlalchemy import create_engine, text
-        from sqlalchemy.exc import OperationalError, ProgrammingError
+        from sqlalchemy import create_engine, inspect
         engine = create_engine(settings.DATABASE_URL)
-        critical_tables = [
+        critical_tables = {
             "user",
             "team_member",
             "usage_quota",
@@ -149,15 +153,11 @@ async def lifespan(app: FastAPI):
             "api_keys",
             "audit_log",
             "debate",
-        ]
-        missing = []
-        # Use autocommit to avoid transaction issues during verification
-        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            for tbl in critical_tables:
-                try:
-                    conn.execute(text(f"SELECT 1 FROM {tbl} LIMIT 1;"))
-                except (ProgrammingError, OperationalError):
-                    missing.append(tbl)
+        }
+        inspector = inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+        missing = [tbl for tbl in critical_tables if tbl not in existing_tables]
+
         if missing:
             msg = f"Missing critical tables: {', '.join(missing)}"
             logger.error(msg)
@@ -258,9 +258,16 @@ from exceptions import AppError
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError):
     logger.error(
-        "AppError: %s",
-        exc.message,
-        extra={"code": exc.code, "details": exc.details, "status_code": exc.status_code},
+        "AppError",
+        extra={
+            "code": exc.code,
+            "details": exc.details,
+            "status_code": exc.status_code,
+            "request_path": request.url.path,
+            "request_method": request.method,
+            "request_id": request.headers.get("x-request-id"),
+            "user_id": getattr(request.state, "user_id", None),
+        },
     )
     error_payload = {
         "code": exc.code,

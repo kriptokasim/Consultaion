@@ -1,7 +1,7 @@
 """Official Consultaion API client for Python."""
 
 import json
-from typing import AsyncIterator, Callable, Optional
+from typing import AsyncIterator, Optional
 
 import httpx
 
