@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 from sqlalchemy import JSON, Column, DateTime, Index, Text
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Relationship
 
 
 def utcnow() -> datetime:
@@ -32,6 +32,8 @@ class User(SQLModel, table=True):
     # Patchset 58.0: Privacy controls
     deleted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True, index=True))
     analytics_opt_out: bool = Field(default=False, nullable=False)
+
+    debates: List["Debate"] = Relationship(back_populates="user")
 
 
 class SupportNote(SQLModel, table=True):
@@ -104,6 +106,11 @@ class Debate(SQLModel, table=True):
     routing_policy: Optional[str] = Field(default=None, nullable=True)
     routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     mode: str = Field(default="debate", nullable=False, index=True)
+
+    routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    mode: str = Field(default="debate", nullable=False, index=True)
+
+    user: Optional[User] = Relationship(back_populates="debates")
 
 
 class DebateRound(SQLModel, table=True):

@@ -20,7 +20,7 @@ export default function ApiDocsPage() {
 });
 
 const data = await res.json();
-console.log(data);`;
+// console.log(data);`;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(exampleCode);

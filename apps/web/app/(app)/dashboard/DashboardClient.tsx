@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { trackEvent } from "@/lib/analytics";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { OnboardingPanel } from "@/components/dashboard/OnboardingPanel";
+import { ErrorBanner } from "@/components/errors/ErrorBanner";
 
 type ModelOption = {
   id: string;
@@ -52,142 +53,97 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { getBillingMe } from "@/lib/api";
 
-export default function DashboardClient({ email }: { email?: string | null }) {
+export default function DashboardClient({ email }: { email?: string }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
+  const [modelError, setModelError] = useState<string | null>(null);
 
-  const { data: debatesData } = useDebatesList({ limit: 8, offset: 0 });
-  const debates = debatesData?.items ?? [];
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [templateUsed, setTemplateUsed] = useState(false);
+  const [step3Reviewed, setStep3Reviewed] = useState(false);
+
+  const [errorBanner, setErrorBanner] = useState<{
+    type: "error" | "warning" | "timeout";
+    title?: string;
+    message: string;
+  } | null>(null);
+
+  const { data: debatesData, isLoading: debatesLoading } = useDebatesList();
+  const debates = (debatesData?.items || []) as DebateSummary[];
 
   const { data: billing } = useQuery({
-    queryKey: ["billing-me"],
-    queryFn: getBillingMe,
+    queryKey: ["billing", "me"],
+    queryFn: getBillingMe
   });
 
-  const usage = billing?.usage;
-  const limits = billing?.plan.limits;
-  const maxDebates = limits?.max_debates_per_month as number | undefined;
-  const debatesUsed = usage?.debates_created || 0;
-
-  // Determine allowed tiers
-  const isFree = billing?.plan.is_default_free;
-  const allowedTiers = (limits?.allowed_model_tiers as string[]) || (isFree ? ["standard"] : ["standard", "advanced"]);
-
-  const [models, setModels] = useState<ModelOption[]>([]);
-  const [modelError, setModelError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
-  const [templateId, setTemplateId] = useState<string | null>(null);
-
-  // Onboarding checklist state
-  const [templateUsed, setTemplateUsed] = useState(false);
-  const [step3Reviewed, setStep3Reviewed] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("consultaion_onboarding_step3_reviewed") === "true";
+  // Assuming getMembers returns models/agents
+  const { data: modelsData } = useQuery({
+    queryKey: ["members"],
+    queryFn: async () => {
+      const res = await fetch("/api/config/members"); // Fallback if getMembers not exported or different
+      if (!res.ok) return [];
+      return res.json();
     }
-    return false;
   });
 
-  // Onboarding Panel State
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const models = (modelsData?.items || []).map((m: any) => ({
+    id: m.id,
+    display_name: m.name,
+    provider: m.provider,
+    tags: m.tags || [],
+    recommended: m.tags?.includes("recommended"),
+    tier: m.tier || "standard"
+  })) as ModelOption[];
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const seen = localStorage.getItem("consultaion_onboarding_seen");
-      if (!seen) {
-        setShowOnboarding(true);
-      }
+    if (models.length > 0 && !selectedModel) {
+      const recommended = models.find(m => m.recommended);
+      setSelectedModel(recommended?.id || models[0].id);
     }
-  }, []);
-
-  const handleDismissOnboarding = () => {
-    setShowOnboarding(false);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("consultaion_onboarding_seen", "true");
-    }
-  };
-
-  // Template prompt mappings
-  const TEMPLATE_PROMPTS: Record<string, string> = {
-    "strategy-saas-rollout": "How should our mid-size SaaS company (Series B, 150 employees, $20M ARR) approach integrating AI into our product and operations in 2025?",
-    "risk-bank-governance": "As a regulated bank, what framework should we adopt for AI governance to balance innovation with compliance requirements (GDPR, Basel III)?",
-    "product-roadmap": "Given our current product velocity and Q2 goals, which 3 features should we prioritize: advanced analytics dashboard, mobile app redesign, or API extensibility platform?"
-  };
-
-  const formatTimestamp = (ts?: string | null) => {
-    if (!ts) return t("dashboard.time.justNow");
-    const date = new Date(ts);
-    if (Number.isNaN(date.getTime())) return t("dashboard.time.justNow");
-    return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  };
+  }, [models, selectedModel]);
 
   useEffect(() => {
-    let cancelled = false;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    fetch(`${apiBase}/models`, { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        const items: ModelOption[] = Array.isArray(data?.models) ? data.models : [];
-        setModels(items);
-        // Filter recommended based on allowed tiers if possible, else just pick first allowed
-        const allowedItems = items.filter(m => allowedTiers.includes(m.tier || "standard"));
-        const recommended = allowedItems.find((m) => m.recommended) || allowedItems[0] || items[0];
-        setSelectedModel(recommended ? recommended.id : null);
-        if (!items.length) {
-          setModelError(t("dashboard.errors.noModelsAdmin"));
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setModelError(t("dashboard.errors.loadModels"));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [t, billing]);
-
-  // Template prefill logic
-  useEffect(() => {
-    if (templateId && TEMPLATE_PROMPTS[templateId]) {
-      setPrompt(TEMPLATE_PROMPTS[templateId]);
+    // Check if new user
+    if (!debatesLoading && debates.length === 0) {
+      setShowOnboarding(true);
     }
-  }, [templateId]);
+  }, [debatesLoading, debates.length]);
 
-  // Handle template click
-  const handleTemplateClick = (id: string) => {
-    setTemplateId(id);
-    const text = TEMPLATE_PROMPTS[id];
-    if (text) {
-      setPrompt(text);
-    }
-    trackEvent("template_used", { templateId: id });
-    setTemplateUsed(true); // Mark step 1 complete
-    setTimeout(() => {
-      setShowModal(true);
-    }, 100);
-  };
+  const maxDebates = billing?.plan?.limits?.debates_per_month;
+  const debatesUsed = billing?.usage?.debates_created ?? 0;
+  const allowedTiers = ["standard", "advanced"]; // TODO: get from plan
 
-  const handleStep3Mark = () => {
-    setStep3Reviewed(true);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("consultaion_onboarding_step3_reviewed", "true");
-    }
-    trackEvent("onboarding_step_marked_done", { step: 3 });
+  const handleDismissOnboarding = () => setShowOnboarding(false);
+  const handleStep3Mark = () => setStep3Reviewed(true);
+
+  const handleTemplateClick = (templateId: string) => {
+    setTemplateUsed(true);
+    setShowModal(true);
+    // Prefill prompt based on template
+    if (templateId === "strategy-saas-rollout") setPrompt(t("dashboard.templates.strategy.description"));
+    else if (templateId === "risk-bank-governance") setPrompt(t("dashboard.templates.governance.description"));
+    else if (templateId === "product-roadmap") setPrompt(t("dashboard.templates.product.description"));
   };
 
   const handleCreate = async () => {
     if (!prompt.trim()) return;
     if (!selectedModel) {
-      setError(t("dashboard.errors.noModels"));
+      setErrorBanner({
+        type: "error",
+        message: t("dashboard.errors.noModels"),
+      });
       return;
     }
     setSaving(true);
-    setError(null);
+    setErrorBanner(null);
+    setError(null); // Clear legacy error if any
     try {
       const { id } = await startDebate({ prompt: prompt.trim(), model_id: selectedModel });
       // Invalidate queries to refresh list
@@ -197,10 +153,46 @@ export default function DashboardClient({ email }: { email?: string | null }) {
       setPrompt("");
       window.location.href = `/runs/${id}`;
     } catch (err) {
-      if (err instanceof ApiClientError && err.status === 402) {
-        setLimitModal({ open: true, code: (err.body as any)?.code });
+      if (err instanceof ApiClientError) {
+        if (err.status === 429) {
+          // Quota exceeded
+          const body = err.body as any;
+          const kind = body?.kind === "tokens" ? t("quota.exceeded.tokens") : t("quota.exceeded.exports");
+          setErrorBanner({
+            type: "warning",
+            title: t("quota.exceeded.title"),
+            message: t("quota.exceeded.message", {
+              used: body?.used ?? 0,
+              limit: body?.limit ?? 0,
+              kind
+            }),
+          });
+          trackEvent("quota_exceeded", { kind: body?.kind, limit: body?.limit, used: body?.used, source: "debate_create" });
+        } else if (err.status === 403 && (err.body as any)?.error === "account_disabled") {
+          // Account disabled
+          setErrorBanner({
+            type: "error",
+            title: t("errors.accountDisabled.title"),
+            message: t("errors.accountDisabled"),
+          });
+          trackEvent("account_disabled_action_blocked", { action: "create_debate" });
+        } else if (err.status === 402) {
+          setLimitModal({ open: true, code: (err.body as any)?.code });
+        } else {
+          // Generic API error
+          setErrorBanner({
+            type: "error",
+            message: err.message || t("errors.generic"),
+          });
+          trackEvent("debate_run_error_generic", { source: "debate_create", message: err.message });
+        }
       } else {
-        setError(err instanceof Error ? err.message : t("dashboard.errors.create"));
+        // Unexpected error
+        setErrorBanner({
+          type: "error",
+          message: t("errors.generic"),
+        });
+        trackEvent("debate_run_error_generic", { source: "debate_create", message: (err as Error).message });
       }
     } finally {
       setSaving(false);
@@ -209,6 +201,16 @@ export default function DashboardClient({ email }: { email?: string | null }) {
 
   return (
     <main className="space-y-10">
+      {errorBanner && (
+        <div className="mb-6">
+          <ErrorBanner
+            type={errorBanner.type}
+            title={errorBanner.title}
+            message={errorBanner.message}
+            onDismiss={() => setErrorBanner(null)}
+          />
+        </div>
+      )}
       <section className="rounded-3xl border border-amber-200/80 bg-gradient-to-br from-white via-[#fff7eb] to-[#f8e6c2] p-8 shadow-[0_24px_60px_rgba(112,73,28,0.12)]">
         <div className="flex flex-wrap items-center gap-4">
           <div>

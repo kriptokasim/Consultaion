@@ -438,7 +438,7 @@ async def list_debates(
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0, le=10000),
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     q: Optional[str] = Query(default=None),
 ):
     filters = []
@@ -502,8 +502,9 @@ async def list_debates(
             except Exception:
                 pass
 
-    items_stmt = base_query.order_by(Debate.created_at.desc()).offset(offset).limit(limit)
+    items_stmt = base_query.order_by(sa.desc(Debate.created_at)).offset(offset).limit(limit)
     debates = session.exec(items_stmt).all()
+    
     has_more = offset + len(debates) < total
     return {
         "items": debates,
@@ -588,15 +589,15 @@ async def get_debate_events(
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
 
     messages = session.exec(
-        select(Message).where(Message.debate_id == debate_id).order_by(Message.created_at.asc())
+        select(Message).where(Message.debate_id == debate_id).order_by(sa.asc(Message.created_at))
     ).all()
     scores = session.exec(
-        select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())
+        select(Score).where(Score.debate_id == debate_id).order_by(sa.asc(Score.created_at))
     ).all()
     pairwise_votes = session.exec(
         select(PairwiseVote)
         .where(PairwiseVote.debate_id == debate_id)
-        .order_by(PairwiseVote.created_at.asc())
+        .order_by(sa.asc(PairwiseVote.created_at))
     ).all()
 
     events: list[dict[str, Any]] = []
@@ -701,7 +702,7 @@ async def export_scores_csv(
     current_user: User = Depends(get_current_user),
 ):
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
-    scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(Score.created_at.asc())).all()
+    scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(sa.asc(Score.created_at))).all()
     if not scores:
         raise NotFoundError(message="No scores found", code="scores.not_found")
 

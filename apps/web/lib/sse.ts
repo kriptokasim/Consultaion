@@ -73,14 +73,22 @@ export function useEventSource<T = unknown>(
       if (cancelled) return;
       const attempt = attemptsRef.current;
       setStatus(attempt > 0 ? "reconnecting" : "connecting");
+
       const source = new EventSource(url, { withCredentials });
       eventSourceRef.current = source;
+
       source.onopen = () => {
+        if (cancelled) {
+          source.close();
+          return;
+        }
         attemptsRef.current = 0;
         setStatus("connected");
         setLastError(null);
       };
+
       source.onmessage = (event) => {
+        if (cancelled) return;
         try {
           const payload = parseJson ? (JSON.parse(event.data) as T) : ((event.data as unknown) as T);
           setLastEvent(payload);
@@ -89,13 +97,21 @@ export function useEventSource<T = unknown>(
           setLastError(error instanceof Error ? error.message : "Failed to parse event");
         }
       };
+
       source.onerror = (errorEvent) => {
+        if (cancelled) return;
         setLastError("stream_error");
         onErrorRef.current?.(errorEvent);
+
+        // Close current source before scheduling retry
         source.close();
-        if (cancelled) return;
+        if (eventSourceRef.current === source) {
+          eventSourceRef.current = null;
+        }
+
         attemptsRef.current += 1;
         const delay = retryDelays[Math.min(attemptsRef.current - 1, retryDelays.length - 1)];
+
         clearRetryTimer();
         retryTimerRef.current = setTimeout(() => {
           connect();

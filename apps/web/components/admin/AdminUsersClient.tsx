@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/client"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -27,6 +28,7 @@ type AdminUserBilling = {
 }
 
 export default function AdminUsersClient({ initialItems }: { initialItems: AdminUser[] }) {
+  const { t } = useI18n()
   const [users, setUsers] = useState<AdminUser[]>(initialItems)
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
@@ -152,7 +154,7 @@ export default function AdminUsersClient({ initialItems }: { initialItems: Admin
               {!users.length ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-sm text-stone-500">
-                    {loading ? "Loading…" : "No users yet."}
+                    {loading ? t("processing") : query ? t("admin.users.emptySearch") : "No users yet."}
                   </td>
                 </tr>
               ) : null}

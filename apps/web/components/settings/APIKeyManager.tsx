@@ -254,7 +254,7 @@ export default function APIKeyManager() {
 
                         <div className="mt-4 rounded-lg border-2 border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
                             <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                                ⚠️ Copy this secret now - it won't be shown again!
+                                ⚠️ Copy this secret now - it won&apos;t be shown again!
                             </p>
                         </div>
 

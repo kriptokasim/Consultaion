@@ -168,7 +168,7 @@ export default async function AdminOpsPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-stone-500">No token data recorded yet.</p>
+              <p className="text-sm text-stone-500">{t("admin.quota.empty")}</p>
             )}
           </div>
         </div>

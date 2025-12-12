@@ -13,9 +13,9 @@ from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import AdminEvent, AuditLog, Debate, SupportNote, User
-from promotions.models import Promotion
 from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.provider_health import get_provider_health_snapshot
+from promotions.models import Promotion
 from pydantic import BaseModel
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from ratings import update_ratings_for_debate
@@ -945,8 +945,8 @@ def admin_purge_old_data(
     Anonymizes/deletes old data according to RETAIN_*_DAYS settings.
     Intended to be called by cron job or manually.
     """
-    from maintenance.retention import run_all_purges
     from audit import record_audit
+    from maintenance.retention import run_all_purges
     
     results = run_all_purges(session)
     

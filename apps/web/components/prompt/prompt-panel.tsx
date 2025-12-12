@@ -66,7 +66,7 @@ export function PromptPanel({
             >
 
 
-                // ... (inside component)
+
 
                 {/* Header: Mode Toggle or Status */}
                 <div className="mb-3 flex items-center justify-between">
@@ -140,31 +140,33 @@ export function PromptPanel({
                     </p>
 
                     {/* Right side controls */}
-                    <div className="flex items-center gap-2">
-                        {/* Advanced settings trigger */}
-                        {onAdvancedSettingsClick && (
-                            <button
-                                type="button"
-                                className="text-xs text-slate-500 underline-offset-2 transition hover:text-slate-700 hover:underline"
-                                onClick={onAdvancedSettingsClick}
-                            >
-                                Advanced settings
-                            </button>
-                        )}
-
-                        {/* Submit button */}
-                        <Button
+                    {/* <div className="absolute right-2 top-2">
+                <Kbd>Cmd+Enter</Kbd>
+              </div> */}
+                    {/* Advanced settings trigger */}
+                    {onAdvancedSettingsClick && (
+                        <button
                             type="button"
-                            size="sm"
-                            disabled={!canSubmit}
-                            onClick={onSubmit}
-                            className="bg-brand-accent text-white hover:bg-brand-accent/90"
+                            className="text-xs text-slate-500 underline-offset-2 transition hover:text-slate-700 hover:underline"
+                            onClick={onAdvancedSettingsClick}
                         >
-                            {isSubmitLoading || status === 'running' ? 'Running…' : (mode === 'conversation' ? 'Start Conversation' : submitLabel)}
-                        </Button>
-                    </div>
+                            Advanced settings
+                        </button>
+                    )}
+
+                    {/* Submit button */}
+                    <Button
+                        type="button"
+                        size="sm"
+                        disabled={!canSubmit}
+                        onClick={onSubmit}
+                        className="bg-brand-accent text-white hover:bg-brand-accent/90"
+                    >
+                        {isSubmitLoading || status === 'running' ? 'Running…' : (mode === 'conversation' ? 'Start Conversation' : submitLabel)}
+                    </Button>
                 </div>
             </div>
         </div>
+
     )
 }

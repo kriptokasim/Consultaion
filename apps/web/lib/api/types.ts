@@ -31,6 +31,12 @@ export interface DebateDetail extends DebateSummary {
     panel_config?: PanelConfig;
     final_content?: string;
     final_meta?: any;
+    participant_errors?: Array<{
+        id: string;
+        role: string;
+        name: string;
+        error_type: string;
+    }>;
     // Add other fields as needed from the API response
 }
 

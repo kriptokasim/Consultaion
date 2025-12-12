@@ -19,6 +19,10 @@ import { notFound } from "next/navigation";
 import { normalizeLivePayload } from "@/lib/debateTransforms";
 import { DEFAULT_RUN_MEMBERS, DEFAULT_API_URL, DEFAULT_VOTE_THRESHOLD } from "@/config/debateDefaults";
 import { useDebateVoting } from "@/hooks/useDebateVoting";
+import { ErrorBanner } from "@/components/errors/ErrorBanner";
+import { useI18n } from "@/lib/i18n/client";
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { useState } from "react";
 
 type RunDetailClientProps = {
   id: string;
@@ -34,6 +38,8 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     setActiveDebate,
     reset
   } = useDebateStore();
+  const { t } = useI18n();
+  const [showTechDetails, setShowTechDetails] = useState(false);
 
   // Reset store on mount/unmount
   useEffect(() => {
@@ -41,22 +47,10 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     return () => reset();
   }, [id, setActiveDebate, reset]);
 
-  if (error) {
-    throw error; // Let error boundary handle it
-  }
-
-  if (isLoading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
-  }
-
-  if (!debate) {
-    notFound();
-  }
-
   const base = DEFAULT_API_URL.replace(/\/$/, '');
   const streamUrl = `${base}/debates/${id}/stream`;
   const reportUrl = `${base}/debates/${id}/report`;
-  const shouldStream = debate.status === 'running' || debate.status === 'queued';
+  const shouldStream = debate?.status === 'running' || debate?.status === 'queued';
 
   const handleLiveEvent = useCallback(
     (payload: any) => {
@@ -74,7 +68,7 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
   }, []);
 
   const { status: streamStatus } = useEventSource<any>(shouldStream ? streamUrl : null, {
-    enabled: shouldStream,
+    enabled: !!shouldStream,
     withCredentials: true,
     onEvent: handleLiveEvent,
     onError: handleLiveError,
@@ -121,20 +115,18 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     return messageEvent?.actor;
   }, [events]);
 
-  const tokensUsed = typeof debate.final_meta?.usage?.total_tokens === 'number'
-    ? debate.final_meta.usage.total_tokens
-    : undefined;
+  const tokensUsed = debate?.final_meta?.usage?.total_tokens;
 
   const elapsedSeconds = useMemo(() => {
-    if (!debate.created_at || !debate.updated_at) return undefined;
+    if (!debate?.created_at || !debate?.updated_at) return undefined;
     const start = new Date(debate.created_at).getTime();
     const end = new Date(debate.updated_at).getTime();
     if (Number.isNaN(start) || Number.isNaN(end)) return undefined;
     return Math.max(0, Math.round((end - start) / 1000));
-  }, [debate.created_at, debate.updated_at]);
+  }, [debate?.created_at, debate?.updated_at]);
 
   const seatDefinitions = useMemo(() => {
-    if (Array.isArray(debate.panel_config?.seats) && debate.panel_config.seats.length) {
+    if (debate?.panel_config?.seats && Array.isArray(debate.panel_config.seats) && debate.panel_config.seats.length) {
       return debate.panel_config.seats.map((seat: any) => ({
         id: seat.seat_id,
         name: seat.display_name,
@@ -144,17 +136,17 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
       }));
     }
     return DEFAULT_RUN_MEMBERS;
-  }, [debate.panel_config]);
+  }, [debate?.panel_config]);
 
   const arenaMetrics: ArenaMetrics = useMemo(
     () => ({
       rounds: events.filter((event) => event.type === 'message').length,
       tokensUsed,
       elapsedSeconds,
-      updatedAt: debate.updated_at,
-      budgetReason: debate.final_meta?.budget_reason,
+      updatedAt: debate?.updated_at,
+      budgetReason: debate?.final_meta?.budget_reason,
     }),
-    [debate.final_meta?.budget_reason, debate.updated_at, elapsedSeconds, events, tokensUsed]
+    [debate?.final_meta?.budget_reason, debate?.updated_at, elapsedSeconds, events, tokensUsed]
   );
 
   const arenaSeats: ArenaSeat[] = useMemo(
@@ -171,22 +163,57 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     [seatDefinitions, latestSpeaker, tokensUsed]
   );
 
+  if (error) {
+    throw error; // Let error boundary handle it
+  }
+
+  if (isLoading) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
+
+  if (!debate) {
+    notFound();
+  }
+
   const createdAt = new Date(debate.created_at).toLocaleString();
   const updatedAt = new Date(debate.updated_at).toLocaleString();
+
+  const status = (debate.status || "success").toLowerCase();
+  const isDegraded = status === "degraded";
+  const isFailed = status === "failed";
+
+  const statusPillColor = isFailed
+    ? "bg-red-100 text-red-800 border-red-200"
+    : isDegraded
+      ? "bg-amber-100 text-amber-800 border-amber-200"
+      : "bg-emerald-100 text-emerald-800 border-emerald-200";
+
+  const statusLabel = isFailed
+    ? t("debate.status.failed")
+    : isDegraded
+      ? t("debate.status.degraded")
+      : t("debate.status.success");
 
   // Runtime logs (simplified for now, could be in store too)
   const runtimeLogs: ArenaRuntimeLog[] = [];
 
   return (
     <main id="main" className="space-y-6 p-4 lg:p-6">
+      {(isDegraded || isFailed) && (
+        <ErrorBanner
+          type={isFailed ? "error" : "warning"}
+          title={isFailed ? t("debate.failed.title") : t("debate.degraded.title")}
+          message={isFailed ? t("debate.failed.message") : t("debate.degraded.message")}
+        />
+      )}
       <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-amber-50/70 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:from-stone-900 dark:via-stone-900 dark:to-amber-950/20">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-700">Run detail</p>
         <h1 className="heading-serif text-2xl font-semibold text-amber-900 dark:text-amber-50">
           {debate.prompt ?? 'Parliament session'}
         </h1>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-amber-900/80 dark:text-amber-100/80">
-          <span className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 shadow-inner shadow-amber-900/5 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-            Status: {debate.status}
+          <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide shadow-inner shadow-amber-900/5 ${statusPillColor}`}>
+            {statusLabel}
           </span>
           {debate.model_id ? (
             <span className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 shadow-inner shadow-amber-900/5 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
@@ -226,6 +253,35 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
         voteBasis={voteBasis}
         apiBase={base}
       />
+
+      {(isDegraded || isFailed) && debate.participant_errors && debate.participant_errors.length > 0 && (
+        <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+          <button
+            onClick={() => setShowTechDetails(!showTechDetails)}
+            className="flex w-full items-center justify-between text-sm font-semibold text-stone-700 hover:text-stone-900"
+          >
+            <span className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              {t("debate.technicalDetails.title")}
+            </span>
+            {showTechDetails ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+
+          {showTechDetails && (
+            <div className="mt-3 border-t border-stone-200 pt-3">
+              <ul className="space-y-2 text-xs text-stone-600">
+                {debate.participant_errors.map((err, idx) => (
+                  <li key={err.id || idx} className="flex items-start gap-2">
+                    <span className="font-mono font-medium text-stone-800">{err.role} ({err.name})</span>
+                    <span className="text-stone-400">—</span>
+                    <span className="font-mono text-red-700">{err.error_type}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }

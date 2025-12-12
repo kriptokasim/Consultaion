@@ -66,13 +66,13 @@ export function SocialProof() {
 
                             {/* Quote Text */}
                             <blockquote className="mb-4 text-base italic leading-relaxed text-[#3a2a1a]">
-                                "{testimonial.quote}"
+                                &quot;{testimonial.quote}&quot;
                             </blockquote>
 
                             {/* Attribution */}
                             <div className="border-t border-amber-100 pt-4">
                                 <p className="font-semibold text-[#3a2a1a]">{testimonial.name}</p>
-                                <p className="text-sm text-[#5a4a3a]">{testimonial.role}</p>
+                                <p className="text-sm text-stone-600">&quot;Trusted by teams worldwide&quot;</p>
                                 <p className="text-xs text-amber-700">{testimonial.companyType}</p>
                             </div>
                         </div>

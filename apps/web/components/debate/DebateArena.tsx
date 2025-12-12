@@ -108,9 +108,9 @@ export default function DebateArena({
   const resolvedSeats = seats.length
     ? seats
     : [
-        { id: "analyst", name: "Analyst", role: "agent", status: "speaking", tokens: 0, provider: undefined, model: undefined },
-        { id: "critic", name: "Critic", role: "critic", status: "waiting", tokens: 0, provider: undefined, model: undefined },
-      ];
+      { id: "analyst", name: "Analyst", role: "agent", status: "speaking", tokens: 0, provider: undefined, model: undefined },
+      { id: "critic", name: "Critic", role: "critic", status: "waiting", tokens: 0, provider: undefined, model: undefined },
+    ];
 
   return (
     <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-amber-50/50 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)]">
@@ -123,7 +123,12 @@ export default function DebateArena({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold", statusColors[connectionStatus])}>
+          <span
+            className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold", statusColors[connectionStatus])}
+            role="status"
+            aria-live="polite"
+            aria-label={`Connection status: ${statusLabel[connectionStatus]}`}
+          >
             <RefreshCcw className="h-3.5 w-3.5" />
             {statusLabel[connectionStatus]}
           </span>
