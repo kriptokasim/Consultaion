@@ -1,3 +1,5 @@
+import os
+
 from logging.config import fileConfig
 from pathlib import Path
 
@@ -32,9 +34,21 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# allow DATABASE_URL env override when running migrations
-# Escape % chars for configparser (URL-encoded passwords contain %XX)
-url = settings.DATABASE_URL.replace('%', '%%')
+# Patchset 68.0: Prefer DATABASE_URL_MIGRATIONS for direct Supabase connection
+# This allows migrations to bypass PgBouncer (port 5432 direct vs 6543 pooler)
+DATABASE_URL_MIGRATIONS = os.getenv("DATABASE_URL_MIGRATIONS")
+DATABASE_URL = settings.DATABASE_URL
+
+if DATABASE_URL_MIGRATIONS:
+    # Use direct connection for migrations
+    url = DATABASE_URL_MIGRATIONS.replace('%', '%%')
+else:
+    # Fallback to runtime URL (escape % chars for configparser)
+    url = DATABASE_URL.replace('%', '%%')
+
+if not url:
+    raise RuntimeError("DATABASE_URL is not set")
+
 config.set_main_option("sqlalchemy.url", url)
 
 target_metadata = SQLModel.metadata

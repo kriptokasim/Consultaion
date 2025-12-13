@@ -7,6 +7,13 @@ from sqlmodel import Session, SQLModel, create_engine
 def _create_engine():
     database_url = settings.DATABASE_URL
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+    
+    # Patchset 68.0: PgBouncer safety for psycopg3
+    # Disable prepared statements when using Supabase pooler (transaction mode)
+    # to avoid "prepared statement does not exist" errors
+    if ":6543" in database_url or "pooler.supabase.com" in database_url:
+        connect_args["prepare_threshold"] = 0
+    
     engine_kwargs = {
         "echo": settings.DB_ECHO,
         "connect_args": connect_args,
