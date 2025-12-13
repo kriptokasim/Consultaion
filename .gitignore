@@ -32,3 +32,5 @@ apps/api/ci_migrate.db
 apps/web/.playwright-browsers/
 .playwright-browsers/
 apps/web/*.deb
+.vercel
+.env*.local

@@ -70,6 +70,39 @@ class DebateError(SQLModel, table=True):
     participant_errors: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
 
+class DebateCheckpoint(SQLModel, table=True):
+    """
+    Patchset 66.0: Checkpoint for orchestrator resumability.
+    
+    Stores state machine progress for debates so they can resume
+    after worker restarts or partial failures.
+    """
+    __tablename__ = "debate_checkpoint"
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    
+    # State machine
+    step: str = Field(nullable=False, index=True)  # e.g., "draft", "critique", "judge", "done"
+    step_index: int = Field(default=0, nullable=False)
+    round_index: int = Field(default=0, nullable=False)
+    
+    # Bookkeeping
+    status: str = Field(default="running", nullable=False, index=True)  # Mirror of Debate.status at checkpoint
+    attempt_count: int = Field(default=0, nullable=False)
+    
+    # Ownership / idempotency
+    resume_token: Optional[str] = Field(default=None, index=True)
+    resume_claimed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    
+    # Timestamps (indexes defined separately below)
+    last_checkpoint_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    last_event_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    
+    # Optional context snapshot (keep small - no full transcripts)
+    context_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+
+
 class APIKey(SQLModel, table=True):
     """
     API Key model for programmatic access.
@@ -267,3 +300,7 @@ Index("ix_audit_log_created_at", AuditLog.created_at)
 Index("ix_pairwise_vote_candidates", PairwiseVote.candidate_a, PairwiseVote.candidate_b)
 Index("ix_rating_persona_unique", RatingPersona.persona, RatingPersona.category, unique=True)
 Index("ix_admin_event_created_at", AdminEvent.created_at)
+
+# Patchset 66.0: DebateCheckpoint indexes
+Index("ix_debate_checkpoint_last_checkpoint", DebateCheckpoint.last_checkpoint_at)
+Index("ix_debate_checkpoint_status_checkpoint", DebateCheckpoint.status, DebateCheckpoint.last_checkpoint_at)

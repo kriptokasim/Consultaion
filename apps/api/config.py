@@ -120,6 +120,12 @@ class AppSettings(BaseSettings):
     DEBATE_MIN_REQUIRED_SEATS: int = Field(1, ge=0)
     DEBATE_FAIL_FAST: bool = Field(True, description="Abort debates when too many seats fail.")
 
+    # Patchset 66.0: Stale debate cleanup settings
+    DEBATE_STALE_RUNNING_SECONDS: int = Field(3600, description="Max seconds a debate can stay 'running' before cleanup")
+    DEBATE_STALE_QUEUED_SECONDS: int = Field(1800, description="Max seconds a debate can stay 'queued' before cleanup")
+    DEBATE_CLEANUP_LOOP_SECONDS: int = Field(60, description="Interval between cleanup loop iterations")
+    DEBATE_RESUME_TOKEN_TTL_SECONDS: int = Field(300, description="TTL for resume token ownership claims")
+
     # Provider health & circuit breaker (Patchset 28.0)
     PROVIDER_HEALTH_WINDOW_SECONDS: int = Field(300, description="Sliding window for health metrics (seconds)")
     PROVIDER_HEALTH_ERROR_THRESHOLD: float = Field(0.5, ge=0.0, le=1.0, description="Error rate threshold to open circuit")

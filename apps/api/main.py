@@ -200,17 +200,26 @@ async def lifespan(app: FastAPI):
             logger.info("Models enabled: %s (default=%s)", [m.id for m in models], get_default_model().id)
     except Exception as exc:
         logger.error("Model registry initialization failed: %s", exc)
-    cleanup_task: asyncio.Task | None = None
     
     # Initialize and start SSE backend (singleton)
     sse_backend = get_sse_backend()
     await sse_backend.start()
     app.state.sse_backend = sse_backend
     
+    # Patchset 66.0: Start stale debate cleanup loop
+    from orchestrator_cleanup import start_cleanup_loop, stop_cleanup_loop
+    cleanup_task = start_cleanup_loop()
+    
     try:
         yield
     finally:
+        # Patchset 66.0: Stop cleanup loop gracefully
+        stop_cleanup_loop()
+        if cleanup_task and not cleanup_task.done():
+            with suppress(asyncio.CancelledError):
+                await cleanup_task
         await sse_backend.stop()
+
 
 
 app = FastAPI(
