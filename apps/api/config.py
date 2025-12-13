@@ -305,7 +305,6 @@ class AppSettings(BaseSettings):
         if not self.SSE_REDIS_URL and self.REDIS_URL:
             object.__setattr__(self, "SSE_REDIS_URL", self.REDIS_URL)
         if not is_local:
-            # object.__setattr__(self, "SSE_BACKEND", "redis")  # Allow memory backend if workers=1
             if self.SSE_BACKEND == "redis" and not (self.SSE_REDIS_URL or self.REDIS_URL):
                 raise RuntimeError("SSE_REDIS_URL or REDIS_URL is required for SSE in non-dev environments")
 

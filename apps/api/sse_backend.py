@@ -164,10 +164,18 @@ class RedisChannelBackend:
 
     async def publish(self, channel_id: str, event: dict) -> None:
         payload = json.dumps(event)
-        try:
-            await self._redis.publish(channel_id, payload)
-        except Exception as e:
-             logger.error(f"Failed to publish to Redis SSE {channel_id}: {e}")
+        for attempt in range(3):
+            try:
+                await self._redis.publish(channel_id, payload)
+                return
+            except (redis.ConnectionError, redis.TimeoutError) as e:
+                if attempt == 2:
+                    logger.error(f"Failed to publish to Redis SSE {channel_id} after 3 attempts: {e}")
+                else:
+                    await asyncio.sleep(0.1 * (2**attempt))
+            except Exception as e:
+                logger.error(f"Failed to publish to Redis SSE {channel_id}: {e}")
+                return
 
     async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
         pubsub = self._redis.pubsub()
@@ -211,7 +219,11 @@ def create_sse_backend() -> BaseSSEBackend:
         if url and url.strip() and (url.startswith("redis://") or url.startswith("rediss://") or url.startswith("unix://")):
             return RedisChannelBackend(url=url, ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
         else:
-            logger.warning("SSE_BACKEND=redis but URL invalid. Falling back to memory.")
+            msg = "SSE_BACKEND=redis but URL is invalid or missing."
+            if not settings.IS_LOCAL_ENV:
+                 # Patchset 70: Fail fast in production
+                 raise RuntimeError(msg)
+            logger.warning(f"{msg} Falling back to memory.")
     
     return MemoryChannelBackend(ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
 
