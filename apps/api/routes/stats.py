@@ -92,54 +92,7 @@ class HallOfFameResponse(BaseModel):
 
 
 
-@router.get("/healthz")
-async def healthz():
-    return {"status": "ok", "version": settings.APP_VERSION}
 
-
-@router.get("/readyz")
-async def readyz(
-    session: Session = Depends(get_session),
-    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
-):
-    # 1. DB Check
-    try:
-        session.exec(sa.text("SELECT 1"))
-    except Exception as e:
-         raise HTTPException(status_code=503, detail=f"Database connectivity failed: {e}")
-
-    # 2. Migration Check
-    try:
-        from alembic import config
-        from alembic.migration import MigrationContext
-        # Simplified check: just ensuring we can read the version table
-        # A full check against head requires filesystem access to migration scripts which might be slow
-        # But we can at least check if the table has a version
-        with session.connection() as connection:
-             context = MigrationContext.configure(connection)
-             rev = context.get_current_revision()
-             if not rev:
-                 # Logic for 'migrations pending' or 'fresh db'
-                 pass 
-    except Exception:
-        # Don't fail readyz on migration check failure for now, just log or ignore if alembic not present
-        pass
-
-    # 3. Model Registry Check
-    models_enabled = list_enabled_models()
-    if not models_enabled:
-        raise HTTPException(status_code=503, detail="no models enabled")
-
-    # 4. SSE Backend Check
-    sse_ok = await sse_backend.ping()
-
-    return {
-        "db": "ok",
-        "models_available": True,
-        "enabled_model_count": len(models_enabled),
-        "sse_backend": settings.SSE_BACKEND,
-        "sse_ok": sse_ok,
-    }
 
 
 @router.get("/debug/cookie-config")

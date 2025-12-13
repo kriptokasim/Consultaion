@@ -57,10 +57,9 @@ from routes.stats import (
     get_model_leaderboard_stats,
     get_rate_limit_snapshot,
     get_system_health,
-    healthz,
-    readyz,
     stats_router,
 )
+from routes.ops import router as ops_router
 from routes.teams import (
     TeamCreate,
     TeamMemberCreate,
@@ -321,6 +320,7 @@ async def app_error_handler(request: Request, exc: AppError):
 from routes.debug import router as debug_router  # Patchset 53.0
 
 app.include_router(auth_router)
+app.include_router(ops_router)
 app.include_router(stats_router)
 app.include_router(models_router)
 app.include_router(debates_router)
