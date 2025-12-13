@@ -329,7 +329,7 @@ async def google_callback(
 
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
-async def register_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
+async def register_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
     ip = request.client.host if request and request.client else "anonymous"
     allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
     if not allowed:
@@ -363,7 +363,7 @@ async def register_user(body: AuthRequest, response: Response, session: Session 
 
 
 @router.post("/auth/login")
-async def login_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
+async def login_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
     ip = request.client.host if request and request.client else "anonymous"
     allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
     if not allowed:
