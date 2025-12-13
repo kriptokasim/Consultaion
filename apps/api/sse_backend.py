@@ -96,14 +96,23 @@ class MemoryChannelBackend:
     async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
         await self.create_channel(channel_id)
         queue = self._channels[channel_id]
+        poll_timeout = getattr(settings, 'SSE_POLL_TIMEOUT_SECONDS', 1.0)
         try:
             while True:
                 # Update last seen on access
                 async with self._lock:
-                     self._last_seen[channel_id] = time.time()
+                    self._last_seen[channel_id] = time.time()
                 
-                event = await queue.get()
-                yield event
+                try:
+                    # Patchset 67.0: Use timeout to prevent infinite blocking
+                    event = await asyncio.wait_for(queue.get(), timeout=poll_timeout)
+                    yield event
+                    # Exit on final/error event types
+                    if event.get("type") in ("final", "error"):
+                        break
+                except asyncio.TimeoutError:
+                    # Keep polling - this allows the generator to be cancelled externally
+                    continue
         except asyncio.CancelledError:
             pass
 
@@ -208,6 +217,45 @@ def create_sse_backend() -> BaseSSEBackend:
 
 
 _global_sse_backend: BaseSSEBackend | None = None
+_sse_backend_lock = asyncio.Lock()
+
+
+class SSEBackendProvider:
+    """
+    Patchset 67.0: Thread-safe lazy SSE backend provider.
+    
+    Replaces global mutable singleton pattern for better test isolation
+    and multi-worker safety.
+    """
+    _instance: "SSEBackendProvider | None" = None
+    
+    def __init__(self) -> None:
+        self._backend: BaseSSEBackend | None = None
+    
+    @classmethod
+    def instance(cls) -> "SSEBackendProvider":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+    
+    def get(self) -> BaseSSEBackend:
+        """Get or create the SSE backend instance."""
+        if self._backend is None:
+            self._backend = create_sse_backend()
+            logger.info("SSE backend created: %s", type(self._backend).__name__)
+        return self._backend
+    
+    def reset_for_tests(self) -> None:
+        """Reset backend for test isolation. Logs for debugging."""
+        logger.debug("SSE backend reset for tests")
+        self._backend = None
+    
+    @classmethod
+    def reset_instance_for_tests(cls) -> None:
+        """Fully reset the provider instance (for complete test isolation)."""
+        if cls._instance is not None:
+            cls._instance.reset_for_tests()
+        cls._instance = None
 
 
 def get_sse_backend() -> BaseSSEBackend:
@@ -216,12 +264,10 @@ def get_sse_backend() -> BaseSSEBackend:
     This provides a singleton for the process, ensuring background tasks
     share the same memory backend as the API (if using memory).
     """
-    global _global_sse_backend
-    if _global_sse_backend is None:
-        _global_sse_backend = create_sse_backend()
-    return _global_sse_backend
+    return SSEBackendProvider.instance().get()
 
 
 def reset_sse_backend_for_tests() -> None:
-    global _global_sse_backend
-    _global_sse_backend = None
+    """Reset SSE backend for test isolation."""
+    SSEBackendProvider.reset_instance_for_tests()
+

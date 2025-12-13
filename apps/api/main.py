@@ -304,13 +304,16 @@ async def app_error_handler(request: Request, exc: AppError):
         "hint": exc.hint,
         "retryable": exc.retryable,
     }
-    # Add retry_after_seconds for rate limit errors
+    # Patchset 67.0: Add retry_after_seconds for rate limit errors
+    headers: dict[str, str] = {}
     if hasattr(exc, "retry_after_seconds") and exc.retry_after_seconds is not None:
         error_payload["retry_after_seconds"] = exc.retry_after_seconds
+        headers["Retry-After"] = str(exc.retry_after_seconds)
     
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": error_payload},
+        headers=headers if headers else None,
     )
 
 

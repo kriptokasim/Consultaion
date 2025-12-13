@@ -108,6 +108,7 @@ class AppSettings(BaseSettings):
     SSE_BACKEND: Literal["memory", "redis"] = "memory"
     SSE_REDIS_URL: str | None = None
     SSE_CHANNEL_TTL_SECONDS: int = 900
+    SSE_POLL_TIMEOUT_SECONDS: float = 1.0  # Patchset 67.0: Poll timeout for memory backend subscribe
 
     # LLM retry controls
     LLM_RETRY_ENABLED: bool = Field(True, description="Enable retry/backoff around LLM calls.")
