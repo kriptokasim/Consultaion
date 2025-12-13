@@ -7,7 +7,7 @@ from typing import Any, Optional
 import sqlalchemy as sa
 from audit import record_audit
 from auth import get_current_user, get_optional_user
-from billing.service import increment_debate_usage, increment_export_usage
+from billing.service import check_export_quota, increment_debate_usage, increment_export_usage
 from channels import debate_channel_id
 from config import settings
 from debate_dispatch import dispatch_debate_run
@@ -555,6 +555,9 @@ async def export_debate_report(
 ):
     from services.reporting import build_report, report_to_markdown
     
+    # Check export quota BEFORE doing expensive work (Patchset 65.B1)
+    check_export_quota(session, current_user.id)
+    
     # Run heavy export generation in thread pool
     loop = asyncio.get_running_loop()
     content = await loop.run_in_executor(
@@ -703,6 +706,10 @@ async def export_scores_csv(
     current_user: User = Depends(get_current_user),
 ):
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    
+    # Check export quota BEFORE doing expensive work (Patchset 65.B1)
+    check_export_quota(session, current_user.id)
+    
     scores = session.exec(select(Score).where(Score.debate_id == debate_id).order_by(sa.asc(Score.created_at))).all()
     if not scores:
         raise NotFoundError(message="No scores found", code="scores.not_found")

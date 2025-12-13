@@ -8,6 +8,7 @@ interface ErrorBannerProps {
     message: string
     type?: "error" | "warning" | "timeout"
     onDismiss?: () => void
+    onRetry?: () => void
     dismissible?: boolean
 }
 
@@ -16,6 +17,7 @@ export function ErrorBanner({
     message,
     type = "error",
     onDismiss,
+    onRetry,
     dismissible = true,
 }: ErrorBannerProps) {
     const [dismissed, setDismissed] = useState(false)
@@ -63,6 +65,14 @@ export function ErrorBanner({
             <div className="flex-1">
                 {title && <h3 className={`mb-1 font-semibold ${style.title}`}>{title}</h3>}
                 <p className={`text-sm ${style.text}`}>{message}</p>
+                {onRetry && (
+                    <button
+                        onClick={onRetry}
+                        className={`mt-2 text-sm font-semibold underline-offset-2 hover:underline ${style.title}`}
+                    >
+                        Try again
+                    </button>
+                )}
             </div>
 
             {/* Dismiss button */}

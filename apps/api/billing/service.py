@@ -144,6 +144,51 @@ def increment_export_usage(db: Session, user_id: UserID) -> BillingUsage:
     return usage
 
 
+def check_export_quota(db: Session, user_id: UserID) -> None:
+    """
+    Check if user can export (daily quota check) BEFORE generating export.
+    Raises RateLimitError if quota exceeded.
+    
+    Patchset 65.B1
+    """
+    from exceptions import RateLimitError
+    
+    if settings.ENV == "test":
+        return
+        
+    plan = get_active_plan(db, user_id)
+    limits: Dict[str, object] = plan.limits or {}
+    
+    # Check if exports are enabled
+    exports_flag = limits.get("exports_enabled", True)
+    exports_allowed = exports_flag not in {False, "false", "False", "0"}
+    if not exports_allowed:
+        log_event("billing.export_blocked", user_id=str(user_id), reason="disabled")
+        raise RateLimitError(
+            message="Exports are not available on your current plan.",
+            code="quota.exports_disabled",
+            details={"reason": "disabled", "plan": plan.slug},
+        )
+    
+    # Check daily export limit
+    max_exports_per_day = limits.get("max_exports_per_day")
+    if max_exports_per_day is not None:
+        try:
+            limit = int(max_exports_per_day)
+        except (TypeError, ValueError):
+            limit = None
+            
+        if limit is not None:
+            usage = get_or_create_usage(db, user_id)
+            if usage.exports_count >= limit:
+                log_event("billing.export_blocked", user_id=str(user_id), reason="quota", limit=limit, used=usage.exports_count)
+                raise RateLimitError(
+                    message="Export quota exceeded. Please try again tomorrow or upgrade your plan.",
+                    code="quota.exports_exceeded",
+                    details={"limit": limit, "used": usage.exports_count, "window": "daily"},
+                )
+
+
 def add_tokens_usage(db: Session, user_id: UserID, model_id: str, tokens: int) -> BillingUsage:
     usage = get_or_create_usage(db, user_id)
     usage.tokens_used += int(tokens)

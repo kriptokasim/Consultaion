@@ -21,6 +21,7 @@ import { DEFAULT_RUN_MEMBERS, DEFAULT_API_URL, DEFAULT_VOTE_THRESHOLD } from "@/
 import { useDebateVoting } from "@/hooks/useDebateVoting";
 import { ErrorBanner } from "@/components/errors/ErrorBanner";
 import { useI18n } from "@/lib/i18n/client";
+import { trackEvent } from "@/lib/analytics";
 import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
@@ -193,6 +194,17 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     : isDegraded
       ? t("debate.status.degraded")
       : t("debate.status.success");
+
+  // Track debate result state (Patchset 65.A5)
+  useEffect(() => {
+    if (debate) {
+      trackEvent("debate_result_state", {
+        debateId: id,
+        status: status,
+        hasErrors: (debate.participant_errors?.length ?? 0) > 0,
+      });
+    }
+  }, [id, status, debate]);
 
   // Runtime logs (simplified for now, could be in store too)
   const runtimeLogs: ArenaRuntimeLog[] = [];
