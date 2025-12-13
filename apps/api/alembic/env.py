@@ -33,7 +33,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # allow DATABASE_URL env override when running migrations
-url = settings.DATABASE_URL
+# Escape % chars for configparser (URL-encoded passwords contain %XX)
+url = settings.DATABASE_URL.replace('%', '%%')
 config.set_main_option("sqlalchemy.url", url)
 
 target_metadata = SQLModel.metadata

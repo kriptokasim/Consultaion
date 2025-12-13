@@ -85,10 +85,11 @@ def upgrade() -> None:
                    existing_type=sa.VARCHAR(length=64),
                    type_=sa.Text(),
                    existing_nullable=True)
+        # NOTE: FK constraints may already exist from earlier migrations - skip if so
         # batch_op.drop_constraint('fk_debate_user_id_user', type_='foreignkey')
         # batch_op.drop_constraint('fk_debate_team_id_team', type_='foreignkey')
-        batch_op.create_foreign_key("fk_debate_team_id_team", "team", ["team_id"], ["id"])
-        batch_op.create_foreign_key("fk_debate_user_id_user", "user", ["user_id"], ["id"])
+        # batch_op.create_foreign_key("fk_debate_team_id_team", "team", ["team_id"], ["id"])
+        # batch_op.create_foreign_key("fk_debate_user_id_user", "user", ["user_id"], ["id"])
     
     op.add_column("debate", sa.Column("model_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True))
     op.add_column("debate", sa.Column("routed_model", sqlmodel.sql.sqltypes.AutoString(), nullable=True))
