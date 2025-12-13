@@ -19,8 +19,6 @@ from routes.debates import stream_events  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
 from sse_backend import (  # noqa: E402
     MemoryChannelBackend,
-    get_sse_backend,
-    reset_sse_backend_for_tests,
 )
 
 init_db()
@@ -62,8 +60,8 @@ async def test_memory_backend_cleanup_removes_stale_channels():
 
 @pytest.mark.anyio("asyncio")
 async def test_stream_events_uses_backend():
-    reset_sse_backend_for_tests()
-    backend = get_sse_backend()
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
     debate_id = "stream-test"
     channel_id = f"debate:{debate_id}"
     await backend.create_channel(channel_id)
@@ -81,7 +79,12 @@ async def test_stream_events_uses_backend():
             )
             session.commit()
 
-        response = await stream_events(debate_id, session=session, current_user=None)
+        response = await stream_events(
+            debate_id, 
+            session=session, 
+            current_user=None,
+            sse_backend=backend
+        )
 
         async def publish_final():
             await asyncio.sleep(0.01)
@@ -95,5 +98,6 @@ async def test_stream_events_uses_backend():
             if b"final" in data:
                 break
         await publisher
+        await backend.stop()
 
     assert b"final" in received

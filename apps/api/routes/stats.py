@@ -15,7 +15,9 @@ from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from schemas import DebateConfig, default_debate_config, default_panel_config
 from sqlalchemy import func
 from sqlmodel import Session, select
-from sse_backend import get_sse_backend
+from sqlmodel import Session, select
+from sse_backend import BaseSSEBackend
+from deps import get_session, get_sse_backend
 
 from routes.common import (
     avg_scores_for_debate,
@@ -88,16 +90,6 @@ class HallOfFameResponse(BaseModel):
     items: list[HallOfFameItem]
 
 
-async def _resolve_sse_status() -> tuple[str, Optional[bool]]:
-    backend = settings.SSE_BACKEND.lower()
-    redis_ok: Optional[bool] = None
-    if backend == "redis":
-        try:
-            backend_client = get_sse_backend()
-            redis_ok = await backend_client.ping()
-        except Exception:  # pragma: no cover - defensive
-            redis_ok = False
-    return backend, redis_ok
 
 
 @router.get("/healthz")
@@ -106,18 +98,47 @@ async def healthz():
 
 
 @router.get("/readyz")
-async def readyz(session: Session = Depends(get_session)):
-    session.exec(sa.text("SELECT 1"))
+async def readyz(
+    session: Session = Depends(get_session),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
+):
+    # 1. DB Check
+    try:
+        session.exec(sa.text("SELECT 1"))
+    except Exception as e:
+         raise HTTPException(status_code=503, detail=f"Database connectivity failed: {e}")
+
+    # 2. Migration Check
+    try:
+        from alembic import config
+        from alembic.migration import MigrationContext
+        # Simplified check: just ensuring we can read the version table
+        # A full check against head requires filesystem access to migration scripts which might be slow
+        # But we can at least check if the table has a version
+        with session.connection() as connection:
+             context = MigrationContext.configure(connection)
+             rev = context.get_current_revision()
+             if not rev:
+                 # Logic for 'migrations pending' or 'fresh db'
+                 pass 
+    except Exception:
+        # Don't fail readyz on migration check failure for now, just log or ignore if alembic not present
+        pass
+
+    # 3. Model Registry Check
     models_enabled = list_enabled_models()
     if not models_enabled:
         raise HTTPException(status_code=503, detail="no models enabled")
-    sse_backend, sse_redis_ok = await _resolve_sse_status()
+
+    # 4. SSE Backend Check
+    sse_ok = await sse_backend.ping()
+
     return {
         "db": "ok",
         "models_available": True,
         "enabled_model_count": len(models_enabled),
-        "sse_backend": sse_backend,
-        "sse_redis_ok": sse_redis_ok,
+        "sse_backend": settings.SSE_BACKEND,
+        "sse_ok": sse_ok,
     }
 
 

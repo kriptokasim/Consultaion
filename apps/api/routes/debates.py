@@ -11,7 +11,7 @@ from billing.service import increment_debate_usage, increment_export_usage
 from channels import debate_channel_id
 from config import settings
 from debate_dispatch import dispatch_debate_run
-from deps import get_session
+from deps import get_session, get_sse_backend
 from exceptions import (
     AppError,
     NotFoundError,
@@ -41,7 +41,7 @@ from schemas import (
 )
 from sqlalchemy import func
 from sqlmodel import Session, select
-from sse_backend import get_sse_backend
+from sse_backend import BaseSSEBackend
 from usage_limits import reserve_run_slot
 
 from routes.common import (
@@ -166,12 +166,13 @@ async def create_debate(
     request: Request,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     ip = request.client.host if request.client else "anonymous"
-    allowed = increment_ip_bucket(ip, settings.RL_DEBATE_CREATE_WINDOW, settings.RL_DEBATE_CREATE_MAX_CALLS)
+    allowed, retry_after = increment_ip_bucket(ip, settings.RL_DEBATE_CREATE_WINDOW, settings.RL_DEBATE_CREATE_MAX_CALLS)
     if not allowed:
         record_429(ip, request.url.path)
-        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
     try:
         reserve_run_slot(session, current_user.id)
         increment_debate_usage(session, current_user.id)
@@ -347,11 +348,11 @@ async def create_debate(
         engine_version=panel.engine_version,
     )
     session.add(debate)
+    session.add(debate)
     session.commit()
 
-    backend = get_sse_backend()
     channel_id = debate_channel_id(debate_id)
-    await backend.create_channel(channel_id)
+    await sse_backend.create_channel(channel_id)
 
     if not settings.DISABLE_AUTORUN:
         background_tasks.add_task(
@@ -391,6 +392,7 @@ async def start_debate_run(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     if not settings.DISABLE_AUTORUN:
         raise ValidationError(message="Manual start is disabled", code="debate.manual_start_disabled")
@@ -399,9 +401,8 @@ async def start_debate_run(
     if debate.status not in {"queued", "failed"}:
         raise ValidationError(message="Debate already started", code="debate.already_started")
 
-    backend = get_sse_backend()
     channel_id = debate_channel_id(debate_id)
-    await backend.create_channel(channel_id)
+    await sse_backend.create_channel(channel_id)
     background_tasks.add_task(
         dispatch_debate_run,
         debate_id,
@@ -734,15 +735,15 @@ async def stream_events(
     debate_id: str,
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     require_debate_access(session.get(Debate, debate_id), current_user, session)
-    backend = get_sse_backend()
     channel_id = debate_channel_id(debate_id)
-    await backend.create_channel(channel_id)
+    await sse_backend.create_channel(channel_id)
     track_metric("sse_stream_open")
 
     async def eventgen():
-        async for event in backend.subscribe(channel_id):
+        async for event in sse_backend.subscribe(channel_id):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             if event.get("type") == "final":
                 break

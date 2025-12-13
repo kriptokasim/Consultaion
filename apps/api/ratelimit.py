@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class BaseRateLimiterBackend:
-    def allow(self, key: str, window_seconds: int, max_requests: int) -> bool:
+    def allow(self, key: str, window_seconds: int, max_requests: int) -> tuple[bool, int | None]:
+        """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
         raise NotImplementedError
 
     def record_429(self, ip: str, path: str) -> None:
@@ -41,14 +42,17 @@ class MemoryRateLimiterBackend(BaseRateLimiterBackend):
         self._buckets: dict[str, dict[str, float]] = {}
         self._recent: deque[dict] = deque(maxlen=RECENT_EVENTS_MAX)
 
-    def allow(self, key: str, window_seconds: int, max_requests: int) -> bool:
+    def allow(self, key: str, window_seconds: int, max_requests: int) -> tuple[bool, int | None]:
+        """Check if request is allowed and return retry_after_seconds if not."""
         now = time.time()
         bucket = self._buckets.get(key)
         if not bucket or bucket.get("reset", 0) < now:
             bucket = {"count": 0, "reset": now + window_seconds}
         bucket["count"] = bucket.get("count", 0) + 1
         self._buckets[key] = bucket
-        return bucket["count"] <= max_requests
+        allowed = bucket["count"] <= max_requests
+        retry_after = None if allowed else max(1, int(bucket["reset"] - now))
+        return allowed, retry_after
 
     def record_429(self, ip: str, path: str) -> None:
         self._recent.append({"ip": ip, "path": path, "ts": _utc_timestamp()})
@@ -65,17 +69,26 @@ class RedisRateLimiterBackend(BaseRateLimiterBackend):
             raise RuntimeError("redis library is required for Redis rate limiting")
         self._client = redis.Redis.from_url(url)
         self._max_events = max_events
+        # Patchset 64: Fallback memory backend
+        self._fallback = MemoryRateLimiterBackend()
 
-    def allow(self, key: str, window_seconds: int, max_requests: int) -> bool:
+    def allow(self, key: str, window_seconds: int, max_requests: int) -> tuple[bool, int | None]:
+        """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
         redis_key = f"rl:ip:{key}:{window_seconds}"
         try:
             current = self._client.incr(redis_key)
             if current == 1:
                 self._client.expire(redis_key, window_seconds)
-            return int(current) <= max_requests
+            allowed = int(current) <= max_requests
+            # Get TTL for retry_after computation
+            retry_after = None
+            if not allowed:
+                ttl = self._client.ttl(redis_key)
+                retry_after = max(1, ttl) if ttl and ttl > 0 else window_seconds
+            return allowed, retry_after
         except Exception as exc:  # pragma: no cover - redis failure path
-            logger.error("Redis rate limiter failed, allowing request: %s", exc)
-            return True
+            logger.warning("Redis rate limiter failed (%s), falling back to memory", exc)
+            return self._fallback.allow(key, window_seconds, max_requests)
 
     def record_429(self, ip: str, path: str) -> None:
         entry = {"ip": ip, "path": path, "ts": _utc_timestamp()}
@@ -136,7 +149,8 @@ def reset_rate_limiter_backend_for_tests() -> None:
     _backend = None
 
 
-def increment_ip_bucket(ip: str, window_seconds: int, max_requests: int) -> bool:
+def increment_ip_bucket(ip: str, window_seconds: int, max_requests: int) -> tuple[bool, int | None]:
+    """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
     backend = get_rate_limiter_backend()
     return backend.allow(ip, window_seconds, max_requests)
 

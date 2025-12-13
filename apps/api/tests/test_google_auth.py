@@ -60,7 +60,7 @@ def test_google_callback_creates_user(monkeypatch):
 
     monkeypatch.setattr(auth_routes, "_exchange_code_for_token", _fake_exchange_code_for_token)
     monkeypatch.setattr(auth_routes, "_fetch_google_profile", _fake_fetch_google_profile)
-    monkeypatch.setattr(auth_routes, "increment_ip_bucket", lambda *args, **kwargs: True)
+    monkeypatch.setattr(auth_routes, "increment_ip_bucket", lambda *args, **kwargs: (True, None))
 
     request = _build_request()
     response = Response()

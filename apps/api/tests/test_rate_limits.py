@@ -85,13 +85,18 @@ def test_user(db_session):
 def test_increment_ip_bucket_memory_respects_limit():
     ip = "10.0.0.1"
     for _ in range(5):
-        assert ratelimit_module.increment_ip_bucket(ip, 60, 5)
-    assert not ratelimit_module.increment_ip_bucket(ip, 60, 5)
+        allowed, retry_after = ratelimit_module.increment_ip_bucket(ip, 60, 5)
+        assert allowed
+    allowed, retry_after = ratelimit_module.increment_ip_bucket(ip, 60, 5)
+    assert not allowed
+    assert retry_after is not None and retry_after > 0
 
 
 def test_increment_ip_bucket_separate_ips():
-    assert ratelimit_module.increment_ip_bucket("10.0.0.2", 60, 2)
-    assert ratelimit_module.increment_ip_bucket("10.0.0.3", 60, 2)
+    allowed1, _ = ratelimit_module.increment_ip_bucket("10.0.0.2", 60, 2)
+    allowed2, _ = ratelimit_module.increment_ip_bucket("10.0.0.3", 60, 2)
+    assert allowed1
+    assert allowed2
 
 
 def test_record_429_tracks_recent_events():
@@ -220,8 +225,10 @@ def test_redis_backend_tracks_recent_events(monkeypatch):
     ratelimit_module.reset_rate_limiter_backend_for_tests()
 
     backend = ratelimit_module.get_rate_limiter_backend()
-    assert backend.allow("ip-1", 60, 1)
-    assert not backend.allow("ip-1", 60, 1)
+    allowed1, _ = backend.allow("ip-1", 60, 1)
+    assert allowed1
+    allowed2, retry_after = backend.allow("ip-1", 60, 1)
+    assert not allowed2
     backend.record_429("ip-1", "/debates")
     events = backend.recent_429()
     assert events and events[-1]["path"] == "/debates"

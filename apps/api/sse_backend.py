@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Protocol
+from typing import Protocol, Optional
 
 from config import settings
 
@@ -13,8 +14,16 @@ try:
 except ImportError:  # pragma: no cover - redis optional for memory backend
     redis = None
 
+logger = logging.getLogger(__name__)
+
 
 class BaseSSEBackend(Protocol):
+    async def start(self) -> None:
+        ...
+
+    async def stop(self) -> None:
+        ...
+
     async def create_channel(self, channel_id: str) -> None:
         ...
 
@@ -32,39 +41,82 @@ class BaseSSEBackend(Protocol):
 
 
 class MemoryChannelBackend:
-    def __init__(self, ttl_seconds: int = 900) -> None:
+    def __init__(self, ttl_seconds: int = 900, max_queue_size: int = 1000) -> None:
         self._ttl_seconds = ttl_seconds
+        self._max_queue_size = max_queue_size
         self._channels: dict[str, asyncio.Queue[dict]] = {}
         self._last_seen: dict[str, float] = {}
         self._lock = asyncio.Lock()
+        self._running = False
+        self._cleanup_task: Optional[asyncio.Task] = None
+
+    async def start(self) -> None:
+        self._running = True
+        # Start cleanup task
+        self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+
+    async def stop(self) -> None:
+        self._running = False
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _periodic_cleanup(self) -> None:
+        while self._running:
+            await asyncio.sleep(60)  # Run cleanup every minute
+            await self.cleanup()
 
     async def create_channel(self, channel_id: str) -> None:
         async with self._lock:
             if channel_id not in self._channels:
-                self._channels[channel_id] = asyncio.Queue()
+                self._channels[channel_id] = asyncio.Queue(maxsize=self._max_queue_size)
             self._last_seen[channel_id] = time.time()
 
     async def publish(self, channel_id: str, event: dict) -> None:
         async with self._lock:
             queue = self._channels.get(channel_id)
             if not queue:
-                queue = self._channels[channel_id] = asyncio.Queue()
+                queue = self._channels[channel_id] = asyncio.Queue(maxsize=self._max_queue_size)
             self._last_seen[channel_id] = time.time()
-        await queue.put(event)
+        
+        try:
+            # maintain queue size by removing old items if full
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            await queue.put(event)
+        except Exception as e:
+            logger.error(f"Error publishing to memory channel {channel_id}: {e}")
 
     async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
         await self.create_channel(channel_id)
         queue = self._channels[channel_id]
-        while True:
-            event = await queue.get()
-            yield event
+        try:
+            while True:
+                # Update last seen on access
+                async with self._lock:
+                     self._last_seen[channel_id] = time.time()
+                
+                event = await queue.get()
+                yield event
+        except asyncio.CancelledError:
+            pass
 
     async def cleanup(self) -> None:
         now = time.time()
-        stale = [cid for cid, ts in self._last_seen.items() if now - ts > self._ttl_seconds]
-        for cid in stale:
-            self._channels.pop(cid, None)
-            self._last_seen.pop(cid, None)
+        # Create list of channels to remove to avoid modification during iteration
+        async with self._lock:
+            stale = [cid for cid, ts in self._last_seen.items() if now - ts > self._ttl_seconds]
+            for cid in stale:
+                self._channels.pop(cid, None)
+                self._last_seen.pop(cid, None)
+        if stale:
+             logger.info(f"Cleaned up {len(stale)} stale SSE channels")
 
     async def ping(self) -> bool:
         return True
@@ -76,7 +128,26 @@ class RedisChannelBackend:
             raise RuntimeError("redis library is required for RedisChannelBackend")
         self._url = url
         self._ttl_seconds = ttl_seconds
-        self._redis = redis.from_url(url, encoding="utf-8", decode_responses=True)
+        # Retry on timeout or connection error
+        self._redis = redis.from_url(
+            url, 
+            encoding="utf-8", 
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_keepalive=True,
+            retry_on_timeout=True
+        )
+
+    async def start(self) -> None:
+        # Verify connection
+        try:
+            await self._redis.ping()
+        except Exception as e:
+            logger.error(f"Failed to connect to Redis for SSE: {e}")
+            # We don't raise here to allow app startup, but subsequent calls will fail/retry
+
+    async def stop(self) -> None:
+        await self._redis.aclose()
 
     async def create_channel(self, channel_id: str) -> None:
         key = f"sse:meta:{channel_id}"
@@ -84,58 +155,73 @@ class RedisChannelBackend:
 
     async def publish(self, channel_id: str, event: dict) -> None:
         payload = json.dumps(event)
-        await self._redis.publish(channel_id, payload)
+        try:
+            await self._redis.publish(channel_id, payload)
+        except Exception as e:
+             logger.error(f"Failed to publish to Redis SSE {channel_id}: {e}")
 
     async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
         pubsub = self._redis.pubsub()
         await pubsub.subscribe(channel_id)
         try:
-            async for message in pubsub.listen():
-                if message.get("type") != "message":
-                    continue
-                data = message.get("data")
-                if not data:
-                    continue
-                yield json.loads(data)
+            while True:
+                try:
+                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                    if message:
+                        data = message.get("data")
+                        if data:
+                             yield json.loads(data)
+                    else:
+                        await asyncio.sleep(0.01)
+                except (redis.ConnectionError, redis.TimeoutError) as e:
+                    logger.warning(f"Redis connection lost in subscribe ({e}), retrying...")
+                    await asyncio.sleep(1)
+                    # Attempt to re-subscribe
+                    try:
+                        await pubsub.subscribe(channel_id)
+                    except Exception:
+                        pass
         finally:
             await pubsub.unsubscribe(channel_id)
             await pubsub.close()
 
     async def cleanup(self) -> None:
+        # Redis handles TTL automatically
         return None
 
     async def ping(self) -> bool:
-        return bool(await self._redis.ping())
+        try:
+            return bool(await self._redis.ping())
+        except Exception:
+            return False
+
+# Factory to create the backend instance
+def create_sse_backend() -> BaseSSEBackend:
+    if settings.SSE_BACKEND.lower() == "redis":
+        url = settings.SSE_REDIS_URL or settings.REDIS_URL
+        if url and url.strip() and (url.startswith("redis://") or url.startswith("rediss://") or url.startswith("unix://")):
+            return RedisChannelBackend(url=url, ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
+        else:
+            logger.warning("SSE_BACKEND=redis but URL invalid. Falling back to memory.")
+    
+    return MemoryChannelBackend(ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
 
 
-_sse_backend: BaseSSEBackend | None = None
+_global_sse_backend: BaseSSEBackend | None = None
 
 
 def get_sse_backend() -> BaseSSEBackend:
-    global _sse_backend
-    if _sse_backend is not None:
-        return _sse_backend
-
-    if settings.SSE_BACKEND.lower() == "redis":
-        url = settings.SSE_REDIS_URL or settings.REDIS_URL
-        # Validate Redis URL format before attempting to use it
-        if url and url.strip() and (url.startswith("redis://") or url.startswith("rediss://") or url.startswith("unix://")):
-            _sse_backend = RedisChannelBackend(url=url, ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
-        else:
-            # Fall back to memory if Redis URL is missing or invalid
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                "SSE_BACKEND=redis but REDIS_URL is invalid or missing (%s). Falling back to memory backend.",
-                url or "<not set>"
-            )
-            _sse_backend = MemoryChannelBackend(ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
-    else:
-        _sse_backend = MemoryChannelBackend(ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
-
-    return _sse_backend
+    """
+    Get the global SSE backend instance.
+    This provides a singleton for the process, ensuring background tasks
+    share the same memory backend as the API (if using memory).
+    """
+    global _global_sse_backend
+    if _global_sse_backend is None:
+        _global_sse_backend = create_sse_backend()
+    return _global_sse_backend
 
 
 def reset_sse_backend_for_tests() -> None:
-    global _sse_backend
-    _sse_backend = None
+    global _global_sse_backend
+    _global_sse_backend = None

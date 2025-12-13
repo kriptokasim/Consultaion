@@ -204,9 +204,10 @@ async def _fetch_google_profile(access_token: str) -> dict[str, Any]:
 @router.get("/auth/google/login")
 async def google_login(request: Request, response: Response) -> Response:
     ip = request.client.host if request and request.client else "anonymous"
-    if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
+    allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
+    if not allowed:
         record_429(ip, request.url.path)
-        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
     client_id, _, redirect_url = _google_config()
     state = secrets.token_urlsafe(16)
     next_param = sanitize_next_path(request.query_params.get("next"))
@@ -253,9 +254,10 @@ async def google_callback(
     session: Session = Depends(get_session),
 ):
     ip = request.client.host if request and request.client else "anonymous"
-    if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
+    allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
+    if not allowed:
         record_429(ip, request.url.path)
-        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
 
     if not code or not state:
         raise ValidationError(message="Missing code or state", code="auth.missing_params")
@@ -329,9 +331,10 @@ async def google_callback(
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 async def register_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
     ip = request.client.host if request and request.client else "anonymous"
-    if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
+    allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
+    if not allowed:
         record_429(ip, request.url.path)
-        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
     email = body.email.strip().lower()
     if "@" not in email:
         raise ValidationError(message="Invalid email address", code="auth.invalid_email")
@@ -362,9 +365,10 @@ async def register_user(body: AuthRequest, response: Response, session: Session 
 @router.post("/auth/login")
 async def login_user(body: AuthRequest, response: Response, session: Session = Depends(get_session), request: Any = None):
     ip = request.client.host if request and request.client else "anonymous"
-    if request and not increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS):
+    allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
+    if not allowed:
         record_429(ip, request.url.path)
-        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded")
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
     

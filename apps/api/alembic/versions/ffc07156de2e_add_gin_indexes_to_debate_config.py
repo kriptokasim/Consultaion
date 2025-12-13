@@ -20,9 +20,16 @@ def upgrade() -> None:
     # Check if we are running on Postgres
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        # Create GIN indexes concurrently if possible, or normally if not.
-        op.execute("CREATE INDEX IF NOT EXISTS ix_debate_config_gin ON debate USING GIN (config)")
-        op.execute("CREATE INDEX IF NOT EXISTS ix_debate_panel_config_gin ON debate USING GIN (panel_config)")
+        # GIN indexes require JSONB type with an operator class
+        # Cast JSON to JSONB and use jsonb_path_ops for efficient containment queries
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS ix_debate_config_gin ON debate "
+            "USING GIN ((config::jsonb) jsonb_path_ops)"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS ix_debate_panel_config_gin ON debate "
+            "USING GIN ((panel_config::jsonb) jsonb_path_ops)"
+        )
 
 
 def downgrade() -> None:

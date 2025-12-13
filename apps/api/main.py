@@ -71,6 +71,7 @@ from routes.teams import (
     teams_router,
 )
 from schemas import DebateCreate
+from schemas import DebateCreate
 from sse_backend import get_sse_backend
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -165,6 +166,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Database schema verification failed: %s", e)
         raise
+
+    # Verify migration version matches code
+    try:
+        from alembic import config, script
+        from alembic.migration import MigrationContext
+        
+        # Assume alembic.ini is in the root or accessible
+        alembic_cfg = config.Config("alembic.ini") 
+        # We need to set the script location relative to where we are or use absolute path
+        # If alembic.ini relies on recursive search or specific paths, this might be tricky.
+        # Simplification: Just verify alembic_version table is readable and has a revision.
+        with engine.connect() as connection:
+             context = MigrationContext.configure(connection)
+             current_rev = context.get_current_revision()
+             logger.info(f"Current database revision: {current_rev}")
+             if not current_rev:
+                 logger.warning("Database has no migration revision! Changes may be missing.")
+    except Exception as e:
+        logger.warning(f"Could not verify migration version: {e}")
     _warn_on_multi_worker()
     try:
         ensure_rate_limiter_ready(raise_on_failure=settings.RATE_LIMIT_BACKEND == "redis")
@@ -181,17 +201,16 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("Model registry initialization failed: %s", exc)
     cleanup_task: asyncio.Task | None = None
-    try:
-        cleanup_task = asyncio.create_task(_sse_cleanup_loop())
-    except RuntimeError:
-        cleanup_task = None
+    
+    # Initialize and start SSE backend (singleton)
+    sse_backend = get_sse_backend()
+    await sse_backend.start()
+    app.state.sse_backend = sse_backend
+    
     try:
         yield
     finally:
-        if cleanup_task:
-            cleanup_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await cleanup_task
+        await sse_backend.stop()
 
 
 app = FastAPI(
@@ -316,14 +335,6 @@ app.include_router(features_router)
 
 
 # Lifespan helpers
-async def _sse_cleanup_loop() -> None:
-    backend = get_sse_backend()
-    try:
-        while True:
-            await backend.cleanup()
-            await asyncio.sleep(settings.SSE_CHANNEL_TTL_SECONDS)
-    except asyncio.CancelledError:
-        raise
 
 
 __all__ = [
