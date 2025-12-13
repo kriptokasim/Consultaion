@@ -66,10 +66,18 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
 
+    # Patchset 68.1: PgBouncer safety for Alembic
+    # If using pooler (port 6543), disable prepared statements
+    connect_args = {}
+    url_str = config.get_main_option("sqlalchemy.url") or ""
+    if ":6543" in url_str or "pooler.supabase.com" in url_str:
+        connect_args["prepare_threshold"] = 0
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     with connectable.connect() as connection:
