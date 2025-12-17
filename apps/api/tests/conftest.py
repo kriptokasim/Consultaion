@@ -260,6 +260,9 @@ def setup_test_routes():
 def client():
     from fastapi.testclient import TestClient
     from main import app
+    from sse_backend import get_sse_backend
+    # Ensure app.state.sse_backend is set for deps.get_sse_backend dependency
+    app.state.sse_backend = get_sse_backend()
     return TestClient(app)
 
 

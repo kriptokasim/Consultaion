@@ -110,6 +110,11 @@ class AppSettings(BaseSettings):
     SSE_REDIS_URL: str | None = None
     SSE_CHANNEL_TTL_SECONDS: int = 900
     SSE_POLL_TIMEOUT_SECONDS: float = 1.0  # Patchset 67.0: Poll timeout for memory backend subscribe
+    
+    # Patchset 75: SSE strict mode and memory backend limits
+    SSE_REDIS_STRICT: bool | None = None  # None = auto (strict in prod, lenient in local)
+    SSE_MEMORY_MAX_QUEUE_SIZE: int = 1000
+    SSE_MEMORY_IDLE_TIMEOUT_SECONDS: int = 3600  # 1 hour max idle time for subscriptions
 
     # LLM retry controls
     LLM_RETRY_ENABLED: bool = Field(True, description="Enable retry/backoff around LLM calls.")

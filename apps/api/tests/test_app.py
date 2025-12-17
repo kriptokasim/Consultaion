@@ -250,14 +250,15 @@ def test_export_scores_csv_endpoint():
             )
         )
         session.commit()
-    with Session(database.engine) as session:
-        csv_response = asyncio.run(
-            export_scores_csv(
-                debate_id,
-                session=session,
-                current_user=user,
+    with settings_context(ENV="test"):
+        with Session(database.engine) as session:
+            csv_response = asyncio.run(
+                export_scores_csv(
+                    debate_id,
+                    session=session,
+                    current_user=user,
+                )
             )
-        )
     text = csv_response.body.decode()
     assert "persona,judge,score,rationale,timestamp" in text
     assert "Analyst" in text
@@ -266,14 +267,15 @@ def test_export_scores_csv_endpoint():
 def test_export_markdown_streams_content():
     user = _register_user("export-md@example.com", "secret123")
     debate_id = _create_debate_for_user(user, "Markdown export prompt")
-    with Session(database.engine) as session:
-        response = asyncio.run(
-            export_debate_report(
-                debate_id,
-                session=session,
-                current_user=user,
+    with settings_context(ENV="test"):
+        with Session(database.engine) as session:
+            response = asyncio.run(
+                export_debate_report(
+                    debate_id,
+                    session=session,
+                    current_user=user,
+                )
             )
-        )
     body = response.body.decode()
     assert f"# Debate {debate_id}" in body
     assert "Markdown export prompt" in body

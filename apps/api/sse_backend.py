@@ -41,9 +41,26 @@ class BaseSSEBackend(Protocol):
 
 
 class MemoryChannelBackend:
-    def __init__(self, ttl_seconds: int = 900, max_queue_size: int = 1000) -> None:
+    """
+    In-memory SSE backend for single-instance deployments.
+    
+    Queue size is bounded (default 1000). When full, the oldest event is dropped
+    to make room for new events (drop-oldest policy).
+    
+    Subscriptions will terminate on:
+    - Receiving 'final' or 'error' event types
+    - Idle timeout (no events received within timeout period)
+    - External cancellation
+    """
+    def __init__(
+        self, 
+        ttl_seconds: int = 900, 
+        max_queue_size: int = 1000,
+        idle_timeout_seconds: int = 3600
+    ) -> None:
         self._ttl_seconds = ttl_seconds
         self._max_queue_size = max_queue_size
+        self._idle_timeout_seconds = idle_timeout_seconds
         self._channels: dict[str, asyncio.Queue[dict]] = {}
         self._last_seen: dict[str, float] = {}
         self._lock = asyncio.Lock()
@@ -94,18 +111,32 @@ class MemoryChannelBackend:
             logger.error(f"Error publishing to memory channel {channel_id}: {e}")
 
     async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
+        """Subscribe to a channel and yield events.
+        
+        Terminates on:
+        - 'final' or 'error' event types
+        - idle_timeout_seconds without receiving any event
+        - External cancellation
+        """
         await self.create_channel(channel_id)
         queue = self._channels[channel_id]
         poll_timeout = getattr(settings, "SSE_POLL_TIMEOUT_SECONDS", 1.0)
+        idle_start = time.time()
         try:
             while True:
                 # Update last seen on access
                 async with self._lock:
                     self._last_seen[channel_id] = time.time()
                 
+                # Patchset 75: Check idle timeout
+                if time.time() - idle_start > self._idle_timeout_seconds:
+                    logger.info(f"SSE subscription idle timeout for {channel_id}")
+                    break
+                
                 try:
                     # Patchset 67.0: Use timeout to prevent infinite blocking
                     event = await asyncio.wait_for(queue.get(), timeout=poll_timeout)
+                    idle_start = time.time()  # Reset idle timer on event
                     yield event
                     # Exit on final/error event types
                     if event.get("type") in ("final", "error"):
@@ -132,18 +163,27 @@ class MemoryChannelBackend:
 
 
 class RedisChannelBackend:
+    """Redis-backed SSE backend for multi-instance deployments.
+    
+    Features:
+    - Connection pooling with health check interval
+    - Retry with exponential backoff for publish operations
+    - Auto-reconnect for subscriptions on connection loss
+    """
     def __init__(self, url: str, ttl_seconds: int = 900) -> None:
         if redis is None:
             raise RuntimeError("redis library is required for RedisChannelBackend")
         self._url = url
         self._ttl_seconds = ttl_seconds
-        # Retry on timeout or connection error
+        # Patchset 75: Enhanced connection options
         self._redis = redis.from_url(
             url, 
             encoding="utf-8", 
             decode_responses=True,
             socket_connect_timeout=5,
+            socket_timeout=10,  # Timeout for operations
             socket_keepalive=True,
+            health_check_interval=30,  # Check connection health periodically
             retry_on_timeout=True
         )
 
@@ -212,20 +252,52 @@ class RedisChannelBackend:
         except Exception:
             return False
 
+def _is_strict() -> bool:
+    """Determine if SSE strict mode is enabled.
+    
+    Strict mode causes startup to fail if Redis is configured but unusable.
+    
+    - SSE_REDIS_STRICT=1 -> Always strict
+    - SSE_REDIS_STRICT=0 -> Always lenient (fallback allowed)
+    - SSE_REDIS_STRICT=None -> Auto: strict in production, lenient in local/dev
+    """
+    strict_setting = getattr(settings, "SSE_REDIS_STRICT", None)
+    if strict_setting is not None:
+        return strict_setting
+    return not settings.IS_LOCAL_ENV
+
+
+def _validate_redis_url(url: str | None) -> bool:
+    """Validate Redis URL format."""
+    if not url or not url.strip():
+        return False
+    return url.startswith(("redis://", "rediss://", "unix://"))
+
+
 # Factory to create the backend instance
 def create_sse_backend() -> BaseSSEBackend:
+    """Create the appropriate SSE backend based on configuration.
+    
+    Patchset 75: Uses SSE_REDIS_STRICT for explicit strict mode control.
+    """
     if settings.SSE_BACKEND.lower() == "redis":
         url = settings.SSE_REDIS_URL or settings.REDIS_URL
-        if url and url.strip() and (url.startswith("redis://") or url.startswith("rediss://") or url.startswith("unix://")):
+        if _validate_redis_url(url):
             return RedisChannelBackend(url=url, ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
         else:
             msg = "SSE_BACKEND=redis but URL is invalid or missing."
-            if not settings.IS_LOCAL_ENV:
-                 # Patchset 70: Fail fast in production
-                 raise RuntimeError(msg)
+            if _is_strict():
+                raise RuntimeError(f"{msg} Set SSE_REDIS_STRICT=0 to allow fallback.")
             logger.warning(f"{msg} Falling back to memory.")
     
-    return MemoryChannelBackend(ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS)
+    # Use configurable memory backend settings
+    max_queue = getattr(settings, "SSE_MEMORY_MAX_QUEUE_SIZE", 1000)
+    idle_timeout = getattr(settings, "SSE_MEMORY_IDLE_TIMEOUT_SECONDS", 3600)
+    return MemoryChannelBackend(
+        ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS,
+        max_queue_size=max_queue,
+        idle_timeout_seconds=idle_timeout
+    )
 
 
 _global_sse_backend: BaseSSEBackend | None = None
