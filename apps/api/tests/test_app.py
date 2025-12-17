@@ -34,12 +34,12 @@ from main import (  # noqa: E402
     get_debate_events,
     get_leaderboard,
     get_model_leaderboard_stats,
-    healthz,
     list_debates,
     register_user,
     start_debate_run,
     update_debate,
 )
+from routes.ops import healthz
 from models import (  # noqa: E402
     AuditLog,
     Debate,
@@ -71,16 +71,24 @@ def test_debate_create_prompt_validation():
 def test_jwt_secret_default_rejected(monkeypatch):
     import auth as auth_module
 
-    monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
-    # Must set IS_LOCAL_ENV to False to trigger the error
-    monkeypatch.setattr(settings, "IS_LOCAL_ENV", False)
-    settings.reload()
-    with pytest.raises(RuntimeError):
-        importlib.reload(auth_module)
-    monkeypatch.setenv("JWT_SECRET", "test-secret")
-    monkeypatch.setattr(settings, "IS_LOCAL_ENV", True)
-    settings.reload()
-    importlib.reload(auth_module)
+    try:
+        monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
+        # Must set IS_LOCAL_ENV to False to trigger the error.
+        # Note: changing proxy attribute IS_LOCAL_ENV doesn't affect AppSettings() instantiation
+        # logic unless we assume the code uses the proxy attribute.
+        # But AppSettings model_post_init derives is_local from ENV.
+        # So we must set ENV to production to trigger validation.
+        monkeypatch.setenv("ENV", "production") 
+        
+        # Expect ValidationError from Pydantic when reloading settings with bad config
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            settings.reload()
+    finally:
+        # Restore safe state
+        monkeypatch.setenv("JWT_SECRET", "test-secret")
+        monkeypatch.setenv("ENV", "development")
+        settings.reload()
 
 
 def dummy_request(path: str = "/debates") -> Request:
@@ -162,8 +170,9 @@ def _register_user(email: str, password: str) -> User:
     body = AuthRequest(email=email, password=password)
     with Session(database.engine) as session:
         response = Response()
+        request = dummy_request()
         try:
-            asyncio.run(register_user(body, response, session))
+            asyncio.run(register_user(body, request, response, session))
         except HTTPException as exc:
             # Tests can call this helper repeatedly with the same email; reuse existing user.
             if exc.status_code == 400 and getattr(exc, "detail", "") == "email already registered":
@@ -183,6 +192,7 @@ def _create_debate_for_user(user: User, prompt: str) -> str:
     background_tasks = BackgroundTasks()
     request = dummy_request()
     body = DebateCreate(prompt=prompt)
+    sse = get_sse_backend()
     with Session(database.engine) as session:
         result = asyncio.run(
             create_debate(
@@ -191,6 +201,7 @@ def _create_debate_for_user(user: User, prompt: str) -> str:
                 request,
                 session,
                 current_user=user,
+                sse_backend=sse,
             )
         )
     # Execute background tasks to mirror FastAPI behavior when routes are called directly
@@ -558,6 +569,7 @@ def test_manual_start_requires_flag():
         debate_id = _create_debate_for_user(user, "Manual guard prompt")
         with Session(database.engine) as session:
             background_tasks = BackgroundTasks()
+            sse = get_sse_backend()
             with pytest.raises(ValidationError):
                 asyncio.run(
                     start_debate_run(
@@ -565,6 +577,7 @@ def test_manual_start_requires_flag():
                         background_tasks,
                         session=session,
                         current_user=user,
+                        sse_backend=sse,
                     )
                 )
 
@@ -575,12 +588,14 @@ def test_manual_start_succeeds_when_disabled():
         debate_id = _create_debate_for_user(user, "Manual start run prompt")
         with Session(database.engine) as session:
             background_tasks = BackgroundTasks()
+            sse = get_sse_backend()
             result = asyncio.run(
                 start_debate_run(
                     debate_id,
                     background_tasks,
                     session=session,
                     current_user=user,
+                    sse_backend=sse,
                 )
             )
         assert result["status"] == "scheduled"

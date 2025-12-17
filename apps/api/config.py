@@ -29,6 +29,7 @@ class AppSettings(BaseSettings):
     APP_ENV: str = "local"
 
     DATABASE_URL: str = "sqlite:///./consultaion.db"
+    DATABASE_URL_ASYNC: str | None = None
     REDIS_URL: str | None = None
     
     # LLM Provider Timeouts
@@ -302,6 +303,16 @@ class AppSettings(BaseSettings):
         if self.JWT_TTL_SECONDS is None:
             object.__setattr__(self, "JWT_TTL_SECONDS", self.JWT_EXPIRE_MINUTES * 60)
 
+        # Patchset 72: Async DB URL
+        if not self.DATABASE_URL_ASYNC:
+            url = self.DATABASE_URL
+            async_url = url
+            if url.startswith("sqlite"):
+                async_url = url.replace("sqlite:", "sqlite+aiosqlite:")
+            elif url.startswith("postgres"):
+                async_url = url.replace("postgresql:", "postgresql+psycopg:").replace("postgres:", "postgresql+psycopg:")
+            object.__setattr__(self, "DATABASE_URL_ASYNC", async_url)
+
         if not self.SSE_REDIS_URL and self.REDIS_URL:
             object.__setattr__(self, "SSE_REDIS_URL", self.REDIS_URL)
         if not is_local:
@@ -371,6 +382,13 @@ class AppSettings(BaseSettings):
         if resolved not in cors_origins:
             cors_origins.append(resolved)
         object.__setattr__(self, "CORS_ORIGINS", ",".join(cors_origins))
+        
+        # Patchset 73: Strict CORS Validation
+        if not is_local:
+             if "*" in cors_origins:
+                 raise ValueError("Wildcard CORS origin '*' is not allowed in production. Set explicit CORS_ORIGINS.")
+             if not cors_origins:
+                 raise ValueError("CORS_ORIGINS must be set in production.")
 
 
 class SettingsProxy:

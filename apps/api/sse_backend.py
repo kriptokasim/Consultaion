@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Protocol, Optional
+from typing import Optional, Protocol
 
 from config import settings
 
@@ -96,7 +96,7 @@ class MemoryChannelBackend:
     async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
         await self.create_channel(channel_id)
         queue = self._channels[channel_id]
-        poll_timeout = getattr(settings, 'SSE_POLL_TIMEOUT_SECONDS', 1.0)
+        poll_timeout = getattr(settings, "SSE_POLL_TIMEOUT_SECONDS", 1.0)
         try:
             while True:
                 # Update last seen on access

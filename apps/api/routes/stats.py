@@ -6,18 +6,14 @@ import sqlalchemy as sa
 from auth import get_current_admin, get_optional_user
 from config import settings
 from deps import get_session
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Query, Response
 from metrics import get_metrics_snapshot
 from models import Debate, Score
-from parliament.model_registry import list_enabled_models
 from pydantic import BaseModel
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from schemas import DebateConfig, default_debate_config, default_panel_config
 from sqlalchemy import func
 from sqlmodel import Session, select
-from sqlmodel import Session, select
-from sse_backend import BaseSSEBackend
-from deps import get_session, get_sse_backend
 
 from routes.common import (
     avg_scores_for_debate,

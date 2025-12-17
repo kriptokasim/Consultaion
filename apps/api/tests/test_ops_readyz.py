@@ -1,7 +1,6 @@
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
-from checks import check_db_readiness, check_sse_readiness
 from fastapi.testclient import TestClient
 from main import app  # Assuming app is in main.py
 

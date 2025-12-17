@@ -2,9 +2,10 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from database import session_scope
 
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("USE_MOCK", "1")
@@ -78,19 +79,24 @@ def test_select_candidates_respects_override():
 @pytest.mark.anyio("asyncio")
 async def test_fast_debate_path_emits_final_event(monkeypatch):
     monkeypatch.setenv("FAST_DEBATE", "1")
-    debate = Debate(
-        id="fast-debate",
-        prompt="Test prompt for FAST mode",
-        status="queued",
-        config=DebateConfig(
+    
+    d_id = "fast-debate"
+    d_prompt = "Test prompt for FAST mode"
+    d_config = DebateConfig(
             agents=[AgentConfig(name="Analyst", persona="Systems thinker")],
             judges=[JudgeConfig(name="JudgeOne", rubrics=["accuracy"])],
-        ).model_dump(),
+        ).model_dump()
+        
+    debate = Debate(
+        id=d_id,
+        prompt=d_prompt,
+        status="queued",
+        config=d_config,
     )
 
     async def collect():
         backend = get_sse_backend()
-        channel_id = f"debate:{debate.id}"
+        channel_id = f"debate:{d_id}"
         await backend.create_channel(channel_id)
         events: list[dict] = []
 
@@ -110,13 +116,19 @@ async def test_fast_debate_path_emits_final_event(monkeypatch):
                 if event.get("type") == "final":
                     break
 
-        with patch("orchestrator.session_scope", fake_scope), patch("orchestrator._complete_debate_record"):
+        with patch("orchestrator._complete_debate_record", new_callable=AsyncMock):
             consumer = asyncio.create_task(consume())
-            await run_debate(debate.id, debate.prompt, channel_id, debate.config)
+            await run_debate(d_id, d_prompt, channel_id, d_config)
             await consumer
         return events
 
     reset_sse_backend_for_tests()
+    
+    # Persist debate so run_debate can load it
+    with session_scope() as session:
+        session.add(debate)
+        session.commit()
+            
     events = await collect()
     assert any(evt.get("type") == "final" for evt in events)
     monkeypatch.setenv("FAST_DEBATE", "0")

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from models import Debate
-
 from .config import PARLIAMENT_CHARTER, SEAT_OUTPUT_CONTRACT
 from .roles import ROLE_PROFILES
 
@@ -14,7 +12,8 @@ def seat_output_contract_instructions() -> str:
 
 def build_messages_for_seat(
     *,
-    debate: Debate,
+    debate_id: str,
+    prompt: str,
     seat: dict[str, Any],
     round_info: dict[str, Any],
     transcript: str,
@@ -31,10 +30,10 @@ def build_messages_for_seat(
 
     seat_name = seat.get("display_name") or seat.get("seat_id") or "Seat"
     user_content = (
-        f"Debate ID: {debate.id}\n"
+        f"Debate ID: {debate_id}\n"
         f"Round: {round_info['index']} ({round_info['phase']})\n\n"
         f"Seat: {seat_name}\n"
-        f"User question:\n{debate.prompt}\n\n"
+        f"User question:\n{prompt}\n\n"
         f"Summary of previous contributions:\n{transcript or 'No previous contributions.'}\n\n"
         f"Your task this round: {round_info.get('task_for_seat', '').strip() or 'Contribute meaningfully to this round.'}\n\n"
         "Remember: respond with JSON only using the provided schema."

@@ -96,11 +96,21 @@ def _build_seat_message_event(debate_id: str, turn: SeatTurn) -> dict:
 
 
 async def run_parliament_debate(
-    debate: Debate,
+    debate_id: str,
     *,
     model_id: str | None,
 ) -> ParliamentResult:
-    panel_payload = debate.panel_config or default_panel_config().model_dump()
+    # Load debate data synchronously to avoid detached objects
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        if not debate:
+            raise ValueError(f"Debate {debate_id} not found")
+        
+        # Eager load/copy fields needed
+        prompt = debate.prompt
+        panel_payload = debate.panel_config or default_panel_config().model_dump()
+        debate_model_id = debate.model_id
+    
     try:
         panel = PanelConfig.model_validate(panel_payload)
     except Exception:
@@ -114,16 +124,18 @@ async def run_parliament_debate(
 
     for round_info in DEFAULT_ROUNDS:
         await backend.publish(
-            f"debate:{debate.id}",
+            f"debate:{debate_id}",
             {
                 "type": "round_started",
-                "debate_id": str(debate.id),
+                "debate_id": str(debate_id),
                 "round": round_info["index"],
                 "phase": round_info["phase"],
             },
         )
         outcome, round_turns = await _execute_round(
-            debate=debate,
+            debate_id=debate_id,
+            prompt=prompt,
+            debate_model_id=debate_model_id,
             panel=panel,
             round_info=round_info,
             transcript_summary=transcript_to_text(transcript_buffer),
@@ -131,7 +143,7 @@ async def run_parliament_debate(
         )
         seat_messages: list[SeatMessage] = []
         for turn in round_turns:
-            event = _build_seat_message_event(debate.id, turn)
+            event = _build_seat_message_event(debate_id, turn)
             transcript_buffer.append({"seat_name": turn.seat_name, "content": turn.content})
             seat_usage.append(
                 {
@@ -156,9 +168,9 @@ async def run_parliament_debate(
                     created_at=datetime.now(timezone.utc),
                 )
             )
-            await backend.publish(f"debate:{debate.id}", event)
+            await backend.publish(f"debate:{debate_id}", event)
         _ = DebateSnapshot(
-            debate_id=str(debate.id),
+            debate_id=str(debate_id),
             round_index=round_info["index"],
             seat_messages=seat_messages,
         )
@@ -180,10 +192,10 @@ async def run_parliament_debate(
         )
         if outcome.status == "failed":
             await backend.publish(
-                f"debate:{debate.id}",
+                f"debate:{debate_id}",
                 {
                     "type": "debate_failed",
-                    "debate_id": str(debate.id),
+                    "debate_id": str(debate_id),
                     "reason": outcome.reason or "seat_failure_threshold_exceeded",
                 },
             )
@@ -209,7 +221,8 @@ async def run_parliament_debate(
             )
 
     final_text, final_usage = await _synthesize_verdict(
-        debate=debate,
+        debate_id=debate_id,
+        prompt=prompt,
         transcript_summary=transcript_to_text(transcript_buffer, limit=24),
         panel=panel,
         model_id=model_id,
@@ -239,7 +252,9 @@ async def run_parliament_debate(
 
 async def _execute_round(
     *,
-    debate: Debate,
+    debate_id: str,
+    prompt: str,
+    debate_model_id: str | None,
     panel: PanelConfig,
     round_info: dict[str, Any],
     transcript_summary: str,
@@ -254,7 +269,8 @@ async def _execute_round(
         seat_role = role_profile.title if role_profile else seat.role_profile
         try:
             messages = build_messages_for_seat(
-                debate=debate,
+                debate_id=debate_id,
+                prompt=prompt,
                 seat=seat.model_dump(),
                 round_info=round_info,
                 transcript=transcript_summary,
@@ -264,8 +280,8 @@ async def _execute_round(
                 role=seat.display_name,
                 temperature=seat.temperature or 0.5,
                 model_override=seat.model,
-                model_id=debate.model_id,
-                debate_id=debate.id,
+                model_id=debate_model_id,
+                debate_id=debate_id,
             )
             envelope = parse_seat_llm_output(text)
             usage_tracker.add_call(call_usage)
@@ -287,7 +303,7 @@ async def _execute_round(
             with session_scope() as session:
                 session.add(
                     Message(
-                        debate_id=debate.id,
+                        debate_id=debate_id,
                         round_index=round_info["index"],
                         role="seat",
                         persona=seat.display_name,
@@ -334,7 +350,8 @@ async def _execute_round(
 
 async def _synthesize_verdict(
     *,
-    debate: Debate,
+    debate_id: str,
+    prompt: str,
     transcript_summary: str,
     panel: PanelConfig,
     model_id: str | None,
@@ -345,7 +362,7 @@ async def _synthesize_verdict(
         {
             "role": "user",
             "content": (
-                f"Debate prompt:\n{debate.prompt}\n\nPanel seats: {seats_summary}\n\n"
+                f"Debate prompt:\n{prompt}\n\nPanel seats: {seats_summary}\n\n"
                 f"Transcript summary:\n{transcript_summary}\n\n"
                 "Produce a concise verdict that captures consensus recommendations, key risks, and next actions."
             ),
@@ -358,5 +375,5 @@ async def _synthesize_verdict(
         temperature=0.35,
         model_override=chair_model,
         model_id=model_id,
-        debate_id=debate.id,
+        debate_id=debate_id,
     )

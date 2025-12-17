@@ -11,7 +11,7 @@ from billing.routes import MODEL_COST_PER_1K
 from billing.service import _current_period, get_active_plan
 from config import settings
 from deps import get_session
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from models import AdminEvent, AuditLog, Debate, SupportNote, User
 from parliament.model_registry import get_default_model, list_enabled_models
 from parliament.provider_health import get_provider_health_snapshot
@@ -558,6 +558,7 @@ class ChangePlanRequest(BaseModel):
 def change_user_plan(
     user_id: str,
     request: ChangePlanRequest,
+    req: Request,
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
@@ -612,7 +613,9 @@ def change_user_plan(
         user_id=admin.id,
         target_type="user",
         target_id=user.id,
+
         meta={"old_plan": old_plan, "new_plan": request.plan, "target_email": user.email},
+        ip_address=req.client.host if req.client else None,
         session=session,
     )
     
@@ -857,6 +860,7 @@ def admin_get_user_notes(
 def admin_create_user_note(
     user_id: str,
     request: CreateNoteRequest,
+    req: Request,
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
@@ -879,6 +883,17 @@ def admin_create_user_note(
     session.refresh(note)
     
     logger.info(f"Support note created by {admin.email} for user {user.email}: {note.id}")
+
+    from audit import record_audit
+    record_audit(
+        "create_support_note",
+        user_id=admin.id,
+        target_type="user",
+        target_id=user.id,
+        meta={"note_id": note.id, "target_email": user.email},
+        ip_address=req.client.host if req.client else None,
+        session=session,
+    )
     
     return {
         "id": note.id,
@@ -893,6 +908,7 @@ def admin_create_user_note(
 def admin_update_user_status(
     user_id: str,
     request: UpdateUserStatusRequest,
+    req: Request,
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
@@ -922,6 +938,7 @@ def admin_update_user_status(
         target_type="user",
         target_id=user.id,
         meta={"old_status": old_status, "new_status": request.is_active, "target_email": user.email},
+        ip_address=req.client.host if req.client else None,
         session=session,
     )
     
@@ -936,6 +953,7 @@ def admin_update_user_status(
 # Patchset 58.0: Data Retention Purge Endpoint
 @router.post("/maintenance/purge")
 def admin_purge_old_data(
+    req: Request,
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
@@ -956,6 +974,7 @@ def admin_purge_old_data(
         target_type="system",
         target_id=None,
         meta=results,
+        ip_address=req.client.host if req.client else None,
         session=session,
     )
     

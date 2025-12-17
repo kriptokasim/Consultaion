@@ -62,15 +62,15 @@ class PanelConfig(BaseModel):
     engine_version: str = "parliament-v1"
     seats: List[PanelSeat]
     max_seat_fail_ratio: Optional[float] = Field(
-        None,
+        default=None,
         description="Override for DEBATE_MAX_SEAT_FAIL_RATIO; fraction of seats allowed to fail before aborting.",
     )
     min_required_seats: Optional[int] = Field(
-        None,
+        default=None,
         description="Override for DEBATE_MIN_REQUIRED_SEATS; minimum successful seats per round.",
     )
     fail_fast: Optional[bool] = Field(
-        None,
+        default=None,
         description="Override for DEBATE_FAIL_FAST; when True, abort debate instead of limping along.",
     )
 

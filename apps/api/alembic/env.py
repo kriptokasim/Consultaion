@@ -1,5 +1,4 @@
 import os
-
 from logging.config import fileConfig
 from pathlib import Path
 
@@ -41,10 +40,10 @@ DATABASE_URL = settings.DATABASE_URL
 
 if DATABASE_URL_MIGRATIONS:
     # Use direct connection for migrations
-    url = DATABASE_URL_MIGRATIONS.replace('%', '%%')
+    url = DATABASE_URL_MIGRATIONS.replace("%", "%%")
 else:
     # Fallback to runtime URL (escape % chars for configparser)
-    url = DATABASE_URL.replace('%', '%%')
+    url = DATABASE_URL.replace("%", "%%")
 
 if not url:
     raise RuntimeError("DATABASE_URL is not set")

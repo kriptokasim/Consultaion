@@ -3,8 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from alembic import config as alembic_config
-from alembic import script
+from alembic import config as alembic_config, script
 from alembic.runtime import migration
 from database import engine
 from sqlalchemy import text

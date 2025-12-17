@@ -69,3 +69,19 @@ If any check fails (e.g., pending migrations), it returns **503 Service Unavaila
 
 **Cause:** Migrations likely failed or haven't run.
 **Fix:** Check build logs for `alembic upgrade head` output. Run migrations manually if needed.
+
+## Observability
+
+### Logs
+
+Application logs are structured as JSON (in production) and include a `request_id` field for tracing across async operations.
+
+* **Key Field:** `request_id`
+* **Correlates:** HTTP requests, background tasks (if propagated), and errors.
+* **Usage:** Search logs for a specific request ID to see the full lifecycle of an operation.
+
+### Metrics
+
+* **Readiness:** Monitor `/readyz` for service health.
+* **Liveness:** Monitor `/healthz` for process uptime.
+* **Dashboard:** Refer to the stats dashboard `/admin/ops/summary` (if enabled) for internal metrics.

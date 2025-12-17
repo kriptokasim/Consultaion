@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
+from middleware.body_limit import BodySizeLimitMiddleware
 from parliament.model_registry import get_default_model, list_enabled_models
 from promotions.routes import promotions_router
 from ratelimit import ensure_rate_limiter_ready
@@ -50,6 +51,7 @@ from routes.debates import (
     update_debate,
 )
 from routes.models import models_router
+from routes.ops import router as ops_router
 from routes.stats import (
     get_debate_summary,
     get_hall_of_fame_stats,
@@ -59,7 +61,6 @@ from routes.stats import (
     get_system_health,
     stats_router,
 )
-from routes.ops import router as ops_router
 from routes.teams import (
     TeamCreate,
     TeamMemberCreate,
@@ -70,15 +71,16 @@ from routes.teams import (
     teams_router,
 )
 from schemas import DebateCreate
-from schemas import DebateCreate
 from sse_backend import get_sse_backend
 from starlette.middleware.base import BaseHTTPMiddleware
 
 root_level = settings.LOG_LEVEL.upper()
-LOGGING_CONFIG["loggers"][""]["level"] = root_level
+# MyPy sees LOGGING_CONFIG as Dict[str, Any] but inferred loosely.
+# We can just ignore the type error for this dynamic configuration or cast it.
+LOGGING_CONFIG["loggers"][""]["level"] = root_level  # type: ignore
 for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "apps"):
     if logger_name in LOGGING_CONFIG["loggers"]:
-        LOGGING_CONFIG["loggers"][logger_name]["level"] = root_level
+        LOGGING_CONFIG["loggers"][logger_name]["level"] = root_level  # type: ignore
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 TEST_FAST_APP = settings.ENV == "test"
@@ -138,6 +140,9 @@ async def csrf_protect(request: Request) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if TEST_FAST_APP:
+        # Ensure sse_backend is available in state for dependencies even in test mode
+        from sse_backend import get_sse_backend as get_global_sse
+        app.state.sse_backend = get_global_sse()
         yield
         return
     init_db()
@@ -168,7 +173,7 @@ async def lifespan(app: FastAPI):
 
     # Verify migration version matches code
     try:
-        from alembic import config, script
+        from alembic import config
         from alembic.migration import MigrationContext
         
         # Assume alembic.ini is in the root or accessible
@@ -269,8 +274,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 origins = settings.CORS_ORIGINS.split(",")
+app.add_middleware(RequestIDMiddleware)
 if settings.ENV != "test":
-    app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(BodySizeLimitMiddleware, max_content_size=10 * 1024 * 1024) # 10MB
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -367,8 +373,6 @@ __all__ = [
     "register_user",
     "google_login",
     "google_callback",
-    "healthz",
-    "readyz",
     "get_model_leaderboard_stats",
     "get_model_detail",
     "get_debate_summary",

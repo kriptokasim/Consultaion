@@ -11,7 +11,10 @@ Plans:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from models import User
 
 
 @dataclass

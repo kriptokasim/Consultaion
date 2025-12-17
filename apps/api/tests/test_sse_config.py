@@ -1,7 +1,8 @@
+from unittest.mock import patch
+
 import pytest
-from config import AppSettings, settings
-from sse_backend import create_sse_backend, MemoryChannelBackend, RedisChannelBackend
-from unittest.mock import patch, MagicMock
+from sse_backend import MemoryChannelBackend, RedisChannelBackend, create_sse_backend
+
 
 class TestSSEConfig:
     @patch("sse_backend.settings")

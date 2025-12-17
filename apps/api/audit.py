@@ -14,9 +14,15 @@ def record_audit(
     user_id: Optional[str] = None,
     target_type: Optional[str] = None,
     target_id: Optional[str] = None,
+    ip_address: Optional[str] = None,
     meta: Optional[dict[str, Any]] = None,
     session: Optional[Session] = None,
 ) -> None:
+    # Patchset 73: Add IP address to meta if provided
+    final_meta = meta or {}
+    if ip_address:
+        final_meta["ip_address"] = ip_address
+    
     try:
         if session is None:
             with session_scope() as scoped:
@@ -25,7 +31,7 @@ def record_audit(
                     action=action,
                     target_type=target_type,
                     target_id=target_id,
-                    meta=meta,
+                    meta=final_meta,
                     created_at=utcnow(),
                 )
                 scoped.add(log)
@@ -35,7 +41,7 @@ def record_audit(
                 action=action,
                 target_type=target_type,
                 target_id=target_id,
-                meta=meta,
+                meta=final_meta,
                 created_at=utcnow(),
             )
             session.add(log)

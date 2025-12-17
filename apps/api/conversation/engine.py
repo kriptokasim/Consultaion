@@ -19,15 +19,25 @@ from sse_backend import get_sse_backend
 logger = logging.getLogger(__name__)
 
 async def run_conversation_debate(
-    debate: Debate,
+    debate_id: str,
     *,
     model_id: str | None,
 ) -> Any:
     """
     Orchestrate a collaborative conversation mode run.
     """
+    # Load debate data synchronously to avoid detached objects
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        if not debate:
+            raise ValueError(f"Debate {debate_id} not found")
+        
+        # Eager load/copy fields needed
+        prompt = debate.prompt
+        panel_payload = debate.panel_config or default_panel_config().model_dump()
+        user_id = debate.user_id
+        
     # Load config
-    panel_payload = debate.panel_config or default_panel_config().model_dump()
     try:
         panel = PanelConfig.model_validate(panel_payload)
     except Exception:
@@ -45,8 +55,8 @@ async def run_conversation_debate(
     
     # Notify start
     await backend.publish(
-        f"debate:{debate.id}",
-        {"type": "round_started", "debate_id": str(debate.id), "round": 0, "phase": "conversation_start"}
+        f"debate:{debate_id}",
+        {"type": "round_started", "debate_id": str(debate_id), "round": 0, "phase": "conversation_start"}
     )
 
     for round_idx in range(1, num_rounds + 1):
@@ -54,13 +64,13 @@ async def run_conversation_debate(
         if usage.total_tokens >= max_tokens:
             truncated = True
             truncate_reason = "token_limit"
-            logger.info(f"Conversation {debate.id} truncated due to token limit ({usage.total_tokens} >= {max_tokens})")
+            logger.info(f"Conversation {debate_id} truncated due to token limit ({usage.total_tokens} >= {max_tokens})")
             break
 
         # Notify round start
         await backend.publish(
-            f"debate:{debate.id}",
-            {"type": "round_started", "debate_id": str(debate.id), "round": round_idx, "phase": "discussion"}
+            f"debate:{debate_id}",
+            {"type": "round_started", "debate_id": str(debate_id), "round": round_idx, "phase": "discussion"}
         )
         
         round_messages = []
@@ -73,7 +83,7 @@ async def run_conversation_debate(
                 {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
                 {
                     "role": "user", 
-                    "content": f"Topic: {debate.prompt}\n\nPrevious discussion:\n{context_text}\n\nYour contribution:"
+                    "content": f"Topic: {prompt}\n\nPrevious discussion:\n{context_text}\n\nYour contribution:"
                 }
             ]
             
@@ -84,7 +94,7 @@ async def run_conversation_debate(
                     temperature=seat.temperature or 0.7,
                     model_override=seat.model,
                     model_id=model_id,
-                    debate_id=debate.id,
+                    debate_id=debate_id,
                     extra_tags={"mode": "conversation", "round": round_idx},
                 )
                 usage.add_call(call_usage)
@@ -93,7 +103,7 @@ async def run_conversation_debate(
                 with session_scope() as session:
                     session.add(
                         Message(
-                            debate_id=debate.id,
+                            debate_id=debate_id,
                             round_index=round_idx,
                             role="delegate",
                             persona=seat.display_name,
@@ -112,10 +122,10 @@ async def run_conversation_debate(
                 
                 # Emit event
                 await backend.publish(
-                    f"debate:{debate.id}",
+                    f"debate:{debate_id}",
                     {
                         "type": "seat_message", # Reusing seat_message for compatibility
-                        "debate_id": str(debate.id),
+                        "debate_id": str(debate_id),
                         "round": round_idx,
                         "seat_name": seat.display_name,
                         "content": content,
@@ -134,7 +144,7 @@ async def run_conversation_debate(
         
         summary_messages = [
             {"role": "system", "content": CONVERSATION_SCRIBE_PROMPT},
-            {"role": "user", "content": f"Topic: {debate.prompt}\n\nRound {round_idx} Transcript:\n" + "\n".join([f"{m['seat']}: {m['content']}" for m in round_messages])}
+            {"role": "user", "content": f"Topic: {prompt}\n\nRound {round_idx} Transcript:\n" + "\n".join([f"{m['seat']}: {m['content']}" for m in round_messages])}
         ]
         
         try:
@@ -143,16 +153,16 @@ async def run_conversation_debate(
                 role="Scribe",
                 temperature=0.3,
                 model_id=model_id, # Use default or specific model
-                debate_id=debate.id,
+                debate_id=debate_id,
                 extra_tags={"mode": "conversation", "round": round_idx},
             )
             usage.add_call(summary_usage)
             
             await backend.publish(
-                f"debate:{debate.id}",
+                f"debate:{debate_id}",
                 {
                     "type": "conversation_summary",
-                    "debate_id": str(debate.id),
+                    "debate_id": str(debate_id),
                     "round": round_idx,
                     "content": summary_content
                 }
@@ -167,7 +177,7 @@ async def run_conversation_debate(
     # Final Synthesis
     synthesis_messages = [
         {"role": "system", "content": CONVERSATION_SYNTHESIS_PROMPT},
-        {"role": "user", "content": f"Topic: {debate.prompt}\n\nFull Transcript:\n" + "\n".join([f"{t['seat']}: {t['content']}" for t in transcript])}
+        {"role": "user", "content": f"Topic: {prompt}\n\nFull Transcript:\n" + "\n".join([f"{t['seat']}: {t['content']}" for t in transcript])}
     ]
     
     final_content = ""
@@ -177,7 +187,7 @@ async def run_conversation_debate(
             role="Facilitator",
             temperature=0.4,
             model_id=model_id,
-            debate_id=debate.id,
+            debate_id=debate_id,
             extra_tags={"mode": "conversation", "phase": "synthesis"},
         )
         usage.add_call(final_usage)
@@ -208,13 +218,13 @@ async def run_conversation_debate(
     })
     
     # Record token usage for quota tracking
-    if hasattr(debate, "user_id") and debate.user_id:
+    if user_id:
         try:
             from usage_limits import record_token_usage
             with session_scope() as session:
-                record_token_usage(session, debate.user_id, usage.total_tokens, commit=True)
+                record_token_usage(session, user_id, usage.total_tokens, commit=True)
         except Exception as e:
-            logger.error(f"Failed to record token usage for conversation {debate.id}: {e}")
+            logger.error(f"Failed to record token usage for conversation {debate_id}: {e}")
     
     return type("ConversationResult", (), {
         "final_answer": final_content,

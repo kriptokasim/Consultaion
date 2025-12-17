@@ -52,11 +52,11 @@ class FinalizationService:
         return ranking, details
 
     @staticmethod
-    def persist_vote(state_manager: DebateStateManager, ranking: List[str], details: Dict[str, Any]):
+    async def persist_vote(state_manager: DebateStateManager, ranking: List[str], details: Dict[str, Any]):
         """
         Persist the vote result using the state manager.
         """
-        state_manager.save_vote(
+        await state_manager.save_vote(
             method="borda+condorcet",
             ranking=ranking,
             details=details

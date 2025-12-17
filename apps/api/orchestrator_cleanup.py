@@ -28,7 +28,7 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
     running_cutoff = now - timedelta(seconds=settings.DEBATE_STALE_RUNNING_SECONDS)
     queued_cutoff = now - timedelta(seconds=settings.DEBATE_STALE_QUEUED_SECONDS)
     
-    stale_debates: List[Tuple[Debate, str, int]] = []  # (debate, reason, age_seconds)
+    stale_debates: List[Tuple[str, str, int]] = []  # (debate_id, reason, age_seconds)
     
     with session_scope() as session:
         # Find stale queued debates
@@ -38,11 +38,35 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
         )
         for debate in session.exec(stmt_queued).all():
             age = int((now - debate.created_at).total_seconds())
-            stale_debates.append((debate, "queued_timeout", age))
+            stale_debates.append((debate.id, "queued_timeout", age))
         
         # Find stale running debates using checkpoint
         stmt_running = select(Debate).where(Debate.status == "running")
         for debate in session.exec(stmt_running).all():
+            # Patchset 71: Check Lease Expiration
+            if debate.lease_expires_at:
+                lease_expires = debate.lease_expires_at
+                # Handle naive datetimes (SQLite tests)
+                if lease_expires.tzinfo is None:
+                    lease_expires = lease_expires.replace(tzinfo=timezone.utc)
+                
+                if lease_expires < now:
+                    age = int((now - lease_expires).total_seconds())
+                    if debate.run_attempt < 3:
+                        # Requeue for another worker
+                        debate.status = "queued"
+                        debate.runner_id = None
+                        debate.lease_expires_at = None
+                        debate.updated_at = now
+                        session.add(debate)
+                        session.commit()
+                        logger.info("Lease expired for debate %s (age=%ds), requeuing (attempt %d)", debate.id, age, debate.run_attempt)
+                        continue
+                    else:
+                        # Retries exhausted, mark as stale/failed below
+                        stale_debates.append((debate.id, "lease_timeout_retries_exceeded", age))
+                        continue
+
             # Check checkpoint for last activity
             ckpt_stmt = select(DebateCheckpoint).where(
                 DebateCheckpoint.debate_id == debate.id
@@ -57,7 +81,7 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
             
             if last_activity < running_cutoff:
                 age = int((now - last_activity).total_seconds())
-                stale_debates.append((debate, "running_timeout", age))
+                stale_debates.append((debate.id, "running_timeout", age))
     
     if not stale_debates:
         return 0, 0
@@ -66,13 +90,13 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
     degraded_count = 0
     backend = get_sse_backend()
     
-    for debate, reason, age in stale_debates:
+    for debate_id, reason, age in stale_debates:
         # Determine if degraded (has partial output) or failed
-        has_output = _debate_has_output(debate.id)
+        has_output = _debate_has_output(debate_id)
         final_status = "degraded" if has_output else "failed"
         
         with session_scope() as session:
-            db_debate = session.get(Debate, debate.id)
+            db_debate = session.get(Debate, debate_id)
             if not db_debate or db_debate.status not in {"queued", "running"}:
                 # Status changed while we were processing
                 continue
@@ -91,21 +115,21 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
             
             # Create DebateError record
             error = DebateError(
-                debate_id=debate.id,
-                user_id=debate.user_id,
+                debate_id=debate_id,
+                user_id=db_debate.user_id,
                 status=final_status,
                 error_summary=f"stale_debate_timeout: {reason}",
                 participant_errors={
                     "reason": reason,
                     "age_seconds": age,
-                    "last_known_step": _get_last_step(session, debate.id),
+                    "last_known_step": _get_last_step(session, debate_id),
                 },
             )
             session.add(error)
             
             # Update checkpoint if exists
             ckpt_stmt = select(DebateCheckpoint).where(
-                DebateCheckpoint.debate_id == debate.id
+                DebateCheckpoint.debate_id == debate_id
             )
             ckpt = session.exec(ckpt_stmt).first()
             if ckpt:
@@ -117,10 +141,10 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
         # Emit SSE event for observability
         try:
             await backend.publish(
-                f"debate:{debate.id}",
+                f"debate:{debate_id}",
                 {
                     "type": "debate.failed",
-                    "debate_id": debate.id,
+                    "debate_id": debate_id,
                     "reason": "stale_timeout",
                     "stale_reason": reason,
                     "age_seconds": age,
@@ -137,7 +161,7 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
         
         logger.info(
             "Stale debate cleanup: debate_id=%s status=%s reason=%s age_seconds=%d",
-            debate.id,
+            debate_id,
             final_status,
             reason,
             age,

@@ -30,7 +30,7 @@ class DraftStage(BaseStage):
     name = "draft"
 
     async def run(self, context: DebateContext, state: DebateState) -> DebateState:
-        round_id = self.state_manager.start_round(1, "draft", "candidate drafting")
+        round_id = await self.state_manager.start_round(1, "draft", "candidate drafting")
         
         agent_configs = context.config.get("agents", [])
         if not agent_configs:
@@ -68,8 +68,8 @@ class DraftStage(BaseStage):
         if not candidates:
             raise RuntimeError("All candidate generators failed")
 
-        self.state_manager.save_messages(1, candidates, role="candidate")
-        self.state_manager.end_round(round_id)
+        await self.state_manager.save_messages(1, candidates, role="candidate")
+        await self.state_manager.end_round(round_id)
         
         await self._publish(context.channel_id, {"type": "message", "round": 1, "candidates": candidates})
         
@@ -82,7 +82,7 @@ class CritiqueStage(BaseStage):
     name = "critique"
 
     async def run(self, context: DebateContext, state: DebateState) -> DebateState:
-        round_id = self.state_manager.start_round(2, "critique", "cross-critique and revision")
+        round_id = await self.state_manager.start_round(2, "critique", "cross-critique and revision")
         
         revised, critique_usage = await criticize_and_revise(
             context.prompt, 
@@ -92,8 +92,8 @@ class CritiqueStage(BaseStage):
         )
         context.usage_tracker.extend(critique_usage)
         
-        self.state_manager.save_messages(2, revised, role="revised")
-        self.state_manager.end_round(round_id)
+        await self.state_manager.save_messages(2, revised, role="revised")
+        await self.state_manager.end_round(round_id)
         
         await self._publish(context.channel_id, {"type": "message", "round": 2, "revised": revised})
         
@@ -106,7 +106,7 @@ class JudgeStage(BaseStage):
     name = "judge"
 
     async def run(self, context: DebateContext, state: DebateState) -> DebateState:
-        round_id = self.state_manager.start_round(3, "judge", "rubric scoring")
+        round_id = await self.state_manager.start_round(3, "judge", "rubric scoring")
         
         judge_configs = context.config.get("judges", [])
         candidates_to_judge = state.revised_candidates or state.candidates
@@ -120,8 +120,8 @@ class JudgeStage(BaseStage):
         )
         context.usage_tracker.extend(judge_usage)
         
-        self.state_manager.save_scores(judge_details)
-        self.state_manager.end_round(round_id)
+        await self.state_manager.save_scores(judge_details)
+        await self.state_manager.end_round(round_id)
         
         await self._publish(
             context.channel_id, 
@@ -131,7 +131,7 @@ class JudgeStage(BaseStage):
         # Compute and persist rankings
         from .finalization import FinalizationService
         ranking, vote_details = FinalizationService.compute_rankings(aggregate_scores)
-        FinalizationService.persist_vote(self.state_manager, ranking, vote_details)
+        await FinalizationService.persist_vote(self.state_manager, ranking, vote_details)
         
         state.scores = aggregate_scores
         state.ranking = ranking

@@ -1,11 +1,11 @@
-import asyncio
-import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from sse_backend import RedisChannelBackend
 
 # Mock redis module just enough to expose ConnectionError/TimeoutError classes for catching
 import redis.asyncio as real_redis
+from sse_backend import RedisChannelBackend
+
 
 @pytest.mark.asyncio
 class TestSSEResilience:

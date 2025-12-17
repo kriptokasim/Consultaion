@@ -128,6 +128,7 @@ class Debate(SQLModel, table=True):
     model_config["protected_namespaces"] = ()
     __table_args__ = (
         Index("ix_debate_user_status", "user_id", "status"),
+        Index("ix_debate_status_lease", "status", "lease_expires_at"),
     )
     id: str = Field(primary_key=True)
     prompt: str = Field(sa_column=Column(Text, nullable=False))
@@ -146,6 +147,12 @@ class Debate(SQLModel, table=True):
     routing_policy: Optional[str] = Field(default=None, nullable=True)
     routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     mode: str = Field(default="debate", nullable=False, index=True)
+
+    # Patchset 71.0: Lease fields for multi-worker support
+    runner_id: Optional[str] = Field(default=None, index=True, nullable=True)
+    lease_expires_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    last_heartbeat_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    run_attempt: int = Field(default=0, nullable=False)
 
 
 

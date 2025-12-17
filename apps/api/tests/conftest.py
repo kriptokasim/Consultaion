@@ -52,6 +52,7 @@ def test_database_url():
     from billing.models import BillingPlan
     from config import settings
     from database import init_db, reset_engine
+    from database_async import reset_async_engine
     from sqlmodel import Session, select
 
     from tests.utils import cleanup_test_database, init_test_database, make_test_database_url
@@ -69,6 +70,7 @@ def test_database_url():
     
     # Reset the global engine to use the test database
     reset_engine()
+    reset_async_engine()
     
     # Initialize database (creates tables if needed)
     init_db()
@@ -132,15 +134,21 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     """
     from config import settings
     from database import reset_engine
+    from database_async import reset_async_engine
     from sse_backend import reset_sse_backend_for_tests
 
     from tests.utils import reset_provider_health, truncate_all_tables
 
+    # Force environment to test mode and clear production flags
+    os.environ["ENV"] = "test"
+    os.environ.pop("RENDER", None)
+    
     # Force the shared settings/engine to the session database even if other tests mutated env.
     if settings.DATABASE_URL != test_database_url:
         os.environ["DATABASE_URL"] = test_database_url
         settings.reload()
         reset_engine()
+        reset_async_engine()
 
     # Truncate all tables to ensure clean state before each test
     truncate_all_tables()

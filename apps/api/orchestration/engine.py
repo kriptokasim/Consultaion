@@ -26,7 +26,7 @@ class DebateRunner:
         backend = get_sse_backend()
         
         # Initial state
-        self.state_manager.set_status("running")
+        await self.state_manager.set_status("running")
         
         try:
             logger.debug("Debate %s: starting pipeline execution", context.debate_id)
@@ -35,7 +35,7 @@ class DebateRunner:
             final_state = await self.pipeline.execute(context)
             
             # Finalize
-            self.state_manager.complete_debate(
+            await self.state_manager.complete_debate(
                 final_content=final_state.final_content or "",
                 final_meta=final_state.final_meta,
                 status=final_state.status,
@@ -70,7 +70,7 @@ class DebateRunner:
             logger.exception("Debate %s failed: %s", context.debate_id, exc)
             
             # Record failure
-            self.state_manager.set_status("failed", meta={"error": str(exc)})
+            await self.state_manager.set_status("failed", meta={"error": str(exc)})
             
             # Log failure
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
