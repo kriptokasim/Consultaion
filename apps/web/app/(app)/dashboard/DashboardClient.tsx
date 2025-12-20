@@ -65,12 +65,10 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       // 1. Save to localStorage for API clients
       localStorage.setItem("auth_token", authToken);
 
-      // 2. Set 'session' cookie for SSR (Cross-Origin Bootstrapping)
-      // Note: Backend uses 'session' cookie name. We duplicate it here on Frontend domain.
-      // This allows next SSR request to see 'session' cookie and proxy/forward it if configured.
-      // Even if not proxying, it allows Client-side 'getMe' to maybe work or just allows us to have a session.
-      // Backend expects HttpOnly but we can't set that. Verification happens on value signature.
-      document.cookie = `session=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
+      // 2. Set 'consultaion_token' cookie for SSR (Cross-Origin Bootstrapping)
+      // Note: Backend uses 'consultaion_token' cookie name (defined in config.py).
+      // We duplicate it here on Frontend domain to allow SSR to see it.
+      document.cookie = `consultaion_token=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
 
       // 3. Clear URL and potentially reload to establish clean state
       const url = new URL(window.location.href);
