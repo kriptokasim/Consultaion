@@ -204,6 +204,7 @@ class AppSettings(BaseSettings):
     LITELLM_API_KEY: str | None = None
     LITELLM_MODEL: str = "gpt-4o-mini"
     LITELLM_API_BASE: str | None = None
+    OPENROUTER_FALLBACK_MODEL: str = "openrouter/openai/gpt-4o-mini"
 
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 10

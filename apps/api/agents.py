@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 from config import settings
 from exceptions import ProviderCircuitOpenError
 from integrations.langfuse import current_trace_id, log_model_observation
-from litellm import acompletion
+from litellm import acompletion, RateLimitError
 from llm_errors import TransientLLMError
 from parliament.provider_health import get_health_state, record_call_result
 from safety.pii import scrub_messages
@@ -336,6 +336,18 @@ async def call_llm_with_retry(
                 max_attempts,
                 exc,
             )
+            
+            # Patchset 81: OpenRouter Fallback logic
+            # If we hit a Rate Limit and have OpenRouter configured, switch to fallback model.
+            if isinstance(exc.cause, RateLimitError) and settings.OPENROUTER_API_KEY and settings.OPENROUTER_FALLBACK_MODEL:
+                if model_override != settings.OPENROUTER_FALLBACK_MODEL: # Prevent infinite switching if fallback also fails
+                    logger.warning(
+                        f"Rate limit exceeded on {model_override or 'default'}. "
+                        f"Switching to OpenRouter fallback: {settings.OPENROUTER_FALLBACK_MODEL}"
+                    )
+                    model_override = settings.OPENROUTER_FALLBACK_MODEL
+                    delay = 0 # Retry immediately
+            
             if delay > 0:
                 await asyncio.sleep(min(delay, max_delay))
                 delay = min(max_delay, delay * 2 if delay else max_delay)
