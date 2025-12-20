@@ -291,6 +291,31 @@ class AdminEvent(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class ConversationVote(SQLModel, table=True):
+    """
+    Patchset 77: Conversation V2 voting with idempotency.
+    
+    Stores user votes on conversation messages with optional reason and confidence.
+    Unique constraint on (conversation_id, message_id, user_id) enables upsert behavior.
+    """
+    __tablename__ = "conversation_votes"
+    __table_args__ = (
+        Index("ix_conversation_votes_conversation", "conversation_id"),
+        Index("ix_conversation_votes_message", "message_id"),
+        Index("ix_conversation_votes_unique", "conversation_id", "message_id", "user_id", unique=True),
+    )
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    conversation_id: str = Field(nullable=False, index=True)
+    message_id: str = Field(nullable=False, index=True)
+    user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
+    vote: int = Field(nullable=False)  # -1 or 1
+    reason: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    confidence: Optional[int] = Field(default=None, nullable=True)  # 1-3
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 Index("ix_message_debate_round", Message.debate_id, Message.round_index)
 Index("ix_score_debate_persona", Score.debate_id, Score.persona)
 Index("ix_round_debate_index", DebateRound.debate_id, DebateRound.index)

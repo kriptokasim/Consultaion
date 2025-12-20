@@ -351,6 +351,10 @@ from routes.gifs import router as gifs_router
 app.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
 app.include_router(features_router)
 
+# Patchset 77: Conversation V2 voting API
+from routes.votes import router as votes_router
+app.include_router(votes_router)
+
 
 # Lifespan helpers
 
