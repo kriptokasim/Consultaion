@@ -176,8 +176,9 @@ def test_admin_models_metadata(authenticated_client, db_session: Session):
 
 
 def test_create_debate_rate_limit(authenticated_client, monkeypatch):
-    monkeypatch.setenv("RL_DEBATE_CREATE_WINDOW", "60")
-    monkeypatch.setenv("RL_DEBATE_CREATE_MAX_CALLS", "2")
+    # Must use DEV_RL_* vars because model_post_init uses these for local/test environments
+    monkeypatch.setenv("DEV_RL_DEBATE_CREATE_WINDOW", "60")
+    monkeypatch.setenv("DEV_RL_DEBATE_CREATE_MAX_CALLS", "2")
     import config as config_module
     config_module.settings.reload()
     

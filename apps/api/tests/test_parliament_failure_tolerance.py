@@ -1,14 +1,13 @@
 import uuid
 
-import agents  # noqa: E402
+import agents
 import pytest
-from agents import UsageCall  # noqa: E402
-from database import engine  # noqa: E402
-from models import Debate  # noqa: E402
-from parliament.engine import ParliamentResult, run_parliament_debate  # noqa: E402
-from schemas import PanelSeat, default_panel_config  # noqa: E402
+from agents import UsageCall
+from models import Debate
+from parliament.engine import ParliamentResult, run_parliament_debate
+from schemas import PanelSeat, default_panel_config
 from sqlmodel import Session
-from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
+from sse_backend import get_sse_backend, reset_sse_backend_for_tests
 
 
 class _FlakyLLM:
@@ -24,21 +23,20 @@ class _FlakyLLM:
 
 
 @pytest.mark.anyio("asyncio")
-async def test_parliament_tolerance_allows_minor_failures(monkeypatch):
+async def test_parliament_tolerance_allows_minor_failures(db_session: Session, monkeypatch):
     panel = default_panel_config()
     panel.max_seat_fail_ratio = 0.8
     debate_id = f"tolerance-ok-{uuid.uuid4().hex[:6]}"
-    with Session(engine) as session:
-        debate = Debate(
-            id=debate_id,
-            prompt="Resilient debate",
-            status="queued",
-            panel_config=panel.model_dump(),
-            engine_version=panel.engine_version,
-        )
-        session.add(debate)
-        session.commit()
-        session.refresh(debate)
+    debate = Debate(
+        id=debate_id,
+        prompt="Resilient debate",
+        status="queued",
+        panel_config=panel.model_dump(),
+        engine_version=panel.engine_version,
+    )
+    db_session.add(debate)
+    db_session.commit()
+    db_session.refresh(debate)
 
     reset_sse_backend_for_tests()
     backend = get_sse_backend()
@@ -47,13 +45,13 @@ async def test_parliament_tolerance_allows_minor_failures(monkeypatch):
     flaky = _FlakyLLM(fail_on_calls={3})  # one failure out of three seats
     monkeypatch.setattr(agents, "call_llm_for_role", flaky)
     monkeypatch.setattr("parliament.engine.call_llm_for_role", flaky)
-    result: ParliamentResult = await run_parliament_debate(debate, model_id=None)
+    result: ParliamentResult = await run_parliament_debate(debate.id, model_id=None)
     assert result.status == "completed"
     assert result.error_reason is None
 
 
 @pytest.mark.anyio("asyncio")
-async def test_parliament_tolerance_aborts_when_threshold_exceeded(monkeypatch):
+async def test_parliament_tolerance_aborts_when_threshold_exceeded(db_session: Session, monkeypatch):
     panel = default_panel_config()
     panel.max_seat_fail_ratio = 0.2
     panel.fail_fast = True
@@ -68,17 +66,16 @@ async def test_parliament_tolerance_aborts_when_threshold_exceeded(monkeypatch):
         )
     )
     debate_id = f"tolerance-fail-{uuid.uuid4().hex[:6]}"
-    with Session(engine) as session:
-        debate = Debate(
-            id=debate_id,
-            prompt="Should abort when many seats fail",
-            status="queued",
-            panel_config=panel.model_dump(),
-            engine_version=panel.engine_version,
-        )
-        session.add(debate)
-        session.commit()
-        session.refresh(debate)
+    debate = Debate(
+        id=debate_id,
+        prompt="Should abort when many seats fail",
+        status="queued",
+        panel_config=panel.model_dump(),
+        engine_version=panel.engine_version,
+    )
+    db_session.add(debate)
+    db_session.commit()
+    db_session.refresh(debate)
 
     reset_sse_backend_for_tests()
     backend = get_sse_backend()
@@ -87,7 +84,7 @@ async def test_parliament_tolerance_aborts_when_threshold_exceeded(monkeypatch):
     flaky = _FlakyLLM(fail_on_calls={1, 2, 3})
     monkeypatch.setattr(agents, "call_llm_for_role", flaky)
     monkeypatch.setattr("parliament.engine.call_llm_for_role", flaky)
-    result: ParliamentResult = await run_parliament_debate(debate, model_id=None)
+    result: ParliamentResult = await run_parliament_debate(debate.id, model_id=None)
     assert result.status == "failed"
     assert result.error_reason == "seat_failure_threshold_exceeded"
     assert result.final_meta.get("failure", {}).get("failure_count") == 3

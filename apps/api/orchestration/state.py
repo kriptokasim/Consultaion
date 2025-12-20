@@ -147,8 +147,8 @@ class DebateStateManager:
         """Load the checkpoint for this debate if one exists."""
         async with async_session_scope() as session:
             stmt = select(DebateCheckpoint).where(DebateCheckpoint.debate_id == self.debate_id)
-            result = await session.exec(stmt)
-            return result.first()
+            result = await session.execute(stmt)
+            return result.scalars().first()
 
     async def checkpoint_create(
         self,
@@ -211,8 +211,8 @@ class DebateStateManager:
     ) -> None:
         """Internal helper to update checkpoint within an existing session."""
         stmt = select(DebateCheckpoint).where(DebateCheckpoint.debate_id == self.debate_id)
-        result = await session.exec(stmt)
-        ckpt = result.first()
+        result = await session.execute(stmt)
+        ckpt = result.scalars().first()
         if ckpt:
             ckpt.step = step
             ckpt.step_index = step_index
@@ -227,8 +227,8 @@ class DebateStateManager:
         """Update last_event_at when streaming any SSE event."""
         async with async_session_scope() as session:
             stmt = select(DebateCheckpoint).where(DebateCheckpoint.debate_id == self.debate_id)
-            result = await session.exec(stmt)
-            ckpt = result.first()
+            result = await session.execute(stmt)
+            ckpt = result.scalars().first()
             if ckpt:
                 ckpt.last_event_at = datetime.now(timezone.utc)
                 session.add(ckpt)
@@ -243,8 +243,8 @@ class DebateStateManager:
         
         async with async_session_scope() as session:
             stmt = select(DebateCheckpoint).where(DebateCheckpoint.debate_id == self.debate_id)
-            result = await session.exec(stmt)
-            ckpt = result.first()
+            result = await session.execute(stmt)
+            ckpt = result.scalars().first()
             
             if not ckpt:
                 return True
@@ -284,8 +284,8 @@ class DebateStateManager:
                 return False, None
             
             stmt = select(DebateCheckpoint).where(DebateCheckpoint.debate_id == self.debate_id)
-            result = await session.exec(stmt)
-            ckpt = result.first()
+            result = await session.execute(stmt)
+            ckpt = result.scalars().first()
             
             if not ckpt:
                 return True, "draft"
