@@ -123,6 +123,10 @@ def get_optional_user(
     session: Session = Depends(get_session),
 ) -> Optional[User]:
     token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
     return _resolve_user_from_token(token, session)
 
 

@@ -1,7 +1,7 @@
 import logging
 import secrets
 from typing import Any, Optional
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 
 import httpx
 from audit import record_audit
@@ -296,7 +296,16 @@ async def google_callback(
     
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     redirect_target = sanitize_next_path(request.cookies.get(OAUTH_NEXT_COOKIE))
-    redirect_resp = RedirectResponse(url=build_frontend_redirect(redirect_target), status_code=status.HTTP_302_FOUND)
+    
+    # Append token to redirect URL for fallback auth
+    target_url = build_frontend_redirect(redirect_target)
+    parsed_url = urlparse(target_url)
+    query_params = dict(parse_qsl(parsed_url.query))
+    query_params["token"] = token
+    new_query = urlencode(query_params)
+    final_url = urlunparse(parsed_url._replace(query=new_query))
+    
+    redirect_resp = RedirectResponse(url=final_url, status_code=status.HTTP_302_FOUND)
     set_auth_cookie(redirect_resp, token)
     
     # [AUTH_DEBUG] Patchset 53.0: Log after cookie set
