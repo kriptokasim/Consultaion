@@ -53,11 +53,35 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { getBillingMe } from "@/lib/api";
 
-export default function DashboardClient({ email }: { email?: string }) {
+export default function DashboardClient({ email, authToken }: { email?: string; authToken?: string }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+
+  // Fallback to reload if token was processed
+  useEffect(() => {
+    if (authToken && typeof window !== "undefined") {
+      // 1. Save to localStorage for API clients
+      localStorage.setItem("auth_token", authToken);
+
+      // 2. Set 'session' cookie for SSR (Cross-Origin Bootstrapping)
+      // Note: Backend uses 'session' cookie name. We duplicate it here on Frontend domain.
+      // This allows next SSR request to see 'session' cookie and proxy/forward it if configured.
+      // Even if not proxying, it allows Client-side 'getMe' to maybe work or just allows us to have a session.
+      // Backend expects HttpOnly but we can't set that. Verification happens on value signature.
+      document.cookie = `session=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
+
+      // 3. Clear URL and potentially reload to establish clean state
+      const url = new URL(window.location.href);
+      url.searchParams.delete("token");
+      window.history.replaceState({}, "", url.toString());
+
+      // Reload to retry SSR 'getMe' check now that cookie is set
+      window.location.reload();
+    }
+  }, [authToken]);
+
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

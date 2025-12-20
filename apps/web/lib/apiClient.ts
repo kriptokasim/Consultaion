@@ -101,10 +101,18 @@ export async function apiRequest<TResponse = unknown, TBody = unknown>(
     (init as any).body = JSON.stringify(body);
   }
 
-  if (typeof window !== "undefined" && ["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-    const csrfToken = getCsrfTokenFromCookie();
-    if (csrfToken) {
-      (init.headers as Record<string, string>)["X-CSRF-Token"] = csrfToken;
+  if (typeof window !== "undefined") {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+      const csrfToken = getCsrfTokenFromCookie();
+      if (csrfToken) {
+        (init.headers as Record<string, string>)["X-CSRF-Token"] = csrfToken;
+      }
+    }
+
+    // Fallback Auth: Inject Bearer token if present (for when cookies fail)
+    const storedToken = localStorage.getItem("auth_token");
+    if (storedToken) {
+      (init.headers as Record<string, string>)["Authorization"] = `Bearer ${storedToken}`;
     }
   }
 
