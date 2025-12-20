@@ -229,15 +229,19 @@ async def lifespan(app: FastAPI):
 
 
 # Initialize Sentry
-if settings.SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        send_default_pii=True,
-        enable_logs=True,
-        traces_sample_rate=1.0,
-        profile_session_sample_rate=1.0,
-        profile_lifecycle="trace",
-    )
+# Initialize Sentry
+if settings.SENTRY_DSN and settings.SENTRY_DSN.strip() and settings.SENTRY_DSN.startswith("http"):
+    try:
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            send_default_pii=True,
+            enable_logs=True,
+            traces_sample_rate=1.0,
+            profile_session_sample_rate=1.0,
+            profile_lifecycle="trace",
+        )
+    except Exception as e:
+        print(f"Failed to initialize Sentry: {e}")
 
 app = FastAPI(
     title="Consultaion API",
