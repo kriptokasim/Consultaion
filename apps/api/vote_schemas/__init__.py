@@ -1,5 +1,5 @@
 """
-Patchset 76: Schemas package.
+Patchset 76: Vote schemas package.
 """
 from .vote import VoteCreate, VoteReason, VoteResponse
 
