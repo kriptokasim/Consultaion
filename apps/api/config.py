@@ -51,7 +51,7 @@ class AppSettings(BaseSettings):
     PROD_RL_DEBATE_CREATE_WINDOW: int = 60
     PROD_RL_DEBATE_CREATE_MAX_CALLS: int = 10
     PROD_AUTH_RL_WINDOW: int = 300
-    PROD_AUTH_RL_MAX_CALLS: int = 10
+    PROD_AUTH_RL_MAX_CALLS: int = 100  # Increased for troubleshooting
     
     # Development Rate Limits (relaxed for testing)
     DEV_RL_WINDOW: int = 60

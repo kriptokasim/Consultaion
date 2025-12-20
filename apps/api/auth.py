@@ -139,15 +139,15 @@ def get_current_user(
         # [AUTH_DEBUG] Patchset 53.0: Log unauthorized access attempt
         if settings.AUTH_DEBUG:
             has_cookie = COOKIE_NAME in request.cookies
-            logger.warning(
-                "[AUTH_DEBUG] Protected endpoint unauthorized",
-                extra={
-                    "reason": "no_valid_token",
-                    "has_auth_cookie": has_cookie,
-                    "cookie_count": len(request.cookies),
-                    "path": request.url.path,
-                },
+            has_cookie = COOKIE_NAME in request.cookies
+            log_msg = (
+                f"[AUTH_DEBUG] Protected endpoint unauthorized. "
+                f"Path: {request.url.path}, "
+                f"Cookies: {list(request.cookies.keys())}, "
+                f"AuthHeader: {request.headers.get('Authorization')}, "
+                f"TargetCookie: {COOKIE_NAME}"
             )
+            logger.warning(log_msg)
         
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     if hasattr(user, "is_active") and not user.is_active:
