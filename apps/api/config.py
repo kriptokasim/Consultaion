@@ -98,6 +98,13 @@ class AppSettings(BaseSettings):
     APP_VERSION: str = "0.2.0"
 
     LOG_LEVEL: str = "INFO"
+    
+    # Sentry Configuration
+    SENTRY_DSN: str | None = Field(
+        "https://ddf2ec99d4dc9d15066c4e4927534818@o4510567771406336.ingest.de.sentry.io/4510567774027856",
+        description="Sentry DSN for error tracking"
+    )
+
     ENABLE_SEC_HEADERS: bool = False
     CORS_ORIGINS: str = "http://localhost:3000"
     WEB_APP_ORIGIN: str | None = None

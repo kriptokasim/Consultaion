@@ -2,6 +2,7 @@ import asyncio
 import logging.config
 import uuid
 from contextlib import asynccontextmanager, suppress
+import sentry_sdk
 
 from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
 from billing.routes import billing_router
@@ -226,6 +227,18 @@ async def lifespan(app: FastAPI):
 
 
 
+
+# Initialize Sentry
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        send_default_pii=True,
+        enable_logs=True,
+        traces_sample_rate=1.0,
+        profile_session_sample_rate=1.0,
+        profile_lifecycle="trace",
+    )
+
 app = FastAPI(
     title="Consultaion API",
     version="0.1.0",
@@ -354,6 +367,12 @@ app.include_router(features_router)
 # Patchset 77: Conversation V2 voting API
 from routes.votes import router as votes_router
 app.include_router(votes_router)
+
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0
+
 
 
 # Lifespan helpers
