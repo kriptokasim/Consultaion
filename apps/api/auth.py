@@ -31,7 +31,7 @@ COOKIE_SECURE = settings.COOKIE_SECURE
 _SAMESITE_VALUE = settings.COOKIE_SAMESITE.strip().lower()
 if _SAMESITE_VALUE not in {"lax", "strict", "none"}:
     _SAMESITE_VALUE = "lax"
-COOKIE_SAMESITE = "None" if _SAMESITE_VALUE == "none" else _SAMESITE_VALUE.capitalize()
+COOKIE_SAMESITE = "none" if _SAMESITE_VALUE == "none" else _SAMESITE_VALUE.capitalize()
 COOKIE_PATH = settings.COOKIE_PATH
 COOKIE_DOMAIN = settings.COOKIE_DOMAIN
 ENABLE_CSRF = settings.ENABLE_CSRF
