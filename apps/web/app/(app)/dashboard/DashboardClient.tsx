@@ -65,10 +65,10 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       // 1. Save to localStorage for API clients
       localStorage.setItem("auth_token", authToken);
 
-      // 2. Set 'consultaion_token' cookie for SSR (Cross-Origin Bootstrapping)
-      // Note: Backend uses 'consultaion_token' cookie name (defined in config.py).
+      // 2. Set 'consultaion_session' cookie for SSR (Cross-Origin Bootstrapping)
+      // Note: Backend uses 'consultaion_session' cookie name (defined in Render env vars).
       // We duplicate it here on Frontend domain to allow SSR to see it.
-      document.cookie = `consultaion_token=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
+      document.cookie = `consultaion_session=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
 
       // 3. Clear URL and potentially reload to establish clean state
       const url = new URL(window.location.href);
