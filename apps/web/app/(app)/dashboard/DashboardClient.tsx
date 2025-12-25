@@ -49,12 +49,15 @@ function statusTone(status?: string | null) {
   }
 }
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { getBillingMe } from "@/lib/api";
+import { apiRequest } from "@/lib/apiClient";
+import { DebateListSkeleton } from "@/components/ui/skeleton";
+import { ModelSelector } from "@/components/dashboard/ModelSelector";
 
 export default function DashboardClient({ email, authToken }: { email?: string; authToken?: string }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -70,7 +73,8 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       // We duplicate it here on Frontend domain to allow SSR to see it.
       document.cookie = `consultaion_session=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
 
-      // 3. Clear URL and potentially reload to establish clean state
+      // SECURITY: Strip token from URL immediately after capture to prevent
+      // accidental leakage via browser history, referrer headers, or copy-paste
       const url = new URL(window.location.href);
       url.searchParams.delete("token");
       window.history.replaceState({}, "", url.toString());
@@ -81,7 +85,6 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   }, [authToken]);
 
   const [showModal, setShowModal] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
   const [modelError, setModelError] = useState<string | null>(null);
@@ -109,9 +112,11 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   const { data: modelsData } = useQuery({
     queryKey: ["members"],
     queryFn: async () => {
-      const res = await fetch("/api/config/members"); // Fallback if getMembers not exported or different
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        return await apiRequest<{ items: any[] }>({ path: "/config/members", method: "GET" });
+      } catch {
+        return { items: [] };
+      }
     }
   });
 
@@ -153,31 +158,37 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     else if (templateId === "risk-bank-governance") setPrompt(t("dashboard.templates.governance.description"));
     else if (templateId === "product-roadmap") setPrompt(t("dashboard.templates.product.description"));
   };
-
-  const handleCreate = async () => {
-    if (!prompt.trim()) return;
-    if (!selectedModel) {
-      setErrorBanner({
-        type: "error",
-        message: t("dashboard.errors.noModels"),
-      });
-      return;
+  // Draft persistence: restore on modal open
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only trigger on modal open
+  useEffect(() => {
+    if (showModal) {
+      const draft = localStorage.getItem('draft_prompt');
+      if (draft && !prompt) setPrompt(draft);
     }
-    setSaving(true);
-    setErrorBanner(null);
-    setError(null); // Clear legacy error if any
-    try {
-      const { id } = await startDebate({ prompt: prompt.trim(), model_id: selectedModel });
-      // Invalidate queries to refresh list
-      queryClient.invalidateQueries({ queryKey: ['debates'] });
+  }, [showModal]);
 
+  // Draft persistence: save on prompt change
+  useEffect(() => {
+    if (prompt) {
+      localStorage.setItem('draft_prompt', prompt);
+    }
+  }, [prompt]);
+
+  // Create debate mutation using React Query
+  const createDebateMutation = useMutation({
+    mutationFn: async (params: { prompt: string; model_id: string; locale: string }) => {
+      return startDebate(params);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['debates'] });
       setShowModal(false);
       setPrompt("");
-      window.location.href = `/runs/${id}`;
-    } catch (err) {
+      localStorage.removeItem('draft_prompt');
+      window.location.href = `/runs/${data.id}`;
+    },
+    onError: (err) => {
       if (err instanceof ApiClientError) {
         if (err.status === 429) {
-          // Quota exceeded
           const body = err.body as any;
           const kind = body?.kind === "tokens" ? t("quota.exceeded.tokens") : t("quota.exceeded.exports");
           setErrorBanner({
@@ -191,7 +202,6 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
           });
           trackEvent("quota_exceeded", { kind: body?.kind, limit: body?.limit, used: body?.used, source: "debate_create" });
         } else if (err.status === 403 && (err.body as any)?.error === "account_disabled") {
-          // Account disabled
           setErrorBanner({
             type: "error",
             title: t("errors.accountDisabled.title"),
@@ -201,7 +211,6 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
         } else if (err.status === 402) {
           setLimitModal({ open: true, code: (err.body as any)?.code });
         } else {
-          // Generic API error
           setErrorBanner({
             type: "error",
             message: err.message || t("errors.generic"),
@@ -209,17 +218,34 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
           trackEvent("debate_run_error_generic", { source: "debate_create", message: err.message });
         }
       } else {
-        // Unexpected error
         setErrorBanner({
           type: "error",
           message: t("errors.generic"),
         });
         trackEvent("debate_run_error_generic", { source: "debate_create", message: (err as Error).message });
       }
-    } finally {
-      setSaving(false);
+    },
+  });
+
+  const handleCreate = () => {
+    if (!prompt.trim()) return;
+    if (!selectedModel) {
+      setErrorBanner({
+        type: "error",
+        message: t("dashboard.errors.noModels"),
+      });
+      return;
     }
+    setErrorBanner(null);
+    setError(null);
+    createDebateMutation.mutate({
+      prompt: prompt.trim(),
+      model_id: selectedModel,
+      locale,
+    });
   };
+
+  const saving = createDebateMutation.isPending;
 
   return (
     <main className="space-y-10">
@@ -334,7 +360,9 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
             {t("dashboard.section.recent.link")}
           </Link>
         </div>
-        {debates.length === 0 ? (
+        {debatesLoading ? (
+          <DebateListSkeleton />
+        ) : debates.length === 0 ? (
           <Card className="bg-white/90">
             <div className="space-y-3">
               <h3 className="heading-serif text-xl font-semibold text-[#3a2a1a]">{t("dashboard.empty.title")}</h3>
@@ -410,28 +438,13 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
               </label>
               {modelError ? (
                 <p className="text-sm font-medium text-red-600">{modelError}</p>
-              ) : models.length > 1 ? (
-                <select
-                  id="model"
-                  className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900 shadow-inner shadow-amber-900/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-                  value={selectedModel ?? ""}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                >
-                  {models.map((m) => {
-                    const isAllowed = allowedTiers.includes(m.tier || "standard");
-                    return (
-                      <option key={m.id} value={m.id} disabled={!isAllowed}>
-                        {m.display_name}
-                        {m.recommended ? ` (${t("dashboard.modal.recommendedTag")})` : ""}
-                        {!isAllowed ? " (Pro only)" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              ) : models.length === 1 ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
-                  {t("dashboard.modal.singleModelLabel")} {models[0].display_name}
-                </div>
+              ) : models.length > 0 ? (
+                <ModelSelector
+                  models={models}
+                  selectedModel={selectedModel}
+                  onSelect={setSelectedModel}
+                  allowedTiers={allowedTiers}
+                />
               ) : null}
             </div>
             {error ? <p className="mt-2 text-sm font-medium text-red-600">{error}</p> : null}
@@ -461,12 +474,12 @@ function PrimaryCard({ title, description, icon, onClick }: { title: string; des
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-start gap-3 rounded-2xl border border-amber-300 bg-gradient-to-br from-amber-500 via-amber-400 to-amber-300 p-5 text-left shadow-[0_18px_36px_rgba(255,190,92,0.35)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+      className="group flex items-center md:items-start gap-3 rounded-2xl border border-amber-300 bg-gradient-to-br from-amber-500 via-amber-400 to-amber-300 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(255,190,92,0.35)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
     >
-      <span className="rounded-xl bg-white/20 p-2 text-amber-950 shadow-inner shadow-amber-900/20">{icon}</span>
-      <div>
-        <p className="text-lg font-semibold text-amber-950">{title}</p>
-        <p className="text-sm text-amber-900/90">{description}</p>
+      <span className="shrink-0 rounded-xl bg-white/20 p-2 text-amber-950 shadow-inner shadow-amber-900/20">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-base md:text-lg font-semibold text-amber-950 truncate">{title}</p>
+        <p className="hidden md:block text-sm text-amber-900/90">{description}</p>
       </div>
     </button>
   );
@@ -476,12 +489,12 @@ function LinkCard({ title, description, icon, href }: { title: string; descripti
   return (
     <Link
       href={href}
-      className="flex items-start gap-3 rounded-2xl border border-amber-100/80 bg-white/90 p-5 text-left shadow-[0_18px_36px_rgba(112,73,28,0.12)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg"
+      className="flex items-center md:items-start gap-3 rounded-2xl border border-amber-100/80 bg-white/90 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(112,73,28,0.12)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg"
     >
-      <span className="rounded-xl bg-amber-50 p-2 text-amber-800">{icon}</span>
-      <div>
-        <p className="text-lg font-semibold text-[#3a2a1a]">{title}</p>
-        <p className="text-sm text-[#5a4a3a]">{description}</p>
+      <span className="shrink-0 rounded-xl bg-amber-50 p-2 text-amber-800">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-base md:text-lg font-semibold text-[#3a2a1a] truncate">{title}</p>
+        <p className="hidden md:block text-sm text-[#5a4a3a]">{description}</p>
       </div>
     </Link>
   );

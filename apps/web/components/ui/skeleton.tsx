@@ -20,3 +20,22 @@ export function DebateCardSkeleton() {
     </div>
   );
 }
+
+export function DebateListSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white/90 shadow-[0_18px_40px_rgba(112,73,28,0.12)]">
+      <div className="divide-y divide-amber-100/80">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-4 px-5 py-4">
+            <Skeleton className="h-10 w-10 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/4 rounded-full" />
+              <Skeleton className="h-3 w-1/2 rounded-full" />
+            </div>
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
