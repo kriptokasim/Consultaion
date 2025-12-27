@@ -94,9 +94,18 @@ export default function HomeContent() {
               <p className="text-lg font-semibold text-amber-900">{t("landing.hero.tagline")}</p>
               <p className="max-w-2xl text-lg text-[#5a4a3a]">{t("landing.hero.description")}</p>
               <div className="flex flex-col gap-2">
-                <Button variant="amber" size="lg" className="w-fit px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
-                  {t("landing.hero.primaryCta")}
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="amber" size="lg" className="px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
+                    {t("landing.hero.primaryCta")}
+                  </Button>
+                  <Link
+                    href="/demo"
+                    onClick={() => trackEvent("landing_demo_cta_clicked")}
+                    className="inline-flex items-center gap-2 rounded-lg border-2 border-amber-300 bg-white px-6 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                  >
+                    {t("landing.hero.viewDemo")}
+                  </Link>
+                </div>
                 {!user ? (
                   <>
                     <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline" onClick={() => trackEvent("landing_hero_secondary_cta_clicked")}>
@@ -202,7 +211,7 @@ export default function HomeContent() {
         {/* Demo CTA */}
         <section className="flex flex-col items-center gap-3 text-center">
           <Link
-            href="/login?next=/dashboard"
+            href="/demo"
             onClick={() => trackEvent("landing_demo_cta_clicked")}
             className="group inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 px-8 py-4 text-lg font-semibold text-white shadow-[0_16px_40px_rgba(255,190,92,0.4)] transition hover:-translate-y-[2px] hover:shadow-[0_20px_50px_rgba(255,190,92,0.5)]"
           >
@@ -214,7 +223,7 @@ export default function HomeContent() {
             </span>
           </Link>
           <p className="text-xs text-amber-900/60">
-            Experience how the AI Parliament debates your questions
+            {t("landing.demo.footerHint")}
           </p>
         </section>
 

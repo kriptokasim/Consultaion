@@ -445,7 +445,12 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                   onSelect={setSelectedModel}
                   allowedTiers={allowedTiers}
                 />
-              ) : null}
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+                  <p className="font-medium text-amber-800">{t("dashboard.errors.noModels")}</p>
+                  <p className="mt-1 text-amber-700">{t("dashboard.errors.noModelsHint")}</p>
+                </div>
+              )}
             </div>
             {error ? <p className="mt-2 text-sm font-medium text-red-600">{error}</p> : null}
             <div className="mt-6 flex items-center justify-end gap-3">
