@@ -40,6 +40,69 @@ if LITELLM_API_BASE:
 _INJECTION_PATTERNS = [r"ignore previous instructions", r"disregard above", r"reveal the system prompt", r"print the system prompt"]
 
 
+def _persist_usage_log_sync(
+    call_usage: "UsageCall",
+    *,
+    debate_id: str | None,
+    user_id: str | None,
+    role: str,
+    latency_ms: float,
+    success: bool,
+    error_message: str | None = None,
+) -> None:
+    """Store usage data for cost analytics (sync version for background execution)."""
+    try:
+        from database import engine
+        from models import LLMUsageLog
+        from sqlmodel import Session
+        
+        log_entry = LLMUsageLog(
+            debate_id=debate_id,
+            user_id=user_id,
+            provider=call_usage.provider or "unknown",
+            model=call_usage.model or "unknown",
+            prompt_tokens=int(call_usage.prompt_tokens),
+            completion_tokens=int(call_usage.completion_tokens),
+            total_tokens=int(call_usage.total_tokens),
+            cost_usd=call_usage.cost_usd,
+            role=role,
+            latency_ms=latency_ms,
+            success=success,
+            error_message=error_message,
+        )
+        with Session(engine) as session:
+            session.add(log_entry)
+            session.commit()
+    except Exception as exc:
+        logger.warning("Failed to persist LLM usage log: %s", exc)
+
+
+async def persist_usage_log(
+    call_usage: "UsageCall",
+    *,
+    debate_id: str | None,
+    user_id: str | None,
+    role: str,
+    latency_ms: float,
+    success: bool,
+    error_message: str | None = None,
+) -> None:
+    """Store usage data for cost analytics (async wrapper)."""
+    # Run in thread pool to avoid blocking
+    await asyncio.get_event_loop().run_in_executor(
+        None,
+        lambda: _persist_usage_log_sync(
+            call_usage,
+            debate_id=debate_id,
+            user_id=user_id,
+            role=role,
+            latency_ms=latency_ms,
+            success=success,
+            error_message=error_message,
+        ),
+    )
+
+
 @dataclass
 class UsageCall:
     prompt_tokens: float = 0.0
@@ -258,8 +321,18 @@ async def _raw_llm_call(
             output_tokens=int(token_counts["completion"]),
             latency_ms=latency_ms,
             success=True,
-            extra={"provider": provider_name, "model_used": model_used, "debate_id": debate_id, **(extra_tags or {})},
+            extra={"provider": provider_name, "model_used": model_used, "debate_id": debate_id, "cost_usd": call_usage.cost_usd, **(extra_tags or {})},
         )
+        
+        # Patchset v2.0: Persist usage log for cost tracking
+        asyncio.create_task(persist_usage_log(
+            call_usage,
+            debate_id=debate_id,
+            user_id=None,  # TODO: pass user_id from context
+            role=role,
+            latency_ms=latency_ms,
+            success=True,
+        ))
         
         return content.strip(), call_usage
     except ProviderCircuitOpenError:

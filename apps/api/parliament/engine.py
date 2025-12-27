@@ -74,7 +74,20 @@ def _resolve_tolerance(panel: PanelConfig) -> tuple[float, int, bool]:
     )
 
 
-def _build_seat_message_event(debate_id: str, turn: SeatTurn) -> dict:
+def _calculate_sentiment_score(stance: str | None) -> int:
+    """Convert stance to numeric score for real-time sentiment gauge."""
+    if not stance:
+        return 0
+    stance_lower = stance.lower()
+    if any(word in stance_lower for word in ["support", "agree", "positive", "favor", "pro"]):
+        return 1
+    if any(word in stance_lower for word in ["oppose", "disagree", "negative", "against", "con"]):
+        return -1
+    return 0
+
+
+def _build_seat_message_event(debate_id: str, turn: SeatTurn, cumulative_score: int = 0) -> dict:
+    sentiment = _calculate_sentiment_score(turn.stance)
     return {
         "type": "seat_message",
         "debate_id": str(debate_id),
@@ -85,6 +98,9 @@ def _build_seat_message_event(debate_id: str, turn: SeatTurn) -> dict:
         "provider": turn.provider,
         "model": turn.model,
         "content": turn.content,
+        # Patchset v2.0: Real-time sentiment scoring
+        "sentiment": sentiment,
+        "winning_score": cumulative_score + sentiment,
         "seat": {
             "seat_id": turn.seat_id,
             "role_id": turn.role_profile,
@@ -142,8 +158,10 @@ async def run_parliament_debate(
             usage_tracker=usage,
         )
         seat_messages: list[SeatMessage] = []
+        cumulative_score = 0  # v2.0: Track sentiment
         for turn in round_turns:
-            event = _build_seat_message_event(debate_id, turn)
+            event = _build_seat_message_event(debate_id, turn, cumulative_score)
+            cumulative_score = event["winning_score"]  # Update for next turn
             transcript_buffer.append({"seat_name": turn.seat_name, "content": turn.content})
             seat_usage.append(
                 {

@@ -316,6 +316,46 @@ class ConversationVote(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class LLMUsageLog(SQLModel, table=True):
+    """
+    Patchset v2.0: Tracks LLM usage per call for cost analysis.
+    
+    Stores token counts and costs for each LLM invocation to enable
+    cost tracking, budget alerts, and usage analytics.
+    """
+    __tablename__ = "llm_usage_log"
+    __table_args__ = (
+        Index("ix_llm_usage_log_debate", "debate_id"),
+        Index("ix_llm_usage_log_user", "user_id"),
+        Index("ix_llm_usage_log_provider_model", "provider", "model"),
+        Index("ix_llm_usage_log_created", "created_at"),
+    )
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: Optional[str] = Field(foreign_key="debate.id", default=None, index=True, nullable=True)
+    user_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True, nullable=True)
+    
+    # Model info
+    provider: str = Field(nullable=False, index=True)
+    model: str = Field(nullable=False, index=True)
+    
+    # Token counts
+    prompt_tokens: int = Field(default=0, nullable=False)
+    completion_tokens: int = Field(default=0, nullable=False)
+    total_tokens: int = Field(default=0, nullable=False)
+    
+    # Cost
+    cost_usd: float = Field(default=0.0, nullable=False)
+    
+    # Context
+    role: Optional[str] = Field(default=None)  # e.g., "producer", "critic", "judge"
+    latency_ms: Optional[float] = Field(default=None)
+    success: bool = Field(default=True, nullable=False)
+    error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 Index("ix_message_debate_round", Message.debate_id, Message.round_index)
 Index("ix_score_debate_persona", Score.debate_id, Score.persona)
 Index("ix_round_debate_index", DebateRound.debate_id, DebateRound.index)

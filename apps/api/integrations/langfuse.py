@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import Any, Optional
 
-from core.settings import settings
+from config import settings
 from langfuse import Langfuse
 from loguru import logger
 
@@ -16,20 +16,18 @@ def get_langfuse() -> Optional[Langfuse]:
     if _langfuse_client is not None:
         return _langfuse_client
 
-    obs_settings = settings.observability
-    if not obs_settings.enable_langfuse:
-        # Only log once to avoid spam, but here we rely on lazy init
+    if not settings.ENABLE_LANGFUSE:
         return None
 
-    if not (obs_settings.langfuse_public_key and obs_settings.langfuse_secret_key and obs_settings.langfuse_host):
+    if not (settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY):
         logger.warning("Langfuse enabled but missing required env vars; skipping init")
         return None
 
     try:
         _langfuse_client = Langfuse(
-            public_key=obs_settings.langfuse_public_key,
-            secret_key=obs_settings.langfuse_secret_key,
-            host=obs_settings.langfuse_host,
+            public_key=settings.LANGFUSE_PUBLIC_KEY,
+            secret_key=settings.LANGFUSE_SECRET_KEY,
+            host=settings.LANGFUSE_HOST,
         )
         logger.info("Langfuse client initialized")
     except Exception as exc:

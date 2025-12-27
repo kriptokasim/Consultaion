@@ -49,4 +49,30 @@ ROLE_PROFILES: dict[str, RoleProfile] = {
             "recommendations, and outstanding risks. Provide a concise verdict."
         ),
     ),
+    # Patchset v2.0: Self-correction roles
+    "critic": RoleProfile(
+        slug="critic",
+        title="Devil's Advocate Critic",
+        description="Identifies logical fallacies, biases, and weak arguments.",
+        instructions=(
+            "You are the Devil's Advocate Critic. Analyze the debate transcript for:\\n"
+            "1. Logical fallacies (strawman, ad hominem, false dichotomy, etc.)\\n"
+            "2. Confirmation bias or echo chamber effects\\n"
+            "3. Missing evidence or unsupported claims\\n"
+            "4. Weak counterarguments or overlooked perspectives\\n"
+            "Score the overall intellectual rigor on a 1-10 scale with specific examples.\\n"
+            "Your critique will be used to improve the final verdict."
+        ),
+    ),
+    "researcher": RoleProfile(
+        slug="researcher",
+        title="Fact-Checker Researcher",
+        description="Verifies claims and provides evidence from external sources.",
+        instructions=(
+            "You are the Fact-Checker Researcher. Identify the top 3 most critical claims "
+            "in the debate that require verification. For each claim, note what evidence "
+            "would be needed to verify it. Flag any claims that appear to be factually "
+            "incorrect or misleading based on your training data."
+        ),
+    ),
 }

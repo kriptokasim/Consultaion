@@ -29,6 +29,10 @@ class ModelInfo(BaseModel):
     
     # Visual Identity
     logo_url: Optional[str] = Field(None, description="Path to the model logo (e.g. '/logos/openai.svg')")
+    
+    # Patchset v2.0: Immersive Persona
+    persona_type: Optional[str] = Field(None, description="Personality archetype (e.g., 'The Cold Logician')")
+    persona_tagline: Optional[str] = Field(None, description="Short personality tagline")
 
 
 # Define the registry
@@ -85,6 +89,8 @@ ALL_MODELS: List[ModelInfo] = [
         quality_tier="flagship",
         safety_profile="strict",
         logo_url="/logos/openai.svg",
+        persona_type="The Methodical Analyst",
+        persona_tagline="Precision through structured reasoning",
     ),
     ModelInfo(
         id="claude-sonnet",
@@ -98,6 +104,8 @@ ALL_MODELS: List[ModelInfo] = [
         quality_tier="flagship",
         safety_profile="strict",
         logo_url="/logos/claude.svg",
+        persona_type="The Thoughtful Mentor",
+        persona_tagline="Nuanced insight with ethical care",
     ),
     ModelInfo(
         id="claude-haiku",
@@ -137,6 +145,8 @@ ALL_MODELS: List[ModelInfo] = [
         quality_tier="flagship",
         safety_profile="normal",
         logo_url="/logos/googlegemini.svg",
+        persona_type="The Cold Logician",
+        persona_tagline="Ruthless precision, zero sentiment",
     ),
     ModelInfo(
         id="groq-llama-3-3",
@@ -150,6 +160,8 @@ ALL_MODELS: List[ModelInfo] = [
         quality_tier="advanced",
         safety_profile="normal",
         logo_url="/logos/groq.svg",
+        persona_type="The Creative Visionary",
+        persona_tagline="Bold ideas at lightning speed",
     ),
     ModelInfo(
         id="llama-3-free",
@@ -189,6 +201,8 @@ ALL_MODELS: List[ModelInfo] = [
         quality_tier="flagship",
         safety_profile="normal",
         logo_url="/logos/mistralai.svg",
+        persona_type="The European Pragmatist",
+        persona_tagline="Efficient solutions, minimal waste",
     ),
 ]
 

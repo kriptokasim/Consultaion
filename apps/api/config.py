@@ -187,6 +187,12 @@ class AppSettings(BaseSettings):
     SENTRY_DSN: str | None = None
     SENTRY_ENV: str = "local"
     SENTRY_SAMPLE_RATE: float = 0.1
+    
+    # Langfuse Observability (Patchset v2.0)
+    ENABLE_LANGFUSE: bool = Field(default=False, description="Enable Langfuse tracing")
+    LANGFUSE_PUBLIC_KEY: str | None = None
+    LANGFUSE_SECRET_KEY: str | None = None
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
     WEB_CONCURRENCY: int | None = None
     GUNICORN_WORKERS: int | None = None
