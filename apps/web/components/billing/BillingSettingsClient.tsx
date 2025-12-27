@@ -67,7 +67,7 @@ export default function BillingSettingsClient() {
   }
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-10 md:flex-row">
+    <div className="mx-auto max-w-5xl space-y-6 px-6 py-10">
       <div className="flex-1 space-y-4">
         <Card className="border-amber-200 bg-white/90 p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-amber-700">{t("settings.billing.currentPlan")}</p>
@@ -120,9 +120,6 @@ export default function BillingSettingsClient() {
             ))}
           </div>
         </Card>
-      </div>
-      <div className="w-full max-w-sm space-y-4">
-        <PromotionArea location="billing_sidebar" />
       </div>
       <BillingLimitModal open={limitModal.open} code={limitModal.code} onClose={() => setLimitModal({ open: false })} />
     </div>

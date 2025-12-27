@@ -521,6 +521,7 @@
   "settings.billing.planUnknown": "Bilinmiyor",
   "settings.billing.periodLabel": "Dönem:",
   "settings.billing.periodUnknown": "Yok",
+  "settings.billing.usagePrefix": "Kullandığınız",
   "settings.billing.manageSubscription": "Aboneliği yönet",
   "settings.billing.debateSuffix": "münazara kullandın.",
   "settings.billing.debatesThisMonth": "Bu ayki münazaralar",
