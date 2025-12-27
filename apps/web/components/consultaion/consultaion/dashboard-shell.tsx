@@ -261,22 +261,11 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
             </div>
             <div className="flex items-center gap-2">
               {profile ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    asChild
-                    className="hidden sm:inline-flex border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
-                  >
-                    <Link href="/dashboard">{t("nav.dashboard")}</Link>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleLogout} disabled={loadingProfile} className="hidden sm:inline-flex">
-                    {t("auth.logout")}
-                  </Button>
-                  <div className="ml-1 flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5">
-                    {(profile.display_name || profile.email).charAt(0).toUpperCase()}
-                  </div>
-                </>
+                <UserDropdown
+                  profile={profile}
+                  onLogout={handleLogout}
+                  loadingProfile={loadingProfile}
+                />
               ) : (
                 <Button
                   variant="outline"
@@ -296,5 +285,77 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
         </div>
       </div>
     </ToastProvider>
+  )
+}
+
+function UserDropdown({
+  profile,
+  onLogout,
+  loadingProfile,
+}: {
+  profile: CurrentUserProfile
+  onLogout: () => void
+  loadingProfile: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const { t } = useI18n()
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5 transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+        aria-haspopup="true"
+        aria-expanded={open}
+      >
+        {(profile.display_name || profile.email).charAt(0).toUpperCase()}
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-amber-200/80 bg-white py-1 shadow-lg">
+            <div className="border-b border-amber-100 px-4 py-2">
+              <p className="text-sm font-semibold text-amber-900 truncate">
+                {profile.display_name || profile.email}
+              </p>
+              <p className="text-xs text-amber-700 truncate">{profile.email}</p>
+            </div>
+            <Link
+              href="/dashboard"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 hover:bg-amber-50"
+            >
+              <BarChart3 className="h-4 w-4" />
+              {t("nav.dashboard")}
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 hover:bg-amber-50"
+            >
+              <Settings className="h-4 w-4" />
+              {t("nav.settings")}
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                onLogout()
+              }}
+              disabled={loadingProfile}
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+            >
+              <X className="h-4 w-4" />
+              {t("auth.logout")}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
