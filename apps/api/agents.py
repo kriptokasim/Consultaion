@@ -26,6 +26,9 @@ PROVIDER_KEYS = (
     "GOOGLE_API_KEY",
     "AZURE_API_KEY",
     "LITELLM_API_KEY",
+    "OPENROUTER_API_KEY",
+    "GROQ_API_KEY",
+    "MISTRAL_API_KEY",
 )
 _has_llm_key = any(getattr(settings, key, None) for key in PROVIDER_KEYS)
 REQUIRE_REAL_LLM = settings.REQUIRE_REAL_LLM

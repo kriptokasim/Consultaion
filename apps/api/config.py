@@ -197,6 +197,8 @@ class AppSettings(BaseSettings):
     GOOGLE_API_KEY: str | None = None
 
     OPENROUTER_API_KEY: str | None = None
+    GROQ_API_KEY: str | None = None
+    MISTRAL_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
@@ -292,6 +294,9 @@ class AppSettings(BaseSettings):
                     self.ANTHROPIC_API_KEY,
                     self.GEMINI_API_KEY,
                     self.GOOGLE_API_KEY,
+                    self.OPENROUTER_API_KEY,
+                    self.GROQ_API_KEY,
+                    self.MISTRAL_API_KEY,
                 ])
                 if not has_provider:
                     raise ValueError(

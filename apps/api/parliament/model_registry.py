@@ -104,11 +104,47 @@ ALL_MODELS: List[ModelInfo] = [
         safety_profile="strict",
     ),
     ModelInfo(
-        id="gemini-flash",
-        display_name="Gemini 1.5 Flash",
+        id="gemini-2-flash",
+        display_name="Gemini 2.0 Flash",
         provider="gemini",
-        litellm_model="gemini/gemini-1.5-flash",
+        litellm_model="gemini/gemini-2.0-flash",
         capabilities={"chat", "tools", "vision", "long_context"},
+        tier="standard",
+        cost_tier="low",
+        latency_class="fast",
+        quality_tier="advanced",
+        safety_profile="normal",
+    ),
+    ModelInfo(
+        id="gemini-2-5-pro",
+        display_name="Gemini 2.5 Pro",
+        provider="gemini",
+        litellm_model="gemini/gemini-2.5-pro-preview-06-05",
+        capabilities={"chat", "tools", "vision", "long_context", "reasoning"},
+        tier="advanced",
+        cost_tier="medium",
+        latency_class="normal",
+        quality_tier="flagship",
+        safety_profile="normal",
+    ),
+    ModelInfo(
+        id="groq-llama-3-3",
+        display_name="Llama 3.3 70B (Groq)",
+        provider="groq",
+        litellm_model="groq/llama-3.3-70b-versatile",
+        capabilities={"chat", "tools"},
+        tier="standard",
+        cost_tier="low",
+        latency_class="fast",
+        quality_tier="advanced",
+        safety_profile="normal",
+    ),
+    ModelInfo(
+        id="llama-3-free",
+        display_name="Llama 3 8B (Free)",
+        provider="openrouter",
+        litellm_model="openrouter/meta-llama/llama-3-8b-instruct:free",
+        capabilities={"chat"},
         tier="standard",
         cost_tier="low",
         latency_class="fast",
@@ -116,11 +152,23 @@ ALL_MODELS: List[ModelInfo] = [
         safety_profile="normal",
     ),
     ModelInfo(
-        id="gemini-pro",
-        display_name="Gemini 1.5 Pro",
-        provider="gemini",
-        litellm_model="gemini/gemini-1.5-pro",
-        capabilities={"chat", "tools", "vision", "long_context", "reasoning"},
+        id="mimo-v2-free",
+        display_name="MiMo v2 Flash (Free)",
+        provider="openrouter",
+        litellm_model="openrouter/xiaomi/mimo-vl-1b-v2:free",
+        capabilities={"chat", "vision"},
+        tier="standard",
+        cost_tier="low",
+        latency_class="fast",
+        quality_tier="baseline",
+        safety_profile="experimental",
+    ),
+    ModelInfo(
+        id="mistral-large",
+        display_name="Mistral Large",
+        provider="mistral",
+        litellm_model="mistral/mistral-large-latest",
+        capabilities={"chat", "tools", "reasoning"},
         tier="advanced",
         cost_tier="medium",
         latency_class="normal",
@@ -141,6 +189,10 @@ def _provider_enabled(provider: str) -> bool:
         return bool(settings.ANTHROPIC_API_KEY)
     if provider == "gemini":
         return bool(settings.GEMINI_API_KEY)
+    if provider == "groq":
+        return bool(settings.GROQ_API_KEY)
+    if provider == "mistral":
+        return bool(settings.MISTRAL_API_KEY)
     return False
 
 

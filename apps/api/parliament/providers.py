@@ -32,6 +32,18 @@ def create_gemini_client() -> dict:
     return _noop_factory("google")()
 
 
+def create_openrouter_client() -> dict:
+    return _noop_factory("openrouter")()
+
+
+def create_groq_client() -> dict:
+    return _noop_factory("groq")()
+
+
+def create_mistral_client() -> dict:
+    return _noop_factory("mistral")()
+
+
 PROVIDERS: Dict[str, ProviderConfig] = {
     "openai": ProviderConfig(
         name="OpenAI",
@@ -50,6 +62,24 @@ PROVIDERS: Dict[str, ProviderConfig] = {
         base_url=None,
         api_key_env="GEMINI_API_KEY",
         client_factory=create_gemini_client,
+    ),
+    "openrouter": ProviderConfig(
+        name="OpenRouter",
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_API_KEY",
+        client_factory=create_openrouter_client,
+    ),
+    "groq": ProviderConfig(
+        name="Groq",
+        base_url=None,  # LiteLLM uses groq/ prefix
+        api_key_env="GROQ_API_KEY",
+        client_factory=create_groq_client,
+    ),
+    "mistral": ProviderConfig(
+        name="Mistral",
+        base_url=None,  # LiteLLM uses mistral/ prefix
+        api_key_env="MISTRAL_API_KEY",
+        client_factory=create_mistral_client,
     ),
 }
 
