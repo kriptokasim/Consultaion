@@ -26,6 +26,9 @@ class ModelInfo(BaseModel):
     
     # Legacy/Optional
     tags: Optional[List[str]] = None
+    
+    # Visual Identity
+    logo_url: Optional[str] = Field(None, description="Path to the model logo (e.g. '/logos/openai.svg')")
 
 
 # Define the registry
@@ -42,6 +45,7 @@ ALL_MODELS: List[ModelInfo] = [
         quality_tier="advanced",
         safety_profile="normal",
         recommended=True,
+        logo_url="/logos/openrouter.svg",
     ),
     ModelInfo(
         id="router-deep",
@@ -54,6 +58,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="slow",
         quality_tier="flagship",
         safety_profile="normal",
+        logo_url="/logos/openrouter.svg",
     ),
     ModelInfo(
         id="gpt4o-mini",
@@ -66,6 +71,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="fast",
         quality_tier="baseline",
         safety_profile="strict",
+        logo_url="/logos/openai.svg",
     ),
     ModelInfo(
         id="gpt4o-deep",
@@ -78,6 +84,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="normal",
         quality_tier="flagship",
         safety_profile="strict",
+        logo_url="/logos/openai.svg",
     ),
     ModelInfo(
         id="claude-sonnet",
@@ -90,6 +97,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="normal",
         quality_tier="flagship",
         safety_profile="strict",
+        logo_url="/logos/claude.svg",
     ),
     ModelInfo(
         id="claude-haiku",
@@ -102,6 +110,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="fast",
         quality_tier="baseline",
         safety_profile="strict",
+        logo_url="/logos/claude.svg",
     ),
     ModelInfo(
         id="gemini-2-flash",
@@ -114,6 +123,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="fast",
         quality_tier="advanced",
         safety_profile="normal",
+        logo_url="/logos/googlegemini.svg",
     ),
     ModelInfo(
         id="gemini-2-5-pro",
@@ -126,6 +136,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="normal",
         quality_tier="flagship",
         safety_profile="normal",
+        logo_url="/logos/googlegemini.svg",
     ),
     ModelInfo(
         id="groq-llama-3-3",
@@ -138,6 +149,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="fast",
         quality_tier="advanced",
         safety_profile="normal",
+        logo_url="/logos/groq.svg",
     ),
     ModelInfo(
         id="llama-3-free",
@@ -150,6 +162,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="fast",
         quality_tier="baseline",
         safety_profile="normal",
+        logo_url="/logos/openrouter.svg",
     ),
     ModelInfo(
         id="mimo-v2-free",
@@ -162,6 +175,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="fast",
         quality_tier="baseline",
         safety_profile="experimental",
+        logo_url="/logos/openrouter.svg",
     ),
     ModelInfo(
         id="mistral-large",
@@ -174,6 +188,7 @@ ALL_MODELS: List[ModelInfo] = [
         latency_class="normal",
         quality_tier="flagship",
         safety_profile="normal",
+        logo_url="/logos/mistralai.svg",
     ),
 ]
 

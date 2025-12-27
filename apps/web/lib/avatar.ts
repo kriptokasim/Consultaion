@@ -6,7 +6,10 @@ function normalizeSeed(seed: string): string {
     return seed.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
-export function getModelAvatarUrl(modelName: string): string | null {
+export function getModelAvatarUrl(modelName: string, customLogoUrl?: string): string | null {
+    // Prioritize custom logo if provided
+    if (customLogoUrl) return customLogoUrl;
+    // Fallback to DiceBear pattern
     if (!ENABLE_DICEBEAR_AVATARS) return null;
     const seed = normalizeSeed(modelName || 'unknown-model');
     return `${DICEBEAR_BASE}/${DICEBEAR_STYLE}/svg?seed=${encodeURIComponent(seed)}`;
