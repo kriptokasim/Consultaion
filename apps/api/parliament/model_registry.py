@@ -33,6 +33,9 @@ class ModelInfo(BaseModel):
     # Patchset v2.0: Immersive Persona
     persona_type: Optional[str] = Field(None, description="Personality archetype (e.g., 'The Cold Logician')")
     persona_tagline: Optional[str] = Field(None, description="Short personality tagline")
+    
+    # UX Polish: Model selection guidance
+    description: Optional[str] = Field(None, description="Why to pick this model (e.g., 'Best for complex reasoning')")
 
 
 # Define the registry
@@ -91,6 +94,7 @@ ALL_MODELS: List[ModelInfo] = [
         logo_url="/logos/openai.svg",
         persona_type="The Methodical Analyst",
         persona_tagline="Precision through structured reasoning",
+        description="Best for complex reasoning, coding, and multi-step analysis",
     ),
     ModelInfo(
         id="claude-sonnet",
@@ -106,6 +110,7 @@ ALL_MODELS: List[ModelInfo] = [
         logo_url="/logos/claude.svg",
         persona_type="The Thoughtful Mentor",
         persona_tagline="Nuanced insight with ethical care",
+        description="Ideal for writing, nuanced discussions, and alignment-focused tasks",
     ),
     ModelInfo(
         id="claude-haiku",
@@ -147,6 +152,7 @@ ALL_MODELS: List[ModelInfo] = [
         logo_url="/logos/googlegemini.svg",
         persona_type="The Cold Logician",
         persona_tagline="Ruthless precision, zero sentiment",
+        description="Optimal for long documents, multimodal analysis, and deep research",
     ),
     ModelInfo(
         id="groq-llama-3-3",
@@ -162,6 +168,7 @@ ALL_MODELS: List[ModelInfo] = [
         logo_url="/logos/groq.svg",
         persona_type="The Creative Visionary",
         persona_tagline="Bold ideas at lightning speed",
+        description="Fastest inference for real-time applications and cost-efficient drafts",
     ),
     ModelInfo(
         id="llama-3-free",
@@ -203,6 +210,7 @@ ALL_MODELS: List[ModelInfo] = [
         logo_url="/logos/mistralai.svg",
         persona_type="The European Pragmatist",
         persona_tagline="Efficient solutions, minimal waste",
+        description="Strong for European languages and enterprise reasoning tasks",
     ),
 ]
 

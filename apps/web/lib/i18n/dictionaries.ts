@@ -1,9 +1,9 @@
 import en from "@/locales/en.json";
 import tr from "@/locales/tr.json";
 
-export const LOCALES = ["tr", "en"] as const;
+export const LOCALES = ["en", "tr"] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_LOCALE: Locale = "tr";
+export const DEFAULT_LOCALE: Locale = "en";
 
 const DICTIONARIES: Record<Locale, Record<string, string>> = {
   tr,
