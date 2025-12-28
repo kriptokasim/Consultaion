@@ -157,7 +157,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           </Link>
           <button
             type="button"
-            className="mt-4 inline-flex items-center gap-2 rounded-md bg-gray-100 px-3 py-1 text-sm font-medium text-gray-800 hover:bg-gray-200"
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-gray-100 dark:bg-stone-800 px-3 py-1 text-sm font-medium text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-stone-700"
             onClick={() => router.back()}
           >
             ← Go Back
@@ -318,17 +318,17 @@ function UserDropdown({
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
-          <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-amber-200/80 bg-white py-1 shadow-lg">
-            <div className="border-b border-amber-100 px-4 py-2">
-              <p className="text-sm font-semibold text-amber-900 truncate">
+          <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-amber-200/80 dark:border-amber-700/50 bg-white dark:bg-stone-900 py-1 shadow-lg">
+            <div className="border-b border-amber-100 dark:border-amber-800/50 px-4 py-2">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 truncate">
                 {profile.display_name || profile.email}
               </p>
-              <p className="text-xs text-amber-700 truncate">{profile.email}</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 truncate">{profile.email}</p>
             </div>
             <Link
               href="/dashboard"
               onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 hover:bg-amber-50"
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 dark:text-amber-100 hover:bg-amber-50 dark:hover:bg-amber-900/50"
             >
               <BarChart3 className="h-4 w-4" />
               {t("nav.dashboard")}
@@ -336,7 +336,7 @@ function UserDropdown({
             <Link
               href="/settings"
               onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 hover:bg-amber-50"
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 dark:text-amber-100 hover:bg-amber-50 dark:hover:bg-amber-900/50"
             >
               <Settings className="h-4 w-4" />
               {t("nav.settings")}
@@ -348,7 +348,7 @@ function UserDropdown({
                 onLogout()
               }}
               disabled={loadingProfile}
-              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
             >
               <X className="h-4 w-4" />
               {t("auth.logout")}

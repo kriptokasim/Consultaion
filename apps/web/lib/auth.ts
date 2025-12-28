@@ -54,6 +54,10 @@ export async function logout() {
     method: "POST",
     path: "/auth/logout",
   });
+  // Clear fallback auth token from localStorage
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("auth_token");
+  }
 }
 
 export async function fetchWithAuth(path: string, init?: RequestInit) {

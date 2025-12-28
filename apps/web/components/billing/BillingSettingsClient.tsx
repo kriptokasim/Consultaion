@@ -63,23 +63,23 @@ export default function BillingSettingsClient() {
   };
 
   if (loading) {
-    return <div className="p-8 text-sm text-[#5a4a3a]">{t("settings.billing.loading")}</div>;
+    return <div className="p-8 text-sm text-[#5a4a3a] dark:text-amber-100/80">{t("settings.billing.loading")}</div>;
   }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-6 py-10">
       <div className="flex-1 space-y-4">
-        <Card className="border-amber-200 bg-white/90 p-6">
+        <Card className="border-amber-200 dark:border-amber-800/50 bg-white/90 dark:bg-stone-900/90 p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-amber-700">{t("settings.billing.currentPlan")}</p>
-          <h2 className="heading-serif text-3xl text-[#3a2a1a]">{billing.plan?.name ?? t("settings.billing.planUnknown")}</h2>
-          <p className="mt-2 text-sm text-[#5a4a3a]">
+          <h2 className="heading-serif text-3xl text-[#3a2a1a] dark:text-amber-50">{billing.plan?.name ?? t("settings.billing.planUnknown")}</h2>
+          <p className="mt-2 text-sm text-[#5a4a3a] dark:text-amber-100/80">
             {t("settings.billing.periodLabel")} {billing.usage?.period ?? t("settings.billing.periodUnknown")}.{" "}
             {t("settings.billing.usagePrefix")} {billing.usage?.debates_created ?? 0} {t("settings.billing.debateSuffix")}
           </p>
           {billing.plan?.limits?.max_debates_per_month ? (
             <div className="mt-4">
-              <p className="text-xs text-stone-500">{t("settings.billing.debatesThisMonth")}</p>
-              <div className="mt-2 h-2 w-full rounded-full bg-amber-100">
+              <p className="text-xs text-stone-500 dark:text-stone-400">{t("settings.billing.debatesThisMonth")}</p>
+              <div className="mt-2 h-2 w-full rounded-full bg-amber-100 dark:bg-amber-900/50">
                 <div
                   className="h-full rounded-full bg-amber-500"
                   style={{
@@ -90,7 +90,7 @@ export default function BillingSettingsClient() {
                   }}
                 />
               </div>
-              <p className="mt-1 text-xs text-[#5a4a3a]">
+              <p className="mt-1 text-xs text-[#5a4a3a] dark:text-amber-100/80">
                 {billing.usage?.debates_created ?? 0} / {billing.plan.limits.max_debates_per_month} {t("settings.billing.debateProgress")}
               </p>
             </div>
@@ -99,14 +99,14 @@ export default function BillingSettingsClient() {
 
         <ModelUsageChart />
 
-        <Card className="border-amber-200 bg-white/90 p-5">
-          <h3 className="heading-serif text-xl text-[#3a2a1a]">{t("settings.billing.upgradeTitle")}</h3>
+        <Card className="border-amber-200 dark:border-amber-800/50 bg-white/90 dark:bg-stone-900/90 p-5">
+          <h3 className="heading-serif text-xl text-[#3a2a1a] dark:text-amber-50">{t("settings.billing.upgradeTitle")}</h3>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {plans.map((plan) => (
-              <Card key={plan.slug} className="border border-amber-100 bg-white/80 p-4">
+              <Card key={plan.slug} className="border border-amber-100 dark:border-amber-900/50 bg-white/80 dark:bg-stone-900/80 p-4">
                 <p className="text-xs uppercase tracking-[0.3em] text-amber-600">{plan.is_default_free ? t("settings.billing.planBadge.free") : t("settings.billing.planBadge.pro")}</p>
-                <h4 className="heading-serif text-xl text-[#3a2a1a]">{plan.name}</h4>
-                <p className="mt-1 text-xs text-[#5a4a3a]">
+                <h4 className="heading-serif text-xl text-[#3a2a1a] dark:text-amber-50">{plan.name}</h4>
+                <p className="mt-1 text-xs text-[#5a4a3a] dark:text-amber-100/80">
                   {plan.limits?.max_debates_per_month ?? "?"} {t("settings.billing.planLimitLabel")}
                 </p>
                 <Button
