@@ -82,7 +82,7 @@ export default function RegisterPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
+              className="border-slate-200 bg-white/90 text-slate-900 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             />
           </div>
           <div className="space-y-2">
@@ -93,7 +93,7 @@ export default function RegisterPage() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
+              className="border-slate-200 bg-white/90 text-slate-900 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             />
             <p className="text-xs text-slate-600 dark:text-slate-400">{t("auth.register.passwordHelp")}</p>
           </div>
@@ -105,7 +105,7 @@ export default function RegisterPage() {
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
+              className="border-slate-200 bg-white/90 text-slate-900 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             />
           </div>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}

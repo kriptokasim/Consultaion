@@ -81,7 +81,7 @@ export default function LoginPage() {
             autoComplete="email"
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
+            className="border-slate-200 bg-white/90 text-slate-900 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
           />
         </div>
         <div className="space-y-2">
@@ -94,7 +94,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
+            className="border-slate-200 bg-white/90 text-slate-900 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
           />
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}

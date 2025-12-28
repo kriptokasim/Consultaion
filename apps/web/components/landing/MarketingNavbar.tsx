@@ -59,16 +59,16 @@ export function MarketingNavbar() {
                 className={cn(
                     "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
                     scrolled
-                        ? "bg-[#fff7eb]/95 backdrop-blur-lg shadow-md py-3"
-                        : "bg-transparent py-4"
+                        ? "bg-amber-50/95 backdrop-blur-lg shadow-md py-3 dark:bg-slate-900/95"
+                        : "bg-amber-50/80 backdrop-blur-sm py-4 dark:bg-transparent"
                 )}
             >
                 <div className="container mx-auto px-6">
                     <div className="flex items-center justify-between">
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-2">
-                            <Brain className="h-7 w-7 text-amber-700" />
-                            <span className="text-xl font-bold text-[#3a2a1a]">Consultaion</span>
+                            <Brain className="h-7 w-7 text-blue-900 dark:text-amber-400" />
+                            <span className="text-xl font-bold text-blue-900 dark:text-white drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]">Consultaion</span>
                         </Link>
 
                         {/* Desktop Navigation */}
@@ -80,8 +80,8 @@ export function MarketingNavbar() {
                                     className={cn(
                                         "text-sm font-semibold transition-colors",
                                         pathname === link.href
-                                            ? "text-amber-700"
-                                            : "text-[#5a4a3a] hover:text-amber-700"
+                                            ? "text-blue-900 dark:text-amber-400 drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]"
+                                            : "text-blue-900 hover:text-blue-950 dark:text-white dark:hover:text-amber-400 drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]"
                                     )}
                                 >
                                     {link.label}
@@ -104,7 +104,7 @@ export function MarketingNavbar() {
                                 setMobileMenuOpen(true);
                                 trackEvent("mobile_nav_opened");
                             }}
-                            className="md:hidden rounded-lg border border-amber-200 bg-white/80 p-2 text-amber-900 hover:bg-amber-50 transition"
+                            className="md:hidden rounded-lg border border-amber-200 bg-white/80 p-2 text-amber-900 hover:bg-amber-50 dark:border-amber-700 dark:bg-slate-800/80 dark:text-white dark:hover:bg-slate-700 transition"
                             aria-label={t("nav.mobile.open")}
                         >
                             <Menu className="h-6 w-6" />
@@ -123,17 +123,17 @@ export function MarketingNavbar() {
                     />
 
                     {/* Drawer */}
-                    <div className="fixed top-0 right-0 bottom-0 z-50 w-80 bg-gradient-to-br from-[#fff7eb] to-amber-50 shadow-2xl overflow-y-auto">
+                    <div className="fixed top-0 right-0 bottom-0 z-50 w-80 bg-gradient-to-br from-[#fff7eb] to-amber-50 dark:from-slate-900 dark:to-slate-800 shadow-2xl overflow-y-auto">
                         <div className="p-6 space-y-6">
                             {/* Close Button */}
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <Brain className="h-6 w-6 text-amber-700" />
-                                    <span className="text-lg font-bold text-[#3a2a1a]">Consultaion</span>
+                                    <Brain className="h-6 w-6 text-blue-900 dark:text-amber-400" />
+                                    <span className="text-lg font-bold text-blue-900 dark:text-white">Consultaion</span>
                                 </div>
                                 <button
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="rounded-lg p-2 text-amber-900 hover:bg-amber-100 transition"
+                                    className="rounded-lg p-2 text-amber-900 hover:bg-amber-100 dark:text-white dark:hover:bg-amber-900/30 transition"
                                     aria-label={t("nav.mobile.close")}
                                 >
                                     <X className="h-6 w-6" />
@@ -153,8 +153,8 @@ export function MarketingNavbar() {
                                         className={cn(
                                             "block rounded-lg px-4 py-3 text-lg font-semibold transition-colors",
                                             pathname === link.href
-                                                ? "bg-amber-100 text-amber-900"
-                                                : "text-[#6b5844] hover:bg-amber-50"
+                                                ? "bg-blue-100 text-blue-900 dark:bg-amber-900/50 dark:text-amber-200"
+                                                : "text-blue-900 hover:bg-blue-50 dark:text-white dark:hover:bg-amber-900/30"
                                         )}
                                     >
                                         {link.label}
@@ -163,7 +163,7 @@ export function MarketingNavbar() {
                             </nav>
 
                             {/* Language Switcher */}
-                            <div className="pt-4 border-t border-amber-200">
+                            <div className="pt-4 border-t border-amber-200 dark:border-slate-700">
                                 <LanguageSwitcher />
                             </div>
 

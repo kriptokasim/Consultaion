@@ -20,7 +20,7 @@ export default function LanguageSwitcher() {
   };
 
   return (
-    <div className="mt-3 space-y-1 text-xs font-semibold text-amber-800">
+    <div className="mt-0 space-y-1 text-xs font-semibold text-amber-800">
       {/* Language label removed for a cleaner UI */}
       <div className="inline-flex rounded-full border border-amber-200/70 bg-white/70 p-1 shadow-sm">
         {OPTIONS.map((option) => (
