@@ -63,25 +63,25 @@ export default function BillingSettingsClient() {
   };
 
   if (loading) {
-    return <div className="p-8 text-sm text-[#5a4a3a] dark:text-amber-100/80">{t("settings.billing.loading")}</div>;
+    return <div className="p-8 text-sm text-slate-600 dark:text-slate-300">{t("settings.billing.loading")}</div>;
   }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-6 py-10">
       <div className="flex-1 space-y-4">
-        <Card className="border-amber-200 dark:border-amber-800/50 bg-white/90 dark:bg-stone-900/90 p-6">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-700">{t("settings.billing.currentPlan")}</p>
-          <h2 className="heading-serif text-3xl text-[#3a2a1a] dark:text-amber-50">{billing.plan?.name ?? t("settings.billing.planUnknown")}</h2>
-          <p className="mt-2 text-sm text-[#5a4a3a] dark:text-amber-100/80">
+        <Card className="border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800 p-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-primary dark:text-blue-400">{t("settings.billing.currentPlan")}</p>
+          <h2 className="heading-serif text-3xl text-slate-900 dark:text-white">{billing.plan?.name ?? t("settings.billing.planUnknown")}</h2>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
             {t("settings.billing.periodLabel")} {billing.usage?.period ?? t("settings.billing.periodUnknown")}.{" "}
             {t("settings.billing.usagePrefix")} {billing.usage?.debates_created ?? 0} {t("settings.billing.debateSuffix")}
           </p>
           {billing.plan?.limits?.max_debates_per_month ? (
             <div className="mt-4">
-              <p className="text-xs text-stone-500 dark:text-stone-400">{t("settings.billing.debatesThisMonth")}</p>
-              <div className="mt-2 h-2 w-full rounded-full bg-amber-100 dark:bg-amber-900/50">
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("settings.billing.debatesThisMonth")}</p>
+              <div className="mt-2 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
                 <div
-                  className="h-full rounded-full bg-amber-500"
+                  className="h-full rounded-full bg-blue-500"
                   style={{
                     width: `${Math.min(
                       100,
@@ -90,7 +90,7 @@ export default function BillingSettingsClient() {
                   }}
                 />
               </div>
-              <p className="mt-1 text-xs text-[#5a4a3a] dark:text-amber-100/80">
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
                 {billing.usage?.debates_created ?? 0} / {billing.plan.limits.max_debates_per_month} {t("settings.billing.debateProgress")}
               </p>
             </div>
@@ -99,18 +99,18 @@ export default function BillingSettingsClient() {
 
         <ModelUsageChart />
 
-        <Card className="border-amber-200 dark:border-amber-800/50 bg-white/90 dark:bg-stone-900/90 p-5">
-          <h3 className="heading-serif text-xl text-[#3a2a1a] dark:text-amber-50">{t("settings.billing.upgradeTitle")}</h3>
+        <Card className="border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800 p-5">
+          <h3 className="heading-serif text-xl text-slate-900 dark:text-white">{t("settings.billing.upgradeTitle")}</h3>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {plans.map((plan) => (
-              <Card key={plan.slug} className="border border-amber-100 dark:border-amber-900/50 bg-white/80 dark:bg-stone-900/80 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-amber-600">{plan.is_default_free ? t("settings.billing.planBadge.free") : t("settings.billing.planBadge.pro")}</p>
-                <h4 className="heading-serif text-xl text-[#3a2a1a] dark:text-amber-50">{plan.name}</h4>
-                <p className="mt-1 text-xs text-[#5a4a3a] dark:text-amber-100/80">
+              <Card key={plan.slug} className="border border-slate-200 dark:border-slate-600 bg-white/80 dark:bg-slate-800 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-primary dark:text-blue-400">{plan.is_default_free ? t("settings.billing.planBadge.free") : t("settings.billing.planBadge.pro")}</p>
+                <h4 className="heading-serif text-xl text-slate-900 dark:text-white">{plan.name}</h4>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
                   {plan.limits?.max_debates_per_month ?? "?"} {t("settings.billing.planLimitLabel")}
                 </p>
                 <Button
-                  className="mt-3 w-full bg-amber-600 text-white hover:bg-amber-700"
+                  className="mt-3 w-full"
                   disabled={checkoutLoading === plan.slug}
                   onClick={() => handleCheckout(plan.slug)}
                 >

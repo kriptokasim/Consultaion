@@ -39,13 +39,13 @@ function formatTimestamp(ts?: string | null) {
 function statusTone(status?: string | null) {
   switch ((status || "").toLowerCase()) {
     case "running":
-      return "bg-amber-100 text-amber-800 border-amber-200";
+      return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/50 dark:text-blue-200 dark:border-blue-700";
     case "completed":
     case "done":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-200 dark:border-emerald-700";
     case "queued":
     default:
-      return "bg-stone-100 text-stone-800 border-stone-200";
+      return "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600";
   }
 }
 
@@ -259,16 +259,16 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
           />
         </div>
       )}
-      <section className="rounded-3xl border border-amber-200/80 bg-gradient-to-br from-white via-[#fff7eb] to-[#f8e6c2] p-8 shadow-[0_24px_60px_rgba(112,73,28,0.12)]">
+      <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-blue-50 p-8 shadow-[0_24px_60px_rgba(30,58,95,0.08)] dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">{t("dashboard.hero.kicker")}</p>
-            <h1 className="heading-serif text-4xl font-semibold text-[#3a2a1a]">{t("dashboard.hero.title")}</h1>
-            <p className="mt-2 max-w-2xl text-sm text-[#5a4a3a]">{t("dashboard.hero.description")}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary dark:text-blue-400">{t("dashboard.hero.kicker")}</p>
+            <h1 className="heading-serif text-4xl font-semibold text-slate-900 dark:text-white">{t("dashboard.hero.title")}</h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">{t("dashboard.hero.description")}</p>
           </div>
           {email ? (
-            <div className="ml-auto flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-800">{email.charAt(0).toUpperCase()}</span>
+            <div className="ml-auto flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">{email.charAt(0).toUpperCase()}</span>
               <span>{email}</span>
             </div>
           ) : null}
@@ -277,21 +277,21 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
           <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => setShowModal(true)} />
           <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
           {maxDebates ? (
-            <div className="flex flex-col justify-between rounded-2xl border border-amber-100/80 bg-white/90 p-5 shadow-[0_18px_36px_rgba(112,73,28,0.12)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg">
+            <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-[0_18px_36px_rgba(30,58,95,0.08)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg dark:border-slate-700 dark:bg-slate-800">
               <div className="flex items-start gap-3">
-                <span className="rounded-xl bg-amber-50 p-2 text-amber-800">
+                <span className="rounded-xl bg-blue-50 p-2 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                   <Trophy className="h-5 w-5" />
                 </span>
                 <div>
-                  <p className="text-lg font-semibold text-[#3a2a1a]">Usage</p>
-                  <p className="text-sm text-[#5a4a3a]">
+                  <p className="text-lg font-semibold text-slate-900 dark:text-white">Usage</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
                     {debatesUsed} / {maxDebates} debates used
                   </p>
                 </div>
               </div>
-              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-amber-100">
+              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
                 <div
-                  className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-red-500" : "bg-amber-500"}`}
+                  className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-red-500" : "bg-blue-500"}`}
                   style={{ width: `${Math.min((debatesUsed / maxDebates) * 100, 100)}%` }}
                 />
               </div>
@@ -324,10 +324,10 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
             onStep3Mark={handleStep3Mark}
           />
 
-          <section id="templates-section" className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white to-amber-50/30 p-8 shadow-md">
+          <section id="templates-section" className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-blue-50/30 p-8 shadow-md dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
             <div className="mb-6 text-center">
-              <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.onboarding.title")}</h2>
-              <p className="mt-2 text-sm text-[#5a4a3a]">{t("dashboard.onboarding.subtitle")}</p>
+              <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("dashboard.onboarding.title")}</h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t("dashboard.onboarding.subtitle")}</p>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
               <TemplateCard
@@ -353,46 +353,46 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700">{t("dashboard.section.recent.kicker")}</p>
-            <h2 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.section.recent.title")}</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary dark:text-blue-400">{t("dashboard.section.recent.kicker")}</p>
+            <h2 className="heading-serif text-2xl font-semibold text-slate-900 dark:text-white">{t("dashboard.section.recent.title")}</h2>
           </div>
-          <Link href="/runs" className="text-sm font-semibold text-amber-800 hover:text-amber-700">
+          <Link href="/runs" className="text-sm font-semibold text-primary hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300">
             {t("dashboard.section.recent.link")}
           </Link>
         </div>
         {debatesLoading ? (
           <DebateListSkeleton />
         ) : debates.length === 0 ? (
-          <Card className="bg-white/90">
+          <Card className="bg-white/90 dark:bg-slate-800">
             <div className="space-y-3">
-              <h3 className="heading-serif text-xl font-semibold text-[#3a2a1a]">{t("dashboard.empty.title")}</h3>
-              <p className="text-sm text-[#5a4a3a]">{t("dashboard.empty.description")}</p>
-              <Button variant="amber" className="px-5" onClick={() => setShowModal(true)}>
+              <h3 className="heading-serif text-xl font-semibold text-slate-900 dark:text-white">{t("dashboard.empty.title")}</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{t("dashboard.empty.description")}</p>
+              <Button variant="default" className="px-5" onClick={() => setShowModal(true)}>
                 {t("dashboard.empty.cta")}
               </Button>
             </div>
           </Card>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white/90 shadow-[0_18px_40px_rgba(112,73,28,0.12)]">
-            <div className="divide-y divide-amber-100/80">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-[0_18px_40px_rgba(30,58,95,0.08)] dark:border-slate-700 dark:bg-slate-800">
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
               {debates.map((debate) => {
                 const replayAvailable = (debate.status || "").toLowerCase() === "completed" || (debate.status || "").toLowerCase() === "failed";
                 return (
                   <Link
                     key={debate.id}
                     href={`/runs/${debate.id}`}
-                    className="flex items-center gap-4 px-5 py-4 transition hover:bg-amber-50/70"
+                    className="flex items-center gap-4 px-5 py-4 transition hover:bg-blue-50/70 dark:hover:bg-slate-700"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 shadow-inner shadow-amber-900/10">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700 shadow-inner shadow-blue-900/10 dark:bg-blue-900 dark:text-blue-300">
                       <Play className="h-5 w-5" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-[#3a2a1a] line-clamp-1">{debate.prompt || t("dashboard.prompt.untitled")}</p>
-                      <p className="text-xs text-[#5a4a3a]">{t("dashboard.time.createdPrefix")} {formatTimestamp(debate.created_at)}</p>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-1">{debate.prompt || t("dashboard.prompt.untitled")}</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">{t("dashboard.time.createdPrefix")} {formatTimestamp(debate.created_at)}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {replayAvailable ? (
-                        <Link href={`/runs/${debate.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
+                        <Link href={`/runs/${debate.id}/replay`} className="text-xs font-semibold text-primary underline-offset-4 hover:underline dark:text-blue-400">
                           {t("dashboard.recentDebates.replay")}
                         </Link>
                       ) : null}
@@ -408,13 +408,13 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
 
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-amber-200/80 bg-white p-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)]">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-slate-600 dark:bg-slate-800">
             <div className="space-y-2">
-              <h3 className="heading-serif text-2xl font-semibold text-[#3a2a1a]">{t("dashboard.modal.title")}</h3>
-              <p className="text-sm text-[#5a4a3a]">{t("dashboard.modal.description")}</p>
+              <h3 className="heading-serif text-2xl font-semibold text-slate-900 dark:text-white">{t("dashboard.modal.title")}</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{t("dashboard.modal.description")}</p>
             </div>
             <div className="mt-4 space-y-2">
-              <label className="text-sm font-semibold text-[#3a2a1a]" htmlFor="prompt">
+              <label className="text-sm font-semibold text-slate-900 dark:text-white" htmlFor="prompt">
                 {t("dashboard.modal.questionLabel")}
               </label>
               <Textarea
@@ -424,16 +424,16 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                 placeholder={t("dashboard.modal.placeholder")}
                 minLength={10}
                 maxLength={5000}
-                className="min-h-[140px] bg-white text-[#3a2a1a]"
+                className="min-h-[140px] bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
               />
-              <div className="flex items-center justify-between text-xs text-stone-600">
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                 <span>
                   {prompt.length} {t("dashboard.modal.characters")}
                 </span>
               </div>
             </div>
             <div className="mt-4 space-y-2">
-              <label className="text-sm font-semibold text-[#3a2a1a]" htmlFor="model">
+              <label className="text-sm font-semibold text-slate-900 dark:text-white" htmlFor="model">
                 {t("dashboard.modal.modelLabel")}
               </label>
               {modelError ? (
@@ -446,9 +446,9 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                   allowedTiers={allowedTiers}
                 />
               ) : (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
-                  <p className="font-medium text-amber-800">{t("dashboard.errors.noModels")}</p>
-                  <p className="mt-1 text-amber-700">{t("dashboard.errors.noModelsHint")}</p>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-700 dark:bg-blue-900/50">
+                  <p className="font-medium text-blue-800 dark:text-blue-200">{t("dashboard.errors.noModels")}</p>
+                  <p className="mt-1 text-blue-700 dark:text-blue-300">{t("dashboard.errors.noModelsHint")}</p>
                 </div>
               )}
             </div>
@@ -457,7 +457,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
               <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
                 {t("dashboard.modal.cancel")}
               </Button>
-              <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (!selectedModel && models.length > 0)} className="shadow-[0_14px_32px_rgba(255,190,92,0.35)]">
+              <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (!selectedModel && models.length > 0)} className="shadow-[0_14px_32px_rgba(59,130,246,0.25)]">
                 {saving ? t("dashboard.modal.creating") : t("dashboard.modal.submit")}
               </Button>
             </div>
@@ -479,12 +479,12 @@ function PrimaryCard({ title, description, icon, onClick }: { title: string; des
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-center md:items-start gap-3 rounded-2xl border border-amber-300 bg-gradient-to-br from-amber-500 via-amber-400 to-amber-300 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(255,190,92,0.35)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+      className="group flex items-center md:items-start gap-3 rounded-2xl border border-blue-400 bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(59,130,246,0.35)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
     >
-      <span className="shrink-0 rounded-xl bg-white/20 p-2 text-amber-950 shadow-inner shadow-amber-900/20">{icon}</span>
+      <span className="shrink-0 rounded-xl bg-white/20 p-2 text-white shadow-inner shadow-blue-900/20">{icon}</span>
       <div className="min-w-0">
-        <p className="text-base md:text-lg font-semibold text-amber-950 truncate">{title}</p>
-        <p className="hidden md:block text-sm text-amber-900/90">{description}</p>
+        <p className="text-base md:text-lg font-semibold text-white truncate">{title}</p>
+        <p className="hidden md:block text-sm text-blue-100">{description}</p>
       </div>
     </button>
   );
@@ -494,12 +494,12 @@ function LinkCard({ title, description, icon, href }: { title: string; descripti
   return (
     <Link
       href={href}
-      className="flex items-center md:items-start gap-3 rounded-2xl border border-amber-100/80 bg-white/90 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(112,73,28,0.12)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg"
+      className="flex items-center md:items-start gap-3 rounded-2xl border border-slate-200 bg-white/90 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(30,58,95,0.08)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
     >
-      <span className="shrink-0 rounded-xl bg-amber-50 p-2 text-amber-800">{icon}</span>
+      <span className="shrink-0 rounded-xl bg-blue-50 p-2 text-blue-700 dark:bg-blue-900 dark:text-blue-300">{icon}</span>
       <div className="min-w-0">
-        <p className="text-base md:text-lg font-semibold text-[#3a2a1a] truncate">{title}</p>
-        <p className="hidden md:block text-sm text-[#5a4a3a]">{description}</p>
+        <p className="text-base md:text-lg font-semibold text-slate-900 dark:text-white truncate">{title}</p>
+        <p className="hidden md:block text-sm text-slate-600 dark:text-slate-300">{description}</p>
       </div>
     </Link>
   );
@@ -508,15 +508,15 @@ function LinkCard({ title, description, icon, href }: { title: string; descripti
 function TemplateCard({ title, description, onClick }: { title: string; description: string; onClick: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="flex flex-col justify-between rounded-2xl border border-amber-200/70 bg-white/90 p-5 shadow-sm">
+    <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
       <div>
-        <h3 className="text-lg font-semibold text-[#3a2a1a] mb-2">{title}</h3>
-        <p className="text-sm text-[#5a4a3a] mb-4">{description}</p>
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">{title}</h3>
+        <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">{description}</p>
       </div>
       <button
         type="button"
         onClick={onClick}
-        className="w-full rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-white px-4 py-2 text-sm font-semibold text-amber-900 transition hover:from-amber-100 hover:to-amber-50 hover:shadow-md"
+        className="w-full rounded-lg border-2 border-blue-400 bg-gradient-to-r from-blue-50 to-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:from-blue-100 hover:to-blue-50 hover:shadow-md dark:from-blue-900/50 dark:to-slate-800 dark:text-blue-300 dark:border-blue-600"
       >
         {t("dashboard.templates.useTemplate")}
       </button>
