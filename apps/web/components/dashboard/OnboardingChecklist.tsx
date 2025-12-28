@@ -40,13 +40,13 @@ export function OnboardingChecklist({
     ]
 
     return (
-        <div className="mb-8 rounded-2xl border border-amber-200/70 bg-gradient-to-br from-white to-amber-50/30 p-6 shadow-sm">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/30 p-6 shadow-sm dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
             {/* Header */}
             <div className="mb-6">
-                <h2 className="mb-2 font-heading text-2xl font-bold text-[#3a2a1a]">
+                <h2 className="mb-2 font-heading text-2xl font-bold text-slate-900 dark:text-white">
                     {t("dashboard.onboarding.checklist.title")}
                 </h2>
-                <p className="text-sm text-[#5a4a3a]">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                     {t("dashboard.onboarding.checklist.subtitle")}
                 </p>
             </div>
@@ -56,7 +56,7 @@ export function OnboardingChecklist({
                 {steps.map((step) => (
                     <div
                         key={step.number}
-                        className="flex items-start gap-4 rounded-lg bg-white/60 p-4 transition hover:bg-white"
+                        className="flex items-start gap-4 rounded-lg bg-white/60 p-4 transition hover:bg-white dark:bg-slate-800/60 dark:hover:bg-slate-800"
                     >
                         {/* Status Icon */}
                         <div className="flex-shrink-0 pt-0.5">
@@ -66,8 +66,8 @@ export function OnboardingChecklist({
                                     <span className="sr-only">Complete</span>
                                 </div>
                             ) : (
-                                <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-300">
-                                    <Circle className="h-3 w-3 text-amber-300" aria-hidden="true" />
+                                <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-400">
+                                    <Circle className="h-3 w-3 text-amber-400" aria-hidden="true" />
                                     <span className="sr-only">Incomplete</span>
                                 </div>
                             )}
@@ -75,16 +75,16 @@ export function OnboardingChecklist({
 
                         {/* Content */}
                         <div className="flex-1">
-                            <h3 className="mb-1 font-semibold text-[#3a2a1a]">
+                            <h3 className="mb-1 font-semibold text-slate-900 dark:text-white">
                                 {step.number}. {step.title}
                             </h3>
-                            <p className="text-sm text-[#5a4a3a]">{step.description}</p>
+                            <p className="text-sm text-slate-600 dark:text-slate-300">{step.description}</p>
 
                             {/* Step 3 Action Button */}
                             {step.number === 3 && !step.complete && step2Complete && (
                                 <button
                                     onClick={onStep3Mark}
-                                    className="mt-2 rounded-lg bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200"
+                                    className="mt-2 rounded-lg bg-amber-100 px-3 py-1.5 text-sm font-medium text-amber-900 transition hover:bg-amber-200 dark:bg-amber-900/50 dark:text-amber-200 dark:hover:bg-amber-900"
                                 >
                                     {t("dashboard.onboarding.markReviewed")}
                                 </button>

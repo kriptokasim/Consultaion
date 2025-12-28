@@ -59,17 +59,17 @@ export default function RegisterPage() {
       footer={
         <span>
           {t("auth.register.footer")} {" "}
-          <Link href="/login" className="underline underline-offset-4 text-[#3a2a1a] dark:text-amber-200">
+          <Link href="/login" className="underline underline-offset-4 text-slate-800 dark:text-blue-400">
             {t("auth.register.footerLink")}
           </Link>
         </span>
       }
     >
       {hydrating ? (
-        <div className="space-y-3 rounded-2xl border border-amber-100/60 bg-amber-50/80 p-5 shadow-lg dark:bg-stone-700/60">
-          <SkeletonLoader className="h-4 w-3/4 bg-white/60" />
-          <SkeletonLoader lines={3} className="h-10 bg-white/60" />
-          <SkeletonLoader className="h-10 w-full rounded-xl bg-white/60" />
+        <div className="space-y-3 rounded-2xl border border-slate-100 bg-blue-50/80 p-5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+          <SkeletonLoader className="h-4 w-3/4 bg-white/60 dark:bg-slate-700" />
+          <SkeletonLoader lines={3} className="h-10 bg-white/60 dark:bg-slate-700" />
+          <SkeletonLoader className="h-10 w-full rounded-xl bg-white/60 dark:bg-slate-700" />
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -82,7 +82,7 @@ export default function RegisterPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
+              className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
             />
           </div>
           <div className="space-y-2">
@@ -93,9 +93,9 @@ export default function RegisterPage() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
+              className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
             />
-            <p className="text-xs text-amber-900/70 dark:text-amber-100/70">{t("auth.register.passwordHelp")}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400">{t("auth.register.passwordHelp")}</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-password">{t("auth.register.confirm")}</Label>
@@ -105,20 +105,20 @@ export default function RegisterPage() {
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
+              className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
             />
           </div>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          <Button type="submit" variant="amber" className="mt-2 w-full" disabled={loading}>
+          <Button type="submit" className="mt-2 w-full" disabled={loading}>
             {loading ? t("auth.register.ctaLoading") : t("auth.register.cta")}
           </Button>
-          <p className="text-xs text-center text-amber-900/70 dark:text-amber-100/70">
+          <p className="text-xs text-center text-slate-600 dark:text-slate-400">
             By creating an account, you agree to our{" "}
-            <Link href="/terms" className="underline underline-offset-2 hover:text-amber-700">
+            <Link href="/terms" className="underline underline-offset-2 hover:text-primary">
               {t("auth.register.termsLink")}
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="underline underline-offset-2 hover:text-amber-700">
+            <Link href="/privacy" className="underline underline-offset-2 hover:text-primary">
               {t("auth.register.privacyLink")}
             </Link>.
           </p>

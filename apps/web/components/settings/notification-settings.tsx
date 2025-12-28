@@ -36,10 +36,10 @@ export function NotificationSettings({ initialEnabled }: NotificationSettingsPro
         <div className="card-elevated max-w-2xl space-y-4 p-6">
             <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                    <h3 className="text-base font-semibold text-amber-950 dark:text-amber-50">
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                         Email Summaries
                     </h3>
-                    <p className="text-sm text-amber-900/80 dark:text-amber-100/80">
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
                         Receive a summary email after each debate completes.
                     </p>
                 </div>

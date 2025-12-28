@@ -62,10 +62,10 @@ export function PrivacySettings({ initialOptOut }: PrivacySettingsProps) {
     return (
         <div className="card-elevated space-y-6 p-6">
             <div>
-                <h2 className="text-lg font-semibold text-amber-950 dark:text-amber-50">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                     {t("settings.privacy.title")}
                 </h2>
-                <p className="text-sm text-amber-900/70 dark:text-amber-100/70">
+                <p className="text-sm text-slate-600 dark:text-slate-300">
                     {t("settings.privacy.description")}
                 </p>
             </div>
@@ -74,10 +74,10 @@ export function PrivacySettings({ initialOptOut }: PrivacySettingsProps) {
                 {/* Analytics Toggle */}
                 <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                        <label className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                        <label className="text-sm font-medium text-slate-800 dark:text-slate-200">
                             {t("settings.privacy.analyticsLabel")}
                         </label>
-                        <p className="text-xs text-amber-900/60 dark:text-amber-100/60">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                             {t("settings.privacy.analyticsDescription")}
                         </p>
                     </div>
@@ -87,13 +87,13 @@ export function PrivacySettings({ initialOptOut }: PrivacySettingsProps) {
                     />
                 </div>
 
-                <div className="border-t border-amber-200/30 dark:border-amber-800/30 pt-4">
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
                     <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                             <label className="text-sm font-medium text-red-600 dark:text-red-400">
                                 {t("settings.privacy.deleteAccount.title")}
                             </label>
-                            <p className="text-xs text-amber-900/60 dark:text-amber-100/60">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
                                 {t("settings.privacy.deleteAccount.description")}
                             </p>
                         </div>
@@ -116,11 +116,11 @@ export function PrivacySettings({ initialOptOut }: PrivacySettingsProps) {
                         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
                         onClick={() => !isDeleting && setShowDeleteDialog(false)}
                     />
-                    <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-amber-200 bg-white p-6 shadow-xl dark:border-amber-800 dark:bg-stone-900">
-                        <h3 className="text-lg font-semibold text-amber-950 dark:text-amber-50">
+                    <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                             {t("settings.privacy.deleteAccount.title")}
                         </h3>
-                        <p className="mt-2 text-sm text-amber-900/70 dark:text-amber-100/70">
+                        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                             {t("settings.privacy.deleteAccount.confirmation")}
                         </p>
                         <div className="mt-6 flex justify-end gap-3">

@@ -33,35 +33,35 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] px-4 py-8">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 px-4 py-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
       <div className="w-full max-w-md">
         <div className="relative">
           <div
-            className="pointer-events-none absolute -inset-1 rounded-3xl bg-gradient-to-br from-amber-300/60 via-amber-500/40 to-amber-700/40 opacity-70 blur-xl"
+            className="pointer-events-none absolute -inset-1 rounded-3xl bg-gradient-to-br from-blue-300/60 via-blue-500/40 to-blue-700/40 opacity-70 blur-xl dark:from-blue-400/30 dark:via-blue-600/20 dark:to-blue-800/20"
             aria-hidden="true"
           />
 
-          <div className="relative card-elevated auth-card px-6 py-8 dark:border-amber-200/40 sm:px-8 sm:py-10">
+          <div className="relative card-elevated auth-card px-6 py-8 dark:border-slate-600 sm:px-8 sm:py-10">
             <button
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="focus-ring absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/60 bg-white/90 text-amber-700 shadow-sm transition hover:-translate-y-[1px] dark:border-amber-200/30 dark:bg-white/10 dark:text-amber-50"
+              className="focus-ring absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:-translate-y-[1px] dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <header className="mb-6 space-y-2 text-center">
               <div className="flex justify-center">
-                <BrandWordmark size="sm" className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-800 dark:text-amber-100" />
+                <BrandWordmark size="sm" className="text-xs font-semibold uppercase tracking-[0.2em] text-primary dark:text-blue-400" />
               </div>
-              <h1 className="heading-serif text-2xl font-semibold text-amber-950 dark:text-amber-50 sm:text-3xl">{title}</h1>
+              <h1 className="heading-serif text-2xl font-semibold text-slate-900 dark:text-white sm:text-3xl">{title}</h1>
               {subtitle ? <p className="text-sm auth-muted">{subtitle}</p> : null}
             </header>
 
             <div className="space-y-4">{children}</div>
 
             {footer ? (
-              <footer className="mt-6 border-t border-amber-100/60 pt-4 text-center text-xs text-amber-900/70 dark:border-amber-200/20 dark:text-amber-100/70">
+              <footer className="mt-6 border-t border-slate-100 pt-4 text-center text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
                 {footer}
               </footer>
             ) : null}

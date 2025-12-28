@@ -50,22 +50,22 @@ export default function LoginPage() {
       footer={
         <span>
           {t("auth.login.footer")} {" "}
-          <Link href="/register" className="underline underline-offset-4 text-[#3a2a1a] dark:text-amber-200">
+          <Link href="/register" className="underline underline-offset-4 text-slate-800 dark:text-blue-400">
             {t("auth.login.footerLink")}
           </Link>
         </span>
       }
     >
       {hydrating ? (
-        <div className="space-y-3 rounded-2xl border border-amber-100/60 bg-amber-50/80 p-5 shadow-lg dark:bg-stone-700/60">
-          <SkeletonLoader className="h-10 w-full rounded-xl bg-white/60" />
-          <SkeletonLoader className="h-3 w-20 bg-white/60" />
-          <SkeletonLoader lines={2} className="h-3 bg-white/60" />
+        <div className="space-y-3 rounded-2xl border border-slate-100 bg-blue-50/80 p-5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+          <SkeletonLoader className="h-10 w-full rounded-xl bg-white/60 dark:bg-slate-700" />
+          <SkeletonLoader className="h-3 w-20 bg-white/60 dark:bg-slate-700" />
+          <SkeletonLoader lines={2} className="h-3 bg-white/60 dark:bg-slate-700" />
         </div>
       ) : (
-        <div className="flex flex-col gap-3 rounded-2xl border border-amber-100/60 bg-amber-50/80 p-5 text-center shadow-lg text-amber-950 dark:bg-stone-700/60 dark:text-amber-50">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-blue-50/80 p-5 text-center shadow-lg text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
           <GoogleButton nextPath={nextPath} label={t("auth.login.google")} className="w-full justify-center focus-ring" />
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-100">{t("auth.login.or")}</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary dark:text-blue-400">{t("auth.login.or")}</div>
           <p className="text-sm auth-muted">{t("auth.login.credentials")}</p>
         </div>
       )}
@@ -81,7 +81,7 @@ export default function LoginPage() {
             autoComplete="email"
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
+            className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
           />
         </div>
         <div className="space-y-2">
@@ -94,11 +94,11 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="border-amber-200/70 bg-white/90 focus-visible:ring-amber-500 focus-visible:ring-offset-2 dark:border-amber-200/30 dark:bg-white/5"
+            className="border-slate-200 bg-white/90 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-800"
           />
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        <Button type="submit" variant="amber" disabled={loading} className="mt-2 w-full">
+        <Button type="submit" disabled={loading} className="mt-2 w-full">
           {loading ? t("auth.login.ctaLoading") : t("auth.login.cta")}
         </Button>
       </form>
