@@ -146,13 +146,13 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           )}
           aria-label="Primary navigation"
         >
-          <Link href="/dashboard" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
+          <Link href="/dashboard" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
             <RosettaChamberLogo size={32} className="drop-shadow" />
             <div className="leading-tight">
-              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700">
+              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-primary dark:text-blue-400">
                 <BrandWordmark size="sm" className="text-[0.65rem]" />
               </div>
-              <p className="heading-serif text-lg font-semibold text-amber-900">Parliament</p>
+              <p className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">Parliament</p>
             </div>
           </Link>
           <button
@@ -172,13 +172,13 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   aria-current={isActive ? "page" : undefined}
                   title={item.tooltip}
                   className={cn(
-                    "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
+                    "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
                     isActive
-                      ? "bg-gradient-to-r from-amber-100/90 to-amber-50 text-amber-900 shadow-inner shadow-amber-200/60 border border-amber-200/70"
-                      : "text-sidebar-foreground hover:bg-amber-50/60 hover:text-amber-900 hover:-translate-y-[1px] hover:shadow-sm",
+                      ? "bg-gradient-to-r from-blue-100/90 to-slate-50 text-slate-900 shadow-inner shadow-blue-200/60 border border-blue-200/70 dark:from-blue-900/50 dark:to-slate-800 dark:text-white dark:border-blue-700/50"
+                      : "text-sidebar-foreground hover:bg-blue-50/60 hover:text-slate-900 hover:-translate-y-[1px] hover:shadow-sm dark:hover:bg-blue-900/30 dark:hover:text-white",
                   )}
                 >
-                  <span className={cn("rounded-lg border border-transparent p-1 transition-colors", isActive && "border-amber-200 bg-white/80 text-amber-700")}>
+                  <span className={cn("rounded-lg border border-transparent p-1 transition-colors", isActive && "border-blue-200 bg-white/80 text-primary dark:border-blue-600 dark:bg-slate-800")}>
                     <item.icon className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <span>{item.name}</span>
@@ -198,7 +198,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                 </div>
               </div>
             ) : (
-              <Button variant="outline" asChild className="w-full justify-center border-amber-200/90 text-amber-900 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-50 dark:hover:bg-amber-900/30">
+              <Button variant="outline" asChild className="w-full justify-center border-slate-200 text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-700">
                 <Link href="/login">{t("nav.signIn")}</Link>
               </Button>
             )}
@@ -206,7 +206,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           </div>
           <button
             type="button"
-            className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full p-1 text-amber-800 transition hover:bg-amber-100 md:hidden"
+            className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full p-1 text-slate-700 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 md:hidden"
             onClick={() => setSidebarOpen(false)}
             aria-label={t("dashboardShell.nav.close")}
           >
@@ -217,11 +217,11 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
         {/* Main content */}
         <div className="flex flex-1 flex-col overflow-hidden app-surface">
           {/* Header */}
-          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-amber-100/70 bg-card/90 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-amber-900/5 md:px-6">
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-card/90 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-slate-900/5 dark:border-slate-700 md:px-6">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-lg border border-amber-200/80 bg-white/70 p-2 text-amber-800 shadow-sm transition hover:-translate-y-[1px] hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-amber-500 md:hidden"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white/70 p-2 text-slate-700 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 md:hidden"
                 onClick={() => setSidebarOpen(true)}
                 aria-label={t("dashboardShell.nav.open")}
               >
@@ -231,7 +231,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                 <Button
                   variant="outline"
                   size="sm"
-                  className="inline-flex items-center gap-2 border-amber-300 bg-white/95 text-amber-900 shadow-sm hover:bg-amber-100"
+                  className="inline-flex items-center gap-2 border-slate-300 bg-white/95 text-slate-800 shadow-sm hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
                   onClick={handleBackClick}
                   aria-label={t("nav.goBack")}
                 >
@@ -239,9 +239,9 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   <span>{t("nav.goBack")}</span>
                 </Button>
               ) : null}
-              <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
+              <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
                 <RosettaChamberLogo size={32} className="drop-shadow-sm" />
-                <span className="heading-serif text-lg font-semibold text-amber-900">
+                <span className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">
                   <BrandWordmark size="md" inline />
                 </span>
               </Link>
@@ -254,7 +254,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   id="global-search"
                   type="search"
                   placeholder={t("dashboardShell.search.placeholder")}
-                  className="search-elevated w-full rounded-xl border-stone-200 bg-white pl-10 text-sm text-stone-800 placeholder:text-stone-500 shadow-inner shadow-amber-900/5 focus-visible:ring-amber-500 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card dark:border-amber-900/50 dark:bg-stone-900 dark:text-amber-50 dark:placeholder:text-amber-200/70"
+                  className="search-elevated w-full rounded-xl border-slate-200 bg-white pl-10 text-sm text-slate-800 placeholder:text-slate-500 shadow-inner shadow-slate-900/5 focus-visible:ring-primary focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-400"
                   suppressHydrationWarning
                 />
               </div>
@@ -272,7 +272,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   size="sm"
                   asChild
                   aria-label={t("nav.signIn")}
-                  className="hidden sm:inline-flex border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
+                  className="hidden sm:inline-flex border-slate-300 bg-white text-slate-800 hover:bg-slate-50 focus-visible:ring-primary dark:border-slate-600 dark:text-white dark:hover:bg-slate-700"
                 >
                   <Link href="/login">{t("nav.signIn")}</Link>
                 </Button>
@@ -305,7 +305,7 @@ function UserDropdown({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-amber-200/70 bg-amber-50/80 text-xs font-bold uppercase text-amber-800 shadow-inner shadow-amber-900/5 transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-blue-50 text-xs font-bold uppercase text-slate-700 shadow-inner shadow-slate-900/5 transition hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
         aria-haspopup="true"
         aria-expanded={open}
       >
@@ -318,17 +318,17 @@ function UserDropdown({
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
-          <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-amber-200/80 dark:border-amber-700/50 bg-white dark:bg-stone-900 py-1 shadow-lg">
-            <div className="border-b border-amber-100 dark:border-amber-800/50 px-4 py-2">
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 truncate">
+          <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-1 shadow-lg">
+            <div className="border-b border-slate-100 dark:border-slate-700 px-4 py-2">
+              <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">
                 {profile.display_name || profile.email}
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 truncate">{profile.email}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-300 truncate">{profile.email}</p>
             </div>
             <Link
               href="/dashboard"
               onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 dark:text-amber-100 hover:bg-amber-50 dark:hover:bg-amber-900/50"
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700"
             >
               <BarChart3 className="h-4 w-4" />
               {t("nav.dashboard")}
@@ -336,7 +336,7 @@ function UserDropdown({
             <Link
               href="/settings"
               onClick={() => setOpen(false)}
-              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-900 dark:text-amber-100 hover:bg-amber-50 dark:hover:bg-amber-900/50"
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700"
             >
               <Settings className="h-4 w-4" />
               {t("nav.settings")}

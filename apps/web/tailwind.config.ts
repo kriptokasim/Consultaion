@@ -46,12 +46,12 @@ const config: Config = {
           border: '#E5E7EB',
         },
         amberParliament: {
-          amber: '#F4A623',
-          accent: '#FF9E0F',
-          sepiaDark: '#2B2A33',      // Updated: no muddy brown
-          sepia: '#5F6470',           // Updated: cleaner gray-slate
-          sepiaLight: '#e5c49cff',
-          softYellow: '#FFFBE6',
+          amber: '#F59E0B',
+          accent: '#3B82F6',
+          sepiaDark: '#1E293B',      // Parliament slate
+          sepia: '#64748B',           // Slate-500
+          sepiaLight: '#CBD5E1',
+          softYellow: '#EFF6FF',      // Blue-50
         },
         primary: {
           DEFAULT: 'hsl(var(--primary))',

@@ -54,9 +54,12 @@ export async function logout() {
     method: "POST",
     path: "/auth/logout",
   });
-  // Clear fallback auth token from localStorage
+  // Clear all auth state from browser
   if (typeof window !== "undefined") {
+    // Clear localStorage token
     localStorage.removeItem("auth_token");
+    // Clear frontend-set cookie (used for cross-origin bootstrap after Google login)
+    document.cookie = "consultaion_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=lax";
   }
 }
 

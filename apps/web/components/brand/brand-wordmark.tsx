@@ -46,9 +46,9 @@ export function BrandWordmark({
                 className
             )}
         >
-            <span className="text-brand-primary">Consult</span>
+            <span className="text-brand-primary dark:text-white">Consult</span>
             <span className="text-brand-accent">ai</span>
-            <span className="text-brand-primary">on</span>
+            <span className="text-brand-primary dark:text-white">on</span>
         </span>
     )
 }
