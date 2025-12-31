@@ -262,13 +262,13 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-blue-50 p-8 shadow-[0_24px_60px_rgba(30,58,95,0.08)] dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary dark:text-blue-400">{t("dashboard.hero.kicker")}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700 dark:text-amber-400">{t("dashboard.hero.kicker")}</p>
             <h1 className="heading-serif text-4xl font-semibold text-slate-900 dark:text-white">{t("dashboard.hero.title")}</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">{t("dashboard.hero.description")}</p>
           </div>
           {email ? (
             <div className="ml-auto flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">{email.charAt(0).toUpperCase()}</span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">{email.charAt(0).toUpperCase()}</span>
               <span>{email}</span>
             </div>
           ) : null}
@@ -279,7 +279,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
           {maxDebates ? (
             <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-[0_18px_36px_rgba(30,58,95,0.08)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg dark:border-slate-700 dark:bg-slate-800">
               <div className="flex items-start gap-3">
-                <span className="rounded-xl bg-blue-50 p-2 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                <span className="rounded-xl bg-amber-50 p-2 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
                   <Trophy className="h-5 w-5" />
                 </span>
                 <div>
@@ -291,7 +291,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
               </div>
               <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
                 <div
-                  className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-red-500" : "bg-blue-500"}`}
+                  className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-red-500" : "bg-amber-500"}`}
                   style={{ width: `${Math.min((debatesUsed / maxDebates) * 100, 100)}%` }}
                 />
               </div>
@@ -479,12 +479,12 @@ function PrimaryCard({ title, description, icon, onClick }: { title: string; des
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-center md:items-start gap-3 rounded-2xl border border-blue-400 bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(59,130,246,0.35)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+      className="group flex items-center md:items-start gap-3 rounded-2xl border border-amber-400 bg-gradient-to-br from-amber-600 via-amber-500 to-amber-400 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(245,158,11,0.35)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
     >
-      <span className="shrink-0 rounded-xl bg-white/20 p-2 text-white shadow-inner shadow-blue-900/20">{icon}</span>
+      <span className="shrink-0 rounded-xl bg-white/20 p-2 text-white shadow-inner shadow-amber-900/20">{icon}</span>
       <div className="min-w-0">
         <p className="text-base md:text-lg font-semibold text-white truncate">{title}</p>
-        <p className="hidden md:block text-sm text-blue-100">{description}</p>
+        <p className="hidden md:block text-sm text-amber-100">{description}</p>
       </div>
     </button>
   );
@@ -496,7 +496,7 @@ function LinkCard({ title, description, icon, href }: { title: string; descripti
       href={href}
       className="flex items-center md:items-start gap-3 rounded-2xl border border-slate-200 bg-white/90 p-3 md:p-5 text-left shadow-[0_18px_36px_rgba(30,58,95,0.08)] transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
     >
-      <span className="shrink-0 rounded-xl bg-blue-50 p-2 text-blue-700 dark:bg-blue-900 dark:text-blue-300">{icon}</span>
+      <span className="shrink-0 rounded-xl bg-amber-50 p-2 text-amber-700 dark:bg-amber-900 dark:text-amber-300">{icon}</span>
       <div className="min-w-0">
         <p className="text-base md:text-lg font-semibold text-slate-900 dark:text-white truncate">{title}</p>
         <p className="hidden md:block text-sm text-slate-600 dark:text-slate-300">{description}</p>
