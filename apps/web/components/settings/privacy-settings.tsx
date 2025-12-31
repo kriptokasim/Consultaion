@@ -62,7 +62,7 @@ export function PrivacySettings({ initialOptOut }: PrivacySettingsProps) {
     return (
         <div className="card-elevated space-y-6 p-6">
             <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                <h2 className="heading-serif text-lg font-semibold text-slate-900 dark:text-white">
                     {t("settings.privacy.title")}
                 </h2>
                 <p className="text-sm text-slate-600 dark:text-slate-300">

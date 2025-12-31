@@ -36,7 +36,7 @@ export function NotificationSettings({ initialEnabled }: NotificationSettingsPro
         <div className="card-elevated max-w-2xl space-y-4 p-6">
             <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                    <h3 className="heading-serif text-lg font-semibold text-slate-900 dark:text-white">
                         Email Summaries
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-300">
