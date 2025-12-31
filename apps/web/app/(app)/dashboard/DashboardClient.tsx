@@ -39,7 +39,7 @@ function formatTimestamp(ts?: string | null) {
 function statusTone(status?: string | null) {
   switch ((status || "").toLowerCase()) {
     case "running":
-      return "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/50 dark:text-blue-200 dark:border-blue-700";
+      return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/50 dark:text-amber-200 dark:border-amber-700";
     case "completed":
     case "done":
       return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-200 dark:border-emerald-700";
@@ -353,10 +353,10 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary dark:text-blue-400">{t("dashboard.section.recent.kicker")}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700 dark:text-amber-400">{t("dashboard.section.recent.kicker")}</p>
             <h2 className="heading-serif text-2xl font-semibold text-slate-900 dark:text-white">{t("dashboard.section.recent.title")}</h2>
           </div>
-          <Link href="/runs" className="text-sm font-semibold text-primary hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300">
+          <Link href="/runs" className="text-sm font-semibold text-amber-700 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300">
             {t("dashboard.section.recent.link")}
           </Link>
         </div>
@@ -381,9 +381,9 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                   <Link
                     key={debate.id}
                     href={`/runs/${debate.id}`}
-                    className="flex items-center gap-4 px-5 py-4 transition hover:bg-blue-50/70 dark:hover:bg-slate-700"
+                    className="flex items-center gap-4 px-5 py-4 transition hover:bg-amber-50/70 dark:hover:bg-slate-700"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700 shadow-inner shadow-blue-900/10 dark:bg-blue-900 dark:text-blue-300">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 shadow-inner shadow-amber-900/10 dark:bg-amber-900 dark:text-amber-300">
                       <Play className="h-5 w-5" />
                     </div>
                     <div className="flex-1">
@@ -392,7 +392,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                     </div>
                     <div className="flex items-center gap-2">
                       {replayAvailable ? (
-                        <Link href={`/runs/${debate.id}/replay`} className="text-xs font-semibold text-primary underline-offset-4 hover:underline dark:text-blue-400">
+                        <Link href={`/runs/${debate.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline dark:text-amber-400">
                           {t("dashboard.recentDebates.replay")}
                         </Link>
                       ) : null}
@@ -446,9 +446,9 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                   allowedTiers={allowedTiers}
                 />
               ) : (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-700 dark:bg-blue-900/50">
-                  <p className="font-medium text-blue-800 dark:text-blue-200">{t("dashboard.errors.noModels")}</p>
-                  <p className="mt-1 text-blue-700 dark:text-blue-300">{t("dashboard.errors.noModelsHint")}</p>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-900/50">
+                  <p className="font-medium text-amber-800 dark:text-amber-200">{t("dashboard.errors.noModels")}</p>
+                  <p className="mt-1 text-amber-700 dark:text-amber-300">{t("dashboard.errors.noModelsHint")}</p>
                 </div>
               )}
             </div>
@@ -516,7 +516,7 @@ function TemplateCard({ title, description, onClick }: { title: string; descript
       <button
         type="button"
         onClick={onClick}
-        className="w-full rounded-lg border-2 border-blue-400 bg-gradient-to-r from-blue-50 to-white px-4 py-2 text-sm font-semibold text-blue-700 transition hover:from-blue-100 hover:to-blue-50 hover:shadow-md dark:from-blue-900/50 dark:to-slate-800 dark:text-blue-300 dark:border-blue-600"
+        className="w-full rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-white px-4 py-2 text-sm font-semibold text-amber-700 transition hover:from-amber-100 hover:to-amber-50 hover:shadow-md dark:from-amber-900/50 dark:to-slate-800 dark:text-amber-300 dark:border-amber-600"
       >
         {t("dashboard.templates.useTemplate")}
       </button>

@@ -50,22 +50,22 @@ export default function LoginPage() {
       footer={
         <span>
           {t("auth.login.footer")} {" "}
-          <Link href="/register" className="underline underline-offset-4 text-slate-800 dark:text-blue-400">
+          <Link href="/register" className="underline underline-offset-4 text-slate-800 dark:text-amber-400">
             {t("auth.login.footerLink")}
           </Link>
         </span>
       }
     >
       {hydrating ? (
-        <div className="space-y-3 rounded-2xl border border-slate-100 bg-blue-50/80 p-5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+        <div className="space-y-3 rounded-2xl border border-slate-100 bg-amber-50/80 p-5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
           <SkeletonLoader className="h-10 w-full rounded-xl bg-white/60 dark:bg-slate-700" />
           <SkeletonLoader className="h-3 w-20 bg-white/60 dark:bg-slate-700" />
           <SkeletonLoader lines={2} className="h-3 bg-white/60 dark:bg-slate-700" />
         </div>
       ) : (
-        <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-blue-50/80 p-5 text-center shadow-lg text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-amber-50/80 p-5 text-center shadow-lg text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
           <GoogleButton nextPath={nextPath} label={t("auth.login.google")} className="w-full justify-center focus-ring" />
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-primary dark:text-blue-400">{t("auth.login.or")}</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">{t("auth.login.or")}</div>
           <p className="text-sm auth-muted">{t("auth.login.credentials")}</p>
         </div>
       )}

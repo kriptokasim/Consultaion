@@ -70,7 +70,7 @@ export default function BillingSettingsClient() {
     <div className="mx-auto max-w-5xl space-y-6 px-6 py-10">
       <div className="flex-1 space-y-4">
         <Card className="border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800 p-6">
-          <p className="text-xs uppercase tracking-[0.2em] text-primary dark:text-blue-400">{t("settings.billing.currentPlan")}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">{t("settings.billing.currentPlan")}</p>
           <h2 className="heading-serif text-3xl text-slate-900 dark:text-white">{billing.plan?.name ?? t("settings.billing.planUnknown")}</h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
             {t("settings.billing.periodLabel")} {billing.usage?.period ?? t("settings.billing.periodUnknown")}.{" "}
@@ -81,7 +81,7 @@ export default function BillingSettingsClient() {
               <p className="text-xs text-slate-500 dark:text-slate-400">{t("settings.billing.debatesThisMonth")}</p>
               <div className="mt-2 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
                 <div
-                  className="h-full rounded-full bg-blue-500"
+                  className="h-full rounded-full bg-amber-500"
                   style={{
                     width: `${Math.min(
                       100,
@@ -104,7 +104,7 @@ export default function BillingSettingsClient() {
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {plans.map((plan) => (
               <Card key={plan.slug} className="border border-slate-200 dark:border-slate-600 bg-white/80 dark:bg-slate-800 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-primary dark:text-blue-400">{plan.is_default_free ? t("settings.billing.planBadge.free") : t("settings.billing.planBadge.pro")}</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-amber-700 dark:text-amber-400">{plan.is_default_free ? t("settings.billing.planBadge.free") : t("settings.billing.planBadge.pro")}</p>
                 <h4 className="heading-serif text-xl text-slate-900 dark:text-white">{plan.name}</h4>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
                   {plan.limits?.max_debates_per_month ?? "?"} {t("settings.billing.planLimitLabel")}

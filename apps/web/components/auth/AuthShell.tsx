@@ -33,11 +33,11 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 px-4 py-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-amber-50 px-4 py-8 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800">
       <div className="w-full max-w-md">
         <div className="relative">
           <div
-            className="pointer-events-none absolute -inset-1 rounded-3xl bg-gradient-to-br from-blue-300/60 via-blue-500/40 to-blue-700/40 opacity-70 blur-xl dark:from-blue-400/30 dark:via-blue-600/20 dark:to-blue-800/20"
+            className="pointer-events-none absolute -inset-1 rounded-3xl bg-gradient-to-br from-amber-300/60 via-amber-500/40 to-amber-700/40 opacity-70 blur-xl dark:from-amber-400/30 dark:via-amber-600/20 dark:to-amber-800/20"
             aria-hidden="true"
           />
 
@@ -52,7 +52,7 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
             </button>
             <header className="mb-6 space-y-2 text-center">
               <div className="flex justify-center">
-                <BrandWordmark size="sm" className="text-xs font-semibold uppercase tracking-[0.2em] text-primary dark:text-blue-400" />
+                <BrandWordmark size="sm" className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400" />
               </div>
               <h1 className="heading-serif text-2xl font-semibold text-slate-900 dark:text-white sm:text-3xl">{title}</h1>
               {subtitle ? <p className="text-sm auth-muted">{subtitle}</p> : null}

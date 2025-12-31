@@ -64,8 +64,8 @@ export default function RunsPageClient({ initialQuery, initialStatus, translatio
 
     return (
         <main id="main" className="h-full space-y-8 py-6">
-            <header className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/70 p-6 shadow-[0_24px_60px_rgba(30,58,95,0.08)] dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary dark:text-blue-400">{t("runs.hero.kicker")}</p>
+            <header className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-amber-50/70 p-6 shadow-[0_24px_60px_rgba(30,58,95,0.08)] dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700 dark:text-amber-400">{t("runs.hero.kicker")}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-3">
                     <h1 className="heading-serif text-3xl font-semibold text-slate-900 dark:text-white">{t("runs.hero.title")}</h1>
                     <span className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700 shadow-inner shadow-slate-900/5 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
@@ -80,14 +80,14 @@ export default function RunsPageClient({ initialQuery, initialStatus, translatio
             <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
                 <SmartSearch items={searchItems} initialQuery={initialQuery} />
                 <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-[0_18px_40px_rgba(30,58,95,0.08)] dark:border-slate-700 dark:bg-slate-800">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary dark:text-blue-400">{t("runs.status.kicker")}</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700 dark:text-amber-400">{t("runs.status.kicker")}</p>
                     <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-700 dark:text-slate-300">
-                        <div className="rounded-xl border border-slate-200 bg-blue-50 p-3 shadow-inner shadow-slate-900/5 dark:border-slate-600 dark:bg-slate-700">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary dark:text-blue-400">{t("runs.status.total")}</p>
+                        <div className="rounded-xl border border-slate-200 bg-amber-50 p-3 shadow-inner shadow-slate-900/5 dark:border-slate-600 dark:bg-slate-700">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("runs.status.total")}</p>
                             <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">{items.length}</p>
                         </div>
-                        <div className="rounded-xl border border-slate-200 bg-blue-50 p-3 shadow-inner shadow-slate-900/5 dark:border-slate-600 dark:bg-slate-700">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary dark:text-blue-400">{t("runs.status.inProgress")}</p>
+                        <div className="rounded-xl border border-slate-200 bg-amber-50 p-3 shadow-inner shadow-slate-900/5 dark:border-slate-600 dark:bg-slate-700">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("runs.status.inProgress")}</p>
                             <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
                                 {items.filter((item) => item.status === "running").length}
                             </p>
@@ -106,7 +106,7 @@ export default function RunsPageClient({ initialQuery, initialStatus, translatio
             <section className="space-y-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary dark:text-blue-400">{t("runs.list.kicker")}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-700 dark:text-amber-400">{t("runs.list.kicker")}</p>
                         <h2 className="heading-serif text-xl font-semibold text-slate-900 dark:text-white">{t("runs.list.title")}</h2>
                     </div>
                     <span className="text-xs text-slate-500 dark:text-slate-400">{t("runs.list.caption")}</span>

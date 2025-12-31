@@ -59,14 +59,14 @@ export default function RegisterPage() {
       footer={
         <span>
           {t("auth.register.footer")} {" "}
-          <Link href="/login" className="underline underline-offset-4 text-slate-800 dark:text-blue-400">
+          <Link href="/login" className="underline underline-offset-4 text-slate-800 dark:text-amber-400">
             {t("auth.register.footerLink")}
           </Link>
         </span>
       }
     >
       {hydrating ? (
-        <div className="space-y-3 rounded-2xl border border-slate-100 bg-blue-50/80 p-5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+        <div className="space-y-3 rounded-2xl border border-slate-100 bg-amber-50/80 p-5 shadow-lg dark:border-slate-700 dark:bg-slate-800">
           <SkeletonLoader className="h-4 w-3/4 bg-white/60 dark:bg-slate-700" />
           <SkeletonLoader lines={3} className="h-10 bg-white/60 dark:bg-slate-700" />
           <SkeletonLoader className="h-10 w-full rounded-xl bg-white/60 dark:bg-slate-700" />

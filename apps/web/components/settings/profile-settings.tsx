@@ -125,7 +125,7 @@ export default function ProfileSettings() {
   return (
     <form onSubmit={handleSubmit} className="card-elevated p-6">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-primary dark:text-blue-400">{t("settings.profile.section.kicker")}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("settings.profile.section.kicker")}</p>
         <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("settings.profile.section.title")}</h1>
         <p className="text-sm text-slate-600 dark:text-slate-300">{t("settings.profile.section.description")}</p>
       </div>
@@ -206,7 +206,7 @@ export default function ProfileSettings() {
           type="submit"
           disabled={saving}
           className={cn(
-            "inline-flex items-center rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+            "inline-flex items-center rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-amber-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
             saving && "opacity-70",
           )}
         >
