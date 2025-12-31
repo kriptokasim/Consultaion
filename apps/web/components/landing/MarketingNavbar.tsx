@@ -67,8 +67,8 @@ export function MarketingNavbar() {
                     <div className="flex items-center justify-between">
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-2">
-                            <Brain className="h-7 w-7 text-blue-900 dark:text-amber-400" />
-                            <span className="text-xl font-bold text-blue-900 dark:text-white drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]">Consultaion</span>
+                            <Brain className="h-7 w-7 text-amber-700 dark:text-amber-400" />
+                            <span className="text-xl font-bold text-amber-900 dark:text-white drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]">Consultaion</span>
                         </Link>
 
                         {/* Desktop Navigation */}
@@ -80,8 +80,8 @@ export function MarketingNavbar() {
                                     className={cn(
                                         "text-sm font-semibold transition-colors",
                                         pathname === link.href
-                                            ? "text-blue-900 dark:text-amber-400 drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]"
-                                            : "text-blue-900 hover:text-blue-950 dark:text-white dark:hover:text-amber-400 drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]"
+                                            ? "text-amber-900 dark:text-amber-400 drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]"
+                                            : "text-amber-800 hover:text-amber-950 dark:text-white dark:hover:text-amber-400 drop-shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]"
                                     )}
                                 >
                                     {link.label}
@@ -128,8 +128,8 @@ export function MarketingNavbar() {
                             {/* Close Button */}
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <Brain className="h-6 w-6 text-blue-900 dark:text-amber-400" />
-                                    <span className="text-lg font-bold text-blue-900 dark:text-white">Consultaion</span>
+                                    <Brain className="h-6 w-6 text-amber-700 dark:text-amber-400" />
+                                    <span className="text-lg font-bold text-amber-900 dark:text-white">Consultaion</span>
                                 </div>
                                 <button
                                     onClick={() => setMobileMenuOpen(false)}
@@ -153,8 +153,8 @@ export function MarketingNavbar() {
                                         className={cn(
                                             "block rounded-lg px-4 py-3 text-lg font-semibold transition-colors",
                                             pathname === link.href
-                                                ? "bg-blue-100 text-blue-900 dark:bg-amber-900/50 dark:text-amber-200"
-                                                : "text-blue-900 hover:bg-blue-50 dark:text-white dark:hover:bg-amber-900/30"
+                                                ? "bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200"
+                                                : "text-amber-800 hover:bg-amber-50 dark:text-white dark:hover:bg-amber-900/30"
                                         )}
                                     >
                                         {link.label}

@@ -149,7 +149,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           <Link href="/dashboard" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
             <RosettaChamberLogo size={32} className="drop-shadow" />
             <div className="leading-tight">
-              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-primary dark:text-blue-400">
+              <div className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700 dark:text-amber-400">
                 <BrandWordmark size="sm" className="text-[0.65rem]" />
               </div>
               <p className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">Parliament</p>
@@ -174,11 +174,11 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   className={cn(
                     "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
                     isActive
-                      ? "bg-gradient-to-r from-blue-100/90 to-slate-50 text-slate-900 shadow-inner shadow-blue-200/60 border border-blue-200/70 dark:from-blue-900/50 dark:to-slate-800 dark:text-white dark:border-blue-700/50"
-                      : "text-sidebar-foreground hover:bg-blue-50/60 hover:text-slate-900 hover:-translate-y-[1px] hover:shadow-sm dark:hover:bg-blue-900/30 dark:hover:text-white",
+                      ? "bg-gradient-to-r from-amber-100/90 to-slate-50 text-slate-900 shadow-inner shadow-amber-200/60 border border-amber-200/70 dark:from-amber-900/50 dark:to-slate-800 dark:text-white dark:border-amber-700/50"
+                      : "text-sidebar-foreground hover:bg-amber-50/60 hover:text-slate-900 hover:-translate-y-[1px] hover:shadow-sm dark:hover:bg-amber-900/30 dark:hover:text-white",
                   )}
                 >
-                  <span className={cn("rounded-lg border border-transparent p-1 transition-colors", isActive && "border-blue-200 bg-white/80 text-primary dark:border-blue-600 dark:bg-slate-800")}>
+                  <span className={cn("rounded-lg border border-transparent p-1 transition-colors", isActive && "border-amber-200 bg-white/80 text-amber-700 dark:border-amber-600 dark:bg-slate-800")}>
                     <item.icon className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <span>{item.name}</span>
@@ -305,7 +305,7 @@ function UserDropdown({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-blue-50 text-xs font-bold uppercase text-slate-700 shadow-inner shadow-slate-900/5 transition hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-amber-50 text-xs font-bold uppercase text-slate-700 shadow-inner shadow-slate-900/5 transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
         aria-haspopup="true"
         aria-expanded={open}
       >

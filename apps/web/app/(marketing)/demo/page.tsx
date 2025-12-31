@@ -41,18 +41,18 @@ export default function DemoPage() {
     }, [scenarioParam])
 
     return (
-        <main className="min-h-screen bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] px-6 py-16">
+        <main className="min-h-screen bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] dark:from-stone-900 dark:via-stone-950 dark:to-black px-6 py-16">
             <div className="mx-auto max-w-5xl space-y-12">
                 {/* Header */}
                 <header className="space-y-6 text-center">
-                    <div className="inline-flex items-center gap-2 rounded-full border-2 border-dashed border-amber-300 bg-amber-50 px-4 py-1 text-sm font-semibold text-amber-700">
+                    <div className="inline-flex items-center gap-2 rounded-full border-2 border-dashed border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 px-4 py-1 text-sm font-semibold text-amber-700 dark:text-amber-300">
                         <Sparkles className="h-4 w-4" />
                         {t("demo.badge")}
                     </div>
-                    <h1 className="text-4xl font-display font-bold text-[#3a2a1a]">
+                    <h1 className="text-4xl font-display font-bold text-[#3a2a1a] dark:text-stone-100">
                         {t("demo.gallery.title")}
                     </h1>
-                    <p className="mx-auto max-w-2xl text-lg text-[#5a4a3a]">
+                    <p className="mx-auto max-w-2xl text-lg text-[#5a4a3a] dark:text-stone-300">
                         {t("demo.gallery.subtitle")}
                     </p>
                 </header>
@@ -78,10 +78,10 @@ export default function DemoPage() {
                                         {t(`demo.tags.${scenario.tag.toLowerCase().replace(' & ', '')}`)}
                                     </span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-[#3a2a1a] mb-2">
+                                <h3 className="text-lg font-semibold text-[#3a2a1a] dark:text-stone-100 mb-2">
                                     {t(`demo.scenarios.${scenario.id.replace('-', '')}.title`)}
                                 </h3>
-                                <p className="text-sm text-[#5a4a3a]">
+                                <p className="text-sm text-[#5a4a3a] dark:text-stone-300">
                                     {t(`demo.scenarios.${scenario.id.replace('-', '')}.description`)}
                                 </p>
                                 {selectedScenarioId === scenario.id && (
@@ -99,30 +99,30 @@ export default function DemoPage() {
                 </section>
 
                 {/* Context */}
-                <section className="rounded-2xl border border-amber-100/80 bg-white/90 p-6 shadow-sm">
+                <section className="rounded-2xl border border-amber-100/80 bg-white/90 dark:border-stone-700 dark:bg-stone-900/50 p-6 shadow-sm">
                     <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700">
                         {t("demo.context.label")}
                     </h2>
-                    <p className="text-[#5a4a3a]">{debate.context}</p>
+                    <p className="text-[#5a4a3a] dark:text-stone-300">{debate.context}</p>
                 </section>
 
                 {/* Question */}
-                <section className="rounded-3xl border-2 border-amber-200 bg-gradient-to-br from-white to-amber-50/50 p-8 shadow-md">
+                <section className="rounded-3xl border-2 border-amber-200 bg-gradient-to-br from-white to-amber-50/50 dark:border-amber-700 dark:from-stone-900 dark:to-stone-800 p-8 shadow-md">
                     <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-amber-700">
                         <MessageSquare className="h-4 w-4" />
                         {t("demo.question.label")}
                     </h2>
-                    <p className="text-2xl font-semibold text-[#3a2a1a]">{debate.question}</p>
+                    <p className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{debate.question}</p>
                 </section>
 
                 {/* Agents */}
                 <section className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("demo.agents.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{t("demo.agents.title")}</h2>
                     <div className="grid gap-4 md:grid-cols-3">
                         {debate.agents.map((agent) => (
                             <div
                                 key={agent.id}
-                                className="rounded-2xl border border-amber-100/80 bg-white/90 p-5 shadow-sm"
+                                className="rounded-2xl border border-amber-100/80 bg-white/90 dark:border-stone-700 dark:bg-stone-900/50 p-5 shadow-sm"
                             >
                                 <div className="mb-2 flex items-center justify-between">
                                     <Brain className="h-5 w-5 text-amber-600" />
@@ -130,7 +130,7 @@ export default function DemoPage() {
                                         {agent.role}
                                     </span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-[#3a2a1a]">{agent.name}</h3>
+                                <h3 className="text-lg font-semibold text-[#3a2a1a] dark:text-stone-100">{agent.name}</h3>
                                 <p className="mt-1 text-sm text-amber-700">
                                     {agent.model} <span className="text-amber-600/70">• {agent.provider}</span>
                                 </p>
@@ -141,7 +141,7 @@ export default function DemoPage() {
 
                 {/* Debate Rounds */}
                 <section className="space-y-6">
-                    <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("demo.rounds.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{t("demo.rounds.title")}</h2>
                     {debate.rounds.map((round) => (
                         <div key={round.number} className="space-y-4">
                             <h3 className="flex items-center gap-2 text-lg font-semibold text-amber-800">
@@ -154,10 +154,10 @@ export default function DemoPage() {
                                 {round.arguments.map((arg, idx) => (
                                     <div
                                         key={`${round.number}-${idx}`}
-                                        className="rounded-xl border border-amber-100/70 bg-white/80 p-5 shadow-sm"
+                                        className="rounded-xl border border-amber-100/70 bg-white/80 dark:border-stone-700 dark:bg-stone-900/50 p-5 shadow-sm"
                                     >
                                         <div className="mb-2 font-semibold text-amber-900">{arg.agentName}</div>
-                                        <p className="text-[#5a4a3a] leading-relaxed">{arg.content}</p>
+                                        <p className="text-[#5a4a3a] dark:text-stone-300 leading-relaxed">{arg.content}</p>
                                     </div>
                                 ))}
                             </div>
@@ -167,12 +167,12 @@ export default function DemoPage() {
 
                 {/* Judge Commentary */}
                 <section className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("demo.judges.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{t("demo.judges.title")}</h2>
                     <div className="space-y-3">
                         {debate.judgeCommentary.map((judge, idx) => (
                             <div
                                 key={idx}
-                                className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm"
+                                className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white dark:border-stone-700 dark:from-stone-800 dark:to-stone-900 p-5 shadow-sm"
                             >
                                 <div className="mb-2 flex items-center justify-between">
                                     <span className="font-semibold text-slate-800">{judge.judge}</span>
@@ -188,11 +188,11 @@ export default function DemoPage() {
 
                 {/* Champion Answer */}
                 <section className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-2xl font-semibold text-[#3a2a1a]">
+                    <h2 className="flex items-center gap-2 text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">
                         <Trophy className="h-6 w-6 text-amber-600" />
                         {t("demo.champion.title")}
                     </h2>
-                    <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 via-amber-100/50 to-white p-8 shadow-lg">
+                    <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 via-amber-100/50 to-white dark:border-amber-700 dark:from-stone-900 dark:via-stone-800 dark:to-stone-900 p-8 shadow-lg">
                         <div className="mb-4 flex items-center gap-3">
                             <div className="rounded-full bg-gradient-to-br from-amber-500 to-amber-600 px-4 py-1.5 text-sm font-bold text-white shadow-md">
                                 {t("demo.champion.winner")}: {debate.championAnswer.winner}
@@ -201,14 +201,14 @@ export default function DemoPage() {
                                 ({debate.championAnswer.winnerModel})
                             </span>
                         </div>
-                        <p className="mb-6 text-lg font-medium text-[#3a2a1a] leading-relaxed">
+                        <p className="mb-6 text-lg font-medium text-[#3a2a1a] dark:text-stone-100 leading-relaxed">
                             {debate.championAnswer.synthesis}
                         </p>
-                        <div className="rounded-xl bg-white/80 p-5 border border-amber-200/70">
+                        <div className="rounded-xl bg-white/80 dark:bg-stone-800/50 p-5 border border-amber-200/70 dark:border-stone-700">
                             <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-700">
                                 {t("demo.champion.reasoning")}
                             </h4>
-                            <p className="text-[#5a4a3a]">{debate.championAnswer.reasoning}</p>
+                            <p className="text-[#5a4a3a] dark:text-stone-300">{debate.championAnswer.reasoning}</p>
                         </div>
 
                         {/* Champion Feedback */}
@@ -217,8 +217,8 @@ export default function DemoPage() {
                 </section>
 
                 {/* Footer CTAs */}
-                <section className="flex flex-col items-center gap-4 rounded-3xl border border-amber-200/70 bg-white/90 p-8 text-center shadow-sm">
-                    <p className="text-lg text-[#5a4a3a]">
+                <section className="flex flex-col items-center gap-4 rounded-3xl border border-amber-200/70 bg-white/90 dark:border-stone-700 dark:bg-stone-900/50 p-8 text-center shadow-sm">
+                    <p className="text-lg text-[#5a4a3a] dark:text-stone-300">
                         Ready to run your own debate with real AI models?
                     </p>
                     <div className="flex flex-wrap justify-center gap-4">
