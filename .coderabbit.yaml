@@ -46,16 +46,16 @@ reviews:
         - Environment variable usage
         - Output format consistency with PatchTask schema
 
+  # Ignore patterns for review
+  path_filters:
+    - "!**/*.lock"
+    - "!**/package-lock.json"
+    - "!**/*.min.js"
+    - "!**/node_modules/**"
+    - "!**/__pycache__/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/.next/**"
+
 chat:
   auto_reply: true
-
-# Ignore patterns
-path_filters:
-  - "!**/*.lock"
-  - "!**/package-lock.json"
-  - "!**/*.min.js"
-  - "!**/node_modules/**"
-  - "!**/__pycache__/**"
-  - "!**/dist/**"
-  - "!**/build/**"
-  - "!**/.next/**"
