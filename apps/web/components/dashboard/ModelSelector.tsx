@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Bot, Zap, Brain, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
+import { ModelSelectorSkeleton } from "@/components/ui/skeleton";
 
 type ModelOption = {
     id: string;
@@ -41,7 +42,7 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
     const { t } = useI18n();
 
     if (models.length === 0) {
-        return null;
+        return <ModelSelectorSkeleton />;
     }
 
     if (models.length === 1) {

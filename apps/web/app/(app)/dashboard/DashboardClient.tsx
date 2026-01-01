@@ -18,6 +18,7 @@ import { trackEvent } from "@/lib/analytics";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { OnboardingPanel } from "@/components/dashboard/OnboardingPanel";
 import { ErrorBanner } from "@/components/errors/ErrorBanner";
+import { ProviderHealthBanner } from "@/components/ui/provider-health-banner";
 
 type ModelOption = {
   id: string;
@@ -259,6 +260,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
           />
         </div>
       )}
+      <ProviderHealthBanner className="mb-6" />
       <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-blue-50 p-8 shadow-[0_24px_60px_rgba(30,58,95,0.08)] dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
         <div className="flex flex-wrap items-center gap-4">
           <div>

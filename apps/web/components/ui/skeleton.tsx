@@ -39,3 +39,24 @@ export function DebateListSkeleton() {
     </div>
   );
 }
+
+export function ModelSelectorSkeleton() {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="flex items-start gap-3 rounded-xl border-2 border-amber-100 bg-white p-3 dark:border-amber-900/40 dark:bg-stone-900"
+        >
+          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-amber-200 dark:border-amber-800">
+            <Skeleton className="h-2 w-2 rounded-full" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <Skeleton className="h-4 w-3/4 rounded" />
+            <Skeleton className="h-3 w-1/2 rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

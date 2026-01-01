@@ -47,3 +47,35 @@ async def readyz(response: Response) -> dict[str, Any]:
             "version": settings.APP_VERSION,
         }
     }
+
+
+@router.get("/api/health/providers")
+async def provider_health() -> dict[str, Any]:
+    """
+    Provider health check.
+    
+    Returns status of AI providers based on configured API keys.
+    Used by frontend to display provider degradation warnings.
+    """
+    providers = []
+    
+    # Check each provider based on configured keys
+    provider_configs = [
+        ("openai", settings.OPENAI_API_KEY),
+        ("anthropic", settings.ANTHROPIC_API_KEY),
+        ("gemini", settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY),
+        ("openrouter", settings.OPENROUTER_API_KEY),
+        ("groq", settings.GROQ_API_KEY),
+        ("mistral", settings.MISTRAL_API_KEY),
+    ]
+    
+    for provider_name, api_key in provider_configs:
+        if api_key:
+            # Provider is configured - assume healthy
+            # In production, you could ping provider endpoints
+            providers.append({
+                "provider": provider_name,
+                "status": "healthy",
+            })
+    
+    return {"providers": providers}

@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PatchTask",
+  "description": "A normalized error or failure that can be consumed by a coding agent",
+  "type": "object",
+  "required": ["id", "title", "area", "owner", "severity", "frequency", "lastSeen"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier (e.g., sentry-123456 or playwright-test-name)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Brief error title or test name"
+    },
+    "area": {
+      "type": "string",
+      "enum": ["frontend", "backend", "infra"],
+      "description": "High-level area of the codebase"
+    },
+    "owner": {
+      "type": "string",
+      "enum": ["dashboard", "runs", "voting", "auth", "billing", "admin", "sse", "db", "api", "marketing", "settings"],
+      "description": "Team/component owner"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["blocker", "high", "medium", "low"],
+      "description": "Impact severity"
+    },
+    "frequency": {
+      "type": "integer",
+      "description": "Number of occurrences"
+    },
+    "lastSeen": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp of last occurrence"
+    },
+    "firstSeen": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp of first occurrence"
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "sentryUrl": { "type": "string" },
+        "stack": { "type": "array", "items": { "type": "string" } },
+        "breadcrumbs": { "type": "array", "items": { "type": "string" } },
+        "request": {
+          "type": "object",
+          "properties": {
+            "url": { "type": "string" },
+            "method": { "type": "string" }
+          }
+        },
+        "domSnapshot": { "type": "string" },
+        "networkHar": { "type": "string" },
+        "screenshot": { "type": "string" }
+      }
+    },
+    "expectedFix": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["guardrail", "bugfix", "refactor", "test", "docs"]
+        },
+        "filesHint": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

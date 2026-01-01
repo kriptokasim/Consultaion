@@ -1,0 +1,48 @@
+name: Production Smoke Tests
+
+on:
+    # Run after deploy (triggered by Vercel/Render webhooks or manually)
+    workflow_dispatch:
+        inputs:
+            frontend_url:
+                description: "Frontend URL to test"
+                required: false
+                default: "https://consultaion.vercel.app"
+            api_url:
+                description: "API URL to test"
+                required: false
+                default: "https://consultaion-api.onrender.com"
+
+    # Run on successful deploy to main
+    deployment_status:
+
+jobs:
+    smoke:
+        runs-on: ubuntu-latest
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Install TypeScript
+              run: npm install -g typescript ts-node
+
+            - name: Install dependencies
+              run: npm install --prefix scripts || true
+
+            - name: Run Smoke Tests
+              run: npx ts-node scripts/prod_smoke.ts
+              env:
+                  SMOKE_BASE_URL: ${{ github.event.inputs.frontend_url || 'https://consultaion.vercel.app' }}
+                  SMOKE_API_URL: ${{ github.event.inputs.api_url || 'https://consultaion-api.onrender.com' }}
+
+            - name: Notify on failure
+              if: failure()
+              run: |
+                  echo "::error::Production smoke tests failed!"
+                  echo "Check the logs above for details."

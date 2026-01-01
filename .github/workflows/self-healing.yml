@@ -1,0 +1,69 @@
+name: Self-Healing Pipeline
+
+on:
+    # Weekly on Monday at 9am UTC
+    schedule:
+        - cron: "0 9 * * 1"
+
+    # Manual trigger
+    workflow_dispatch:
+        inputs:
+            limit:
+                description: "Number of Sentry issues to fetch"
+                required: false
+                default: "10"
+            dry_run:
+                description: "Dry run (preview without creating PRs)"
+                required: false
+                default: "true"
+                type: choice
+                options:
+                    - "true"
+                    - "false"
+
+jobs:
+    heal:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Install TypeScript
+              run: npm install -g typescript ts-node
+
+            - name: Pull Sentry errors
+              run: npx ts-node scripts/sentry_errors.ts --limit ${{ github.event.inputs.limit || '10' }}
+              env:
+                  SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+                  SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+                  SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+              continue-on-error: true
+
+            - name: Normalize errors
+              run: npx ts-node scripts/normalize_errors.ts
+              continue-on-error: true
+
+            - name: Create PRs (dry run)
+              if: github.event.inputs.dry_run == 'true' || github.event_name == 'schedule'
+              run: npx ts-node scripts/agent_patch_pr.ts --dry-run
+
+            - name: Create PRs (live)
+              if: github.event.inputs.dry_run == 'false'
+              run: npx ts-node scripts/agent_patch_pr.ts
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_OWNER: ${{ github.repository_owner }}
+                  GITHUB_REPO: ${{ github.event.repository.name }}
+
+            - name: Upload PatchTasks artifact
+              uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: patchtasks
+                  path: out/
+                  retention-days: 7
