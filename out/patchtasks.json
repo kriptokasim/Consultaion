@@ -1,0 +1,112 @@
+[
+  {
+    "id": "sentry-84294390",
+    "title": "AppError",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 11,
+    "lastSeen": "2025-12-25T09:32:32.417477Z",
+    "firstSeen": "2025-12-20T15:37:50.940449Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294390/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/auth/google/callback"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84294394",
+    "title": "RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insuffici...",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 6,
+    "lastSeen": "2025-12-20T15:38:13.120202Z",
+    "firstSeen": "2025-12-20T15:37:54.254173Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294394/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84294399",
+    "title": "Seat architect failed in round 1: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details....",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 3,
+    "lastSeen": "2025-12-20T15:38:13.226676Z",
+    "firstSeen": "2025-12-20T15:38:01.224111Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294399/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84294401",
+    "title": "LLM call failed for role Systems Architect: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billin...",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 3,
+    "lastSeen": "2025-12-20T15:38:13.219127Z",
+    "firstSeen": "2025-12-20T15:38:01.217024Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294401/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84295091",
+    "title": "ZeroDivisionError: division by zero",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 1,
+    "lastSeen": "2025-12-20T15:45:11.125780Z",
+    "firstSeen": "2025-12-20T15:45:11.125780Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84295091/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/sentry-debug"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  }
+]

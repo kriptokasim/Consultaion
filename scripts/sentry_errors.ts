@@ -71,7 +71,7 @@ async function fetchSentryIssues(limit: number): Promise<SentryIssue[]> {
     }
 
     const baseUrl = 'https://sentry.io/api/0';
-    const url = `${baseUrl}/projects/${org}/${project}/issues/?query=is:unresolved environment:${env}&statsPeriod=7d&limit=${limit}`;
+    const url = `${baseUrl}/projects/${org}/${project}/issues/?query=is:unresolved&statsPeriod=14d&limit=${limit}`;
 
     console.log(`Fetching issues from Sentry: ${org}/${project} (env: ${env})`);
 

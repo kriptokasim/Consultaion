@@ -1,0 +1,591 @@
+[
+  {
+    "issue": {
+      "id": "84294390",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-2",
+      "title": "AppError",
+      "culprit": "/auth/google/callback",
+      "permalink": "https://consultaion.sentry.io/issues/84294390/",
+      "logger": "main",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "AppError",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": true,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.24030208587646484,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "11",
+      "userCount": 2,
+      "firstSeen": "2025-12-20T15:37:50.940449Z",
+      "lastSeen": "2025-12-25T09:32:32.417477Z",
+      "stats": {
+        "14d": [
+          [
+            1766102400,
+            0
+          ],
+          [
+            1766188800,
+            10
+          ],
+          [
+            1766275200,
+            0
+          ],
+          [
+            1766361600,
+            0
+          ],
+          [
+            1766448000,
+            0
+          ],
+          [
+            1766534400,
+            0
+          ],
+          [
+            1766620800,
+            1
+          ],
+          [
+            1766707200,
+            0
+          ],
+          [
+            1766793600,
+            0
+          ],
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84295091",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-6",
+      "title": "ZeroDivisionError: division by zero",
+      "culprit": "/sentry-debug",
+      "permalink": "https://consultaion.sentry.io/issues/84295091/",
+      "logger": null,
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "division by zero",
+        "type": "ZeroDivisionError",
+        "filename": "main.py",
+        "function": "trigger_error",
+        "in_app_frame_mix": "mixed",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.46983474493026733,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": true,
+      "count": "1",
+      "userCount": 1,
+      "firstSeen": "2025-12-20T15:45:11.125780Z",
+      "lastSeen": "2025-12-20T15:45:11.125780Z",
+      "stats": {
+        "14d": [
+          [
+            1766102400,
+            0
+          ],
+          [
+            1766188800,
+            1
+          ],
+          [
+            1766275200,
+            0
+          ],
+          [
+            1766361600,
+            0
+          ],
+          [
+            1766448000,
+            0
+          ],
+          [
+            1766534400,
+            0
+          ],
+          [
+            1766620800,
+            0
+          ],
+          [
+            1766707200,
+            0
+          ],
+          [
+            1766793600,
+            0
+          ],
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294399",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-4",
+      "title": "Seat architect failed in round 1: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details....",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294399/",
+      "logger": "parliament.engine",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Seat architect failed in round 1: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details....",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.33050116896629333,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "3",
+      "userCount": 1,
+      "firstSeen": "2025-12-20T15:38:01.224111Z",
+      "lastSeen": "2025-12-20T15:38:13.226676Z",
+      "stats": {
+        "14d": [
+          [
+            1766102400,
+            0
+          ],
+          [
+            1766188800,
+            3
+          ],
+          [
+            1766275200,
+            0
+          ],
+          [
+            1766361600,
+            0
+          ],
+          [
+            1766448000,
+            0
+          ],
+          [
+            1766534400,
+            0
+          ],
+          [
+            1766620800,
+            0
+          ],
+          [
+            1766707200,
+            0
+          ],
+          [
+            1766793600,
+            0
+          ],
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294401",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-5",
+      "title": "LLM call failed for role Systems Architect: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billin...",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294401/",
+      "logger": "agents",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "LLM call failed for role Systems Architect: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billin...",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.3192601799964905,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "3",
+      "userCount": 1,
+      "firstSeen": "2025-12-20T15:38:01.217024Z",
+      "lastSeen": "2025-12-20T15:38:13.219127Z",
+      "stats": {
+        "14d": [
+          [
+            1766102400,
+            0
+          ],
+          [
+            1766188800,
+            3
+          ],
+          [
+            1766275200,
+            0
+          ],
+          [
+            1766361600,
+            0
+          ],
+          [
+            1766448000,
+            0
+          ],
+          [
+            1766534400,
+            0
+          ],
+          [
+            1766620800,
+            0
+          ],
+          [
+            1766707200,
+            0
+          ],
+          [
+            1766793600,
+            0
+          ],
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294394",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-3",
+      "title": "RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insuffici...",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294394/",
+      "logger": null,
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}",
+        "type": "RateLimitError",
+        "filename": "openai/_base_client.py",
+        "function": "request",
+        "in_app_frame_mix": "system-only",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75,
+        "title": null
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.22735677659511566,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": true,
+      "count": "6",
+      "userCount": 1,
+      "firstSeen": "2025-12-20T15:37:54.254173Z",
+      "lastSeen": "2025-12-20T15:38:13.120202Z",
+      "stats": {
+        "14d": [
+          [
+            1766102400,
+            0
+          ],
+          [
+            1766188800,
+            6
+          ],
+          [
+            1766275200,
+            0
+          ],
+          [
+            1766361600,
+            0
+          ],
+          [
+            1766448000,
+            0
+          ],
+          [
+            1766534400,
+            0
+          ],
+          [
+            1766620800,
+            0
+          ],
+          [
+            1766707200,
+            0
+          ],
+          [
+            1766793600,
+            0
+          ],
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ]
+        ]
+      }
+    }
+  }
+]
