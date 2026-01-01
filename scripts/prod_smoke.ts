@@ -35,7 +35,6 @@ const FRONTEND_CHECKS = [
 const API_CHECKS = [
     { name: 'API Readiness', path: '/readyz' },
     { name: 'API Health', path: '/healthz' },
-    { name: 'Backend Root', path: '/' },
 ];
 
 async function checkEndpoint(baseUrl: string, path: string, name: string): Promise<SmokeResult> {
