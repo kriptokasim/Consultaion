@@ -26,16 +26,22 @@ export SENTRY_PROJECT="consultaion"
 
 ```bash
 # 1. Pull production errors
-npx ts-node scripts/sentry_errors.ts --limit 20
+npm run sentry:pull
 
 # 2. Normalize to PatchTasks
-npx ts-node scripts/normalize_errors.ts
+npm run sentry:normalize
 
 # 3. Preview PRs (dry run)
-npx ts-node scripts/agent_patch_pr.ts --dry-run
+npm run sentry:patch -- --dry-run
 
 # 4. Create draft PRs
-npx ts-node scripts/agent_patch_pr.ts
+npm run sentry:patch
+```
+
+Or run the full workflow:
+
+```bash
+npm run sentry:workflow
 ```
 
 ## Pipeline Components

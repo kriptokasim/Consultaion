@@ -1,0 +1,19 @@
+{
+    "name": "consultaion",
+    "version": "1.0.0",
+    "private": true,
+    "description": "AI-powered debate platform",
+    "scripts": {
+        "sentry:pull": "npx tsx scripts/sentry_errors.ts --limit 10",
+        "sentry:normalize": "npx tsx scripts/normalize_errors.ts",
+        "sentry:patch": "npx tsx scripts/agent_patch_pr.ts",
+        "sentry:workflow": "npm run sentry:pull && npm run sentry:normalize && npm run sentry:patch --dry-run",
+        "playwright:normalize": "npx tsx scripts/normalize_playwright_failures.ts",
+        "smoke": "npx tsx scripts/prod_smoke.ts"
+    },
+    "devDependencies": {
+        "@types/node": "^20.10.0",
+        "tsx": "^4.7.0",
+        "typescript": "^5.3.0"
+    }
+}

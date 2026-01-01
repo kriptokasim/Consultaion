@@ -43,6 +43,8 @@ jobs:
 
       - name: Normalize errors
         run: npx tsx scripts/normalize_errors.ts
+        env:
+          SENTRY_ERROR_MIN_FREQUENCY: ${{ vars.SENTRY_ERROR_MIN_FREQUENCY || '2' }}
         continue-on-error: true
 
       - name: Create PRs (dry run)

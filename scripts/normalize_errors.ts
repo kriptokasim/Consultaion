@@ -2,7 +2,7 @@
  * Error Normalizer
  * Converts raw Sentry errors into PatchTask JSON format
  * 
- * Usage: npx ts-node scripts/normalize_errors.ts
+ * Usage: npx tsx scripts/normalize_errors.ts [--min-frequency N]
  * 
  * Reads: out/sentry_errors.json
  * Outputs: out/patchtasks.json
@@ -11,6 +11,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { classifyOwnership, classifySeverity, type Area, type Owner, type Severity } from './ownership';
+import { config } from './error-intake.config';
 
 interface SentryIssue {
     id: string;
@@ -132,7 +133,7 @@ function suggestFilesHint(culprit: string, stack: string[]): string[] {
     return Array.from(hints).slice(0, 5);
 }
 
-function normalizeSentryErrors(raw: RawSentryError[]): PatchTask[] {
+function normalizeSentryErrors(raw: RawSentryError[]): { tasks: PatchTask[]; dedupeCount: number } {
     const tasks: PatchTask[] = [];
     const seen = new Set<string>();
 
@@ -184,44 +185,90 @@ function normalizeSentryErrors(raw: RawSentryError[]): PatchTask[] {
         return b.frequency - a.frequency;
     });
 
-    return tasks;
+    return { tasks, dedupeCount: seen.size - tasks.length };
+}
+
+function parseArgs(): { minFrequency: number } {
+    const args = process.argv.slice(2);
+    const minFreqIndex = args.indexOf('--min-frequency');
+    const minFrequency = minFreqIndex !== -1 && args[minFreqIndex + 1]
+        ? parseInt(args[minFreqIndex + 1], 10)
+        : config.minFrequency;
+    return { minFrequency };
 }
 
 async function main() {
     const inputPath = join(process.cwd(), 'out', 'sentry_errors.json');
     const outputPath = join(process.cwd(), 'out', 'patchtasks.json');
+    const { minFrequency } = parseArgs();
 
-    if (!existsSync(inputPath)) {
-        console.error(`❌ Input file not found: ${inputPath}`);
-        console.error(`   Run 'npx ts-node scripts/sentry_errors.ts' first`);
+    try {
+        // Check input file exists
+        if (!existsSync(inputPath)) {
+            console.error(`❌ Input file not found: ${inputPath}`);
+            console.error(`   Run 'npx tsx scripts/sentry_errors.ts' first`);
+            process.exit(1);
+        }
+
+        console.log(`\n📖 Reading Sentry errors from: ${inputPath}`);
+
+        // Read and parse input
+        const content = readFileSync(inputPath, 'utf-8');
+        let raw: RawSentryError[];
+        try {
+            raw = JSON.parse(content);
+        } catch (parseError) {
+            console.error(`❌ Failed to parse input file: ${inputPath}`);
+            console.error(`   Error: ${parseError instanceof Error ? parseError.message : parseError}`);
+            process.exit(1);
+        }
+
+        console.log(`   Found ${raw.length} raw errors`);
+
+        // Normalize errors
+        const { tasks: allTasks } = normalizeSentryErrors(raw);
+        console.log(`   Normalized to ${allTasks.length} PatchTasks (after deduplication)`);
+
+        // Apply frequency filter
+        const beforeCount = allTasks.length;
+        const tasks = allTasks.filter(t => t.frequency >= minFrequency);
+        const filteredOut = beforeCount - tasks.length;
+
+        if (filteredOut > 0) {
+            console.log(`   Filtered out ${filteredOut} low-frequency errors (< ${minFrequency} occurrences)`);
+        }
+        console.log(`   Final count: ${tasks.length} PatchTasks`);
+
+        // Summary by severity
+        const bySeverity = tasks.reduce((acc, t) => {
+            acc[t.severity] = (acc[t.severity] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        console.log(`\n📊 Severity breakdown:`);
+        console.log(`   Blocker: ${bySeverity.blocker || 0}`);
+        console.log(`   High: ${bySeverity.high || 0}`);
+        console.log(`   Medium: ${bySeverity.medium || 0}`);
+        console.log(`   Low: ${bySeverity.low || 0}`);
+
+        // Write output
+        try {
+            mkdirSync(join(process.cwd(), 'out'), { recursive: true });
+            writeFileSync(outputPath, JSON.stringify(tasks, null, 2));
+        } catch (writeError) {
+            console.error(`❌ Failed to write output file: ${outputPath}`);
+            console.error(`   Error: ${writeError instanceof Error ? writeError.message : writeError}`);
+            process.exit(1);
+        }
+
+        console.log(`\n📁 Output written to: ${outputPath}`);
+        console.log(`\n✅ PatchTasks ready for agent consumption!`);
+
+    } catch (error) {
+        console.error(`❌ Unexpected error during normalization:`);
+        console.error(`   ${error instanceof Error ? error.message : error}`);
         process.exit(1);
     }
-
-    console.log(`\n📖 Reading Sentry errors from: ${inputPath}`);
-
-    const raw: RawSentryError[] = JSON.parse(readFileSync(inputPath, 'utf-8'));
-    console.log(`   Found ${raw.length} raw errors`);
-
-    const tasks = normalizeSentryErrors(raw);
-    console.log(`   Normalized to ${tasks.length} PatchTasks (after deduplication)`);
-
-    // Summary by severity
-    const bySeverity = tasks.reduce((acc, t) => {
-        acc[t.severity] = (acc[t.severity] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
-
-    console.log(`\n📊 Severity breakdown:`);
-    console.log(`   Blocker: ${bySeverity.blocker || 0}`);
-    console.log(`   High: ${bySeverity.high || 0}`);
-    console.log(`   Medium: ${bySeverity.medium || 0}`);
-    console.log(`   Low: ${bySeverity.low || 0}`);
-
-    mkdirSync(join(process.cwd(), 'out'), { recursive: true });
-    writeFileSync(outputPath, JSON.stringify(tasks, null, 2));
-
-    console.log(`\n📁 Output written to: ${outputPath}`);
-    console.log(`\n✅ PatchTasks ready for agent consumption!`);
 }
 
 main();

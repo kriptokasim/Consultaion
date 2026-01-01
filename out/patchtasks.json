@@ -86,27 +86,5 @@
       ],
       "notes": "Auto-classified: medium severity guardrail in dashboard"
     }
-  },
-  {
-    "id": "sentry-84295091",
-    "title": "ZeroDivisionError: division by zero",
-    "area": "frontend",
-    "owner": "dashboard",
-    "severity": "medium",
-    "frequency": 1,
-    "lastSeen": "2025-12-20T15:45:11.125780Z",
-    "firstSeen": "2025-12-20T15:45:11.125780Z",
-    "evidence": {
-      "sentryUrl": "https://consultaion.sentry.io/issues/84295091/",
-      "stack": [],
-      "breadcrumbs": []
-    },
-    "expectedFix": {
-      "kind": "guardrail",
-      "filesHint": [
-        "/sentry-debug"
-      ],
-      "notes": "Auto-classified: medium severity guardrail in dashboard"
-    }
   }
 ]

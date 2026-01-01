@@ -48,10 +48,30 @@ npx ts-node scripts/sentry_errors.ts --with-events
 Converts raw Sentry data to PatchTask JSON.
 
 ```bash
-npx ts-node scripts/normalize_errors.ts
+# Basic usage (uses config defaults)
+npx tsx scripts/normalize_errors.ts
+
+# Override minimum frequency threshold
+npx tsx scripts/normalize_errors.ts --min-frequency 3
 ```
 
 **Output**: `out/patchtasks.json`
+
+## Configuration
+
+Configuration is centralized in `scripts/error-intake.config.ts`:
+
+| Option | Default | Environment Variable | Description |
+|--------|---------|---------------------|-------------|
+| `minFrequency` | 2 | `SENTRY_ERROR_MIN_FREQUENCY` | Minimum occurrences to include (filters one-off errors) |
+| `defaultLimit` | 10 | `SENTRY_ERROR_LIMIT` | Default Sentry fetch limit |
+| `defaultSeverities` | `['blocker', 'high']` | - | Severities that trigger PR creation |
+
+**Example**: Only include errors that occurred 3+ times:
+
+```bash
+SENTRY_ERROR_MIN_FREQUENCY=3 npm run sentry:normalize
+```
 
 ## PatchTask Schema
 
