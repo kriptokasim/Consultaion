@@ -2,14 +2,19 @@
  * Sentry Error Fetcher
  * Fetches recent issues from Sentry for analysis and normalization
  * 
- * Usage: npx ts-node scripts/sentry_errors.ts --limit 50
+ * Usage: npx tsx scripts/sentry_errors.ts --limit 50
  * 
- * Environment variables:
+ * Environment variables (loaded from .env or .env.local):
  * - SENTRY_AUTH_TOKEN: Sentry API auth token
  * - SENTRY_ORG: Sentry organization slug
  * - SENTRY_PROJECT: Sentry project slug
  * - SENTRY_ENV: Environment filter (default: production)
  */
+
+import { config } from 'dotenv';
+// Load .env.local first (local overrides), then .env
+config({ path: '.env.local' });
+config({ path: '.env' });
 
 import { writeFileSync } from 'fs';
 import { join } from 'path';
