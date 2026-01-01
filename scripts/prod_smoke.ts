@@ -19,7 +19,7 @@ interface SmokeResult {
 }
 
 const FRONTEND_BASE = process.env.SMOKE_BASE_URL || 'https://consultaion.vercel.app';
-const API_BASE = process.env.SMOKE_API_URL || 'https://consultaion-api.onrender.com';
+const API_BASE = process.env.SMOKE_API_URL || 'https://consultaion.onrender.com';
 
 const FRONTEND_CHECKS = [
     { name: 'Landing Page', path: '/' },

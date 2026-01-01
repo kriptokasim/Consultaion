@@ -11,7 +11,7 @@ on:
       api_url:
         description: "API URL to test"
         required: false
-        default: "https://consultaion-api.onrender.com"
+        default: "https://consultaion.onrender.com"
 
   # Run on successful deploy to main
   deployment_status:
@@ -33,7 +33,7 @@ jobs:
         run: npx tsx scripts/prod_smoke.ts
         env:
           SMOKE_BASE_URL: ${{ github.event.inputs.frontend_url || 'https://consultaion.vercel.app' }}
-          SMOKE_API_URL: ${{ github.event.inputs.api_url || 'https://consultaion-api.onrender.com' }}
+          SMOKE_API_URL: ${{ github.event.inputs.api_url || 'https://consultaion.onrender.com' }}
 
       - name: Notify on failure
         if: failure()
