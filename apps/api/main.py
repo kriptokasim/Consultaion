@@ -124,10 +124,21 @@ ENABLE_SEC_HEADERS = settings.ENABLE_SEC_HEADERS
 
 
 async def csrf_protect(request: Request) -> None:
-    """Optional double-submit CSRF guard for cookie auth."""
+    """Optional double-submit CSRF guard for cookie auth.
+    
+    CSRF protection is skipped when:
+    - Request uses a safe HTTP method
+    - ENABLE_CSRF is False
+    - Request is to auth endpoints (login/register)
+    - Request uses Bearer token auth (Authorization header)
+    """
     if request.method in SAFE_METHODS or not ENABLE_CSRF:
         return
     if request.url.path in {"/auth/login", "/auth/register"}:
+        return
+    # Skip CSRF for Bearer token auth - CSRF attacks only affect cookie auth
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
         return
     csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
     csrf_header = request.headers.get("x-csrf-token") or request.headers.get("X-CSRF-Token")
