@@ -37,6 +37,14 @@ LITELLM_MODEL = settings.LITELLM_MODEL
 LITELLM_API_BASE = settings.LITELLM_API_BASE
 if LITELLM_API_BASE:
     os.environ["LITELLM_API_BASE"] = LITELLM_API_BASE
+
+# Patchset 82.2: Export provider API keys to os.environ for LiteLLM
+# LiteLLM reads API keys from environment variables, not Python settings
+for key in PROVIDER_KEYS:
+    value = getattr(settings, key, None)
+    if value:
+        os.environ[key] = value
+
 _INJECTION_PATTERNS = [r"ignore previous instructions", r"disregard above", r"reveal the system prompt", r"print the system prompt"]
 
 
