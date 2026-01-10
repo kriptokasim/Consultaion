@@ -153,8 +153,8 @@ async def get_debate_timeline(
     debate = require_debate_access(debate, current_user, session)
     if not debate:
         raise NotFoundError(message="Debate not found", code="debate.not_found")
-    if (debate.status or "").lower() not in {"completed", "failed"}:
-        raise AppError(message="Debate not finished", code="debate.not_finished", status_code=409)
+    
+    # Return partial timeline for running debates instead of erroring
     timeline = build_debate_timeline(session, debate)
     return timeline
 
