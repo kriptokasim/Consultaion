@@ -212,6 +212,7 @@
   "auth.register.title": "Hesabını oluştur",
   "auth.register.subtitle": "Kendi çoklu ajan meclisini ayağa kaldır.",
   "auth.register.passwordHelp": "Minimum 8 karakter. Parolalar şifrelenir; asla düz metin olarak saklanmaz.",
+  "auth.register.termsAgreement": "Hesap oluşturarak {termsLink} ve {privacyLink} kabul etmiş olursunuz.",
   "auth.register.termsLink": "Hizmet Şartları",
   "auth.register.privacyLink": "Gizlilik Politikası",
   "auth.register.footer": "Zaten hesabın var mı?",
