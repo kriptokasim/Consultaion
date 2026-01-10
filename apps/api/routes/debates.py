@@ -439,7 +439,7 @@ async def list_debates(
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0, le=10000),
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
     q: Optional[str] = Query(default=None),
 ):
     filters = []
