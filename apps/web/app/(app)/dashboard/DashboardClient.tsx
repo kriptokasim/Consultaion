@@ -109,24 +109,24 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     queryFn: getBillingMe
   });
 
-  // Assuming getMembers returns models/agents
+  // Fetch available AI models from /models/ endpoint
   const { data: modelsData } = useQuery({
-    queryKey: ["members"],
+    queryKey: ["models"],
     queryFn: async () => {
       try {
-        return await apiRequest<{ items: any[] }>({ path: "/config/members", method: "GET" });
+        return await apiRequest<{ models: any[] }>({ path: "/models/", method: "GET" });
       } catch {
-        return { items: [] };
+        return { models: [] };
       }
     }
   });
 
-  const models = (modelsData?.items || []).map((m: any) => ({
+  const models = (modelsData?.models || []).map((m: any) => ({
     id: m.id,
-    display_name: m.name,
+    display_name: m.display_name,
     provider: m.provider,
     tags: m.tags || [],
-    recommended: m.tags?.includes("recommended"),
+    recommended: m.recommended ?? false,
     tier: m.tier || "standard"
   })) as ModelOption[];
 
