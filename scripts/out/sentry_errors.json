@@ -1,0 +1,591 @@
+[
+  {
+    "issue": {
+      "id": "84294394",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-3",
+      "title": "RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insuffici...",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294394/",
+      "logger": null,
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}",
+        "type": "RateLimitError",
+        "filename": "openai/_base_client.py",
+        "function": "request",
+        "in_app_frame_mix": "system-only",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75,
+        "title": null
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.22735677659511566,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": true,
+      "count": "20",
+      "userCount": 2,
+      "firstSeen": "2025-12-20T15:37:54.254173Z",
+      "lastSeen": "2026-01-10T11:13:56.315416Z",
+      "stats": {
+        "14d": [
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            14
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294399",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-4",
+      "title": "Seat risk_officer failed in round 3: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294399/",
+      "logger": "parliament.engine",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Seat risk_officer failed in round 3: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.33050116896629333,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "9",
+      "userCount": 2,
+      "firstSeen": "2025-12-20T15:38:01.224111Z",
+      "lastSeen": "2026-01-10T11:13:48.810293Z",
+      "stats": {
+        "14d": [
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            6
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294401",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-5",
+      "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294401/",
+      "logger": "agents",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.3192601799964905,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "9",
+      "userCount": 2,
+      "firstSeen": "2025-12-20T15:38:01.217024Z",
+      "lastSeen": "2026-01-10T11:13:48.760087Z",
+      "stats": {
+        "14d": [
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            6
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294390",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-2",
+      "title": "AppError",
+      "culprit": "/debates/{debate_id}/timeline",
+      "permalink": "https://consultaion.sentry.io/issues/84294390/",
+      "logger": "main",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "AppError",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": true,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.24030208587646484,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "16",
+      "userCount": 3,
+      "firstSeen": "2025-12-20T15:37:50.940449Z",
+      "lastSeen": "2026-01-10T11:13:19.209586Z",
+      "stats": {
+        "14d": [
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            5
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84295091",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-6",
+      "title": "ZeroDivisionError: division by zero",
+      "culprit": "/sentry-debug",
+      "permalink": "https://consultaion.sentry.io/issues/84295091/",
+      "logger": null,
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "division by zero",
+        "type": "ZeroDivisionError",
+        "filename": "main.py",
+        "function": "trigger_error",
+        "in_app_frame_mix": "mixed",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.46983474493026733,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": true,
+      "count": "1",
+      "userCount": 1,
+      "firstSeen": "2025-12-20T15:45:11.125780Z",
+      "lastSeen": "2025-12-20T15:45:11.125780Z",
+      "stats": {
+        "14d": [
+          [
+            1766880000,
+            0
+          ],
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            0
+          ]
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,90 @@
+[
+  {
+    "id": "sentry-84294394",
+    "title": "RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insuffici...",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 20,
+    "lastSeen": "2026-01-10T11:13:56.315416Z",
+    "firstSeen": "2025-12-20T15:37:54.254173Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294394/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84294390",
+    "title": "AppError",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 16,
+    "lastSeen": "2026-01-10T11:13:19.209586Z",
+    "firstSeen": "2025-12-20T15:37:50.940449Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294390/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates/{debate_id}/timeline"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84294399",
+    "title": "Seat risk_officer failed in round 3: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 9,
+    "lastSeen": "2026-01-10T11:13:48.810293Z",
+    "firstSeen": "2025-12-20T15:38:01.224111Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294399/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84294401",
+    "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 9,
+    "lastSeen": "2026-01-10T11:13:48.760087Z",
+    "firstSeen": "2025-12-20T15:38:01.217024Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294401/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  }
+]
