@@ -14,36 +14,37 @@ export default async function MethodologyPage() {
   ];
   return (
     <main id="main" className="space-y-6 p-4">
-      <header className="rounded-3xl border border-stone-200 bg-gradient-to-br from-white via-amber-50 to-stone-50 p-6 shadow">
+      <header className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-amber-50 to-slate-50 p-6 shadow dark:border-slate-600 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
         <div className="flex items-center gap-3">
           <Brand variant="mark" height={28} />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("methodology.kicker")}</p>
-            <h1 className="text-3xl font-semibold text-stone-900">{t("methodology.title")}</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("methodology.kicker")}</p>
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("methodology.title")}</h1>
           </div>
         </div>
-        <p className="mt-3 max-w-3xl text-sm text-stone-600">{t("methodology.description")}</p>
+        <p className="mt-3 max-w-3xl text-sm text-slate-600 dark:text-slate-300">{t("methodology.description")}</p>
       </header>
-      <section className="space-y-6 rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
+      <section className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-600 dark:bg-slate-800">
         {sections.map((section) => (
           <article key={section.title}>
-            <h2 className="text-xl font-semibold text-stone-900">{section.title}</h2>
-            <p className="mt-2 text-sm text-stone-600" dangerouslySetInnerHTML={{ __html: section.body }} />
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{section.title}</h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: section.body }} />
           </article>
         ))}
       </section>
-      <section className="mt-10 rounded-3xl border border-amber-100/70 bg-white p-6 shadow-[0_16px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/80">
-        <h2 className="text-xl font-semibold text-stone-900 dark:text-amber-50">{t("methodology.section.brand.title")}</h2>
-        <p className="mt-2 text-sm text-stone-600 dark:text-stone-200">{t("methodology.section.brand.body")}</p>
+      <section className="mt-10 rounded-3xl border border-amber-100/70 bg-white p-6 shadow-[0_16px_36px_rgba(112,73,28,0.12)] dark:border-slate-600 dark:bg-slate-800">
+        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{t("methodology.section.brand.title")}</h2>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t("methodology.section.brand.body")}</p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <BrandCell label={t("methodology.section.brand.markStone") } tone="stone" />
-          <BrandCell label={t("methodology.section.brand.markAmber") } tone="amber" />
+          <BrandCell label={t("methodology.section.brand.markStone")} tone="stone" />
+          <BrandCell label={t("methodology.section.brand.markAmber")} tone="amber" />
           <BrandCell label={t("methodology.section.brand.wordmark")} tone="stone" variant="logotype" />
         </div>
       </section>
     </main>
   );
 }
+
 
 function BrandCell({
   label,

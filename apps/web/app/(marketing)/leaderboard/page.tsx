@@ -45,32 +45,32 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
 
   return (
     <main id="main" className="space-y-6 p-4">
-      <header className="rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-50 via-white to-amber-50 p-6 shadow">
+      <header className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-amber-50 p-6 shadow dark:border-slate-600 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
         <div className="flex items-center gap-3">
           <Brand height={32} tone="amber" />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("leaderboard.kicker")}</p>
-            <h1 className="text-3xl font-semibold text-stone-900">{t("leaderboard.title")}</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("leaderboard.kicker")}</p>
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("leaderboard.title")}</h1>
           </div>
         </div>
-        <p className="mt-3 max-w-3xl text-sm text-stone-600">{t("leaderboard.description")}</p>
+        <p className="mt-3 max-w-3xl text-sm text-slate-600 dark:text-slate-300">{t("leaderboard.description")}</p>
       </header>
       {rateLimitNotice ? (
         <RateLimitBanner detail={rateLimitNotice.detail} resetAt={rateLimitNotice.resetAt} />
       ) : null}
-      <section className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-600 dark:bg-slate-800">
         {errorMessage ? (
-          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/50 dark:text-amber-200">
             {errorMessage}
           </div>
         ) : null}
-        <form className="flex flex-wrap items-center gap-4 text-sm text-stone-600" method="get">
+        <form className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-300" method="get">
           <label className="flex items-center gap-2">
             {t("leaderboard.filters.category")}
             <select
               name="category"
               defaultValue={category ?? "all"}
-              className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-900"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
             >
               <option value="all">{t("leaderboard.filters.categoryAll")}</option>
               <option value="">{t("leaderboard.filters.categoryNone")}</option>
@@ -88,7 +88,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
               name="min_matches"
               min={0}
               defaultValue={minMatches || 0}
-              className="w-24 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-900"
+              className="w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-white"
             />
           </label>
           <button
@@ -97,14 +97,14 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           >
             {t("leaderboard.filters.submit")}
           </button>
-          <a href="/methodology" className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+          <a href="/methodology" className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
             {t("leaderboard.filters.methodology")} →
           </a>
         </form>
         <div className="mt-6">
           <LeaderboardTable items={items} />
         </div>
-        <p className="mt-3 text-xs text-stone-500">{t("leaderboard.footer.note")}</p>
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{t("leaderboard.footer.note")}</p>
       </section>
     </main>
   );
