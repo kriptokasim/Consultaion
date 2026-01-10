@@ -244,6 +244,7 @@
   "live.signInRequired": "Canlı oturum başlatmak için giriş yap",
   "live.signInDescription": "Canlı münazaralar anlık akar. Oturumu çağırmak ve istemlerini korumak için giriş yapmalısın.",
   "live.signInCta": "Giriş sayfasına git",
+  "live.start": "Oturumu Başlat",
   "live.startError": "Canlı oturum başlatılamadı. Lütfen tekrar dene.",
   "rateLimit.banner.title": "Oran limiti doldu",
   "rateLimit.banner.resetsPrefix": "Yaklaşık sıfırlanma",
