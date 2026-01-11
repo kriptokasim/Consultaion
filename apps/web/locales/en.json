@@ -660,6 +660,7 @@
   "errors.exportQuotaExceeded.message": "You have reached your daily export limit. Please try again tomorrow or upgrade your plan.",
   "actions.retry": "Try Again",
   "debate.status.success": "Success",
+  "debate.status.running": "Running",
   "debate.status.degraded": "Degraded",
   "debate.status.failed": "Failed",
   "debate.technicalDetails.title": "Technical details (for debugging)",

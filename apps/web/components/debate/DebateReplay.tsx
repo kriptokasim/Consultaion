@@ -121,7 +121,7 @@ export function DebateReplay({ debateId }: Props) {
 
       <div className="space-y-3 rounded-2xl border border-amber-200/70 bg-white/80 p-4 shadow-inner shadow-amber-900/5">
         <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
-          <span>{t("replay.currentRound").replace("{{round}}", String((current.round_index ?? 0) + 1)).replace("{{phase}}", current.type)}</span>
+          <span>{t("replay.currentRound").replace("{{round}}", String(current.round_index || 1)).replace("{{phase}}", current.type)}</span>
           <span>·</span>
           <span>{t("replay.currentSeat").replace("{{role}}", current.role ?? "—").replace("{{provider}}", current.provider ?? "—").replace("{{model}}", current.model ?? "—")}</span>
         </div>

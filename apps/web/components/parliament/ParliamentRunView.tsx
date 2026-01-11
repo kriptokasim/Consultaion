@@ -214,8 +214,8 @@ export default function ParliamentRunView({
                   type="button"
                   onClick={() => scrollToAnswer(entry.persona)}
                   className={`group inline-flex min-w-[9rem] items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm shadow-sm transition ${isChampion
-                      ? "border-amber-500 bg-white text-amber-900 ring-2 ring-amber-200"
-                      : "border-amber-100 bg-white/70 text-stone-800 hover:border-amber-300"
+                    ? "border-amber-500 bg-white text-amber-900 ring-2 ring-amber-200"
+                    : "border-amber-100 bg-white/70 text-stone-800 hover:border-amber-300"
                     }`}
                   aria-label={`View answer from ${entry.persona}`}
                 >
@@ -228,8 +228,8 @@ export default function ParliamentRunView({
                   {typeof entry.score === "number" ? (
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-mono ${isChampion
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-stone-100 text-stone-700"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-stone-100 text-stone-700"
                         }`}
                     >
                       {entry.score.toFixed(2)}
@@ -257,6 +257,7 @@ export default function ParliamentRunView({
                 actor={championActor}
                 text={championText}
                 reasons={championReasons}
+                status={debate?.status}
               />
 
               <a
@@ -286,7 +287,9 @@ export default function ParliamentRunView({
       <SummaryCard title="Model answers" description="Each model’s own answer to the prompt, ordered by their final score.">
         {modelAnswers.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500">
-            No agent messages were recorded for this run.
+            {(debate?.status === "running" || debate?.status === "queued")
+              ? "Debate is running in the background. Events will appear here shortly."
+              : "No agent messages were recorded for this run."}
           </p>
         ) : (
           <div className="space-y-3">
@@ -471,6 +474,7 @@ function ChampionSummary({
   actor,
   text,
   reasons,
+  status,
 }: {
   persona?: string;
   score?: number;
@@ -478,6 +482,7 @@ function ChampionSummary({
   actor?: string;
   text?: string;
   reasons: string[];
+  status?: string;
 }) {
   return (
     <div className="space-y-3">
@@ -524,8 +529,9 @@ function ChampionSummary({
         </div>
       ) : (
         <p className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500">
-          No synthesized final answer was recorded for this run. You can still inspect all individual speeches in the
-          model answers and Hansard transcript below.
+          {(status === "running" || status === "queued")
+            ? "Final synthesis is being prepared..."
+            : "No synthesized final answer was recorded for this run. You can still inspect all individual speeches in the model answers and Hansard transcript below."}
         </p>
       )}
 

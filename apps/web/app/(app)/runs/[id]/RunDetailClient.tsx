@@ -63,6 +63,11 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
   const handleLiveEvent = useCallback(
     (payload: any) => {
       const now = new Date().toISOString();
+      // UX-93: If payload is an array (from hydration), handle it
+      if (Array.isArray(payload)) {
+        payload.forEach(addEvent);
+        return;
+      }
       const normalized = normalizeLivePayload(payload, now);
       if (normalized.length) {
         normalized.forEach(addEvent);
@@ -70,6 +75,26 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     },
     [addEvent]
   );
+
+  // UX-93: Hydration on mount
+  useEffect(() => {
+    if (!id || !base) return;
+
+    // Always fetch timeline to prevent empty state
+    fetch(`${base}/debates/${id}/timeline`)
+      .then(res => {
+        if (!res.ok) return [];
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+          // We might want to clear and replace, or just add. 
+          // For now, addEvent dedups by ID so it's safe.
+          data.forEach(addEvent);
+        }
+      })
+      .catch(err => console.error("Timeline hydration failed", err));
+  }, [id, base, addEvent]);
 
   const handleLiveError = useCallback(() => {
     // handled by sse hook status
@@ -226,7 +251,11 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
   const createdAt = new Date(debate.created_at).toLocaleString();
   const updatedAt = new Date(debate.updated_at).toLocaleString();
 
-  const status = (debate.status || "success").toLowerCase();
+  // Patchset UX-93: Strict status derivation (no optimistic success)
+  const status = (debate.status || "queued").toLowerCase();
+  const isGenericRunning = status === "running" || status === "queued" || status === "scheduled";
+  // Only show SUCCESS if truly completed
+  const isSuccess = status === "completed";
   const isDegraded = status === "degraded";
   const isFailed = status === "failed";
 
@@ -234,13 +263,17 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     ? "bg-red-100 text-red-800 border-red-200"
     : isDegraded
       ? "bg-amber-100 text-amber-800 border-amber-200"
-      : "bg-emerald-100 text-emerald-800 border-emerald-200";
+      : isSuccess
+        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+        : "bg-blue-100 text-blue-800 border-blue-200"; // Blue for running/provisioning
 
   const statusLabel = isFailed
     ? t("debate.status.failed")
     : isDegraded
       ? t("debate.status.degraded")
-      : t("debate.status.success");
+      : isSuccess
+        ? t("debate.status.success")
+        : t("debate.status.running");
 
   // Track debate result state (Patchset 65.A5)
   useEffect(() => {

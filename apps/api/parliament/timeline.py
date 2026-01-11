@@ -52,6 +52,12 @@ def build_debate_timeline(session: Session, debate: Debate) -> List[TimelineEven
                     )
                 )
             
+            # Patchset UX-93: Handle 1-based round indexing preference
+            # If round_idx starts at 1, we use it directly for display
+            display_round = round_idx
+            if round_idx == 0:
+                 display_round = 1
+
             events.append(
                 TimelineEvent(
                     debate_id=debate.id,
@@ -59,7 +65,7 @@ def build_debate_timeline(session: Session, debate: Debate) -> List[TimelineEven
                     ts=ts,
                     type="round_start",
                     round_index=round_idx,
-                    content=f"Round {round_idx + 1} started",
+                    content=f"Round {display_round} started",
                 )
             )
             current_round = round_idx
