@@ -36,6 +36,15 @@ export default defineConfig({
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-seccomp-filter-sandbox"],
     },
   },
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
-  workers: 1,
+  projects: [
+    { name: 'setup', testMatch: /.*\.setup\.ts/ },
+    {
+      name: 'chromium',
+      use: {
+        ...defineConfig({}).use,
+        storageState: 'apps/web/.playwright/.auth/user.json',
+      },
+      dependencies: ['setup'],
+    },
+  ],
 });

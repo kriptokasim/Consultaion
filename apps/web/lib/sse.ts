@@ -132,5 +132,6 @@ export function useEventSource<T = unknown>(
     lastEvent,
     error: lastError,
     close,
+    retryCount: attemptsRef.current
   };
 }

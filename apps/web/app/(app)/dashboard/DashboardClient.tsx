@@ -410,58 +410,71 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
 
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-slate-600 dark:bg-slate-800">
-            <div className="space-y-2">
-              <h3 className="heading-serif text-2xl font-semibold text-slate-900 dark:text-white">{t("dashboard.modal.title")}</h3>
-              <p className="text-sm text-slate-600 dark:text-slate-300">{t("dashboard.modal.description")}</p>
-            </div>
-            <div className="mt-4 space-y-2">
-              <label className="text-sm font-semibold text-slate-900 dark:text-white" htmlFor="prompt">
-                {t("dashboard.modal.questionLabel")}
-              </label>
-              <Textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={t("dashboard.modal.placeholder")}
-                minLength={10}
-                maxLength={5000}
-                className="min-h-[140px] bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
-              />
-              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-                <span>
-                  {prompt.length} {t("dashboard.modal.characters")}
-                </span>
+          <div className="flex flex-col w-full max-w-lg max-h-[85vh] rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-slate-600 dark:bg-slate-800">
+            {/* Header - Fixed */}
+            <div className="flex-shrink-0 p-6 pb-2">
+              <div className="space-y-2">
+                <h3 className="heading-serif text-2xl font-semibold text-slate-900 dark:text-white">{t("dashboard.modal.title")}</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300">{t("dashboard.modal.description")}</p>
               </div>
             </div>
-            <div className="mt-4 space-y-2">
-              <label className="text-sm font-semibold text-slate-900 dark:text-white" htmlFor="model">
-                {t("dashboard.modal.modelLabel")}
-              </label>
-              {modelError ? (
-                <p className="text-sm font-medium text-red-600">{modelError}</p>
-              ) : models.length > 0 ? (
-                <ModelSelector
-                  models={models}
-                  selectedModel={selectedModel}
-                  onSelect={setSelectedModel}
-                  allowedTiers={allowedTiers}
-                />
-              ) : (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-900/50">
-                  <p className="font-medium text-amber-800 dark:text-amber-200">{t("dashboard.errors.noModels")}</p>
-                  <p className="mt-1 text-amber-700 dark:text-amber-300">{t("dashboard.errors.noModelsHint")}</p>
+
+            {/* Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 pt-2">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-900 dark:text-white" htmlFor="prompt">
+                    {t("dashboard.modal.questionLabel")}
+                  </label>
+                  <Textarea
+                    id="prompt"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder={t("dashboard.modal.placeholder")}
+                    minLength={10}
+                    maxLength={5000}
+                    className="min-h-[140px] bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                  />
+                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>
+                      {prompt.length} {t("dashboard.modal.characters")}
+                    </span>
+                  </div>
                 </div>
-              )}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-900 dark:text-white" htmlFor="model">
+                    {t("dashboard.modal.modelLabel")}
+                  </label>
+                  {modelError ? (
+                    <p className="text-sm font-medium text-red-600">{modelError}</p>
+                  ) : models.length > 0 ? (
+                    <ModelSelector
+                      models={models}
+                      selectedModel={selectedModel}
+                      onSelect={setSelectedModel}
+                      allowedTiers={allowedTiers}
+                    />
+                  ) : (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-700 dark:bg-amber-900/50">
+                      <p className="font-medium text-amber-800 dark:text-amber-200">{t("dashboard.errors.noModels")}</p>
+                      <p className="mt-1 text-amber-700 dark:text-amber-300">{t("dashboard.errors.noModelsHint")}</p>
+                    </div>
+                  )}
+                </div>
+                {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+              </div>
             </div>
-            {error ? <p className="mt-2 text-sm font-medium text-red-600">{error}</p> : null}
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
-                {t("dashboard.modal.cancel")}
-              </Button>
-              <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (!selectedModel && models.length > 0)} className="shadow-[0_14px_32px_rgba(59,130,246,0.25)]">
-                {saving ? t("dashboard.modal.creating") : t("dashboard.modal.submit")}
-              </Button>
+
+            {/* Footer - Sticky */}
+            <div className="flex-shrink-0 border-t border-slate-100 bg-white p-6 dark:border-slate-700 dark:bg-slate-800 rounded-b-2xl">
+              <div className="flex items-center justify-end gap-3">
+                <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
+                  {t("dashboard.modal.cancel")}
+                </Button>
+                <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (!selectedModel && models.length > 0)} className="shadow-[0_14px_32px_rgba(59,130,246,0.25)]">
+                  {saving ? t("dashboard.modal.creating") : t("dashboard.modal.submit")}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

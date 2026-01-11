@@ -5,11 +5,33 @@
     "area": "frontend",
     "owner": "dashboard",
     "severity": "medium",
-    "frequency": 20,
-    "lastSeen": "2026-01-10T11:13:56.315416Z",
+    "frequency": 38,
+    "lastSeen": "2026-01-11T15:22:36.915848Z",
     "firstSeen": "2025-12-20T15:37:54.254173Z",
     "evidence": {
       "sentryUrl": "https://consultaion.sentry.io/issues/84294394/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-84294399",
+    "title": "Seat architect failed in round 1: Circuit breaker open for openrouter/openai/gpt-4o-mini (error_rate=100.00%)",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 20,
+    "lastSeen": "2026-01-11T15:22:40.349778Z",
+    "firstSeen": "2025-12-20T15:38:01.224111Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294399/",
       "stack": [],
       "breadcrumbs": []
     },
@@ -44,16 +66,16 @@
     }
   },
   {
-    "id": "sentry-84294399",
-    "title": "Seat risk_officer failed in round 3: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+    "id": "sentry-84294401",
+    "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Pl...",
     "area": "frontend",
     "owner": "dashboard",
     "severity": "medium",
-    "frequency": 9,
-    "lastSeen": "2026-01-10T11:13:48.810293Z",
-    "firstSeen": "2025-12-20T15:38:01.224111Z",
+    "frequency": 15,
+    "lastSeen": "2026-01-11T15:10:04.732447Z",
+    "firstSeen": "2025-12-20T15:38:01.217024Z",
     "evidence": {
-      "sentryUrl": "https://consultaion.sentry.io/issues/84294399/",
+      "sentryUrl": "https://consultaion.sentry.io/issues/84294401/",
       "stack": [],
       "breadcrumbs": []
     },
@@ -66,16 +88,38 @@
     }
   },
   {
-    "id": "sentry-84294401",
-    "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+    "id": "sentry-87773263",
+    "title": "Circuit breaker OPENED for openrouter/anthropic/claude-3-5-sonnet-20240620 (error_rate=100.00% threshold=50.00%)",
     "area": "frontend",
     "owner": "dashboard",
     "severity": "medium",
-    "frequency": 9,
-    "lastSeen": "2026-01-10T11:13:48.760087Z",
-    "firstSeen": "2025-12-20T15:38:01.217024Z",
+    "frequency": 2,
+    "lastSeen": "2026-01-11T15:22:39.340455Z",
+    "firstSeen": "2026-01-11T15:21:08.262245Z",
     "evidence": {
-      "sentryUrl": "https://consultaion.sentry.io/issues/84294401/",
+      "sentryUrl": "https://consultaion.sentry.io/issues/87773263/",
+      "stack": [],
+      "breadcrumbs": []
+    },
+    "expectedFix": {
+      "kind": "guardrail",
+      "filesHint": [
+        "/debates"
+      ],
+      "notes": "Auto-classified: medium severity guardrail in dashboard"
+    }
+  },
+  {
+    "id": "sentry-87773292",
+    "title": "Circuit breaker OPENED for openrouter/openai/gpt-4o-mini (error_rate=100.00% threshold=50.00%)",
+    "area": "frontend",
+    "owner": "dashboard",
+    "severity": "medium",
+    "frequency": 2,
+    "lastSeen": "2026-01-11T15:22:36.925253Z",
+    "firstSeen": "2026-01-11T15:21:15.450267Z",
+    "evidence": {
+      "sentryUrl": "https://consultaion.sentry.io/issues/87773292/",
       "stack": [],
       "breadcrumbs": []
     },

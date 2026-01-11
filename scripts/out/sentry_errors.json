@@ -1,6 +1,342 @@
 [
   {
     "issue": {
+      "id": "84294399",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-4",
+      "title": "Seat architect failed in round 1: Circuit breaker open for openrouter/openai/gpt-4o-mini (error_rate=100.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294399/",
+      "logger": "parliament.engine",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Seat architect failed in round 1: Circuit breaker open for openrouter/openai/gpt-4o-mini (error_rate=100.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.33050116896629333,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "20",
+      "userCount": 2,
+      "firstSeen": "2025-12-20T15:38:01.224111Z",
+      "lastSeen": "2026-01-11T15:22:40.349778Z",
+      "stats": {
+        "14d": [
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            6
+          ],
+          [
+            1768089600,
+            11
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "87773263",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-9",
+      "title": "Circuit breaker OPENED for openrouter/anthropic/claude-3-5-sonnet-20240620 (error_rate=100.00% threshold=50.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/87773263/",
+      "logger": "parliament.provider_health",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Circuit breaker OPENED for openrouter/anthropic/claude-3-5-sonnet-20240620 (error_rate=100.00% threshold=50.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "2",
+      "userCount": 1,
+      "firstSeen": "2026-01-11T15:21:08.262245Z",
+      "lastSeen": "2026-01-11T15:22:39.340455Z",
+      "stats": {
+        "14d": [
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            0
+          ],
+          [
+            1768089600,
+            2
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "87773292",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-A",
+      "title": "Circuit breaker OPENED for openrouter/openai/gpt-4o-mini (error_rate=100.00% threshold=50.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/87773292/",
+      "logger": "parliament.provider_health",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Circuit breaker OPENED for openrouter/openai/gpt-4o-mini (error_rate=100.00% threshold=50.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "2",
+      "userCount": 1,
+      "firstSeen": "2026-01-11T15:21:15.450267Z",
+      "lastSeen": "2026-01-11T15:22:36.925253Z",
+      "stats": {
+        "14d": [
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            0
+          ],
+          [
+            1768089600,
+            2
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
       "id": "84294394",
       "shareId": null,
       "shortId": "PYTHON-FASTAPI-3",
@@ -54,16 +390,12 @@
       "seerFixabilityScore": 0.22735677659511566,
       "seerAutofixLastTriggered": null,
       "isUnhandled": true,
-      "count": "20",
+      "count": "38",
       "userCount": 2,
       "firstSeen": "2025-12-20T15:37:54.254173Z",
-      "lastSeen": "2026-01-10T11:13:56.315416Z",
+      "lastSeen": "2026-01-11T15:22:36.915848Z",
       "stats": {
         "14d": [
-          [
-            1766880000,
-            0
-          ],
           [
             1766966400,
             0
@@ -115,6 +447,10 @@
           [
             1768003200,
             14
+          ],
+          [
+            1768089600,
+            18
           ]
         ]
       }
@@ -122,17 +458,17 @@
   },
   {
     "issue": {
-      "id": "84294399",
+      "id": "87773204",
       "shareId": null,
-      "shortId": "PYTHON-FASTAPI-4",
-      "title": "Seat risk_officer failed in round 3: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+      "shortId": "PYTHON-FASTAPI-8",
+      "title": "ProgrammingError: (psycopg.errors.InvalidSqlStatementName) prepared statement \"_pg3_0\" does not exist",
       "culprit": "/debates",
-      "permalink": "https://consultaion.sentry.io/issues/84294399/",
-      "logger": "parliament.engine",
+      "permalink": "https://consultaion.sentry.io/issues/87773204/",
+      "logger": "orchestrator",
       "level": "error",
       "status": "unresolved",
       "statusDetails": {},
-      "substatus": "ongoing",
+      "substatus": "new",
       "isPublic": false,
       "platform": "python",
       "project": {
@@ -141,9 +477,13 @@
         "slug": "python-fastapi",
         "platform": "python-fastapi"
       },
-      "type": "default",
+      "type": "error",
       "metadata": {
-        "title": "Seat risk_officer failed in round 3: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+        "value": "(psycopg.errors.InvalidSqlStatementName) prepared statement \"_pg3_0\" does not exist\n[SQL: SELECT debate.id AS debate_id, debate.prompt AS debate_prompt, debate.status AS debate_status, debate.config AS debate_config, debate.panel_config AS debate_panel_config, debate.engine_version AS debate_engine_version, debate.model_id AS debate_model_id, debate.created_at AS debate_created_at, debate.updated_at AS debate_updated_at, debate.final_content AS debate_final_content, debate.final_meta AS debate_final_meta, debate.user_id AS debate_user_id, debate.team_id AS debate_team_id, debate.routed_model AS debate_routed_model, debate.routing_policy AS debate_routing_policy, debate.routing_meta AS debate_routing_meta, debate.mode AS debate_mode, debate.runner_id AS debate_runner_id, debate.lease_expires_at AS debate_lease_expires_at, debate.last_heartbeat_at AS debate_last_heartbeat_at, debate.run_attempt AS debate_run_attempt \nFROM debate \nWHERE debate.id = %(pk_1)s::VARCHAR]\n[parameters: {'pk_1': '2f671d72-f89f-4aa4-...",
+        "type": "ProgrammingError",
+        "filename": "orchestrator.py",
+        "function": "run_debate",
+        "in_app_frame_mix": "mixed",
         "sdk": {
           "name": "sentry.python.fastapi",
           "name_normalized": "sentry.python"
@@ -151,35 +491,25 @@
         "initial_priority": 75
       },
       "numComments": 0,
-      "assignedTo": {
-        "type": "team",
-        "id": "4510567771471952",
-        "name": "consultaion"
-      },
+      "assignedTo": null,
       "isBookmarked": false,
-      "isSubscribed": true,
-      "subscriptionDetails": {
-        "reason": "assigned"
-      },
+      "isSubscribed": false,
+      "subscriptionDetails": null,
       "hasSeen": false,
       "annotations": [],
       "issueType": "error",
       "issueCategory": "error",
       "priority": "high",
       "priorityLockedAt": null,
-      "seerFixabilityScore": 0.33050116896629333,
+      "seerFixabilityScore": null,
       "seerAutofixLastTriggered": null,
       "isUnhandled": false,
-      "count": "9",
-      "userCount": 2,
-      "firstSeen": "2025-12-20T15:38:01.224111Z",
-      "lastSeen": "2026-01-10T11:13:48.810293Z",
+      "count": "1",
+      "userCount": 1,
+      "firstSeen": "2026-01-11T15:20:29.214676Z",
+      "lastSeen": "2026-01-11T15:20:29.214676Z",
       "stats": {
         "14d": [
-          [
-            1766880000,
-            0
-          ],
           [
             1766966400,
             0
@@ -230,7 +560,11 @@
           ],
           [
             1768003200,
-            6
+            0
+          ],
+          [
+            1768089600,
+            1
           ]
         ]
       }
@@ -241,7 +575,7 @@
       "id": "84294401",
       "shareId": null,
       "shortId": "PYTHON-FASTAPI-5",
-      "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+      "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Pl...",
       "culprit": "/debates",
       "permalink": "https://consultaion.sentry.io/issues/84294401/",
       "logger": "agents",
@@ -259,7 +593,7 @@
       },
       "type": "default",
       "metadata": {
-        "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: LLM Provider NOT provided. Pass in the LLM provider you are trying to call. You passed model=claude-3-5-sonnet",
+        "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Pl...",
         "sdk": {
           "name": "sentry.python.fastapi",
           "name_normalized": "sentry.python"
@@ -286,16 +620,12 @@
       "seerFixabilityScore": 0.3192601799964905,
       "seerAutofixLastTriggered": null,
       "isUnhandled": false,
-      "count": "9",
+      "count": "15",
       "userCount": 2,
       "firstSeen": "2025-12-20T15:38:01.217024Z",
-      "lastSeen": "2026-01-10T11:13:48.760087Z",
+      "lastSeen": "2026-01-11T15:10:04.732447Z",
       "stats": {
         "14d": [
-          [
-            1766880000,
-            0
-          ],
           [
             1766966400,
             0
@@ -347,6 +677,124 @@
           [
             1768003200,
             6
+          ],
+          [
+            1768089600,
+            6
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "87618915",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-7",
+      "title": "Error: Request failed: 502",
+      "culprit": "Page Server Component (/(app)/analytics)",
+      "permalink": "https://consultaion.sentry.io/issues/87618915/",
+      "logger": null,
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "node",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "Request failed: 502",
+        "type": "Error",
+        "filename": "app:///_next/server/app/(app)/analytics/page.js",
+        "function": "h",
+        "in_app_frame_mix": "mixed",
+        "sdk": {
+          "name": "sentry.javascript.nextjs",
+          "name_normalized": "sentry.javascript.nextjs"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": true,
+      "count": "1",
+      "userCount": 0,
+      "firstSeen": "2026-01-10T11:29:00.577000Z",
+      "lastSeen": "2026-01-10T11:29:00.577000Z",
+      "stats": {
+        "14d": [
+          [
+            1766966400,
+            0
+          ],
+          [
+            1767052800,
+            0
+          ],
+          [
+            1767139200,
+            0
+          ],
+          [
+            1767225600,
+            0
+          ],
+          [
+            1767312000,
+            0
+          ],
+          [
+            1767398400,
+            0
+          ],
+          [
+            1767484800,
+            0
+          ],
+          [
+            1767571200,
+            0
+          ],
+          [
+            1767657600,
+            0
+          ],
+          [
+            1767744000,
+            0
+          ],
+          [
+            1767830400,
+            0
+          ],
+          [
+            1767916800,
+            0
+          ],
+          [
+            1768003200,
+            1
+          ],
+          [
+            1768089600,
+            0
           ]
         ]
       }
@@ -409,10 +857,6 @@
       "stats": {
         "14d": [
           [
-            1766880000,
-            0
-          ],
-          [
             1766966400,
             0
           ],
@@ -463,6 +907,10 @@
           [
             1768003200,
             5
+          ],
+          [
+            1768089600,
+            0
           ]
         ]
       }
@@ -529,10 +977,6 @@
       "stats": {
         "14d": [
           [
-            1766880000,
-            0
-          ],
-          [
             1766966400,
             0
           ],
@@ -582,6 +1026,10 @@
           ],
           [
             1768003200,
+            0
+          ],
+          [
+            1768089600,
             0
           ]
         ]

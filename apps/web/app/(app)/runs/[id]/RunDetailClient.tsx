@@ -30,7 +30,7 @@ type RunDetailClientProps = {
 };
 
 export default function RunDetailClient({ id }: RunDetailClientProps) {
-  const { data: debate, isLoading, error } = useDebate(id);
+  const { data: debate, isLoading, error, isProvisioning } = useDebate(id);
   const {
     events,
     addEvent,
@@ -47,6 +47,13 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     setActiveDebate(id);
     return () => reset();
   }, [id, setActiveDebate, reset]);
+
+  // Track provisioning telemetry
+  useEffect(() => {
+    if (isProvisioning) {
+      trackEvent("debate_provisioning_start", { debateId: id });
+    }
+  }, [isProvisioning, id]);
 
   const base = DEFAULT_API_URL.replace(/\/$/, '');
   const streamUrl = `${base}/debates/${id}/stream`;
@@ -68,7 +75,7 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     // handled by sse hook status
   }, []);
 
-  const { status: streamStatus } = useEventSource<any>(shouldStream ? streamUrl : null, {
+  const { status: streamStatus, retryCount } = useEventSource<any>(shouldStream ? streamUrl : null, {
     enabled: !!shouldStream,
     withCredentials: true,
     onEvent: handleLiveEvent,
@@ -78,6 +85,34 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
   useEffect(() => {
     setConnectionStatus(streamStatus);
   }, [streamStatus, setConnectionStatus]);
+
+  // Fallback Polling Logic (Patchset UX-92)
+  const isSSEUnstable = streamStatus === 'reconnecting' && (retryCount || 0) > 2;
+  const isSSEFailed = streamStatus === 'closed' && shouldStream; // or 'error' if we had that state
+  const shouldPoll = shouldStream && (isSSEUnstable || isSSEFailed);
+
+  useEffect(() => {
+    if (!shouldPoll) return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`${base}/debates/${id}/timeline`);
+        if (!res.ok) return;
+        const data = await res.json();
+        // We assume timeline returns the full list of events.
+        // We need to diff or simply replace if the store allows.
+        // For now, let's just feed new events if we can blindly add them (dedup logic is in store)
+        if (Array.isArray(data)) {
+          data.forEach(addEvent);
+        }
+      } catch (err) {
+        console.error("Polling failed", err);
+      }
+    };
+
+    const timer = setInterval(poll, 3000); // 3s polling
+    return () => clearInterval(timer);
+  }, [shouldPoll, base, id, addEvent]);
 
   // Use the extracted voting hook
   const { eventScores, judgeVotes, voteBasis, voteStats } = useDebateVoting({
@@ -164,12 +199,24 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     [seatDefinitions, latestSpeaker, tokensUsed]
   );
 
-  if (error) {
+  if (error && !isProvisioning) {
     throw error; // Let error boundary handle it
   }
 
-  if (isLoading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  if (isLoading || isProvisioning) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center space-y-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-amber-200 border-t-amber-600" />
+        <div className="text-center">
+          <p className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+            {isProvisioning ? (t("dashboard.modal.provisioning") || "Creating debate...") : (t("dashboard.modal.loading") || "Loading debate...")}
+          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {isProvisioning ? "Provisioning AI agents..." : "Waiting for backend..."}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (!debate) {
@@ -236,7 +283,7 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
           <span>Updated {updatedAt}</span>
           {connectionStatus !== 'idle' && connectionStatus !== 'connected' && (
             <span className="text-amber-600 font-bold animate-pulse">
-              {connectionStatus === 'reconnecting' ? 'Reconnecting...' : 'Disconnected'}
+              {shouldPoll ? 'Polling (SSE unstable)' : connectionStatus === 'reconnecting' ? 'Reconnecting...' : 'Disconnected'}
             </span>
           )}
         </div>
