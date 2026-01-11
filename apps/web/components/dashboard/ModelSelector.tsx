@@ -101,16 +101,16 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
                         </span>
 
                         {/* Content */}
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                                <p
-                                    className={cn(
-                                        "text-sm font-semibold truncate",
-                                        isSelected ? "text-amber-900" : "text-[#3a2a1a]"
-                                    )}
-                                >
-                                    {model.display_name}
-                                </p>
+                        <div className="flex-1 min-w-0 text-left">
+                            <p
+                                className={cn(
+                                    "text-sm font-semibold leading-tight mb-1.5",
+                                    isSelected ? "text-amber-900" : "text-[#3a2a1a]"
+                                )}
+                            >
+                                {model.display_name}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
                                 {model.recommended && (
                                     <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
                                         {t("dashboard.modal.recommendedTag")}
@@ -122,7 +122,7 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
                                     </span>
                                 )}
                             </div>
-                            <p className="mt-0.5 text-xs text-stone-500">
+                            <p className="text-xs text-stone-500">
                                 {getCapabilityLabel(model, t)}
                             </p>
                         </div>
