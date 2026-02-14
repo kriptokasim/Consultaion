@@ -266,8 +266,22 @@ async def google_callback(
         raise ValidationError(message="Invalid OAuth state", code="auth.invalid_state")
 
     client_id, client_secret, redirect_url = _google_config()
-    token_data = await _exchange_code_for_token(code, client_id, client_secret, redirect_url)
-    profile = await _fetch_google_profile(token_data["access_token"])
+    try:
+        token_data = await _exchange_code_for_token(code, client_id, client_secret, redirect_url)
+        profile = await _fetch_google_profile(token_data["access_token"])
+    except AuthError:
+        raise  # re-raise our own errors as-is
+    except Exception as exc:
+        logger.warning(
+            "Google OAuth network error",
+            extra={"error": str(exc), "ip": ip},
+            exc_info=True,
+        )
+        raise AuthError(
+            message="Google authentication temporarily unavailable",
+            code="auth.google_network_error",
+            status_code=502,
+        ) from exc
     email = profile.get("email", "").strip().lower()
     if not email:
         raise ValidationError(message="Missing email from Google profile", code="auth.missing_email")

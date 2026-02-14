@@ -386,6 +386,9 @@ app.include_router(votes_router)
 
 @app.get("/sentry-debug")
 async def trigger_error():
+    if settings.ENV != "local":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
     division_by_zero = 1 / 0
 
 
