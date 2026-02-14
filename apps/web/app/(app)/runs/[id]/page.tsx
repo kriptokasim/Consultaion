@@ -14,6 +14,6 @@ export default async function RunDetailPage(props: RunDetailProps) {
     notFound();
   }
 
-  return <RunDetailClient id={id} />;
+  return <RunDetailClient />;
 }
 

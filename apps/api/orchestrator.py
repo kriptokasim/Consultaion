@@ -278,28 +278,41 @@ async def _run_mock_debate(
     ]
     usage_snapshot = usage_tracker.snapshot()
     backend = get_sse_backend()
-    await backend.publish(channel_id, {"type": "message", "round": 0, "candidates": []})
+    backend = get_sse_backend()
+    await backend.publish(channel_id, {
+        "type": "message", 
+        "round": 0, 
+        "payload": {"candidates": []}
+    })
+    
     await backend.publish(
         channel_id,
         {
             "type": "score",
-            "scores": mock_scores,
-            "judges": [
-                {"persona": score["persona"], "judge": "FastJudge", "score": score["score"], "rationale": score["rationale"]}
-                for score in mock_scores
-            ],
+            "round": 0,
+            "payload": {
+                "scores": mock_scores,
+                "judges": [
+                    {"persona": score["persona"], "judge": "FastJudge", "score": score["score"], "rationale": score["rationale"]}
+                    for score in mock_scores
+                ],
+            }
         }
     )
+    
     await backend.publish(
         channel_id,
         {
             "type": "final",
-            "content": "Fast debate completed.",
-            "meta": {
-                "scores": mock_scores,
-                "ranking": [entry["persona"] for entry in mock_scores],
-                "usage": usage_snapshot,
-            },
+            "round": 0,
+            "payload": {
+                "content": "Fast debate completed.",
+                "meta": {
+                    "scores": mock_scores,
+                    "ranking": [entry["persona"] for entry in mock_scores],
+                    "usage": usage_snapshot,
+                },
+            }
         }
     )
     await _complete_debate_record(
@@ -347,9 +360,12 @@ async def _run_draft_round(
             channel_id,
             {
                 "type": "notice",
-                "level": "warn",
-                "debate_id": debate_id,
-                "message": f"{len(failures)} seat(s) failed during drafting",
+                "round": 1,
+                "payload": {
+                    "level": "warn",
+                    "debate_id": debate_id,
+                    "message": f"{len(failures)} seat(s) failed during drafting",
+                }
             },
         )
 
@@ -359,7 +375,7 @@ async def _run_draft_round(
     await _persist_messages(debate_id, 1, candidates, role="candidate")
     await _end_round(draft_round)
     backend = get_sse_backend()
-    await backend.publish(channel_id, {"type": "message", "round": 1, "candidates": candidates})
+    await backend.publish(channel_id, {"type": "message", "round": 1, "payload": {"candidates": candidates}})
     logger.debug("Debate %s: produced %d candidates", debate_id, len(candidates))
     return candidates
 
@@ -380,7 +396,7 @@ async def _run_critique_round(
     await _persist_messages(debate_id, 2, revised, role="revised")
     await _end_round(critique_round)
     backend = get_sse_backend()
-    await backend.publish(channel_id, {"type": "message", "round": 2, "revised": revised})
+    await backend.publish(channel_id, {"type": "message", "round": 2, "payload": {"revised": revised}})
     logger.debug("Debate %s: critique round completed", debate_id)
     return revised
 
@@ -416,7 +432,7 @@ async def _run_judge_round(
     
     await _end_round(judge_round)
     backend = get_sse_backend()
-    await backend.publish(channel_id, {"type": "score", "round": 3, "scores": aggregate_scores, "judges": judge_details})
+    await backend.publish(channel_id, {"type": "score", "round": 3, "payload": {"scores": aggregate_scores, "judges": judge_details}})
     ranking, vote_details = _compute_rankings(aggregate_scores)
     logger.debug("Debate %s: judges completed with %d entries", debate_id, len(judge_details))
     
@@ -451,7 +467,7 @@ async def run_debate(
     judge_configs = config.judges or default_judges()
     budget = config.budget
     backend = get_sse_backend()
-    await backend.publish(channel_id, {"type": "round_started", "round": 0, "note": "plan"})
+    await backend.publish(channel_id, {"type": "notice", "round": 0, "payload": {"message": "Debate run started", "note": "plan"}})
 
     usage_tracker = UsageAccumulator()
     debate_user_id: str | None = None
@@ -531,9 +547,12 @@ async def run_debate(
                 channel_id,
                 {
                     "type": "final",
+                    "round": 0,
                     "debate_id": debate_id,
-                    "content": result.final_answer,
-                    "meta": result.final_meta,
+                    "payload": {
+                        "content": result.final_answer,
+                        "meta": result.final_meta,
+                    }
                 },
             )
             return
@@ -562,10 +581,13 @@ async def run_debate(
                 await backend.publish(
                     channel_id,
                     {
-                        "type": "debate_failed",
+                        "type": "error",
                         "debate_id": debate_id,
-                        "reason": panel_result.error_reason or "seat_failure_threshold_exceeded",
-                        "meta": final_meta,
+                        "round": 0,
+                        "payload": {
+                            "reason": panel_result.error_reason or "seat_failure_threshold_exceeded",
+                            "meta": final_meta,
+                        }
                     },
                 )
                 return
@@ -574,8 +596,11 @@ async def run_debate(
                 {
                     "type": "final",
                     "debate_id": debate_id,
-                    "content": panel_result.final_answer,
-                    "meta": final_meta,
+                    "round": 0,
+                    "payload": {
+                        "content": panel_result.final_answer,
+                        "meta": final_meta,
+                    }
                 },
             )
             return
@@ -632,7 +657,7 @@ async def run_debate(
 
         await backend.publish(
             channel_id,
-            {"type": "error", "debate_id": debate_id, "message": str(exc)},
+            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": str(exc)}},
         )
 
     finally:

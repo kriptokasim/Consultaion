@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List
 
-from models import Debate, Message
+from models import Debate, Message, Score, Vote
 from sqlmodel import Session, select
 
 from parliament.schemas import TimelineEvent
@@ -13,138 +13,142 @@ def build_debate_timeline(session: Session, debate: Debate) -> List[TimelineEven
     """Build a normalized timeline suitable for replay."""
     events: list[TimelineEvent] = []
 
-    # 1. Initial System Notice
+    # 1. Fetch all related data
+    messages = session.exec(
+        select(Message).where(Message.debate_id == debate.id).order_by(Message.created_at.asc())
+    ).all()
+    
+    scores = session.exec(
+        select(Score).where(Score.debate_id == debate.id).order_by(Score.created_at.asc())
+    ).all()
+    
+    votes = session.exec(
+        select(Vote).where(Vote.debate_id == debate.id).order_by(Vote.created_at.asc())
+    ).all()
+
+    # 2. System Init
     events.append(
         TimelineEvent(
+            id=f"sys_init_{debate.id}",
             debate_id=debate.id,
-            event_id=f"system:init:{debate.id}",
             ts=debate.created_at or datetime.now(timezone.utc),
-            type="system_notice",
-            content=f"Debate initialized: {debate.prompt}",
-            meta={"topic": debate.prompt},
+            type="notice",
+            round=0,
+            payload={
+                "message": f"Debate initialized: {debate.prompt}",
+                "topic": debate.prompt,
+                "level": "info"
+            }
         )
     )
 
-    # 2. Process Messages
-    rows = session.exec(
-        select(Message).where(Message.debate_id == debate.id).order_by(Message.created_at.asc())
-    ).all()
-
-    current_round = -1
-    
-    for row in rows:
-        ts = row.created_at or datetime.now(timezone.utc)
-        meta = row.meta or {}
-        round_idx = meta.get("round_index") or row.round_index or 0
+    # 3. Process Messages
+    # Group by rounds if needed, but here we just map directly
+    for msg in messages:
+        ts = msg.created_at or datetime.now(timezone.utc)
+        meta = msg.meta or {}
         
-        # Emit round start if needed
-        if round_idx > current_round:
-            # Close previous round if any (simplified logic, assumes sequential rounds)
-            if current_round >= 0:
-                 events.append(
-                    TimelineEvent(
-                        debate_id=debate.id,
-                        event_id=f"round:{current_round}:end",
-                        ts=ts, # Approximate end time as start of next event
-                        type="round_end",
-                        round_index=current_round,
-                        content=f"Round {current_round + 1} ended",
-                    )
-                )
+        # Determine strict type
+        evt_type = "message"
+        if msg.role == "seat":
+            evt_type = "seat_message"
+        elif msg.role == "system":
+            evt_type = "notice"
             
-            # Patchset UX-93: Handle 1-based round indexing preference
-            # If round_idx starts at 1, we use it directly for display
-            display_round = round_idx
-            if round_idx == 0:
-                 display_round = 1
-
-            events.append(
-                TimelineEvent(
-                    debate_id=debate.id,
-                    event_id=f"round:{round_idx}:start",
-                    ts=ts,
-                    type="round_start",
-                    round_index=round_idx,
-                    content=f"Round {display_round} started",
-                )
-            )
-            current_round = round_idx
-
-        # Seat Messages
-        if row.role == "seat":
-            seat_id = meta.get("seat_id") or row.persona or "unknown"
-            events.append(
-                TimelineEvent(
-                    debate_id=debate.id,
-                    event_id=f"msg:{row.id}",
-                    ts=ts,
-                    type="seat_message",
-                    round_index=round_idx,
-                    seat_id=str(seat_id),
-                    seat_label=row.persona, # Use persona name as label
-                    role=meta.get("role_profile") or row.role,
-                    provider=meta.get("provider"),
-                    model=meta.get("model"),
-                    stance=meta.get("stance"),
-                    content=row.content,
-                    meta=meta,
-                )
-            )
-        # System/Notice Messages (if stored as messages)
-        elif row.role == "system":
-             events.append(
-                TimelineEvent(
-                    debate_id=debate.id,
-                    event_id=f"sys:{row.id}",
-                    ts=ts,
-                    type="system_notice",
-                    content=row.content,
-                    meta=meta,
-                )
-            )
-
-    # Close final round
-    if current_round >= 0:
+        payload = {
+            "text": msg.content,
+            "role": msg.role,
+            "persona": msg.persona,
+            **meta
+        }
+        
+        # Normalize seat fields
+        if evt_type == "seat_message":
+            payload["seat_id"] = meta.get("seat_id")
+            payload["seat_name"] = msg.persona
+        
         events.append(
             TimelineEvent(
+                id=f"msg_{msg.id}",
                 debate_id=debate.id,
-                event_id=f"round:{current_round}:end",
-                ts=datetime.now(timezone.utc), # Use current time or last msg time
-                type="round_end",
-                round_index=current_round,
-                content=f"Round {current_round + 1} ended",
+                ts=ts,
+                type=evt_type,
+                round=msg.round_index,
+                seat=msg.persona if msg.role == "seat" else None,
+                payload=payload
             )
         )
 
-    # 3. Terminal Event
-    status = (debate.status or "").lower()
-    if status == "failed":
-        failure_reason = None
-        if isinstance(debate.final_meta, dict):
-            failure_reason = (debate.final_meta.get("failure") or {}).get("reason") or debate.final_meta.get("error")
-        
+    # 4. Process Scores
+    for score in scores:
         events.append(
             TimelineEvent(
+                id=f"score_{score.id}",
                 debate_id=debate.id,
-                event_id=f"system:failed:{debate.id}",
+                ts=score.created_at,
+                type="score",
+                round=0, # Scores usually valid for the whole debate or specific round if we tracked it
+                seat=score.persona,
+                payload={
+                    "judge": score.judge,
+                    "score": score.score,
+                    "rationale": score.rationale,
+                    "persona": score.persona
+                }
+            )
+        )
+
+    # 5. Process Votes
+    for vote in votes:
+        events.append(
+            TimelineEvent(
+                id=f"vote_{vote.id}",
+                debate_id=debate.id,
+                ts=vote.created_at,
+                type="vote",
+                round=0,
+                payload={
+                    "method": vote.method,
+                    "rankings": vote.rankings,
+                    "result": vote.result
+                }
+            )
+        )
+
+    # 6. Terminal Event
+    status = (debate.status or "").lower()
+    if status == "failed":
+        failure_meta = debate.final_meta or {}
+        events.append(
+            TimelineEvent(
+                id=f"sys_failed_{debate.id}",
+                debate_id=debate.id,
                 ts=debate.updated_at or datetime.now(timezone.utc),
-                type="debate_failed",
-                content="Debate failed",
-                meta={"reason": failure_reason} if failure_reason else {},
+                type="error",
+                round=0,
+                payload={
+                    "message": "Debate failed",
+                    "reason": failure_meta.get("error") or "Unknown error",
+                    **failure_meta
+                }
             )
         )
     elif status == "completed":
         events.append(
             TimelineEvent(
+                id=f"sys_done_{debate.id}",
                 debate_id=debate.id,
-                event_id=f"system:completed:{debate.id}",
                 ts=debate.updated_at or datetime.now(timezone.utc),
-                type="debate_completed",
-                content="Debate completed successfully",
+                type="final",
+                round=0,
+                payload={
+                    "content": debate.final_content or "",
+                    "meta": debate.final_meta or {}
+                }
             )
         )
 
-    # Ensure all timestamps are timezone-aware
+    # Ensure timezones
     for event in events:
         if event.ts.tzinfo is None:
             event.ts = event.ts.replace(tzinfo=timezone.utc)

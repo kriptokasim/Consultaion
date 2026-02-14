@@ -46,23 +46,10 @@ class DebateSnapshot(BaseModel):
 
 
 class TimelineEvent(BaseModel):
+    id: str = Field(..., description="Unique event identifier (ULID or UUID).")
     debate_id: str
-    event_id: str
     ts: datetime
-    type: Literal[
-        "system_notice",
-        "seat_message",
-        "round_start",
-        "round_end",
-        "debate_failed",
-        "debate_completed",
-    ]
-    round_index: Optional[int] = None
-    seat_id: Optional[str] = None
-    seat_label: Optional[str] = None
-    role: Optional[str] = None
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    stance: Optional[str] = None
-    content: Optional[str] = None
-    meta: dict[str, Any] = Field(default_factory=dict)
+    type: str = Field(..., description="Event type (message, score, vote, notice, etc).")
+    round: int = Field(default=0, description="Round index.")
+    seat: Optional[str] = Field(default=None, description="Seat ID or name if applicable.")
+    payload: dict[str, Any] = Field(default_factory=dict, description="Event-specific data.")
