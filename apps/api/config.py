@@ -293,13 +293,21 @@ class AppSettings(BaseSettings):
             object.__setattr__(self, "COOKIE_SECURE", True)
             object.__setattr__(self, "COOKIE_SAMESITE", "none")
             # Auto-derive COOKIE_DOMAIN from WEB_APP_ORIGIN for cross-subdomain cookies
+            # Auto-derive COOKIE_DOMAIN from WEB_APP_ORIGIN for cross-subdomain cookies
             if not self.COOKIE_DOMAIN:
                 from urllib.parse import urlparse
                 parsed = urlparse(self.WEB_APP_ORIGIN or "")
                 host = parsed.hostname or ""
                 parts = host.split(".")
+                # Patchset 105: Ensure we capture the root domain for subdomains
+                # e.g., web.consultaion.com -> .consultaion.com
                 if len(parts) >= 2:
-                    object.__setattr__(self, "COOKIE_DOMAIN", "." + ".".join(parts[-2:]))
+                    # Logic: if >= 2 parts, use last two (e.g. consultaion.com) prefixed with dot
+                    # This works for .com, .net, etc. Be careful with .co.uk if needed, but for now simple 2-part
+                    self.COOKIE_DOMAIN = "." + ".".join(parts[-2:])
+                else:
+                    # Localhost or single name
+                    self.COOKIE_DOMAIN = None
         
         # Production secret validation
         if not is_local:

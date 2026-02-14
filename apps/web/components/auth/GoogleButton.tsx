@@ -2,7 +2,7 @@
 
 import { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
-import { apiUrl } from "@/lib/config/runtime";
+
 
 type GoogleButtonProps = {
   nextPath?: string;
@@ -12,7 +12,9 @@ type GoogleButtonProps = {
 
 export default function GoogleButton({ nextPath = "/dashboard", label = "Continue with Google", className, ...props }: GoogleButtonProps) {
   const handleClick = () => {
-    const target = apiUrl(`/auth/google/login?next=${encodeURIComponent(nextPath)}`);
+    // Patchset 105: Use relative path to ensure we stay on same origin (web.consultaion.com)
+    // and let Next.js rewrite handle the proxy to backend.
+    const target = `/api/auth/google/login?next=${encodeURIComponent(nextPath)}`;
     if (typeof window !== "undefined") {
       window.location.href = target;
     }

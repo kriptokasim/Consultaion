@@ -66,6 +66,24 @@ def get_or_create_usage(db: Session, user_id: UserID, period: Optional[str] = No
 def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) -> None:
     if settings.ENV == "test":
         return
+
+    # Patchset 103: Owner override
+    from models import User
+    from security.owner import is_owner
+    
+    # We need to fetch the user to check ownership. 
+    # This adds a DB query but is necessary for the check.
+    # Optimization: could cache owner status or use ID allowlist if we didn't want DB hit, 
+    # but email allowlist requires user object.
+    user = db.get(User, _normalize_user_id(user_id))
+    if is_owner(user) and settings.OWNER_UNLIMITED:
+        import logging
+        logging.getLogger(__name__).info(
+            "owner_override_applied",
+            extra={"user_id": str(user_id), "email": getattr(user, "email", None), "override_type": "billing_quota_bypass"}
+        )
+        return
+
     plan = get_active_plan(db, user_id)
     limits: Dict[str, object] = plan.limits or {}
 
@@ -154,6 +172,18 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
     from exceptions import RateLimitError
     
     if settings.ENV == "test":
+        return
+
+    # Patchset 103: Owner override
+    from models import User
+    from security.owner import is_owner
+    user = db.get(User, _normalize_user_id(user_id))
+    if is_owner(user) and settings.OWNER_UNLIMITED:
+        import logging
+        logging.getLogger(__name__).info(
+            "owner_override_applied",
+            extra={"user_id": str(user_id), "email": getattr(user, "email", None), "override_type": "export_quota_bypass"}
+        )
         return
         
     plan = get_active_plan(db, user_id)

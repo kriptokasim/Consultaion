@@ -2,6 +2,7 @@ import logging
 import secrets
 from typing import Any, Optional
 from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
+import time
 
 import httpx
 from audit import record_audit
@@ -209,8 +210,16 @@ async def google_login(request: Request, response: Response) -> Response:
         record_429(ip, request.url.path)
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
     client_id, _, redirect_url = _google_config()
-    state = secrets.token_urlsafe(16)
-    next_param = sanitize_next_path(request.query_params.get("next"))
+    # Patchset 105: Use robust server-side state store
+    from security.state_store import state_store
+    
+    state_meta = {
+        "next": next_param,
+        "created_at": time.time(),
+        "ip": ip,
+    }
+    state = state_store.create_state(state_meta, ttl=600)
+    
     query = urlencode(
         {
             "client_id": client_id,
@@ -223,26 +232,8 @@ async def google_login(request: Request, response: Response) -> Response:
             "state": state,
         }
     )
-    redirect = RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{query}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
-    redirect.set_cookie(
-        key=OAUTH_STATE_COOKIE,
-        value=state,
-        httponly=True,
-        secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE,
-        max_age=600,
-        path="/auth/google",
-    )
-    redirect.set_cookie(
-        key=OAUTH_NEXT_COOKIE,
-        value=next_param,
-        httponly=True,
-        secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE,
-        max_age=600,
-        path="/auth/google",
-    )
-    return redirect
+    # No cookies needed for state!
+    return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{query}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.get("/auth/google/callback")
@@ -261,9 +252,19 @@ async def google_callback(
 
     if not code or not state:
         raise ValidationError(message="Missing code or state", code="auth.missing_params")
-    state_cookie = request.cookies.get(OAUTH_STATE_COOKIE)
-    if not state_cookie or state_cookie != state:
-        raise ValidationError(message="Invalid OAuth state", code="auth.invalid_state")
+    
+    # Patchset 105: Consume state from store
+    from security.state_store import state_store
+    state_meta = state_store.consume_state(state)
+    
+    if not state_meta:
+        logger.warning(f"OAuth invalid state: {state[:8]}... IP={ip}")
+        raise ValidationError(message="Invalid OAuth state (expired or mismatch)", code="auth.invalid_state")
+        
+    # Optional: Validate IP binding? strict binding can be tricky with mobile/proxies, let's skip strict IP check for now 
+    # unless extreme security required.
+    
+    next_param = state_meta.get("next")
 
     client_id, client_secret, redirect_url = _google_config()
     try:
@@ -309,7 +310,7 @@ async def google_callback(
         )
     
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
-    redirect_target = sanitize_next_path(request.cookies.get(OAUTH_NEXT_COOKIE))
+    redirect_target = sanitize_next_path(next_param)
     
     # Append token to redirect URL for fallback auth
     target_url = build_frontend_redirect(redirect_target)
@@ -338,8 +339,9 @@ async def google_callback(
     
     if ENABLE_CSRF:
         set_csrf_cookie(redirect_resp, generate_csrf_token())
-    redirect_resp.delete_cookie(OAUTH_STATE_COOKIE, path="/auth/google")
-    redirect_resp.delete_cookie(OAUTH_NEXT_COOKIE, path="/auth/google")
+    
+    # State cookie cleanup no longer needed as we didn't set it.
+    
     record_audit(
         audit_action,
         user_id=user.id,

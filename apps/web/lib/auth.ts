@@ -1,7 +1,8 @@
 import { apiRequest } from "@/lib/apiClient";
 import { API_ORIGIN } from "@/lib/config/runtime";
 
-const API_BASE = API_ORIGIN;
+// Patchset 105: Use relative /api path on client to ensure cookie consistency
+const API_BASE = typeof window === 'undefined' ? API_ORIGIN : "/api";
 
 async function buildHeaders(init?: HeadersInit): Promise<Headers> {
   const headers = new Headers(init);
