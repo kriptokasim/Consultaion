@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
+import { API_ORIGIN } from "@/lib/config/runtime";
 
 type ExportButtonProps = {
   debateId: string;
@@ -12,7 +13,7 @@ type ExportButtonProps = {
 export default function ExportButton({ debateId, apiBase, onBillingLimit }: ExportButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const base = apiBase || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const base = apiBase || API_ORIGIN;
   const { pushToast } = useToast();
 
   const handleExport = async () => {

@@ -1,12 +1,9 @@
 import { apiRequest } from "@/lib/apiClient";
 import { fetchWithAuth } from "@/lib/auth";
 import type { PanelConfigPayload } from "@/lib/panels";
+import { API_ORIGIN } from "@/lib/config/runtime";
 
-// Use /api prefix in browser (proxied by Vercel to Render)
-const API =
-  typeof window !== 'undefined' && process.env.NODE_ENV === 'production'
-    ? '/api'
-    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API = API_ORIGIN;
 
 type ListParams = {
   status?: string;

@@ -4,6 +4,8 @@
     "private": true,
     "description": "AI-powered debate platform",
     "scripts": {
+        "lint:urls": "npx tsx scripts/check_no_hardcoded_urls.ts",
+        "lint:urls:full": "npx tsx scripts/check_no_hardcoded_urls.ts --profile full",
         "sentry:pull": "npx tsx scripts/sentry_errors.ts --limit 10",
         "sentry:normalize": "npx tsx scripts/normalize_errors.ts",
         "sentry:patch": "npx tsx scripts/agent_patch_pr.ts",

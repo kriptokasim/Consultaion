@@ -48,7 +48,7 @@ const data = await res.json();
                         https://api.consultaion.ai
                     </div>
                     <p className="mt-2 text-sm text-[#5a4a3a]">
-                        Local development: <code className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">http://localhost:8000</code>
+                        Local development: set <code className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">NEXT_PUBLIC_API_URL</code> in <code className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">.env.local</code>
                     </p>
                 </section>
 

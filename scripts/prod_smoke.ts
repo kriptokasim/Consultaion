@@ -5,8 +5,8 @@
  * Usage: npx ts-node scripts/prod_smoke.ts
  * 
  * Environment variables:
- * - SMOKE_BASE_URL: Production URL (default: https://consultaion.vercel.app)
- * - SMOKE_API_URL: Production API URL (default: https://consultaion-api.onrender.com)
+ * - SMOKE_BASE_URL: Production URL (required, e.g. https://web.consultaion.com)
+ * - SMOKE_API_URL: Production API URL (required, e.g. https://api.consultaion.com)
  */
 
 interface SmokeResult {
@@ -18,8 +18,8 @@ interface SmokeResult {
     error?: string;
 }
 
-const FRONTEND_BASE = process.env.SMOKE_BASE_URL || 'https://consultaion.vercel.app';
-const API_BASE = process.env.SMOKE_API_URL || 'https://consultaion.onrender.com';
+const FRONTEND_BASE = process.env.SMOKE_BASE_URL || (() => { throw new Error('SMOKE_BASE_URL env var is required'); })();
+const API_BASE = process.env.SMOKE_API_URL || (() => { throw new Error('SMOKE_API_URL env var is required'); })();
 
 const FRONTEND_CHECKS = [
     { name: 'Landing Page', path: '/' },

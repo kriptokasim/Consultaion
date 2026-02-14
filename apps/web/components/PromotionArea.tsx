@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { API_ORIGIN } from "@/lib/config/runtime";
 
 interface PromotionItem {
   id: string;
@@ -12,7 +13,7 @@ interface PromotionItem {
   cta_url?: string | null;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = API_ORIGIN;
 
 export function PromotionArea({ location }: { location: string }) {
   const [promos, setPromos] = useState<PromotionItem[]>([]);

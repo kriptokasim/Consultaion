@@ -15,6 +15,7 @@ import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
 import { useI18n } from "@/lib/i18n/client"
 import { BrandWordmark } from "@/components/brand"
+import { API_ORIGIN } from "@/lib/config/runtime"
 
 // NOTE: Marketing-only routes (pricing, leaderboard, hall-of-fame, models, methodology)
 // live under (marketing) and are not linked from the authenticated sidebar to avoid
@@ -49,7 +50,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
   const [profile, setProfile] = useState<CurrentUserProfile | null>(hasInitialProfile ? initialProfile ?? null : null)
   const [loadingProfile, setLoadingProfile] = useState(!hasInitialProfile)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  const apiBase = API_ORIGIN
   const { t } = useI18n()
 
   useEffect(() => {

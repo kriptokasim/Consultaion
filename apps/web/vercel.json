@@ -1,18 +1,8 @@
 {
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://consultaion.onrender.com/:path*"
-    }
-  ],
   "headers": [
     {
       "source": "/api/:path*",
       "headers": [
-        {
-          "key": "X-Forwarded-Host",
-          "value": "consultaion.vercel.app"
-        },
         {
           "key": "X-Forwarded-Proto",
           "value": "https"

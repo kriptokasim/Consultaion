@@ -2,8 +2,9 @@
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/client"
+import { API_ORIGIN } from "@/lib/config/runtime"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const API_BASE = API_ORIGIN
 
 type AdminUser = {
   id: string

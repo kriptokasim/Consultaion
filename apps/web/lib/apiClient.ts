@@ -1,9 +1,6 @@
-// Use /api prefix in browser (proxied by Vercel to Render)
-// In SSR or local dev, use full URL
-const API_BASE_URL =
-  typeof window !== 'undefined' && process.env.NODE_ENV === 'production'
-    ? '/api'  // Browser production: use Vercel proxy
-    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_ORIGIN } from "@/lib/config/runtime";
+
+const API_BASE_URL = API_ORIGIN;
 
 export class ApiClientError extends Error {
   status?: number;

@@ -5,13 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       frontend_url:
-        description: "Frontend URL to test"
-        required: false
-        default: "https://consultaion.vercel.app"
+        description: "Frontend URL to test (required)"
+        required: true
       api_url:
-        description: "API URL to test"
-        required: false
-        default: "https://consultaion.onrender.com"
+        description: "API URL to test (required)"
+        required: true
 
   # Run on successful deploy to main
   deployment_status:
@@ -32,8 +30,8 @@ jobs:
       - name: Run Smoke Tests
         run: npx tsx scripts/prod_smoke.ts
         env:
-          SMOKE_BASE_URL: ${{ github.event.inputs.frontend_url || 'https://consultaion.vercel.app' }}
-          SMOKE_API_URL: ${{ github.event.inputs.api_url || 'https://consultaion.onrender.com' }}
+          SMOKE_BASE_URL: ${{ github.event.inputs.frontend_url }}
+          SMOKE_API_URL: ${{ github.event.inputs.api_url }}
 
       - name: Notify on failure
         if: failure()

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { apiRequest } from "@/lib/apiClient"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
+import { API_ORIGIN } from "@/lib/config/runtime"
 
 type ProfileResponse = {
   id: string
@@ -15,7 +16,7 @@ type ProfileResponse = {
   timezone?: string | null
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const API_BASE = API_ORIGIN
 
 const TIMEZONES = ["UTC", "Europe/Istanbul", "Europe/Brussels", "America/New_York", "Asia/Singapore", "Australia/Sydney"]
 

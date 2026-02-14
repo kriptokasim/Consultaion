@@ -11,6 +11,7 @@ import AnimatedCounter from "@/components/ui/AnimatedCounter";
 import { MarketingHero } from "@/components/hero/marketing-hero";
 import { trackEvent } from "@/lib/analytics";
 import { SocialProof } from "@/components/landing/SocialProof";
+import { API_ORIGIN } from "@/lib/config/runtime";
 
 const featureCards = [
   {
@@ -45,7 +46,7 @@ export default function HomeContent() {
 
   useEffect(() => {
     let cancelled = false;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const apiBase = API_ORIGIN;
     fetch(`${apiBase}/me`, { credentials: "include", cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {

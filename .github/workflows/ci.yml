@@ -7,6 +7,35 @@ on:
     branches: [main]
 
 jobs:
+  url-scan:
+    name: Hardcoded URL Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install root deps
+        run: npm ci
+      - name: Scan for hardcoded URLs
+        run: npm run lint:urls
+
+  url-scan-full:
+    name: Full Hardcoded Domain Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install root deps
+        run: npm ci
+      - name: Full scan for prod domains
+        run: npm run lint:urls:full
+
   backend-test:
     runs-on: ubuntu-latest
     defaults:

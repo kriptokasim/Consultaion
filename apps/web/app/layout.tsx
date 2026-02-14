@@ -4,6 +4,7 @@ import { I18nProvider, loadMessages, resolveLocale } from '@/lib/i18n/provider'
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
   title: 'Consultaion',
   description: 'AI Parliament for multi-agent deliberation',
   icons: {

@@ -2,6 +2,7 @@
 
 import { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
+import { apiUrl } from "@/lib/config/runtime";
 
 type GoogleButtonProps = {
   nextPath?: string;
@@ -10,10 +11,8 @@ type GoogleButtonProps = {
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 export default function GoogleButton({ nextPath = "/dashboard", label = "Continue with Google", className, ...props }: GoogleButtonProps) {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
   const handleClick = () => {
-    const target = `${apiBase}/auth/google/login?next=${encodeURIComponent(nextPath)}`;
+    const target = apiUrl(`/auth/google/login?next=${encodeURIComponent(nextPath)}`);
     if (typeof window !== "undefined") {
       window.location.href = target;
     }

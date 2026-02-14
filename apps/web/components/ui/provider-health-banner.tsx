@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { API_ORIGIN } from "@/lib/config/runtime";
 
 interface ProviderStatus {
     provider: string;
@@ -32,7 +33,7 @@ export function ProviderHealthBanner({
 
     const fetchHealth = async () => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+            const apiBase = API_ORIGIN;
             const response = await fetch(`${apiBase}/api/health/providers`, {
                 credentials: "include",
             });
@@ -141,7 +142,7 @@ export function useProviderHealth() {
     useEffect(() => {
         const check = async () => {
             try {
-                const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+                const apiBase = API_ORIGIN;
                 const response = await fetch(`${apiBase}/api/health/providers`, {
                     credentials: "include",
                 });

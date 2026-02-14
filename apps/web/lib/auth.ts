@@ -1,10 +1,7 @@
 import { apiRequest } from "@/lib/apiClient";
+import { API_ORIGIN } from "@/lib/config/runtime";
 
-// Use /api prefix in browser (proxied by Vercel to Render)
-const API_BASE =
-  typeof window !== 'undefined' && process.env.NODE_ENV === 'production'
-    ? '/api'
-    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = API_ORIGIN;
 
 async function buildHeaders(init?: HeadersInit): Promise<Headers> {
   const headers = new Headers(init);

@@ -32,7 +32,20 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/:path*`,
+      },
+    ];
+  },
+  async headers() {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const { hostname } = new URL(appUrl);
+    return [
+      {
+        source: "/api/:path*",
+        headers: [
+          { key: "X-Forwarded-Host", value: hostname },
+          { key: "X-Forwarded-Proto", value: "https" },
+        ],
       },
     ];
   },
