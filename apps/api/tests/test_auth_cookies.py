@@ -34,6 +34,9 @@ def test_production_env_cookie_settings():
     os.environ["ENV"] = "production"
     os.environ["RENDER"] = "true"
     os.environ["JWT_SECRET"] = "production-test-secret-at-least-32-characters-long"
+    os.environ["STRIPE_WEBHOOK_VERIFY"] = "0"  # Not testing Stripe in this test
+    os.environ["REDIS_URL"] = "redis://localhost:6379/0"  # Dummy — prod requires redis
+    os.environ["REQUIRE_REAL_LLM"] = "0"  # No provider keys in test
     
     # Force reload
     from config import settings

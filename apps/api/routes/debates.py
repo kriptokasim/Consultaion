@@ -740,11 +740,22 @@ async def export_scores_csv(
 @router.get("/debates/{debate_id}/stream")
 async def stream_events(
     debate_id: str,
+    request: Request,
+    token: Optional[str] = Query(default=None, description="JWT for EventSource auth fallback"),
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
-    require_debate_access(session.get(Debate, debate_id), current_user, session)
+    # Resolve user: cookie/Bearer first, then query token fallback
+    # (EventSource API cannot set Authorization header, so token param is needed)
+    from auth import get_optional_user, resolve_user_from_token
+    user = get_optional_user(request=request, session=session)
+    if not user and token:
+        user = resolve_user_from_token(token, session)
+    if not user:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    require_debate_access(session.get(Debate, debate_id), user, session)
     channel_id = debate_channel_id(debate_id)
     await sse_backend.create_channel(channel_id)
     track_metric("sse_stream_open")
@@ -755,10 +766,17 @@ async def stream_events(
             if event.get("type") == "final":
                 break
 
+    # Explicit CORS headers — CORSMiddleware does not reliably inject on streaming responses
+    allowed_origin = settings.WEB_APP_ORIGIN or "*"
     return StreamingResponse(
         eventgen(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": allowed_origin,
+            "Access-Control-Allow-Credentials": "true",
+        },
     )
 
 

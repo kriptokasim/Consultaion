@@ -26,6 +26,8 @@ def track_metric(name: str, value: int = 1) -> None:
 
 
 def serialize_user(user: User) -> dict[str, Any]:
+    from security.owner import is_owner
+    from plan_config import resolve_plan_for_user
     return {
         "id": user.id,
         "email": user.email,
@@ -36,6 +38,8 @@ def serialize_user(user: User) -> dict[str, Any]:
         "is_admin": bool(getattr(user, "is_admin", False) or user.role == "admin"),
         "is_active": getattr(user, "is_active", True),
         "email_summaries_enabled": getattr(user, "email_summaries_enabled", False),
+        "plan": resolve_plan_for_user(user),
+        "is_owner": is_owner(user),
     }
 
 

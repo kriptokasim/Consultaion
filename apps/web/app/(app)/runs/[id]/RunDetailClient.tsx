@@ -81,7 +81,7 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     if (!id || !base) return;
 
     // Always fetch timeline to prevent empty state
-    fetch(`${base}/debates/${id}/timeline`)
+    fetch(`${base}/debates/${id}/timeline`, { credentials: 'include' })
       .then(res => {
         if (!res.ok) return [];
         return res.json();
@@ -111,22 +111,19 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
     setConnectionStatus(streamStatus);
   }, [streamStatus, setConnectionStatus]);
 
-  // Fallback Polling Logic (Patchset UX-92)
-  const isSSEUnstable = streamStatus === 'reconnecting' && (retryCount || 0) > 2;
-  const isSSEFailed = streamStatus === 'closed' && shouldStream; // or 'error' if we had that state
-  const shouldPoll = shouldStream && (isSSEUnstable || isSSEFailed);
+  // Fallback Polling Logic — always-on safety net alongside SSE
+  // Polls whenever debate is not completed, regardless of SSE status
+  const shouldPoll = shouldStream;
+  const isSSEDegraded = streamStatus === 'reconnecting' && (retryCount || 0) > 2;
 
   useEffect(() => {
     if (!shouldPoll) return;
 
     const poll = async () => {
       try {
-        const res = await fetch(`${base}/debates/${id}/timeline`);
+        const res = await fetch(`${base}/debates/${id}/timeline`, { credentials: 'include' });
         if (!res.ok) return;
         const data = await res.json();
-        // We assume timeline returns the full list of events.
-        // We need to diff or simply replace if the store allows.
-        // For now, let's just feed new events if we can blindly add them (dedup logic is in store)
         if (Array.isArray(data)) {
           data.forEach(addEvent);
         }
@@ -135,9 +132,11 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
       }
     };
 
-    const timer = setInterval(poll, 3000); // 3s polling
+    // More aggressive polling when SSE is degraded
+    const interval = isSSEDegraded ? 2000 : 5000;
+    const timer = setInterval(poll, interval);
     return () => clearInterval(timer);
-  }, [shouldPoll, base, id, addEvent]);
+  }, [shouldPoll, isSSEDegraded, base, id, addEvent]);
 
   // Use the extracted voting hook
   const { eventScores, judgeVotes, voteBasis, voteStats } = useDebateVoting({
@@ -316,7 +315,11 @@ export default function RunDetailClient({ id }: RunDetailClientProps) {
           <span>Updated {updatedAt}</span>
           {connectionStatus !== 'idle' && connectionStatus !== 'connected' && (
             <span className="text-amber-600 font-bold animate-pulse">
-              {shouldPoll ? 'Polling (SSE unstable)' : connectionStatus === 'reconnecting' ? 'Reconnecting...' : 'Disconnected'}
+              {isSSEDegraded
+                ? 'Live updates degraded — syncing every 2s'
+                : connectionStatus === 'reconnecting'
+                  ? 'Reconnecting…'
+                  : 'Disconnected'}
             </span>
           )}
         </div>

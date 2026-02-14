@@ -13,7 +13,7 @@ export type UseEventSourceOptions<T> = {
   onError?: (event: Event) => void;
 };
 
-const DEFAULT_RETRY = [1000, 2000, 5000, 10000];
+const DEFAULT_RETRY = [2000, 4000, 8000, 15000];
 
 export function useEventSource<T = unknown>(
   url: string | null,
@@ -30,6 +30,7 @@ export function useEventSource<T = unknown>(
   const [status, setStatus] = useState<SSEStatus>(!url || !enabled ? "idle" : "connecting");
   const [lastEvent, setLastEvent] = useState<T | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptsRef = useRef(0);
@@ -83,6 +84,7 @@ export function useEventSource<T = unknown>(
           return;
         }
         attemptsRef.current = 0;
+        setRetryCount(0);
         setStatus("connected");
         setLastError(null);
       };
@@ -110,6 +112,7 @@ export function useEventSource<T = unknown>(
         }
 
         attemptsRef.current += 1;
+        setRetryCount(attemptsRef.current);
         const delay = retryDelays[Math.min(attemptsRef.current - 1, retryDelays.length - 1)];
 
         clearRetryTimer();
@@ -132,6 +135,6 @@ export function useEventSource<T = unknown>(
     lastEvent,
     error: lastError,
     close,
-    retryCount: attemptsRef.current
+    retryCount,
   };
 }

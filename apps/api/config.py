@@ -43,6 +43,18 @@ class AppSettings(BaseSettings):
     RETAIN_SUPPORT_NOTES_DAYS: int | None = None  # Indefinite by default
     RETAIN_USAGE_STATS_DAYS: int = 365
 
+    # Owner override (Patchset 103)
+    OWNER_EMAIL_ALLOWLIST: str = ""   # comma-separated emails
+    OWNER_PLAN: str = "pro"
+    OWNER_UNLIMITED: bool = False
+
+    @property
+    def owner_emails(self) -> list[str]:
+        """Parse comma-separated allowlist into normalized email list."""
+        if not self.OWNER_EMAIL_ALLOWLIST:
+            return []
+        return [e.strip().lower() for e in self.OWNER_EMAIL_ALLOWLIST.split(",") if e.strip()]
+
     RATE_LIMIT_BACKEND: Literal["redis", "memory"] | None = None
     
     # Production Rate Limits (stricter for public users)
@@ -280,6 +292,14 @@ class AppSettings(BaseSettings):
             object.__setattr__(self, "ENABLE_SEC_HEADERS", True)
             object.__setattr__(self, "COOKIE_SECURE", True)
             object.__setattr__(self, "COOKIE_SAMESITE", "none")
+            # Auto-derive COOKIE_DOMAIN from WEB_APP_ORIGIN for cross-subdomain cookies
+            if not self.COOKIE_DOMAIN:
+                from urllib.parse import urlparse
+                parsed = urlparse(self.WEB_APP_ORIGIN or "")
+                host = parsed.hostname or ""
+                parts = host.split(".")
+                if len(parts) >= 2:
+                    object.__setattr__(self, "COOKIE_DOMAIN", "." + ".".join(parts[-2:]))
         
         # Production secret validation
         if not is_local:

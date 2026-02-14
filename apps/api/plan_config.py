@@ -77,6 +77,7 @@ def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
     
     Rules:
     - If user is None (anonymous): return "free"
+    - If user is in owner allowlist: return OWNER_PLAN (Patchset 103)
     - Otherwise: return user.plan (which defaults to "free" in model)
     
     Args:
@@ -87,6 +88,17 @@ def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
     """
     if user is None:
         return "free"
+
+    from security.owner import is_owner
+    if is_owner(user):
+        import logging
+        from config import settings
+        logging.getLogger(__name__).info(
+            "owner_override_applied",
+            extra={"user_id": user.id, "email": user.email, "override_type": "plan"},
+        )
+        return settings.OWNER_PLAN
+
     return getattr(user, "plan", "free") or "free"
 
 

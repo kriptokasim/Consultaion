@@ -102,7 +102,11 @@ def decode_access_token(token: str) -> Dict[str, Any]:
         ) from exc
 
 
-def _resolve_user_from_token(token: Optional[str], session: Session) -> Optional[User]:
+def resolve_user_from_token(token: Optional[str], session: Session) -> Optional[User]:
+    """Resolve a user from a JWT token string.
+    
+    Used by cookie auth, Bearer header auth, and SSE query-param token auth.
+    """
     if not token:
         return None
     try:
@@ -127,7 +131,7 @@ def get_optional_user(
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[7:]
-    return _resolve_user_from_token(token, session)
+    return resolve_user_from_token(token, session)
 
 
 def get_current_user(

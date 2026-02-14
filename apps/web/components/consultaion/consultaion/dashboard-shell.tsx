@@ -120,9 +120,16 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
   }
 
   const handleLogout = async () => {
-    await logout()
+    try {
+      await logout()
+    } catch (e) {
+      console.error("Logout API call failed", e)
+    }
     setProfile(null)
-    window.location.href = "/login"
+    if (typeof window !== "undefined") {
+      localStorage.clear()
+      window.location.href = "/"
+    }
   }
 
   const navItems = BASE_NAV_LINKS.map((item) => ({

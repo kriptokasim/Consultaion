@@ -223,6 +223,18 @@ def check_quota(
     Raises:
         QuotaExceededError: If quota would be exceeded
     """
+    # Patchset 103: Owner unlimited bypass
+    if user is not None:
+        from security.owner import is_owner
+        from config import settings as _settings
+        if is_owner(user) and _settings.OWNER_UNLIMITED:
+            import logging
+            logging.getLogger(__name__).info(
+                "owner_override_applied",
+                extra={"user_id": user.id, "email": user.email, "override_type": "quota"},
+            )
+            return  # bypass all quota checks
+
     from plan_config import get_plan_limits, resolve_plan_for_user
     
     plan_name = resolve_plan_for_user(user)
