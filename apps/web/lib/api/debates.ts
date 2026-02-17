@@ -21,5 +21,20 @@ export async function fetchDebateTimeline(debateId: string): Promise<DebateTimel
   if (!res.ok) {
     throw new Error("Failed to fetch timeline");
   }
-  return res.json();
+  const rawEvents = await res.json();
+
+  // Map backend format to frontend flattened format
+  return rawEvents.map((e: any) => {
+    const payload = e.payload || {};
+    return {
+      ...e,
+      content: payload.text || payload.content || payload.message,
+      seat_label: payload.seat_name || payload.seat_id,
+      role: payload.role,
+      provider: payload.provider,
+      model: payload.model,
+      stance: payload.stance,
+      meta: payload
+    };
+  });
 }
