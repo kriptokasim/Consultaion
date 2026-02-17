@@ -182,6 +182,7 @@
   "demo.scenarios.productroadmap.description": "Product team prioritizing next quarter initiatives",
   "demo.tags.strategy": "Strategy",
   "demo.tags.governance": "Risk & Governance",
+  "demo.tags.riskgovernance": "Risk & Governance",
   "demo.tags.product": "Product",
   "demo.title": "Sample Consultation Debate",
   "demo.subtitle": "Read-only demo with mock data to show how your AI Parliament works",

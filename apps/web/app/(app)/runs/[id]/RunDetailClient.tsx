@@ -10,8 +10,8 @@ import { useDebate } from "@/lib/api/hooks/useDebate";
 import { timelineReducer, initialTimelineState } from "@/lib/timeline/reducer";
 import { TimelineEvent } from "@/lib/timeline/types";
 import { useEventSource } from "@/lib/sse";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { fetchWithAuth } from "@/lib/auth";
+import { API_ORIGIN } from "@/lib/config/runtime";
 
 export default function RunDetailClient() {
   const params = useParams();
@@ -20,14 +20,14 @@ export default function RunDetailClient() {
   const [state, dispatch] = useReducer(timelineReducer, initialTimelineState);
   const mounted = useRef(true);
 
-  // 1. Initial Hydration (REST)
+  // 1. Initial Hydration (REST) — uses authenticated fetch with cookies
   useEffect(() => {
     mounted.current = true;
     if (!id) return;
 
     async function hydrate() {
       try {
-        const res = await fetch(`${API_BASE_URL}/debates/${id}/timeline`);
+        const res = await fetchWithAuth(`/debates/${id}/timeline`);
         if (!res.ok) throw new Error("Failed to fetch timeline");
         const events: TimelineEvent[] = await res.json();
 
@@ -52,7 +52,12 @@ export default function RunDetailClient() {
   }, [id, debate, state.isRecovering]);
 
   // 2. Live Updates (SSE)
-  const streamUrl = id ? `${API_BASE_URL}/debates/${id}/events/stream` : null;
+  // EventSource cannot set Authorization headers, so we pass the auth token
+  // as a query parameter fallback (backend supports ?token= for SSE auth)
+  const authToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const streamUrl = id
+    ? `${API_ORIGIN}/debates/${id}/stream${authToken ? `?token=${authToken}` : ""}`
+    : null;
   const { lastEvent, status: sseStatus } = useEventSource<any>(streamUrl, {
     enabled: !!id,
     withCredentials: true,

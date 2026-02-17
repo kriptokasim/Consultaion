@@ -69,12 +69,20 @@ export async function getDebate(id: string): Promise<DebateDetail> {
 }
 
 export async function getDebatesList(params?: Record<string, any>): Promise<ApiListResponse<DebateSummary>> {
-  const query = params ? new URLSearchParams(params).toString() : "";
+  // Filter out undefined/null values to prevent URLSearchParams from converting them
+  // to literal "undefined"/"null" strings (which would cause backend filter mismatches)
+  const cleanParams = params
+    ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""))
+    : undefined;
+  const query = cleanParams ? new URLSearchParams(cleanParams).toString() : "";
   return fetchWithAuth(`/debates${query ? `?${query}` : ""}`);
 }
 
 export async function getLeaderboard(params?: Record<string, any>): Promise<{ items: LeaderboardEntry[] }> {
-  const query = params ? new URLSearchParams(params).toString() : "";
+  const cleanParams = params
+    ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""))
+    : undefined;
+  const query = cleanParams ? new URLSearchParams(cleanParams).toString() : "";
   return fetchWithAuth(`/leaderboard${query ? `?${query}` : ""}`);
 }
 
