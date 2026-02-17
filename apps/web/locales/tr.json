@@ -224,6 +224,7 @@
   "auth.register.ctaLoading": "Hesap oluşturuluyor…",
   "auth.register.errorMismatch": "Parolalar eşleşmiyor.",
   "arena.title": "Münazara Arenası",
+  "arena.statusLabel": "Oturum Durumu",
   "arena.status.idle": "Beklemede",
   "arena.status.connecting": "Bağlanıyor",
   "arena.status.connected": "Canlı yayın",

@@ -224,6 +224,7 @@
   "auth.register.ctaLoading": "Creating account…",
   "auth.register.errorMismatch": "Passwords do not match.",
   "arena.title": "Debate Arena",
+  "arena.statusLabel": "Session Status",
   "arena.status.idle": "Idle",
   "arena.status.connecting": "Connecting",
   "arena.status.connected": "Live stream",

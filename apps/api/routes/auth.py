@@ -213,6 +213,7 @@ async def google_login(request: Request, response: Response) -> Response:
     # Patchset 105: Use robust server-side state store
     from security.state_store import state_store
     
+    next_param = request.query_params.get("next", "/dashboard")
     state_meta = {
         "next": next_param,
         "created_at": time.time(),
