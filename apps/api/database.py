@@ -41,11 +41,11 @@ def init_db() -> None:
 
 
 def get_session():
-    with Session(engine) as session:
-        try:
-            yield session
-        finally:
-            pass
+    session = Session(engine)
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 @contextmanager
