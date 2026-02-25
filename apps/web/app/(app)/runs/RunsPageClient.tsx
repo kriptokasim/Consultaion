@@ -11,15 +11,16 @@ import { ApiError, getRateLimitInfo, isAuthError, getTeams } from "@/lib/api";
 import { redirect, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { useTranslation } from "@/lib/i18n/client";
+
 type RunsPageClientProps = {
     initialQuery: string;
     initialStatus: string;
-    translations: Record<string, string>;
 };
 
-export default function RunsPageClient({ initialQuery, initialStatus, translations }: RunsPageClientProps) {
+export default function RunsPageClient({ initialQuery, initialStatus }: RunsPageClientProps) {
     const router = useRouter();
-    const t = (key: string) => translations[key] || key;
+    const { t } = useTranslation();
 
     const { data: debatesData, isLoading: isLoadingDebates, error: debatesError } = useDebatesList({
         limit: 100,
