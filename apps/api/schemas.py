@@ -97,6 +97,11 @@ class DebateCreate(BaseModel):
         "debate",
         description="Operation mode: 'debate' (adversarial) or 'conversation' (collaborative). Defaults to 'debate'."
     )
+    locale: Optional[str] = Field(
+        None,
+        max_length=10,
+        description="User's locale for response language (e.g., 'tr', 'en'). When set, AI models will respond in this language."
+    )
 
     @field_validator("prompt")
     @classmethod

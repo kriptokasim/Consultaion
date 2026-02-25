@@ -17,16 +17,40 @@ def build_messages_for_seat(
     seat: dict[str, Any],
     round_info: dict[str, Any],
     transcript: str,
+    locale: str | None = None,
 ) -> list[dict[str, str]]:
     role_profile = ROLE_PROFILES.get(seat.get("role_profile")) or ROLE_PROFILES["optimist"]
 
-    system_content = "\n\n".join(
-        [
-            PARLIAMENT_CHARTER,
-            role_profile.instructions,
-            seat_output_contract_instructions(),
-        ]
-    )
+    parts = [
+        PARLIAMENT_CHARTER,
+        role_profile.instructions,
+        seat_output_contract_instructions(),
+    ]
+
+    # Inject language instruction when user's locale is non-English
+    LOCALE_NAMES: dict[str, str] = {
+        "tr": "Turkish",
+        "de": "German",
+        "fr": "French",
+        "es": "Spanish",
+        "pt": "Portuguese",
+        "it": "Italian",
+        "nl": "Dutch",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "zh": "Chinese",
+        "ar": "Arabic",
+        "ru": "Russian",
+    }
+    if locale and locale.lower() not in ("en", "en-us", "en-gb"):
+        lang_name = LOCALE_NAMES.get(locale.lower().split("-")[0], locale)
+        parts.append(
+            f"IMPORTANT: You MUST write your entire response (including the 'content' field in your JSON) in {lang_name}. "
+            f"All explanations, arguments, and reasoning must be in {lang_name}. "
+            "Only keep JSON keys, field names, and technical terms in English."
+        )
+
+    system_content = "\n\n".join(parts)
 
     seat_name = seat.get("display_name") or seat.get("seat_id") or "Seat"
     user_content = (

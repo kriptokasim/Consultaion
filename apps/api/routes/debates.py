@@ -331,6 +331,9 @@ async def create_debate(
     )
 
     config_payload = config.model_dump()
+    # Store locale in config so the engine can instruct LLMs to respond in user's language
+    if body.locale:
+        config_payload["locale"] = body.locale
     debate = Debate(
         id=debate_id,
         prompt=body.prompt,
