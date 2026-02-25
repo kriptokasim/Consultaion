@@ -397,7 +397,7 @@ async def call_llm_with_retry(
     max_attempts = settings.LLM_RETRY_MAX_ATTEMPTS if settings.LLM_RETRY_ENABLED else 1
     delay = settings.LLM_RETRY_INITIAL_DELAY_SECONDS or 0.0
     max_delay = settings.LLM_RETRY_MAX_DELAY_SECONDS or delay
-    last_exc: TransientLLMError | None = None
+    last_exc: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
             return await _raw_llm_call(
@@ -410,6 +410,18 @@ async def call_llm_with_retry(
                 debate_id=debate_id,
                 extra_tags=extra_tags,
             )
+        except ProviderCircuitOpenError as exc:
+            last_exc = exc
+            if settings.OPENROUTER_API_KEY and settings.OPENROUTER_FALLBACK_MODEL and model_override != settings.OPENROUTER_FALLBACK_MODEL:
+                logger.warning(
+                    f"Circuit breaker open for {model_override or 'default'}. "
+                    f"Switching to fallback: {settings.OPENROUTER_FALLBACK_MODEL}"
+                )
+                model_override = settings.OPENROUTER_FALLBACK_MODEL
+                delay = 0 # Retry immediately
+                continue
+            if attempt >= max_attempts:
+                raise TransientLLMError(f"Circuit breaker open: {exc}") from exc
         except TransientLLMError as exc:
             last_exc = exc
             if attempt >= max_attempts:
@@ -437,7 +449,7 @@ async def call_llm_with_retry(
                 delay = min(max_delay, delay * 2 if delay else max_delay)
             else:
                 await asyncio.sleep(0)
-    raise last_exc or TransientLLMError("LLM call failed after retries")
+    raise last_exc if isinstance(last_exc, TransientLLMError) else TransientLLMError("LLM call failed after retries")
 
 
 async def _call_llm(
