@@ -21,13 +21,6 @@ import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar }
 import { track } from "@/lib/analytics";
 import { OnboardingHint } from "@/components/ui/onboarding-hint";
 
-const FALLBACK_MEMBERS: Member[] = [
-  { id: 'Analyst', name: 'Analyst', role: 'agent' },
-  { id: 'Critic', name: 'Critic', role: 'critic' },
-  { id: 'Builder', name: 'Builder', role: 'agent' },
-  { id: 'JudgeAlpha', name: 'JudgeAlpha', role: 'judge' },
-]
-
 const seatsToMembers = (seats: PanelSeatConfig[]): Member[] =>
   seats.map((seat) => ({
     id: seat.seat_id,
@@ -35,6 +28,8 @@ const seatsToMembers = (seats: PanelSeatConfig[]): Member[] =>
     role: seat.role_profile === 'judge' ? 'judge' : seat.role_profile === 'risk_officer' ? 'critic' : 'agent',
     party: seat.provider_key,
   }))
+
+const FALLBACK_MEMBERS: Member[] = seatsToMembers(defaultPanelConfig().seats)
 
 type VoteMeta = {
   method?: string
