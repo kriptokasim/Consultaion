@@ -440,7 +440,7 @@ async def list_debates(
     offset: int = Query(0, ge=0, le=10000),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    q: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=200),
 ):
     filters = []
     if current_user.role != "admin":
@@ -491,8 +491,10 @@ async def list_debates(
             pass
 
     if total is None:
-        total_stmt = select(func.count()).select_from(base_query.subquery())
-        total_result = session.exec(total_stmt).one()
+        count_stmt = select(func.count(Debate.id))
+        for f in filters:
+            count_stmt = count_stmt.where(f)
+        total_result = session.exec(count_stmt).one()
         if isinstance(total_result, tuple):
             total_result = total_result[0]
         total = int(total_result or 0)

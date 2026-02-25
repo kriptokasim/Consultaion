@@ -85,6 +85,15 @@ for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "apps"):
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 TEST_FAST_APP = settings.ENV == "test"
+
+# Safety guard: prevent test mode in non-local environments
+if TEST_FAST_APP and not settings.IS_LOCAL_ENV:
+    raise RuntimeError(
+        "FATAL: ENV='test' is set in a non-local environment. "
+        "This would disable CSRF, security headers, and other protections. "
+        "Refusing to start. Set ENV to 'production' or 'staging'."
+    )
+
 if TEST_FAST_APP:
 
     try:
@@ -386,7 +395,7 @@ app.include_router(votes_router)
 
 @app.get("/sentry-debug")
 async def trigger_error():
-    if settings.ENV != "local":
+    if not settings.IS_LOCAL_ENV:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
     division_by_zero = 1 / 0

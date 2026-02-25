@@ -90,7 +90,7 @@ class AppSettings(BaseSettings):
     REQUIRE_REAL_LLM: bool = False
     DISABLE_RATINGS: bool = False
     ENABLE_METRICS: bool = True
-    ENABLE_CONVERSATION_MODE: bool = Field(False, description="Enable new conversation mode")
+    ENABLE_CONVERSATION_MODE: bool = Field(True, description="Enable new conversation mode")
     ENABLE_GIPHY: bool = Field(False, description="Enable Giphy integration visual delights")
     ENABLE_EMAIL_SUMMARIES: bool = Field(False, description="Enable email summary notifications")
     ENABLE_SLACK_ALERTS: bool = Field(False, description="Enable Slack webhook alerts")

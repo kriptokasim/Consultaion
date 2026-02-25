@@ -4,6 +4,7 @@ import { getServerTranslations } from "@/lib/i18n/server"
 import { NotificationSettings } from "@/components/settings/notification-settings"
 import { PrivacySettings } from "@/components/settings/privacy-settings"
 import { MilestoneCelebration } from "@/components/settings/milestone-celebration"
+import { ThemeToggle } from "@/components/settings/theme-toggle"
 
 export default async function SettingsPage() {
   const { t } = await getServerTranslations()
@@ -29,6 +30,8 @@ export default async function SettingsPage() {
           {t("settings.overview.cardParagraph2")}
         </p>
       </div>
+
+      <ThemeToggle />
 
       <NotificationSettings initialEnabled={profile.email_summaries_enabled} />
       <PrivacySettings initialOptOut={profile.analytics_opt_out} />

@@ -41,7 +41,7 @@ type VoteMeta = {
   ranking?: string[]
 }
 
-const ENABLE_CONVERSATION_MODE = process.env.NEXT_PUBLIC_ENABLE_CONVERSATION_MODE === 'true' || process.env.NEXT_PUBLIC_ENABLE_CONVERSATION_MODE === '1'
+const ENABLE_CONVERSATION_MODE = true
 
 export default function Page() {
   const [prompt, setPrompt] = useState('Draft a national EV policy')
@@ -398,7 +398,14 @@ export default function Page() {
             track('settings_opened', { source: 'prompt_panel' })
           }}
           mode={mode}
-          onModeChange={ENABLE_CONVERSATION_MODE ? setMode : undefined}
+          onModeChange={ENABLE_CONVERSATION_MODE ? (newMode: 'debate' | 'conversation') => {
+            setMode(newMode)
+            setSessionStatus('idle')
+            setErrorState(null)
+            setEvents([])
+            setCurrentDebateId(null)
+            currentDebateIdRef.current = null
+          } : undefined}
         />
 
         <OnboardingHint id="live_prompt" text={t("onboarding.live.promptHint")} className="mt-2" />
