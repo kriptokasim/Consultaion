@@ -79,10 +79,13 @@ async def test_stream_events_uses_backend():
             )
             session.commit()
 
+        from fastapi import Request
+        mock_request = Request(scope={"type": "http", "state": {}})
         response = await stream_events(
             debate_id, 
+            request=mock_request,
+            token="test-token",
             session=session, 
-            current_user=None,
             sse_backend=backend
         )
 

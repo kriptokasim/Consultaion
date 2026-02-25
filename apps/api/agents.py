@@ -215,7 +215,7 @@ def _estimate_cost(tokens: Optional[float]) -> float:
 
 
 async def _fake_llm(prompt: str, role: str) -> str:
-    await asyncio.sleep(0.2)
+    # Removed artificial asyncio.sleep(0.2) delay to prevent full-loop integration tests from hanging
     return f"[{role}] Suggestion and reasoning for: {prompt[:80]}…"
 
 

@@ -94,41 +94,22 @@ async def test_fast_debate_path_emits_final_event(monkeypatch):
         config=d_config,
     )
 
-    async def collect():
-        backend = get_sse_backend()
-        channel_id = f"debate:{d_id}"
-        await backend.create_channel(channel_id)
-        events: list[dict] = []
-
-        class DummyScope:
-            def __enter__(self):
-                return None
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        def fake_scope():
-            return DummyScope()
-
-        async def consume():
-            async for event in backend.subscribe(channel_id):
-                events.append(event)
-                if event.get("type") == "final":
-                    break
-
-        with patch("orchestrator._complete_debate_record", new_callable=AsyncMock):
-            consumer = asyncio.create_task(consume())
-            await run_debate(d_id, d_prompt, channel_id, d_config)
-            await consumer
-        return events
-
-    reset_sse_backend_for_tests()
-    
-    # Persist debate so run_debate can load it
     with session_scope() as session:
         session.add(debate)
         session.commit()
-            
-    events = await collect()
-    assert any(evt.get("type") == "final" for evt in events)
+
+    with patch("orchestrator.get_sse_backend") as mock_get_backend, patch("orchestrator._complete_debate_record", new_callable=AsyncMock):
+        mock_backend = AsyncMock()
+        mock_get_backend.return_value = mock_backend
+        
+        await run_debate(d_id, d_prompt, f"debate:{d_id}", d_config)
+        
+        # Verify that publish was called with a "final" event
+        publish_calls = mock_backend.publish.call_args_list
+        has_final = any(
+            call_args[0][1].get("type") == "final" 
+            for call_args in publish_calls
+        )
+        assert has_final
+
     monkeypatch.setenv("FAST_DEBATE", "0")

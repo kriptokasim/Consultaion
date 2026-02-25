@@ -289,7 +289,9 @@ async def _run_mock_debate(
     ]
     usage_snapshot = usage_tracker.snapshot()
     backend = get_sse_backend()
-    backend = get_sse_backend()
+    
+    # Tiny sleep allows the subscriber to connect
+    await asyncio.sleep(0.01)
     await backend.publish(channel_id, {
         "type": "message", 
         "round": 0, 

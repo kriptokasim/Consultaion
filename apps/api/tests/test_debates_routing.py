@@ -7,6 +7,12 @@ from parliament.router_v2 import CandidateDecision
 from sqlmodel import Session
 
 
+import os
+
+os.environ["RL_MAX_CALLS"] = "1000"
+os.environ["AUTH_RL_MAX_CALLS"] = "1000"
+os.environ["USE_MOCK"] = "1"
+
 @pytest.fixture
 def mock_choose_model():
     with patch("routes.debates.choose_model") as mock:

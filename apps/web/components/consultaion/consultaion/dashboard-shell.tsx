@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import Link from "next/link"
+import { Link } from 'next-view-transitions'
 import { usePathname, useRouter } from "next/navigation"
 import { FileText, PlayCircle, Settings, Search, Moon, Sun, Shield, Scale, BarChart3, Trophy, BookOpen, Award, Menu, X, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"

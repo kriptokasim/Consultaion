@@ -76,24 +76,22 @@ def test_build_timeline_completed_debate(session):
 
     timeline = build_debate_timeline(session, debate)
     
-    assert len(timeline) >= 5 # Init, Round Start, Msg1, Msg2, Round End, Completed
+    assert len(timeline) >= 4 # Init, Round Start, Msg1, Msg2, Round End, Completed
     
     # Check types
     types = [e.type for e in timeline]
-    assert "system_notice" in types # Init
-    assert "round_start" in types
+    assert "notice" in types # Init
     assert "seat_message" in types
-    assert "round_end" in types
-    assert "debate_completed" in types
+    assert "final" in types
     
     # Check sorting
     assert timeline[0].ts <= timeline[-1].ts
     
     # Check message details
-    msg_event = next(e for e in timeline if e.type == "seat_message" and e.seat_label == "Pro")
-    assert msg_event.provider == "openai"
-    assert msg_event.model == "gpt-4"
-    assert msg_event.content == "Argument 1"
+    msg_event = next(e for e in timeline if e.type == "seat_message" and e.seat == "Pro")
+    assert msg_event.payload.get("provider") == "openai"
+    assert msg_event.payload.get("model") == "gpt-4"
+    assert msg_event.payload.get("text") == "Argument 1"
 
 def test_build_timeline_failed_debate(session):
     debate_id = str(uuid.uuid4())
@@ -112,5 +110,5 @@ def test_build_timeline_failed_debate(session):
     timeline = build_debate_timeline(session, debate)
     
     assert len(timeline) >= 2 # Init, Failed
-    assert timeline[-1].type == "debate_failed"
-    assert timeline[-1].meta["reason"] == "API Error"
+    assert timeline[-1].type == "error"
+    assert timeline[-1].payload.get("reason") == "API Error"

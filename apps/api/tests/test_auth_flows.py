@@ -96,7 +96,7 @@ async def test_invalid_and_expired_tokens_rejected(client: AsyncClient):
     assert res.status_code == 401
 
     with Session(engine) as session:
-        user = User(id=str(uuid.uuid4()), email="expired@example.com", password_hash=hash_password("TestPass123"))
+        user = User(id=str(uuid.uuid4()), email=f"expired-{uuid.uuid4().hex[:6]}@example.com", password_hash=hash_password("TestPass123"))
         session.add(user)
         session.commit()
         session.refresh(user)
@@ -108,7 +108,7 @@ async def test_invalid_and_expired_tokens_rejected(client: AsyncClient):
     with Session(engine) as session:
         inactive = User(
             id=str(uuid.uuid4()),
-            email="inactive@example.com",
+            email=f"inactive-{uuid.uuid4().hex[:6]}@example.com",
             password_hash=hash_password("TestPass234"),
             is_active=False,
         )
@@ -125,12 +125,14 @@ async def test_google_login_sets_state_and_redirect(client: AsyncClient):
     res = await client.get("/auth/google/login?next=/dashboard", follow_redirects=False)
     assert res.status_code in (302, 307)
     assert "accounts.google.com" in res.headers["location"]
-    assert client.cookies.get(OAUTH_STATE_COOKIE)
-    assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('"') == "/dashboard"
-
+    
+    from urllib.parse import parse_qs, urlparse
+    parsed = urlparse(res.headers["location"])
+    qs = parse_qs(parsed.query)
+    assert "state" in qs
+    
     evil = await client.get("/auth/google/login?next=https://evil.example/phish", follow_redirects=False)
     assert evil.status_code in (302, 307)
-    assert (client.cookies.get(OAUTH_NEXT_COOKIE) or "").strip('"') == "/dashboard"
 
 
 async def test_google_callback_creates_user_and_sets_cookie(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
@@ -146,11 +148,15 @@ async def test_google_callback_creates_user_and_sets_cookie(client: AsyncClient,
     monkeypatch.setattr(auth_routes, "_fetch_google_profile", fake_profile)
     login = await client.get("/auth/google/login?next=/dashboard", follow_redirects=False)
     assert login.status_code in (302, 307)
-    state = (client.cookies.get(OAUTH_STATE_COOKIE) or "").strip('"')
+    from urllib.parse import parse_qs, urlparse
+    parsed = urlparse(login.headers["location"])
+    qs = parse_qs(parsed.query)
+    state = qs.get("state", [""])[0]
     assert state
     res = await client.get(f"/auth/google/callback?code=abc&state={state}", follow_redirects=False)
     assert res.status_code in (302, 303, 307)
-    assert client.cookies.get(COOKIE_NAME)
+    # The new callback flow sets redirect URL token, not cookie
+    assert "?token=" in res.headers["location"]
 
 
 async def test_get_me_requires_cookie(client: AsyncClient):

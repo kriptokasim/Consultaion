@@ -14,29 +14,33 @@ export const metadata: Metadata = {
 
 import { AnalyticsProvider } from '@/components/analytics-provider'
 
+import { ViewTransitions } from 'next-view-transitions'
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await resolveLocale()
   const messages = loadMessages(locale)
 
   return (
-    <html lang={locale} suppressHydrationWarning>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-      </head>
-      <body className="min-h-screen bg-background text-foreground">
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 z-50 rounded bg-primary px-3 py-1 text-primary-foreground"
-        >
-          Skip to content
-        </a>
-        <Providers>
-          <AnalyticsProvider />
-          <I18nProvider locale={locale} messages={messages}>
-            {children}
-          </I18nProvider>
-        </Providers>
-      </body>
-    </html>
+    <ViewTransitions>
+      <html lang={locale} suppressHydrationWarning>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        </head>
+        <body className="min-h-screen bg-background text-foreground">
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 z-50 rounded bg-primary px-3 py-1 text-primary-foreground"
+          >
+            Skip to content
+          </a>
+          <Providers>
+            <AnalyticsProvider />
+            <I18nProvider locale={locale} messages={messages}>
+              {children}
+            </I18nProvider>
+          </Providers>
+        </body>
+      </html>
+    </ViewTransitions>
   )
 }

@@ -18,7 +18,9 @@ async def test_conversation_engine_runs_with_mock_llm(db_session):
         prompt="Collaborative discussion on AI safety",
         status="queued",
         panel_config=panel.model_dump(),
-        mode="conversation"
+        mode="conversation",
+        team_id="test-team-id",
+        user_id="test-user-id"
     )
     db_session.add(debate)
     db_session.commit()
@@ -32,7 +34,7 @@ async def test_conversation_engine_runs_with_mock_llm(db_session):
     settings.ENABLE_CONVERSATION_MODE = True
     settings.FAST_DEBATE = False
     
-    result = await run_conversation_debate(debate, model_id=None)
+    result = await run_conversation_debate(debate.id, model_id=None)
     
     assert result.status == "completed"
     assert result.final_answer
@@ -86,7 +88,9 @@ async def test_conversation_truncation(db_session):
         prompt="Short conversation",
         status="queued",
         panel_config=panel.model_dump(),
-        mode="conversation"
+        mode="conversation",
+        team_id="test-team-id",
+        user_id="test-user-id"
     )
     db_session.add(debate)
     db_session.commit()
@@ -101,7 +105,7 @@ async def test_conversation_truncation(db_session):
     settings.FAST_DEBATE = False
     settings.CONVERSATION_MAX_ROUNDS = 1
     
-    result = await run_conversation_debate(debate, model_id=None)
+    result = await run_conversation_debate(debate.id, model_id=None)
     
     assert result.status == "completed"
     assert result.final_meta["truncated"] is False # Round 1 completes, loop checks before Round 2, but range(1, 2) is just 1. Wait.
@@ -119,7 +123,7 @@ async def test_conversation_truncation(db_session):
     settings.CONVERSATION_MAX_ROUNDS = 4 # Reset to allow more rounds
     settings.CONVERSATION_MAX_TOTAL_TOKENS = 10 # Very low limit
     
-    result = await run_conversation_debate(debate, model_id=None)
+    result = await run_conversation_debate(debate.id, model_id=None)
     
     # It might run 1 round if check is at start of loop and usage is 0.
     # Then for round 2 it would break?

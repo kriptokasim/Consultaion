@@ -11,7 +11,7 @@ import { ApiError, getRateLimitInfo, isAuthError, getTeams } from "@/lib/api";
 import { redirect, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { useTranslation } from "@/lib/i18n/client";
+import { useI18n } from "@/lib/i18n/client";
 
 type RunsPageClientProps = {
     initialQuery: string;
@@ -20,7 +20,7 @@ type RunsPageClientProps = {
 
 export default function RunsPageClient({ initialQuery, initialStatus }: RunsPageClientProps) {
     const router = useRouter();
-    const { t } = useTranslation();
+    const { t } = useI18n();
 
     const { data: debatesData, isLoading: isLoadingDebates, error: debatesError } = useDebatesList({
         limit: 100,

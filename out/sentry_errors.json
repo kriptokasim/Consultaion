@@ -1,133 +1,17 @@
 [
   {
     "issue": {
-      "id": "84294390",
+      "id": "99122532",
       "shareId": null,
-      "shortId": "PYTHON-FASTAPI-2",
-      "title": "AppError",
-      "culprit": "/auth/google/callback",
-      "permalink": "https://consultaion.sentry.io/issues/84294390/",
-      "logger": "main",
-      "level": "error",
-      "status": "unresolved",
-      "statusDetails": {},
-      "substatus": "ongoing",
-      "isPublic": false,
-      "platform": "python",
-      "project": {
-        "id": "4510567774027856",
-        "name": "python-fastapi",
-        "slug": "python-fastapi",
-        "platform": "python-fastapi"
-      },
-      "type": "default",
-      "metadata": {
-        "title": "AppError",
-        "sdk": {
-          "name": "sentry.python.fastapi",
-          "name_normalized": "sentry.python"
-        },
-        "initial_priority": 75
-      },
-      "numComments": 0,
-      "assignedTo": {
-        "type": "team",
-        "id": "4510567771471952",
-        "name": "consultaion"
-      },
-      "isBookmarked": false,
-      "isSubscribed": true,
-      "subscriptionDetails": {
-        "reason": "assigned"
-      },
-      "hasSeen": true,
-      "annotations": [],
-      "issueType": "error",
-      "issueCategory": "error",
-      "priority": "high",
-      "priorityLockedAt": null,
-      "seerFixabilityScore": 0.24030208587646484,
-      "seerAutofixLastTriggered": null,
-      "isUnhandled": false,
-      "count": "11",
-      "userCount": 2,
-      "firstSeen": "2025-12-20T15:37:50.940449Z",
-      "lastSeen": "2025-12-25T09:32:32.417477Z",
-      "stats": {
-        "14d": [
-          [
-            1766880000,
-            0
-          ],
-          [
-            1766966400,
-            0
-          ],
-          [
-            1767052800,
-            0
-          ],
-          [
-            1767139200,
-            0
-          ],
-          [
-            1767225600,
-            0
-          ],
-          [
-            1767312000,
-            0
-          ],
-          [
-            1767398400,
-            0
-          ],
-          [
-            1767484800,
-            0
-          ],
-          [
-            1767571200,
-            0
-          ],
-          [
-            1767657600,
-            0
-          ],
-          [
-            1767744000,
-            0
-          ],
-          [
-            1767830400,
-            0
-          ],
-          [
-            1767916800,
-            0
-          ],
-          [
-            1768003200,
-            0
-          ]
-        ]
-      }
-    }
-  },
-  {
-    "issue": {
-      "id": "84295091",
-      "shareId": null,
-      "shortId": "PYTHON-FASTAPI-6",
-      "title": "ZeroDivisionError: division by zero",
-      "culprit": "/sentry-debug",
-      "permalink": "https://consultaion.sentry.io/issues/84295091/",
+      "shortId": "PYTHON-FASTAPI-H",
+      "title": "InternalError: (psycopg.errors.InternalError_) Unable to check out connection from the pool due to timeout",
+      "culprit": "/me",
+      "permalink": "https://consultaion.sentry.io/issues/99122532/",
       "logger": null,
       "level": "error",
       "status": "unresolved",
       "statusDetails": {},
-      "substatus": "ongoing",
+      "substatus": "escalating",
       "isPublic": false,
       "platform": "python",
       "project": {
@@ -138,10 +22,240 @@
       },
       "type": "error",
       "metadata": {
-        "value": "division by zero",
-        "type": "ZeroDivisionError",
-        "filename": "main.py",
-        "function": "trigger_error",
+        "value": "(psycopg.errors.InternalError_) Unable to check out connection from the pool due to timeout\n[SQL: SELECT \"user\".id AS user_id, \"user\".email AS user_email, \"user\".password_hash AS user_password_hash, \"user\".role AS user_role, \"user\".created_at AS user_created_at, \"user\".is_active AS user_is_active, \"user\".is_admin AS user_is_admin, \"user\".display_name AS user_display_name, \"user\".avatar_url AS user_avatar_url, \"user\".bio AS user_bio, \"user\".timezone AS user_timezone, \"user\".email_summaries_enabled AS user_email_summaries_enabled, \"user\".plan AS user_plan, \"user\".deleted_at AS user_deleted_at, \"user\".analytics_opt_out AS user_analytics_opt_out \nFROM \"user\" \nWHERE \"user\".id = %(pk_1)s::VARCHAR]\n[parameters: {'pk_1': '79cac249-4672-434c-9bc6-3970a7606d29'}]\n(Background on this error at: https://sqlalche.me/e/20/2j85)",
+        "type": "InternalError",
+        "filename": "auth.py",
+        "function": "resolve_user_from_token",
+        "in_app_frame_mix": "mixed",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75,
+        "title": null
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": true,
+      "count": "14",
+      "userCount": 3,
+      "firstSeen": "2026-02-25T17:35:19.422412Z",
+      "lastSeen": "2026-02-25T17:42:05.550832Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            0
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            0
+          ],
+          [
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            0
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
+            14
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "99122531",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-G",
+      "title": "InternalError: (psycopg.errors.InternalError_) DbHandler exited. Check logs for more information.",
+      "culprit": "orchestrator_cleanup in cleanup_stale_debates",
+      "permalink": "https://consultaion.sentry.io/issues/99122531/",
+      "logger": "orchestrator_cleanup",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "(psycopg.errors.InternalError_) DbHandler exited. Check logs for more information.\n[SQL: SELECT debate.id, debate.prompt, debate.status, debate.config, debate.panel_config, debate.engine_version, debate.model_id, debate.created_at, debate.updated_at, debate.final_content, debate.final_meta, debate.user_id, debate.team_id, debate.routed_model, debate.routing_policy, debate.routing_meta, debate.mode, debate.runner_id, debate.lease_expires_at, debate.last_heartbeat_at, debate.run_attempt \nFROM debate \nWHERE debate.status = %(status_1)s::VARCHAR AND debate.created_at < %(created_at_1)s::TIMESTAMP WITH TIME ZONE]\n[parameters: {'status_1': 'queued', 'created_at_1': datetime.datetime(2026, 2, 25, 17, 10, 3, 567887, tzinfo=datetime.timezone.utc)}]\n(Background on this error at: https://sqlalche.me/e/20/2j85)",
+        "type": "InternalError",
+        "filename": "orchestrator_cleanup.py",
+        "function": "cleanup_stale_debates",
+        "in_app_frame_mix": "mixed",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75,
+        "title": null
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "2",
+      "userCount": 0,
+      "firstSeen": "2026-02-25T17:35:17.916425Z",
+      "lastSeen": "2026-02-25T17:41:03.748488Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            0
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            0
+          ],
+          [
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            0
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
+            2
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "99113730",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-F",
+      "title": "ProgrammingError: (psycopg.errors.InvalidSqlStatementName) prepared statement \"_pg3_2\" does not exist",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/99113730/",
+      "logger": "orchestrator",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "(psycopg.errors.InvalidSqlStatementName) prepared statement \"_pg3_2\" does not exist\n[SQL: SELECT debate.id AS debate_id, debate.prompt AS debate_prompt, debate.status AS debate_status, debate.config AS debate_config, debate.panel_config AS debate_panel_config, debate.engine_version AS debate_engine_version, debate.model_id AS debate_model_id, debate.created_at AS debate_created_at, debate.updated_at AS debate_updated_at, debate.final_content AS debate_final_content, debate.final_meta AS debate_final_meta, debate.user_id AS debate_user_id, debate.team_id AS debate_team_id, debate.routed_model AS debate_routed_model, debate.routing_policy AS debate_routing_policy, debate.routing_meta AS debate_routing_meta, debate.mode AS debate_mode, debate.runner_id AS debate_runner_id, debate.lease_expires_at AS debate_lease_expires_at, debate.last_heartbeat_at AS debate_last_heartbeat_at, debate.run_attempt AS debate_run_attempt \nFROM debate \nWHERE debate.id = %(pk_1)s::VARCHAR]\n[parameters: {'pk_1': '76727948-7936-4b98-...",
+        "type": "ProgrammingError",
+        "filename": "orchestration/state.py",
+        "function": "complete_debate",
         "in_app_frame_mix": "mixed",
         "sdk": {
           "name": "sentry.python.fastapi",
@@ -150,86 +264,80 @@
         "initial_priority": 75
       },
       "numComments": 0,
-      "assignedTo": {
-        "type": "team",
-        "id": "4510567771471952",
-        "name": "consultaion"
-      },
+      "assignedTo": null,
       "isBookmarked": false,
-      "isSubscribed": true,
-      "subscriptionDetails": {
-        "reason": "assigned"
-      },
+      "isSubscribed": false,
+      "subscriptionDetails": null,
       "hasSeen": false,
       "annotations": [],
       "issueType": "error",
       "issueCategory": "error",
       "priority": "high",
       "priorityLockedAt": null,
-      "seerFixabilityScore": 0.46983474493026733,
+      "seerFixabilityScore": null,
       "seerAutofixLastTriggered": null,
-      "isUnhandled": true,
+      "isUnhandled": false,
       "count": "1",
       "userCount": 1,
-      "firstSeen": "2025-12-20T15:45:11.125780Z",
-      "lastSeen": "2025-12-20T15:45:11.125780Z",
+      "firstSeen": "2026-02-25T16:51:56.496939Z",
+      "lastSeen": "2026-02-25T16:51:56.496939Z",
       "stats": {
         "14d": [
           [
-            1766880000,
+            1770854400,
             0
           ],
           [
-            1766966400,
+            1770940800,
             0
           ],
           [
-            1767052800,
+            1771027200,
             0
           ],
           [
-            1767139200,
+            1771113600,
             0
           ],
           [
-            1767225600,
+            1771200000,
             0
           ],
           [
-            1767312000,
+            1771286400,
             0
           ],
           [
-            1767398400,
+            1771372800,
             0
           ],
           [
-            1767484800,
+            1771459200,
             0
           ],
           [
-            1767571200,
+            1771545600,
             0
           ],
           [
-            1767657600,
+            1771632000,
             0
           ],
           [
-            1767744000,
+            1771718400,
             0
           ],
           [
-            1767830400,
+            1771804800,
             0
           ],
           [
-            1767916800,
+            1771891200,
             0
           ],
           [
-            1768003200,
-            0
+            1771977600,
+            1
           ]
         ]
       }
@@ -237,17 +345,17 @@
   },
   {
     "issue": {
-      "id": "84294399",
+      "id": "99113729",
       "shareId": null,
-      "shortId": "PYTHON-FASTAPI-4",
-      "title": "Seat architect failed in round 1: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details....",
+      "shortId": "PYTHON-FASTAPI-E",
+      "title": "Circuit breaker OPENED for gemini/gpt-4.1-mini (error_rate=100.00% threshold=50.00%)",
       "culprit": "/debates",
-      "permalink": "https://consultaion.sentry.io/issues/84294399/",
-      "logger": "parliament.engine",
+      "permalink": "https://consultaion.sentry.io/issues/99113729/",
+      "logger": "parliament.provider_health",
       "level": "error",
       "status": "unresolved",
       "statusDetails": {},
-      "substatus": "ongoing",
+      "substatus": "new",
       "isPublic": false,
       "platform": "python",
       "project": {
@@ -258,7 +366,7 @@
       },
       "type": "default",
       "metadata": {
-        "title": "Seat architect failed in round 1: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details....",
+        "title": "Circuit breaker OPENED for gemini/gpt-4.1-mini (error_rate=100.00% threshold=50.00%)",
         "sdk": {
           "name": "sentry.python.fastapi",
           "name_normalized": "sentry.python"
@@ -266,202 +374,80 @@
         "initial_priority": 75
       },
       "numComments": 0,
-      "assignedTo": {
-        "type": "team",
-        "id": "4510567771471952",
-        "name": "consultaion"
-      },
+      "assignedTo": null,
       "isBookmarked": false,
-      "isSubscribed": true,
-      "subscriptionDetails": {
-        "reason": "assigned"
-      },
+      "isSubscribed": false,
+      "subscriptionDetails": null,
       "hasSeen": false,
       "annotations": [],
       "issueType": "error",
       "issueCategory": "error",
       "priority": "high",
       "priorityLockedAt": null,
-      "seerFixabilityScore": 0.33050116896629333,
+      "seerFixabilityScore": null,
       "seerAutofixLastTriggered": null,
       "isUnhandled": false,
-      "count": "3",
+      "count": "1",
       "userCount": 1,
-      "firstSeen": "2025-12-20T15:38:01.224111Z",
-      "lastSeen": "2025-12-20T15:38:13.226676Z",
+      "firstSeen": "2026-02-25T16:51:53.266905Z",
+      "lastSeen": "2026-02-25T16:51:53.266905Z",
       "stats": {
         "14d": [
           [
-            1766880000,
+            1770854400,
             0
           ],
           [
-            1766966400,
+            1770940800,
             0
           ],
           [
-            1767052800,
+            1771027200,
             0
           ],
           [
-            1767139200,
+            1771113600,
             0
           ],
           [
-            1767225600,
+            1771200000,
             0
           ],
           [
-            1767312000,
+            1771286400,
             0
           ],
           [
-            1767398400,
+            1771372800,
             0
           ],
           [
-            1767484800,
+            1771459200,
             0
           ],
           [
-            1767571200,
+            1771545600,
             0
           ],
           [
-            1767657600,
+            1771632000,
             0
           ],
           [
-            1767744000,
+            1771718400,
             0
           ],
           [
-            1767830400,
+            1771804800,
             0
           ],
           [
-            1767916800,
+            1771891200,
             0
           ],
           [
-            1768003200,
-            0
-          ]
-        ]
-      }
-    }
-  },
-  {
-    "issue": {
-      "id": "84294401",
-      "shareId": null,
-      "shortId": "PYTHON-FASTAPI-5",
-      "title": "LLM call failed for role Systems Architect: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billin...",
-      "culprit": "/debates",
-      "permalink": "https://consultaion.sentry.io/issues/84294401/",
-      "logger": "agents",
-      "level": "error",
-      "status": "unresolved",
-      "statusDetails": {},
-      "substatus": "ongoing",
-      "isPublic": false,
-      "platform": "python",
-      "project": {
-        "id": "4510567774027856",
-        "name": "python-fastapi",
-        "slug": "python-fastapi",
-        "platform": "python-fastapi"
-      },
-      "type": "default",
-      "metadata": {
-        "title": "LLM call failed for role Systems Architect: LLM call failed for role Systems Architect: litellm.RateLimitError: RateLimitError: OpenAIException - Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billin...",
-        "sdk": {
-          "name": "sentry.python.fastapi",
-          "name_normalized": "sentry.python"
-        },
-        "initial_priority": 75
-      },
-      "numComments": 0,
-      "assignedTo": {
-        "type": "team",
-        "id": "4510567771471952",
-        "name": "consultaion"
-      },
-      "isBookmarked": false,
-      "isSubscribed": true,
-      "subscriptionDetails": {
-        "reason": "assigned"
-      },
-      "hasSeen": false,
-      "annotations": [],
-      "issueType": "error",
-      "issueCategory": "error",
-      "priority": "high",
-      "priorityLockedAt": null,
-      "seerFixabilityScore": 0.3192601799964905,
-      "seerAutofixLastTriggered": null,
-      "isUnhandled": false,
-      "count": "3",
-      "userCount": 1,
-      "firstSeen": "2025-12-20T15:38:01.217024Z",
-      "lastSeen": "2025-12-20T15:38:13.219127Z",
-      "stats": {
-        "14d": [
-          [
-            1766880000,
-            0
-          ],
-          [
-            1766966400,
-            0
-          ],
-          [
-            1767052800,
-            0
-          ],
-          [
-            1767139200,
-            0
-          ],
-          [
-            1767225600,
-            0
-          ],
-          [
-            1767312000,
-            0
-          ],
-          [
-            1767398400,
-            0
-          ],
-          [
-            1767484800,
-            0
-          ],
-          [
-            1767571200,
-            0
-          ],
-          [
-            1767657600,
-            0
-          ],
-          [
-            1767744000,
-            0
-          ],
-          [
-            1767830400,
-            0
-          ],
-          [
-            1767916800,
-            0
-          ],
-          [
-            1768003200,
-            0
+            1771977600,
+            1
           ]
         ]
       }
@@ -522,66 +508,969 @@
       "seerFixabilityScore": 0.22735677659511566,
       "seerAutofixLastTriggered": null,
       "isUnhandled": true,
-      "count": "6",
-      "userCount": 1,
+      "count": "204",
+      "userCount": 9,
       "firstSeen": "2025-12-20T15:37:54.254173Z",
-      "lastSeen": "2025-12-20T15:38:13.120202Z",
+      "lastSeen": "2026-02-25T16:51:53.170705Z",
       "stats": {
         "14d": [
           [
-            1766880000,
+            1770854400,
             0
           ],
           [
-            1766966400,
+            1770940800,
             0
           ],
           [
-            1767052800,
+            1771027200,
+            35
+          ],
+          [
+            1771113600,
             0
           ],
           [
-            1767139200,
+            1771200000,
             0
           ],
           [
-            1767225600,
+            1771286400,
+            25
+          ],
+          [
+            1771372800,
+            8
+          ],
+          [
+            1771459200,
+            8
+          ],
+          [
+            1771545600,
+            24
+          ],
+          [
+            1771632000,
             0
           ],
           [
-            1767312000,
+            1771718400,
             0
           ],
           [
-            1767398400,
+            1771804800,
             0
           ],
           [
-            1767484800,
+            1771891200,
+            8
+          ],
+          [
+            1771977600,
+            30
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "97901023",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-C",
+      "title": "Circuit breaker OPENED for gemini/claude-3-5-sonnet (error_rate=100.00% threshold=50.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/97901023/",
+      "logger": "parliament.provider_health",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Circuit breaker OPENED for gemini/claude-3-5-sonnet (error_rate=100.00% threshold=50.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "4",
+      "userCount": 2,
+      "firstSeen": "2026-02-20T13:05:36.896648Z",
+      "lastSeen": "2026-02-25T16:51:50.370536Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
             0
           ],
           [
-            1767571200,
+            1770940800,
             0
           ],
           [
-            1767657600,
+            1771027200,
             0
           ],
           [
-            1767744000,
+            1771113600,
             0
           ],
           [
-            1767830400,
+            1771200000,
             0
           ],
           [
-            1767916800,
+            1771286400,
             0
           ],
           [
-            1768003200,
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            1
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
+            3
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294399",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-4",
+      "title": "Seat optimist failed in round 1: Circuit breaker open for gemini/gpt-4o-mini (error_rate=100.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294399/",
+      "logger": "parliament.engine",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Seat optimist failed in round 1: Circuit breaker open for gemini/gpt-4o-mini (error_rate=100.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.33050116896629333,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "92",
+      "userCount": 9,
+      "firstSeen": "2025-12-20T15:38:01.224111Z",
+      "lastSeen": "2026-02-25T16:51:50.317720Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            15
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            12
+          ],
+          [
+            1771372800,
+            3
+          ],
+          [
+            1771459200,
+            3
+          ],
+          [
+            1771545600,
+            9
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            3
+          ],
+          [
+            1771977600,
+            15
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "99113457",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-D",
+      "title": "Circuit breaker OPENED for gemini/gpt-4o-mini (error_rate=100.00% threshold=50.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/99113457/",
+      "logger": "parliament.provider_health",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "new",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Circuit breaker OPENED for gemini/gpt-4o-mini (error_rate=100.00% threshold=50.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "1",
+      "userCount": 1,
+      "firstSeen": "2026-02-25T16:50:56.781665Z",
+      "lastSeen": "2026-02-25T16:50:56.781665Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            0
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            0
+          ],
+          [
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            0
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
+            1
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294401",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-5",
+      "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Pl...",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/84294401/",
+      "logger": "agents",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "LLM call failed for role Risk Officer: LLM call failed for role Risk Officer: litellm.BadRequestError: AnthropicException - {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Pl...",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.3192601799964905,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "72",
+      "userCount": 9,
+      "firstSeen": "2025-12-20T15:38:01.217024Z",
+      "lastSeen": "2026-02-25T16:38:56.135622Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            15
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            9
+          ],
+          [
+            1771372800,
+            3
+          ],
+          [
+            1771459200,
+            3
+          ],
+          [
+            1771545600,
+            6
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            3
+          ],
+          [
+            1771977600,
+            6
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "87773292",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-A",
+      "title": "Circuit breaker OPENED for openrouter/openai/gpt-4o-mini (error_rate=100.00% threshold=50.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/87773292/",
+      "logger": "parliament.provider_health",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Circuit breaker OPENED for openrouter/openai/gpt-4o-mini (error_rate=100.00% threshold=50.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "3",
+      "userCount": 1,
+      "firstSeen": "2026-01-11T15:21:15.450267Z",
+      "lastSeen": "2026-02-17T17:49:05.740741Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            0
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            1
+          ],
+          [
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            0
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "87773263",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-9",
+      "title": "Circuit breaker OPENED for openrouter/anthropic/claude-3-5-sonnet-20240620 (error_rate=100.00% threshold=50.00%)",
+      "culprit": "/debates",
+      "permalink": "https://consultaion.sentry.io/issues/87773263/",
+      "logger": "parliament.provider_health",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "Circuit breaker OPENED for openrouter/anthropic/claude-3-5-sonnet-20240620 (error_rate=100.00% threshold=50.00%)",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "3",
+      "userCount": 1,
+      "firstSeen": "2026-01-11T15:21:08.262245Z",
+      "lastSeen": "2026-02-17T17:48:57.726805Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            0
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            1
+          ],
+          [
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            0
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "96729396",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-B",
+      "title": "NameError: name 'next_param' is not defined",
+      "culprit": "/auth/google/login",
+      "permalink": "https://consultaion.sentry.io/issues/96729396/",
+      "logger": null,
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "error",
+      "metadata": {
+        "value": "name 'next_param' is not defined",
+        "type": "NameError",
+        "filename": "routes/auth.py",
+        "function": "google_login",
+        "in_app_frame_mix": "mixed",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75,
+        "title": null
+      },
+      "numComments": 0,
+      "assignedTo": null,
+      "isBookmarked": false,
+      "isSubscribed": false,
+      "subscriptionDetails": null,
+      "hasSeen": false,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": null,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": true,
+      "count": "6",
+      "userCount": 4,
+      "firstSeen": "2026-02-14T14:52:57.853874Z",
+      "lastSeen": "2026-02-17T16:43:05.366101Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            3
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            2
+          ],
+          [
+            1771286400,
+            1
+          ],
+          [
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            0
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
+            0
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "issue": {
+      "id": "84294390",
+      "shareId": null,
+      "shortId": "PYTHON-FASTAPI-2",
+      "title": "AppError",
+      "culprit": "/auth/google/callback",
+      "permalink": "https://consultaion.sentry.io/issues/84294390/",
+      "logger": "main",
+      "level": "error",
+      "status": "unresolved",
+      "statusDetails": {},
+      "substatus": "ongoing",
+      "isPublic": false,
+      "platform": "python",
+      "project": {
+        "id": "4510567774027856",
+        "name": "python-fastapi",
+        "slug": "python-fastapi",
+        "platform": "python-fastapi"
+      },
+      "type": "default",
+      "metadata": {
+        "title": "AppError",
+        "sdk": {
+          "name": "sentry.python.fastapi",
+          "name_normalized": "sentry.python"
+        },
+        "initial_priority": 75
+      },
+      "numComments": 0,
+      "assignedTo": {
+        "type": "team",
+        "id": "4510567771471952",
+        "name": "consultaion"
+      },
+      "isBookmarked": false,
+      "isSubscribed": true,
+      "subscriptionDetails": {
+        "reason": "assigned"
+      },
+      "hasSeen": true,
+      "annotations": [],
+      "issueType": "error",
+      "issueCategory": "error",
+      "priority": "high",
+      "priorityLockedAt": null,
+      "seerFixabilityScore": 0.24030208587646484,
+      "seerAutofixLastTriggered": null,
+      "isUnhandled": false,
+      "count": "25",
+      "userCount": 3,
+      "firstSeen": "2025-12-20T15:37:50.940449Z",
+      "lastSeen": "2026-02-14T14:45:16.029637Z",
+      "stats": {
+        "14d": [
+          [
+            1770854400,
+            0
+          ],
+          [
+            1770940800,
+            0
+          ],
+          [
+            1771027200,
+            9
+          ],
+          [
+            1771113600,
+            0
+          ],
+          [
+            1771200000,
+            0
+          ],
+          [
+            1771286400,
+            0
+          ],
+          [
+            1771372800,
+            0
+          ],
+          [
+            1771459200,
+            0
+          ],
+          [
+            1771545600,
+            0
+          ],
+          [
+            1771632000,
+            0
+          ],
+          [
+            1771718400,
+            0
+          ],
+          [
+            1771804800,
+            0
+          ],
+          [
+            1771891200,
+            0
+          ],
+          [
+            1771977600,
             0
           ]
         ]

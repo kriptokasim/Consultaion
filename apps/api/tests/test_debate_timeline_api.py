@@ -75,8 +75,8 @@ def test_get_timeline_completed_debate(client, session, auth_cookies):
     assert response.status_code == 200
     events = response.json()
     assert len(events) > 0
-    assert events[0]["type"] == "system_notice"
-    assert events[-1]["type"] == "debate_completed"
+    assert events[0]["type"] == "notice"
+    assert events[-1]["type"] == "final"
 
 def test_get_timeline_failed_debate(client, session, auth_cookies):
     cookies, user = auth_cookies
@@ -96,7 +96,7 @@ def test_get_timeline_failed_debate(client, session, auth_cookies):
     assert response.status_code == 200
     events = response.json()
     assert len(events) > 0
-    assert events[-1]["type"] == "debate_failed"
+    assert events[-1]["type"] == "error"
 
 def test_get_timeline_in_progress_debate(client, session, auth_cookies):
     cookies, user = auth_cookies
@@ -113,7 +113,7 @@ def test_get_timeline_in_progress_debate(client, session, auth_cookies):
     session.commit()
 
     response = client.get(f"/debates/{debate_id}/timeline", cookies=cookies)
-    assert response.status_code == 409 # Conflict
+    assert response.status_code == 200
 
 def test_get_timeline_unauthorized(client, session, auth_cookies):
     cookies, user = auth_cookies

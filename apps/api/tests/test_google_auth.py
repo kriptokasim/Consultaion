@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import Response
 from sqlmodel import Session, select
@@ -52,30 +53,31 @@ def test_google_callback_creates_user(monkeypatch):
     # init_db() is handled by conftest
     import routes.auth as auth_routes
 
-    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client")
-    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-secret")
-    monkeypatch.setenv("GOOGLE_REDIRECT_URL", "http://localhost:8000/auth/google/callback")
-    monkeypatch.setenv("RATE_LIMIT_BACKEND", "memory")
-    monkeypatch.setenv("WEB_APP_ORIGIN", "http://localhost:3000")
+    monkeypatch.setattr(auth_routes.settings, "GOOGLE_CLIENT_ID", "test-client")
+    monkeypatch.setattr(auth_routes.settings, "GOOGLE_CLIENT_SECRET", "test-secret")
+    monkeypatch.setattr(auth_routes.settings, "GOOGLE_REDIRECT_URL", "http://localhost:8000/auth/google/callback")
+    monkeypatch.setattr(auth_routes.settings, "RATE_LIMIT_BACKEND", "memory")
+    monkeypatch.setattr(auth_routes.settings, "WEB_APP_ORIGIN", "http://localhost:3000")
 
     monkeypatch.setattr(auth_routes, "_exchange_code_for_token", _fake_exchange_code_for_token)
     monkeypatch.setattr(auth_routes, "_fetch_google_profile", _fake_fetch_google_profile)
-    monkeypatch.setattr(auth_routes, "increment_ip_bucket", lambda *args, **kwargs: (True, None))
 
     request = _build_request()
     response = Response()
-    with Session(database.engine) as session:
-        redirect_response = asyncio.run(
-            google_callback(
-                request=request,
-                response=response,
-                code="test-code",
-                state="abc123",
-                session=session,
+    with patch("security.state_store.state_store.consume_state", return_value={"next": "/dashboard", "created_at": 1, "ip": "testclient"}):
+        with Session(database.engine) as session:
+            redirect_response = asyncio.run(
+                google_callback(
+                    request=request,
+                    response=response,
+                    code="test-code",
+                    state="abc123",
+                    session=session,
+                )
             )
-        )
     assert redirect_response.status_code in (302, 307)
-    assert redirect_response.headers["location"] == "http://localhost:3000/dashboard"
+    assert redirect_response.headers["location"].startswith("http://localhost:3000/dashboard")
+    assert "?token=" in redirect_response.headers["location"]
 
     with Session(database.engine) as session:
         user = session.exec(select(User).where(User.email == "google-user@example.com")).first()
