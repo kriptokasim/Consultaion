@@ -21,6 +21,8 @@ from models import Debate, DebateRound, Message, Score, User, Vote
 from parliament.engine import run_parliament_debate
 from schemas import DebateConfig, DebateSummary, default_agents, default_judges
 from sqlalchemy import or_, update
+from exceptions import ProviderCircuitOpenError
+from llm_errors import TransientLLMError
 from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
@@ -257,12 +259,21 @@ async def _complete_debate_record(
         session.add(debate)
         if user_id:
             try:
-                # TODO: Async token usage recording
-                # record_token_usage(session, user_id, tokens_total, commit=False)
-                pass
+                from usage_limits import record_token_usage
+                # Execute asynchronously via gathering or directly since we are in async_session_scope
+                # But wait, record_token_usage is synchronous right now in billing. Let's run it in executor or just call it directly.
+                # It does an insert and commit. To avoid session conflicts, we should commit this session first, then call it.
+                await session.commit()
+                # Run sync function in threadpool
+                import asyncio
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: record_token_usage(user_id, tokens_total)
+                )
             except Exception:
                 logger.exception("Failed to record token usage for debate %s", debate_id)
-        await session.commit()
+        else:
+            await session.commit()
 
 
 async def _run_mock_debate(
@@ -627,8 +638,35 @@ async def run_debate(
         # Success path for Standard Pipeline
         await _build_and_send_summary(debate_id, debate_user_id)
 
+    except (TransientLLMError, ProviderCircuitOpenError) as exc:
+        logger.warning("Debate %s encountered transient/provider error: %s", debate_id, exc)
+        await send_slack_alert(
+            message="[Consultaion] Debate transient/provider failure",
+            level="warning",
+            meta={
+                "debate_id": debate_id,
+                "error": str(exc)[:500],
+            },
+        )
+        try:
+            async with async_session_scope() as session:
+                debate = await session.get(Debate, debate_id)
+                if debate and debate.status != "failed":
+                    debate.status = "failed"
+                    debate.updated_at = datetime.now(timezone.utc)
+                    debate.final_meta = {"error": f"Temporary AI provider issue: {exc}"}
+                    session.add(debate)
+                    await session.commit()
+        except Exception:
+            pass
+
+        await backend.publish(
+            channel_id,
+            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": f"Temporary AI provider issue: {exc}"}},
+        )
+
     except Exception as exc:
-        logger.exception("Debate %s failed: %s", debate_id, exc)
+        logger.exception("Debate %s failed terminally: %s", debate_id, exc)
         
         # Slack Alert
         await send_slack_alert(
