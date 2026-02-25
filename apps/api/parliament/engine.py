@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, List, Optional
@@ -9,11 +10,10 @@ from typing import Any, List, Optional
 from agents import UsageAccumulator, UsageCall, call_llm_for_role
 from config import settings
 from database import session_scope
-from models import Debate, Message
+from models import Debate, Message, Score
 from pydantic import ValidationError
 from schemas import PanelConfig, default_panel_config, DebateConfig, default_judges, JudgeConfig
 from sse_backend import get_sse_backend
-from models import Debate, Message, Score
 from orchestration.finalization import FinalizationService
 from .config import PARLIAMENT_CHARTER
 from .prompts import build_messages_for_seat, transcript_to_text
@@ -179,7 +179,6 @@ async def _judge_performance(
         # Parse JSON
         try:
             # Try to find JSON block
-            import re
             match = re.search(r"\{.*\}", text, flags=re.S)
             json_str = match.group(0) if match else text
             data = json.loads(json_str)
@@ -367,33 +366,37 @@ async def run_parliament_debate(
     except Exception:
         judges = default_judges()
 
-    scores, judge_details, judge_usage = await _judge_performance(
-        debate_id=debate_id,
-        prompt=prompt,
-        transcript=transcript_to_text(transcript_buffer, limit=50), # Full context for judging
-        panel=panel,
-        judges=judges,
-        model_id=model_id,
-    )
-    usage.extend(judge_usage)
+    # Wrap judging in try/except so a judge LLM failure does not crash the debate
+    try:
+        scores, judge_details, judge_usage = await _judge_performance(
+            debate_id=debate_id,
+            prompt=prompt,
+            transcript=transcript_to_text(transcript_buffer, limit=50),
+            panel=panel,
+            judges=judges,
+            model_id=model_id,
+        )
+        usage.extend(judge_usage)
 
-    # Persist scores
-    with session_scope() as session:
-        for detail in judge_details:
-            session.add(
-                Score(
-                    debate_id=debate_id,
-                    persona=detail["persona"],
-                    judge=detail["judge"],
-                    score=detail["score"],
-                    rationale=detail["rationale"],
+        # Persist scores
+        with session_scope() as session:
+            for detail in judge_details:
+                session.add(
+                    Score(
+                        debate_id=debate_id,
+                        persona=detail["persona"],
+                        judge=detail["judge"],
+                        score=detail["score"],
+                        rationale=detail["rationale"],
+                    )
                 )
-            )
-        # We don't need to commit here if session_scope handles it, but verify
-        # session_scope commits on exit.
 
-    # Compute Ranking
-    ranking, _ = FinalizationService.compute_rankings(scores)
+        # Compute Ranking
+        ranking, _ = FinalizationService.compute_rankings(scores)
+    except Exception as judge_exc:
+        logger.error("Judging phase failed, falling back to seat-order ranking: %s", judge_exc)
+        scores = []
+        ranking = [seat.display_name for seat in panel.seats]
 
     final_meta = {
         "engine": panel.engine_version,
