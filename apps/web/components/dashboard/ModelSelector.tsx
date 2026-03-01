@@ -47,7 +47,7 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
 
     if (models.length === 1) {
         return (
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary">
                 {getModelIcon(models[0])}
                 {models[0].display_name}
             </div>
@@ -67,10 +67,10 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
                         onClick={() => isAllowed && onSelect(model.id)}
                         disabled={!isAllowed}
                         className={cn(
-                            "group relative flex items-start gap-3 rounded-xl border-2 p-3 text-left transition-all duration-200",
+                            "group relative flex items-start gap-3 rounded-xl border-2 p-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2",
                             isSelected
-                                ? "border-amber-500 bg-amber-50 shadow-[0_4px_12px_rgba(255,190,92,0.25)]"
-                                : "border-amber-100 bg-white hover:border-amber-300 hover:bg-amber-50/50",
+                                ? "border-primary bg-primary/5 shadow-smooth"
+                                : "border-border bg-card hover:border-primary/50 hover:bg-primary/5",
                             !isAllowed && "cursor-not-allowed opacity-50"
                         )}
                     >
@@ -79,8 +79,8 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
                             className={cn(
                                 "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all",
                                 isSelected
-                                    ? "border-amber-500 bg-amber-500"
-                                    : "border-amber-200 bg-white group-hover:border-amber-400"
+                                    ? "border-primary bg-primary"
+                                    : "border-border bg-card group-hover:border-primary/50"
                             )}
                         >
                             {isSelected && (
@@ -93,8 +93,8 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
                             className={cn(
                                 "rounded-lg p-2 transition-colors",
                                 isSelected
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-stone-100 text-stone-600 group-hover:bg-amber-100 group-hover:text-amber-700"
+                                    ? "bg-primary/10 text-primary"
+                                    : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
                             )}
                         >
                             {getModelIcon(model)}
@@ -105,24 +105,24 @@ export function ModelSelector({ models, selectedModel, onSelect, allowedTiers }:
                             <p
                                 className={cn(
                                     "text-sm font-semibold leading-tight mb-1.5",
-                                    isSelected ? "text-amber-900" : "text-[#3a2a1a]"
+                                    isSelected ? "text-primary" : "text-foreground"
                                 )}
                             >
                                 {model.display_name}
                             </p>
                             <div className="flex flex-wrap items-center gap-2 mb-1">
                                 {model.recommended && (
-                                    <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                                    <span className="shrink-0 rounded-full bg-accent-secondary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-secondary">
                                         {t("dashboard.modal.recommendedTag")}
                                     </span>
                                 )}
                                 {!isAllowed && (
-                                    <span className="shrink-0 rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-600">
+                                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                                         Pro
                                     </span>
                                 )}
                             </div>
-                            <p className="text-xs text-stone-500">
+                            <p className="text-xs text-muted-foreground">
                                 {getCapabilityLabel(model, t)}
                             </p>
                         </div>

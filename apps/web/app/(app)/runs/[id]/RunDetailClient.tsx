@@ -206,7 +206,7 @@ export default function RunDetailClient() {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="ml-3 text-sm text-stone-500">Loading debate results…</span>
+        <span className="ml-3 text-sm text-muted-foreground">Loading debate results…</span>
       </div>
     );
   }

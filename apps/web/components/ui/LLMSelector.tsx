@@ -56,32 +56,32 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
     : null
 
   return (
-    <section className="relative mt-12 w-full overflow-hidden rounded-[36px] px-6 py-14 text-white shadow-[0_50px_140px_-80px_rgba(15,15,15,0.9)]" style={{ background: 'linear-gradient(180deg, #1E1F2E 0%, #161923 50%, #0D0E14 100%)' }}>
-      {/* Gradient overlay */}
-      <div className="pointer-events-none absolute inset-0 opacity-30">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(244,166,35,0.25),_transparent_55%)]" />
+    <section className="relative mt-12 w-full overflow-hidden rounded-[36px] border border-border bg-card px-6 py-14 shadow-smooth-xl">
+      {/* Subtle accent overlay */}
+      <div className="pointer-events-none absolute inset-0 opacity-20">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_hsl(var(--color-accent-secondary)_/_0.15),_transparent_55%)]" />
       </div>
 
       <div className="relative mx-auto flex max-w-5xl flex-col items-center text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.5em] text-white/60">{t("landing.selector.caption")}</p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.5em] text-muted-foreground">{t("landing.selector.caption")}</p>
+        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
           {t("landing.selector.title")}
         </h2>
-        <p className="mt-4 max-w-2xl text-base text-white/70">
+        <p className="mt-4 max-w-2xl text-base text-muted-foreground">
           {t("landing.selector.description")}
         </p>
         {/* Multi-LLM Benefits */}
-        <ul className="mt-6 space-y-2 text-left text-sm text-white/80">
+        <ul className="mt-6 space-y-2 text-left text-sm text-foreground/80">
           <li className="flex items-start gap-2">
-            <span className="mt-1 text-amber-400">✓</span>
+            <span className="mt-1 text-accent-secondary">✓</span>
             <span>{t("landing.selector.benefit1")}</span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="mt-1 text-amber-400">✓</span>
+            <span className="mt-1 text-accent-secondary">✓</span>
             <span>{t("landing.selector.benefit2")}</span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="mt-1 text-amber-400">✓</span>
+            <span className="mt-1 text-accent-secondary">✓</span>
             <span>{t("landing.selector.benefit3")}</span>
           </li>
         </ul>
@@ -97,15 +97,15 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
               type="button"
               onClick={() => setSelected(model.id)}
               className={cn(
-                "group relative overflow-hidden rounded-3xl border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40",
-                "glass-card-dark",
+                "group relative overflow-hidden rounded-3xl border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2",
+                "bg-secondary/80 backdrop-blur-sm",
                 "p-6 text-left",
                 isSelected
                   ? cn(
-                    "scale-105 border-white/30 shadow-2xl",
+                    "scale-105 border-primary/30 shadow-2xl",
                     model.glow,
                   )
-                  : "hover:-translate-y-1 border-white/10",
+                  : "hover:-translate-y-1 border-border",
               )}
             >
               {isSelected && (
@@ -134,8 +134,8 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
                   )}
                 </div>
                 <div>
-                  <p className="text-lg font-semibold">{model.name}</p>
-                  <p className="mt-1 text-sm text-white/70">{t(model.descriptionKey)}</p>
+                  <p className="text-lg font-semibold text-foreground">{model.name}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{t(model.descriptionKey)}</p>
                 </div>
                 {/* Learn More Button */}
                 <button
@@ -143,7 +143,7 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
                     e.stopPropagation()
                     setSelectedModelId(model.id)
                   }}
-                  className="mt-4 w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+                  className="mt-4 w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
                 >
                   {t("models.details.learnMore")}
                 </button>
@@ -164,7 +164,7 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
         <button
           type="button"
           onClick={onStart}
-          className="group inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-8 py-3 text-sm font-semibold text-white shadow-[0_25px_60px_-20px_rgba(255,255,255,0.6)] transition-all duration-200 hover:scale-105 active:scale-95"
+          className="group inline-flex items-center gap-3 rounded-full bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-smooth-lg transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
         >
           {t("landing.selector.cta")}
           <ArrowRight className="h-4 w-4 transition-all duration-200 group-hover:translate-x-1" />

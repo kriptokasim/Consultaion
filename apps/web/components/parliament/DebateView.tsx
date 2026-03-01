@@ -13,20 +13,20 @@ export interface DebateViewProps {
 
 const getRoleColor = (role?: Role) => {
   const colors = {
-    agent: "border-l-amber-200",
-    critic: "border-l-purple-200",
-    judge: "border-l-amber-400",
-    synthesizer: "border-l-emerald-200",
+    agent: "border-l-blue-300 dark:border-l-blue-500",
+    critic: "border-l-purple-300 dark:border-l-purple-500",
+    judge: "border-l-accent-secondary",
+    synthesizer: "border-l-emerald-300 dark:border-l-emerald-500",
   };
-  return `border-l-4 ${role ? colors[role] ?? "border-l-stone-200" : "border-l-stone-200"}`;
+  return `border-l-4 ${role ? colors[role] ?? "border-l-border" : "border-l-border"}`;
 };
 
 const getTypeBadge = (type: string) => {
   const badges = {
-    message: "bg-blue-50 text-blue-700 border-blue-100",
-    score: "bg-amber-50 text-amber-700 border-amber-100",
-    final: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    notice: "bg-stone-100 text-stone-600 border-stone-200",
+    message: "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+    score: "bg-accent-secondary/10 text-accent-secondary border-accent-secondary/20",
+    final: "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800",
+    notice: "bg-muted text-muted-foreground border-border",
   };
   return badges[type as keyof typeof badges] || badges.notice;
 };
@@ -43,25 +43,25 @@ export default function DebateView({ events, className = "" }: DebateViewProps) 
 
   return (
     <section
-      className={`rounded-3xl border border-stone-200 bg-white p-6 ${className}`}
+      className={`rounded-3xl border border-border bg-card p-6 ${className}`}
       aria-labelledby="debate-title"
     >
       <div className="space-y-6">
         <div className="text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+          <div className="inline-flex items-center gap-2 rounded-full border border-accent-secondary/20 bg-accent-secondary/5 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-accent-secondary">
             <MessageSquare className="h-4 w-4" aria-hidden="true" />
             {t("debate.transcript.title")}
           </div>
-          <h2 id="debate-title" className="mt-3 text-2xl font-semibold text-stone-900">
+          <h2 id="debate-title" className="mt-3 text-2xl font-semibold text-foreground">
             {t("debate.transcript.currentDebate")}
           </h2>
         </div>
 
-        <div className="rounded-2xl border border-stone-100 bg-stone-50/70 p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+        <div className="rounded-2xl border border-border bg-secondary/50 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("debate.transcript.roleLegend")}
           </h3>
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-stone-600">
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <LegendDot color="bg-blue-500" label={t("debate.transcript.role.agent")} />
             <LegendDot color="bg-purple-500" label={t("debate.transcript.role.critic")} />
             <LegendDot color="bg-amber-500" label={t("debate.transcript.role.judge")} />
@@ -76,14 +76,14 @@ export default function DebateView({ events, className = "" }: DebateViewProps) 
           aria-label="Debate transcript"
         >
           {events.length === 0 ? (
-            <Card className="border border-stone-100 bg-stone-50/70 p-8 text-center">
-              <p className="text-sm text-stone-500">{t("debate.transcript.noEvents")}</p>
+            <Card className="border border-border bg-secondary/50 p-8 text-center">
+              <p className="text-sm text-muted-foreground">{t("debate.transcript.noEvents")}</p>
             </Card>
           ) : (
             events.map((event, index) => (
               <Card
                 key={index}
-                className={`border border-stone-100 bg-white/90 p-5 shadow-sm transition hover:shadow-lg ${getRoleColor(
+                className={`border border-border bg-card p-5 shadow-sm transition hover:shadow-lg ${getRoleColor(
                   event.type === "pairwise" ? "judge" : (event as any).role,
                 )}`}
                 role="article"
@@ -91,14 +91,14 @@ export default function DebateView({ events, className = "" }: DebateViewProps) 
                 <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     {event.type === "message" && event.actor && (
-                      <h4 className="text-sm font-semibold text-stone-900">{event.actor}</h4>
+                      <h4 className="text-sm font-semibold text-foreground">{event.actor}</h4>
                     )}
 
                     {event.type === "score" && "judge" in event && (
-                      <div className="flex items-center gap-2 text-sm text-stone-600">
-                        <span className="font-semibold text-stone-900">{event.judge}</span>
-                        <span aria-hidden="true" className="text-stone-300">→</span>
-                        <span className="text-stone-600">{event.persona}</span>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="font-semibold text-foreground">{event.judge}</span>
+                        <span aria-hidden="true" className="text-muted-foreground/40">→</span>
+                        <span className="text-muted-foreground">{event.persona}</span>
                       </div>
                     )}
 
@@ -107,32 +107,32 @@ export default function DebateView({ events, className = "" }: DebateViewProps) 
                     </Badge>
 
                     {"round" in event && event.round !== undefined && (
-                      <span className="text-xs text-stone-400">{t("debate.transcript.round")} {event.round}</span>
+                      <span className="text-xs text-muted-foreground/60">{t("debate.transcript.round")} {event.round}</span>
                     )}
                   </div>
 
                   {formatTimestamp(event.at) && (
-                    <time className="text-xs text-stone-400" dateTime={event.at}>
+                    <time className="text-xs text-muted-foreground/60" dateTime={event.at}>
                       {formatTimestamp(event.at)}
                     </time>
                   )}
                 </div>
 
                 {"text" in event && event.text && (
-                  <p className="mb-3 text-sm leading-relaxed text-stone-700">{event.text}</p>
+                  <p className="mb-3 text-sm leading-relaxed text-foreground/80">{event.text}</p>
                 )}
 
                 {event.type === "score" && (
-                  <div className="mt-3 space-y-2 rounded-lg border border-amber-100 bg-amber-50/70 p-3 text-xs text-stone-700">
-                    <div className="flex items-center justify-between text-sm font-semibold text-stone-800">
+                  <div className="mt-3 space-y-2 rounded-lg border border-accent-secondary/20 bg-accent-secondary/5 p-3 text-xs text-foreground/80">
+                    <div className="flex items-center justify-between text-sm font-semibold text-foreground">
                       <span>{t("debate.transcript.judgeLabel")} {event.judge}</span>
-                      <span className="text-amber-700">{event.score.toFixed(2)}</span>
+                      <span className="text-accent-secondary">{event.score.toFixed(2)}</span>
                     </div>
-                    <div className="text-stone-600">
-                      {t("debate.transcript.target")}: <span className="font-medium text-stone-900">{event.persona}</span>
+                    <div className="text-muted-foreground">
+                      {t("debate.transcript.target")}: <span className="font-medium text-foreground">{event.persona}</span>
                     </div>
                     {event.rationale && (
-                      <p className="leading-relaxed text-stone-600">{event.rationale}</p>
+                      <p className="leading-relaxed text-muted-foreground">{event.rationale}</p>
                     )}
                   </div>
                 )}

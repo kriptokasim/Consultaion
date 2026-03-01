@@ -39,6 +39,15 @@ const config: Config = {
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        /* Canonical semantic aliases */
+        'bg-primary': 'hsl(var(--color-bg-primary))',
+        'bg-secondary': 'hsl(var(--color-bg-secondary))',
+        'bg-elevated': 'hsl(var(--color-bg-elevated))',
+        'text-primary': 'hsl(var(--color-text-primary))',
+        'text-secondary': 'hsl(var(--color-text-secondary))',
+        'accent-primary': 'hsl(var(--color-accent-primary))',
+        'accent-secondary': 'hsl(var(--color-accent-secondary))',
+        focus: 'hsl(var(--color-focus))',
         brand: {
           bg: '#F9FAFB',
           primary: '#0F172A',
@@ -98,13 +107,13 @@ const config: Config = {
           4: 'hsl(var(--chart-4))',
         },
         success: {
-          DEFAULT: 'hsl(142 76% 36%)',
+          DEFAULT: 'hsl(var(--color-success))',
           foreground: 'hsl(142 76% 97%)',
           light: 'hsl(142 72% 94%)',
           dark: 'hsl(142 80% 20%)',
         },
         warning: {
-          DEFAULT: 'hsl(38 92% 50%)',
+          DEFAULT: 'hsl(var(--color-warning))',
           foreground: 'hsl(38 92% 3%)',
           light: 'hsl(38 92% 93%)',
           dark: 'hsl(38 92% 20%)',
@@ -114,6 +123,10 @@ const config: Config = {
           foreground: 'hsl(217 91% 97%)',
           light: 'hsl(217 91% 93%)',
           dark: 'hsl(217 91% 20%)',
+        },
+        error: {
+          DEFAULT: 'hsl(var(--color-error))',
+          foreground: 'hsl(0 0% 100%)',
         },
       },
       borderRadius: {

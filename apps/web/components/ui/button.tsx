@@ -5,12 +5,12 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-500 focus-visible:ring-offset-background hover:-translate-y-[1px] hover:shadow-lg active:translate-y-0 active:shadow-sm",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-focus focus-visible:ring-offset-background hover:-translate-y-[1px] hover:shadow-lg active:translate-y-0 active:shadow-sm",
   {
     variants: {
       variant: {
         default:
-          'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-300 text-amber-900 shadow-[0_14px_30px_rgba(255,190,92,0.3)] hover:brightness-[1.02] active:brightness-95',
+          'bg-primary text-primary-foreground shadow-smooth hover:brightness-[1.02] active:brightness-95',
         amber:
           'rounded-full bg-amber-500 text-amber-950 shadow-[0_14px_30px_rgba(245,158,11,0.45)] transition-all duration-200 hover:bg-amber-600 hover:-translate-y-[1px] hover:shadow-[0_18px_40px_rgba(245,158,11,0.55)] active:translate-y-0',
         premium:
@@ -18,14 +18,14 @@ const buttonVariants = cva(
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
         outline:
-          'border border-slate-300 bg-white text-slate-800 shadow-[0_8px_24px_rgba(30,58,95,0.08)] hover:bg-slate-50 hover:text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700',
+          'border border-border bg-background text-foreground shadow-sm hover:bg-secondary hover:text-foreground dark:bg-background dark:text-foreground dark:hover:bg-secondary',
         secondary:
-          'border border-slate-200 bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 dark:border-slate-700 dark:bg-slate-800 dark:text-white',
+          'border border-border bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
         ghost:
-          'text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
+          'text-foreground hover:bg-secondary hover:text-foreground',
         muted:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        link: 'text-amber-800 underline-offset-4 hover:underline dark:text-amber-200',
+        link: 'text-accent-secondary underline-offset-4 hover:underline',
         success:
           'bg-success text-success-foreground shadow-smooth hover:bg-success/90 hover:shadow-smooth-lg',
         'soft-amber':

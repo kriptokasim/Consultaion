@@ -11,7 +11,8 @@
         "sentry:patch": "npx tsx scripts/agent_patch_pr.ts",
         "sentry:workflow": "npm run sentry:pull && npm run sentry:normalize && npm run sentry:patch --dry-run",
         "playwright:normalize": "npx tsx scripts/normalize_playwright_failures.ts",
-        "smoke": "npx tsx scripts/prod_smoke.ts"
+        "smoke": "npx tsx scripts/prod_smoke.ts",
+        "lint:colors": "npx tsx scripts/check_raw_colors.ts"
     },
     "devDependencies": {
         "@types/node": "^20.10.0",

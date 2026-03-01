@@ -1,10 +1,10 @@
 import type { HTMLAttributes } from "react";
 
 const statusColors: Record<string, string> = {
-  running: "bg-emerald-100 text-emerald-700 border-emerald-200 animate-[pulse-soft_2s_ease-in-out_infinite]",
-  completed: "bg-amber-100 text-amber-700 border-amber-200",
-  idle: "bg-stone-100 text-stone-600 border-stone-200",
-  error: "bg-red-100 text-red-700 border-red-200",
+  running: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800 animate-[pulse-soft_2s_ease-in-out_infinite]",
+  completed: "bg-accent-secondary/10 text-accent-secondary border-accent-secondary/20",
+  idle: "bg-muted text-muted-foreground border-border",
+  error: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
 };
 
 interface StatusPillProps extends HTMLAttributes<HTMLSpanElement> {
