@@ -64,3 +64,10 @@ async def debug_auth(
         "env": settings.ENV,
         "is_local_env": settings.IS_LOCAL_ENV,
     }
+
+@router.get("/sentry-debug")
+async def trigger_error():
+    """Debug endpoint to test Sentry integration. Fails in production."""
+    if not (settings.IS_LOCAL_ENV or settings.AUTH_DEBUG):
+        raise HTTPException(status_code=404, detail="Not found")
+    division_by_zero = 1 / 0

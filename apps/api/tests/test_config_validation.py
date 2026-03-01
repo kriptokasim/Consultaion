@@ -21,6 +21,9 @@ def test_config_prod_env_defaults(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost/db")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")  # Required for prod
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
+    monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
     
     settings = AppSettings()
     assert settings.IS_LOCAL_ENV is False
@@ -36,10 +39,13 @@ def test_config_workers_validation_memory_backend(monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
     monkeypatch.setenv("WEB_CONCURRENCY", "2")
     monkeypatch.setenv("SSE_BACKEND", "memory")
+    monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
     
     with pytest.raises(PydanticValidationError) as exc:
         AppSettings()
-    assert "SSE_BACKEND='redis' is required when running with 2 workers" in str(exc.value)
+    assert "FATAL: SSE_BACKEND='memory' is not allowed when running with 2 workers" in str(exc.value)
 
 def test_config_workers_validation_redis_backend(monkeypatch):
     # WORKERS > 1 with SSE_BACKEND=redis should pass
@@ -50,6 +56,9 @@ def test_config_workers_validation_redis_backend(monkeypatch):
     monkeypatch.setenv("SSE_BACKEND", "redis")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
+    monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
     
     settings = AppSettings()
     assert settings.WEB_CONCURRENCY == 2

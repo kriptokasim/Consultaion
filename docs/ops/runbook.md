@@ -281,6 +281,30 @@ curl https://api.consultaion.com/readyz
 
 ---
 
+## Runtime & Infrastructure Policies
+
+### Sentry Initialization
+
+- **Location**: Sentry init logic has been deduplicated and moved to `apps/api/integrations/sentry.py`.
+- **Policy**: Must be called exactly once during FastAPI boot lifecycle.
+
+### Redis Durability
+
+- **Policy**: Ephemeral local development instances are forbidden for reliable Celery brokering/event SSE streaming.
+- **Config**: Always run with `--appendonly yes` to guarantee pending tasks are not lost instantly on container restart.
+
+### Startup Dependency Health
+
+- **Docker Compose**: DB uses `pg_isready` and Redis uses `redis-cli ping`. API and workers `depends_on` `service_healthy`.
+- **App Readiness**: `main.py` explicitly retries the Postgres schema verification loop up to 15 times to support seamless boot sequence recovery.
+
+### Debug Route Availability
+
+- **Policy**: Routes such as `/sentry-debug` or equivalent test exception generation are relocated to isolated routers (`apps/api/routes/debug.py`).
+- **Safety**: They are only mounted if `IS_LOCAL_ENV` or `AUTH_DEBUG=True`.
+
+---
+
 ## Emergency Contacts
 
 - **Infrastructure**: Render support, Vercel support

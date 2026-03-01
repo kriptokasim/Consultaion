@@ -2,8 +2,8 @@ import asyncio
 import logging.config
 import uuid
 from contextlib import asynccontextmanager, suppress
-import sentry_sdk
 
+from integrations.sentry import init_sentry
 from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
 from billing.routes import billing_router
 from config import settings
@@ -107,26 +107,7 @@ if TEST_FAST_APP:
             logger.error("Failed to reset DB engine in TEST_FAST_APP mode", exc_info=exc)
             raise
 
-SENTRY_DSN = settings.SENTRY_DSN
-# Only initialize Sentry if DSN is set to a valid, non-empty value
-if SENTRY_DSN and SENTRY_DSN.strip() and SENTRY_DSN.strip().startswith("http"):
-    try:
-        import sentry_sdk
-        from sentry_sdk.integrations.fastapi import FastApiIntegration
-        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            environment=settings.SENTRY_ENV,
-            traces_sample_rate=float(settings.SENTRY_SAMPLE_RATE),
-            integrations=[FastApiIntegration(), SqlalchemyIntegration()],
-        )
-        logger.info("Sentry initialized successfully")
-    except Exception as e:
-        logger.warning("Failed to initialize Sentry: %s. Continuing without Sentry.", e)
-else:
-    logger.info("Sentry DSN not configured or invalid. Skipping Sentry initialization.")
-
+init_sentry()
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 ENABLE_SEC_HEADERS = settings.ENABLE_SEC_HEADERS
@@ -167,7 +148,7 @@ async def lifespan(app: FastAPI):
         yield
         return
     init_db()
-    # Verify that critical tables exist; fail fast if missing
+    # Verify that critical tables exist; retry briefly if DB is warming up
     try:
         from sqlalchemy import create_engine, inspect
         engine = create_engine(settings.DATABASE_URL)
@@ -180,16 +161,35 @@ async def lifespan(app: FastAPI):
             "audit_log",
             "debate",
         }
-        inspector = inspect(engine)
-        existing_tables = set(inspector.get_table_names())
-        missing = [tbl for tbl in critical_tables if tbl not in existing_tables]
-
+        
+        # Bounded retry for database warm-up
+        max_retries = 15
+        retry_delay = 2
+        missing = []
+        
+        for attempt in range(max_retries):
+            try:
+                inspector = inspect(engine)
+                existing_tables = set(inspector.get_table_names())
+                missing = [tbl for tbl in critical_tables if tbl not in existing_tables]
+                if not missing:
+                    logger.info("Database connection and schema verified successfully.")
+                    break
+                else:
+                    logger.warning("Attempt %d: Missing critical tables: %s (DB may be mid-migration)", attempt + 1, missing)
+            except Exception as e:
+                logger.warning("Attempt %d: Database connection failed (warming up?): %s", attempt + 1, e)
+                
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                
         if missing:
-            msg = f"Missing critical tables: {', '.join(missing)}"
+            msg = f"Missing critical tables after retries: {', '.join(missing)}. Please apply migrations."
             logger.error(msg)
             raise RuntimeError(msg)
+            
     except Exception as e:
-        logger.error("Database schema verification failed: %s", e)
+        logger.error("Database schema verification critically failed: %s", e)
         raise
 
     # Verify migration version matches code
@@ -256,25 +256,6 @@ async def lifespan(app: FastAPI):
             with suppress(asyncio.CancelledError):
                 await cleanup_task
         await sse_backend.stop()
-
-
-
-
-# Initialize Sentry
-# Initialize Sentry
-if settings.SENTRY_DSN and settings.SENTRY_DSN.strip() and settings.SENTRY_DSN.startswith("http"):
-    try:
-        sentry_sdk.init(
-            dsn=settings.SENTRY_DSN,
-            send_default_pii=True,
-            enable_logs=True,
-            traces_sample_rate=1.0,
-            profile_session_sample_rate=1.0,
-            profile_lifecycle="trace",
-        )
-    except Exception as e:
-        print(f"Failed to initialize Sentry: {e}")
-
 app = FastAPI(
     title="Consultaion API",
     version="0.1.0",
@@ -355,8 +336,9 @@ app.include_router(debates_router)
 app.include_router(teams_router)
 app.include_router(admin_router)
 
-# Patchset 53.0: Debug routes (only active when AUTH_DEBUG=True)
-app.include_router(debug_router)
+# Patchset 53.0: Debug routes (only registered in safe environments)
+if settings.IS_LOCAL_ENV or settings.AUTH_DEBUG:
+    app.include_router(debug_router)
 
 # Import and add routing admin router
 from routes.routing_admin import router as routing_admin_router
@@ -378,12 +360,7 @@ from routes.votes import router as votes_router
 app.include_router(votes_router)
 
 
-@app.get("/sentry-debug")
-async def trigger_error():
-    if not settings.IS_LOCAL_ENV:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Not found")
-    division_by_zero = 1 / 0
+app.include_router(votes_router)
 
 
 

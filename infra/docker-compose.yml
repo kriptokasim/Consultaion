@@ -8,8 +8,10 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - SSE_REDIS_URL=${SSE_REDIS_URL:-redis://redis:6379/0}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports: ["8000:8000"]
   worker:
     build: ../apps/api
@@ -19,8 +21,10 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - SSE_REDIS_URL=${SSE_REDIS_URL:-redis://redis:6379/0}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     command: ["celery", "-A", "worker.celery_app", "worker", "-l", "info"]
   web:
     build: ../apps/web
@@ -34,6 +38,15 @@ services:
       POSTGRES_DB: consultaion
       POSTGRES_USER: ${POSTGRES_USER:-consultaion}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_dev}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-consultaion} -d consultaion",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     volumes:
       - pg_data:/var/lib/postgresql/data
     ports:
@@ -41,7 +54,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # Use appendonly to ensure local/persistent queue items don't drop instantly on restart
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     ports:
       - "6379:6379"
 

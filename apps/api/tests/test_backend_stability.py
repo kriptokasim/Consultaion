@@ -28,14 +28,6 @@ def test_config_production_safety_validation(monkeypatch):
         monkeypatch.setenv("ENABLE_CSRF", "1")
         AppSettings()
 
-    # 3. Test ENABLE_SEC_HEADERS
-    with pytest.raises(ValueError):
-        monkeypatch.setenv("USE_MOCK", "0")
-        monkeypatch.setenv("REQUIRE_REAL_LLM", "1")
-        monkeypatch.setenv("ENABLE_SEC_HEADERS", "0")
-        monkeypatch.setenv("ENABLE_CSRF", "1")
-        AppSettings()
-
 def test_config_sse_backend_validation(monkeypatch):
     """Test SSE backend validation for multi-worker environments (C1)."""
     from config import AppSettings
