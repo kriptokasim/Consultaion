@@ -2,6 +2,16 @@ from collections import defaultdict
 from threading import Lock
 from typing import Dict
 
+# Standardized Metric Names (Patchset 107)
+# - debate.started
+# - debate.completed
+# - debate.failed
+# - debate.degraded
+# - sse.stream.opened
+# - sse.stream.closed
+# - sse.publish.failed
+# - rate_limit.triggered
+
 _metrics: Dict[str, int] = defaultdict(int)
 _lock = Lock()
 

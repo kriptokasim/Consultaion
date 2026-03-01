@@ -82,7 +82,7 @@
 - **Access**: Users can view their debates and account info
 - **Deletion**: Users can delete their account via Settings
 - **Opt-out**: Users can disable analytics tracking
-- **Contact**: <privacy@consultaion.ai> (or support email)
+- **Contact**: <privacy@consultaion.com> (or support email)
 
 ---
 

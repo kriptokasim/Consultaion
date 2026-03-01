@@ -211,10 +211,14 @@ class RedisChannelBackend:
             except (redis.ConnectionError, redis.TimeoutError) as e:
                 if attempt == 2:
                     logger.error(f"Failed to publish to Redis SSE {channel_id} after 3 attempts: {e}")
+                    from metrics import increment_metric
+                    increment_metric("sse.publish.degraded")
                 else:
                     await asyncio.sleep(0.1 * (2**attempt))
             except Exception as e:
                 logger.error(f"Failed to publish to Redis SSE {channel_id}: {e}")
+                from metrics import increment_metric
+                increment_metric("sse.publish.failed")
                 return
 
     async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:

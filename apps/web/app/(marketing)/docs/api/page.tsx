@@ -9,7 +9,7 @@ export default function ApiDocsPage() {
     const { t } = useI18n();
     const [copied, setCopied] = useState(false);
 
-    const exampleCode = `const res = await fetch("https://api.consultaion.ai/debates", {
+    const exampleCode = `const res = await fetch("https://api.consultaion.com/debates", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   credentials: "include",
@@ -45,7 +45,7 @@ const data = await res.json();
                 <section>
                     <h2 className="mb-4 text-2xl font-semibold text-[#3a2a1a]">{t("docs.api.baseUrl")}</h2>
                     <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 font-mono text-sm text-amber-900">
-                        https://api.consultaion.ai
+                        https://api.consultaion.com
                     </div>
                     <p className="mt-2 text-sm text-[#5a4a3a]">
                         Local development: set <code className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">NEXT_PUBLIC_API_URL</code> in <code className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">.env.local</code>

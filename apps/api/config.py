@@ -86,7 +86,7 @@ class AppSettings(BaseSettings):
 
     DISABLE_AUTORUN: bool = False
     FAST_DEBATE: bool = False
-    USE_MOCK: bool = True
+    USE_MOCK: bool = False
     REQUIRE_REAL_LLM: bool = False
     DISABLE_RATINGS: bool = False
     ENABLE_METRICS: bool = True
@@ -117,7 +117,7 @@ class AppSettings(BaseSettings):
         description="Sentry DSN for error tracking"
     )
 
-    ENABLE_SEC_HEADERS: bool = False
+    ENABLE_SEC_HEADERS: bool = True
     CORS_ORIGINS: str = "http://localhost:3000"
     WEB_APP_ORIGIN: str | None = None
     NEXT_PUBLIC_WEB_URL: str | None = None
@@ -288,6 +288,7 @@ class AppSettings(BaseSettings):
         
         if is_local:
             object.__setattr__(self, "COOKIE_SECURE", False)
+            object.__setattr__(self, "ENABLE_SEC_HEADERS", False)
         else:
             object.__setattr__(self, "ENABLE_SEC_HEADERS", True)
             object.__setattr__(self, "COOKIE_SECURE", True)
@@ -337,6 +338,16 @@ class AppSettings(BaseSettings):
                         "At least one provider API key required when REQUIRE_REAL_LLM=1 in production. "\
                         "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY."
                     )
+            
+            # Patchset 107: Safe production defaults
+            if getattr(self, "USE_MOCK", False):
+                raise ValueError("FATAL: USE_MOCK=True is not allowed in production/staging environments.")
+            if not getattr(self, "REQUIRE_REAL_LLM", False):
+                raise ValueError("FATAL: REQUIRE_REAL_LLM=False is not allowed in production/staging environments.")
+            if not getattr(self, "ENABLE_SEC_HEADERS", True):
+                raise ValueError("FATAL: ENABLE_SEC_HEADERS=False is not allowed in production/staging environments.")
+            if not getattr(self, "ENABLE_CSRF", True):
+                raise ValueError("FATAL: ENABLE_CSRF=False is not allowed in production/staging environments without explicit documented bypass.")
         else:
             # Local env: log warnings
             if not self.JWT_SECRET or self.JWT_SECRET in ("change_me_in_prod", "CHANGE_ME_IN_PRODUCTION"):
@@ -396,11 +407,11 @@ class AppSettings(BaseSettings):
 
         # SSE & Workers validation
         workers_count = int(self.WEB_CONCURRENCY or self.GUNICORN_WORKERS or 1)
-        if workers_count > 1 and self.SSE_BACKEND.lower() != "redis":
+        if workers_count > 1 and self.SSE_BACKEND.lower() == "memory":
             if not is_local:
                 raise ValueError(
-                    f"SSE_BACKEND='redis' is required when running with {workers_count} workers in production. "
-                    "Configure REDIS_URL and set SSE_BACKEND=redis."
+                    f"FATAL: SSE_BACKEND='memory' is not allowed when running with {workers_count} workers in production/staging. "
+                    "Configure REDIS_URL and set SSE_BACKEND=redis to prevent dropped streams."
                 )
             else:
                 logger.warning(

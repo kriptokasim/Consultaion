@@ -210,6 +210,18 @@ async def lifespan(app: FastAPI):
                  logger.warning("Database has no migration revision! Changes may be missing.")
     except Exception as e:
         logger.warning(f"Could not verify migration version: {e}")
+        
+    # Patchset 107: Secondary startup validation for production safety
+    if settings.APP_ENV in ("production", "staging"):
+        if getattr(settings, "USE_MOCK", False):
+            raise RuntimeError("FATAL: Refusing startup in production/staging with USE_MOCK=True.")
+        if not getattr(settings, "REQUIRE_REAL_LLM", False):
+            raise RuntimeError("FATAL: Refusing startup in production/staging with REQUIRE_REAL_LLM=False.")
+        if not getattr(settings, "ENABLE_SEC_HEADERS", True):
+            raise RuntimeError("FATAL: Refusing startup in production/staging with ENABLE_SEC_HEADERS=False.")
+        if not getattr(settings, "ENABLE_CSRF", True):
+            logger.warning("WARNING: Startup permitted with ENABLE_CSRF=False but this is not recommended in production.")
+            
     _warn_on_multi_worker()
     try:
         ensure_rate_limiter_ready(raise_on_failure=settings.RATE_LIMIT_BACKEND == "redis")
@@ -324,40 +336,13 @@ if settings.ENV != "test":
 
 from exceptions import AppError
 
+from exception_handlers import app_error_handler, http_exception_handler, validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException
 
-@app.exception_handler(AppError)
-async def app_error_handler(request: Request, exc: AppError):
-    logger.error(
-        "AppError",
-        extra={
-            "code": exc.code,
-            "details": exc.details,
-            "status_code": exc.status_code,
-            "request_path": request.url.path,
-            "request_method": request.method,
-            "request_id": request.headers.get("x-request-id"),
-            "user_id": getattr(request.state, "user_id", None),
-        },
-    )
-    error_payload = {
-        "code": exc.code,
-        "message": exc.message,
-        "details": exc.details,
-        "hint": exc.hint,
-        "retryable": exc.retryable,
-    }
-    # Patchset 67.0: Add retry_after_seconds for rate limit errors
-    headers: dict[str, str] = {}
-    if hasattr(exc, "retry_after_seconds") and exc.retry_after_seconds is not None:
-        error_payload["retry_after_seconds"] = exc.retry_after_seconds
-        headers["Retry-After"] = str(exc.retry_after_seconds)
-    
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": error_payload},
-        headers=headers if headers else None,
-    )
-
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 # Domain routers live in apps/api/routes/*
 from routes.debug import router as debug_router  # Patchset 53.0

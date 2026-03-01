@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Bot, Zap, Brain, Sparkles } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { ModelSelectorSkeleton } from "@/components/ui/skeleton";
+import { getModelAvatarUrl } from "@/lib/avatar";
 
 type ModelOption = {
     id: string;
@@ -16,11 +17,18 @@ type ModelOption = {
 
 // Map providers/tags to icons
 function getModelIcon(model: ModelOption) {
-    const iconClass = "h-5 w-5";
-    if (model.tags?.includes("fast")) return <Zap className={iconClass} />;
-    if (model.tags?.includes("reasoning")) return <Brain className={iconClass} />;
-    if (model.provider === "openai") return <Sparkles className={iconClass} />;
-    return <Bot className={iconClass} />;
+    const iconClass = "h-5 w-5 object-contain";
+    const logoUrl = getModelAvatarUrl(model.display_name) || getModelAvatarUrl(model.provider);
+
+    // If it maps to one of our static brand logos, use it
+    if (logoUrl && logoUrl.startsWith('/logos/')) {
+        return <img src={logoUrl} alt={model.provider} className={iconClass} />;
+    }
+
+    if (model.tags?.includes("fast")) return <Zap className="h-5 w-5" />;
+    if (model.tags?.includes("reasoning")) return <Brain className="h-5 w-5" />;
+    if (model.provider === "openai") return <Sparkles className="h-5 w-5" />;
+    return <Bot className="h-5 w-5" />;
 }
 
 // Derive capability label from tags

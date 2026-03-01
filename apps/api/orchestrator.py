@@ -475,6 +475,12 @@ async def run_debate(
     if trace_id:
         current_trace_id.set(trace_id)
 
+    runner_id = _get_runner_id()
+    log_extra = {"debate_id": debate_id, "runner_id": runner_id, "provider": model_id}
+    logger.info(f"Starting run_debate for {debate_id} with runner {runner_id}", extra=log_extra)
+    from metrics import increment_metric
+    increment_metric("debate.started")
+
     config = DebateConfig.model_validate(config_data or {})
     agent_configs = config.agents or default_agents()
     judge_configs = config.judges or default_judges()
@@ -519,7 +525,7 @@ async def run_debate(
                     pass
         heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
 
-        logger.debug("Debate %s: starting orchestration (runner=%s)", debate_id, runner_id)
+        logger.info("Debate orchestration started (lease acquired)", extra=log_extra)
 
         if settings.FAST_DEBATE:
             return await _run_mock_debate(debate_id, channel_id, agent_configs, usage_tracker)
@@ -638,10 +644,13 @@ async def run_debate(
         await runner.run(context)
         
         # Success path for Standard Pipeline
+        logger.info(f"Debate completed successfully", extra=log_extra)
+        increment_metric("debate.completed")
         await _build_and_send_summary(debate_id, debate_user_id)
 
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
-        logger.warning("Debate %s encountered transient/provider error: %s", debate_id, exc)
+        logger.warning(f"Debate encountered transient/provider error: {exc}", extra=log_extra)
+        increment_metric("debate.degraded")
         await send_slack_alert(
             message="[Consultaion] Debate transient/provider failure",
             level="warning",
@@ -668,7 +677,8 @@ async def run_debate(
         )
 
     except Exception as exc:
-        logger.exception("Debate %s failed terminally: %s", debate_id, exc)
+        logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
+        increment_metric("debate.failed")
         
         # Slack Alert
         await send_slack_alert(

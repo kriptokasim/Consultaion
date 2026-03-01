@@ -149,6 +149,8 @@ async def get_debate_timeline(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
+    import time
+    start_time = time.time()
     debate = session.get(Debate, debate_id)
     debate = require_debate_access(debate, current_user, session)
     if not debate:
@@ -156,6 +158,11 @@ async def get_debate_timeline(
     
     # Return partial timeline for running debates instead of erroring
     timeline = build_debate_timeline(session, debate)
+    
+    elapsed_ms = (time.time() - start_time) * 1000
+    if elapsed_ms > 500:
+        logger.warning(f"timeline_fetch_slow: debate_id={debate_id} elapsed_ms={elapsed_ms:.1f} events={len(timeline)}")
+        
     return timeline
 
 
@@ -439,7 +446,7 @@ async def start_debate_run(
 @router.get("/debates")
 async def list_debates(
     status: Optional[str] = Query(default=None),
-    limit: int = Query(20, ge=1, le=200),
+    limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0, le=10000),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -595,8 +602,12 @@ async def get_debate_events(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    import time
+    start_time = time.time()
+    
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
 
+    # Patchset 107: Using single transaction block / thread safety optimization
     messages = session.exec(
         select(Message).where(Message.debate_id == debate_id).order_by(sa.asc(Message.created_at))
     ).all()
@@ -685,6 +696,11 @@ async def get_debate_events(
         )
 
     events.sort(key=lambda e: e.get("at") or "")
+    
+    elapsed_ms = (time.time() - start_time) * 1000
+    if elapsed_ms > 500:
+        logger.warning(f"timeline_fetch_slow: debate_id={debate_id} elapsed_ms={elapsed_ms:.1f} events={len(events)}")
+        
     return {"items": events}
 
 

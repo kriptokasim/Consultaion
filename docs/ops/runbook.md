@@ -262,7 +262,7 @@ Limits are automatically set based on `ENV` variable.
 
 ```bash
 # Via API
-curl https://api.consultaion.app/admin/events?level=error \
+curl https://api.consultaion.com/admin/events?level=error \
   -H "Cookie: consultaion_token=..."
 ```
 
@@ -276,7 +276,7 @@ POST /admin/test-alert
 **View System Health:**
 
 ```bash
-curl https://api.consultaion.app/readyz
+curl https://api.consultaion.com/readyz
 ```
 
 ---

@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Bot } from "lucide-react";
 import type { Member, Role } from "./types";
+import { getModelAvatarUrl } from "@/lib/avatar";
 
 export interface ParliamentChamberProps {
   members: Member[];
@@ -38,7 +39,7 @@ export default function ParliamentChamber({
   layout = "hemicycle",
 }: ParliamentChamberProps) {
   return (
-    <section 
+    <section
       className="py-12 [--parl-blue:#0B1D3A] [--parl-gold:#D4AF37] [--muted:#101827]"
       aria-labelledby="chamber-title"
     >
@@ -50,30 +51,34 @@ export default function ParliamentChamber({
           <p className="text-base text-white/70">AI Models in Active Deliberation</p>
         </div>
 
-        <div className={`max-w-6xl mx-auto grid gap-4 ${
-          layout === "hemicycle" 
-            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" 
+        <div className={`max-w-6xl mx-auto grid gap-4 ${layout === "hemicycle"
+            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             : "grid-cols-1 md:grid-cols-2"
-        }`}>
+          }`}>
           {members.map((member) => {
             const isActive = member.id === activeId;
-            
+
             return (
               <Card
                 key={member.id}
-                className={`p-5 transition-all bg-[--muted] border-white/10 ${
-                  isActive ? "border-2 border-[--parl-gold] shadow-xl shadow-[--parl-gold]/20" : "hover:border-white/20"
-                }`}
+                className={`p-5 transition-all bg-[--muted] border-white/10 ${isActive ? "border-2 border-[--parl-gold] shadow-xl shadow-[--parl-gold]/20" : "hover:border-white/20"
+                  }`}
                 role="article"
                 aria-label={`${member.name}, ${member.role}${isActive ? ", currently speaking" : ""}`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      <div className="w-12 h-12 rounded-full bg-[--parl-gold]/10 flex items-center justify-center">
-                        <Bot className="w-6 h-6 text-[--parl-gold]" aria-hidden="true" />
+                      <div className="w-12 h-12 rounded-full bg-[--parl-gold]/10 flex items-center justify-center overflow-hidden">
+                        {(() => {
+                          const avatar = getModelAvatarUrl(member.name);
+                          if (avatar && avatar.startsWith('/logos/')) {
+                            return <img src={avatar} alt={member.name} className="w-8 h-8 object-contain" />;
+                          }
+                          return <Bot className="w-6 h-6 text-[--parl-gold]" aria-hidden="true" />;
+                        })()}
                       </div>
-                      <div 
+                      <div
                         className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-[--muted] ${getRoleDot(member.role, isActive)}`}
                         aria-hidden="true"
                       />
@@ -85,9 +90,9 @@ export default function ParliamentChamber({
                       )}
                     </div>
                   </div>
-                  
+
                   {isActive && speakerSeconds !== undefined && (
-                    <div 
+                    <div
                       className="flex items-center justify-center w-10 h-10 rounded-full bg-[--parl-gold]/20 border border-[--parl-gold]/40"
                       aria-label={`${speakerSeconds} seconds`}
                     >
