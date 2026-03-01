@@ -34,3 +34,12 @@ apps/web/.playwright-browsers/
 apps/web/*.deb
 .vercel
 .env*.local
+
+# Desktop bot files
+.openclaw/
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
