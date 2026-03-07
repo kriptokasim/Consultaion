@@ -49,10 +49,10 @@ export default function DemoPage() {
                         <Sparkles className="h-4 w-4" />
                         {t("demo.badge")}
                     </div>
-                    <h1 className="text-4xl font-display font-bold text-[#3a2a1a] dark:text-stone-100">
+                    <h1 className="text-4xl font-display font-bold text-slate-900 dark:text-stone-100">
                         {t("demo.gallery.title")}
                     </h1>
-                    <p className="mx-auto max-w-2xl text-lg text-[#5a4a3a] dark:text-stone-300">
+                    <p className="mx-auto max-w-2xl text-lg text-slate-600 dark:text-stone-300">
                         {t("demo.gallery.subtitle")}
                     </p>
                 </header>
@@ -78,10 +78,10 @@ export default function DemoPage() {
                                         {t(`demo.tags.${scenario.tag.toLowerCase().replace(' & ', '')}`)}
                                     </span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-[#3a2a1a] dark:text-stone-100 mb-2">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-stone-100 mb-2">
                                     {t(`demo.scenarios.${scenario.id.replace('-', '')}.title`)}
                                 </h3>
-                                <p className="text-sm text-[#5a4a3a] dark:text-stone-300">
+                                <p className="text-sm text-slate-600 dark:text-stone-300">
                                     {t(`demo.scenarios.${scenario.id.replace('-', '')}.description`)}
                                 </p>
                                 {selectedScenarioId === scenario.id && (
@@ -103,7 +103,7 @@ export default function DemoPage() {
                     <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700">
                         {t("demo.context.label")}
                     </h2>
-                    <p className="text-[#5a4a3a] dark:text-stone-300">{debate.context}</p>
+                    <p className="text-slate-600 dark:text-stone-300">{debate.context}</p>
                 </section>
 
                 {/* Question */}
@@ -112,12 +112,12 @@ export default function DemoPage() {
                         <MessageSquare className="h-4 w-4" />
                         {t("demo.question.label")}
                     </h2>
-                    <p className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{debate.question}</p>
+                    <p className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{debate.question}</p>
                 </section>
 
                 {/* Agents */}
                 <section className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{t("demo.agents.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{t("demo.agents.title")}</h2>
                     <div className="grid gap-4 md:grid-cols-3">
                         {debate.agents.map((agent) => (
                             <div
@@ -130,7 +130,7 @@ export default function DemoPage() {
                                         {agent.role}
                                     </span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-[#3a2a1a] dark:text-stone-100">{agent.name}</h3>
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-stone-100">{agent.name}</h3>
                                 <p className="mt-1 text-sm text-amber-700">
                                     {agent.model} <span className="text-amber-600/70">• {agent.provider}</span>
                                 </p>
@@ -141,7 +141,7 @@ export default function DemoPage() {
 
                 {/* Debate Rounds */}
                 <section className="space-y-6">
-                    <h2 className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{t("demo.rounds.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{t("demo.rounds.title")}</h2>
                     {debate.rounds.map((round) => (
                         <div key={round.number} className="space-y-4">
                             <h3 className="flex items-center gap-2 text-lg font-semibold text-amber-800">
@@ -157,7 +157,7 @@ export default function DemoPage() {
                                         className="rounded-xl border border-amber-100/70 bg-white/80 dark:border-stone-700 dark:bg-stone-900/50 p-5 shadow-sm"
                                     >
                                         <div className="mb-2 font-semibold text-amber-900">{arg.agentName}</div>
-                                        <p className="text-[#5a4a3a] dark:text-stone-300 leading-relaxed">{arg.content}</p>
+                                        <p className="text-slate-600 dark:text-stone-300 leading-relaxed">{arg.content}</p>
                                     </div>
                                 ))}
                             </div>
@@ -167,7 +167,7 @@ export default function DemoPage() {
 
                 {/* Judge Commentary */}
                 <section className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">{t("demo.judges.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{t("demo.judges.title")}</h2>
                     <div className="space-y-3">
                         {debate.judgeCommentary.map((judge, idx) => (
                             <div
@@ -188,7 +188,7 @@ export default function DemoPage() {
 
                 {/* Champion Answer */}
                 <section className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-2xl font-semibold text-[#3a2a1a] dark:text-stone-100">
+                    <h2 className="flex items-center gap-2 text-2xl font-semibold text-slate-900 dark:text-stone-100">
                         <Trophy className="h-6 w-6 text-amber-600" />
                         {t("demo.champion.title")}
                     </h2>
@@ -201,14 +201,14 @@ export default function DemoPage() {
                                 ({debate.championAnswer.winnerModel})
                             </span>
                         </div>
-                        <p className="mb-6 text-lg font-medium text-[#3a2a1a] dark:text-stone-100 leading-relaxed">
+                        <p className="mb-6 text-lg font-medium text-slate-900 dark:text-stone-100 leading-relaxed">
                             {debate.championAnswer.synthesis}
                         </p>
                         <div className="rounded-xl bg-white/80 dark:bg-stone-800/50 p-5 border border-amber-200/70 dark:border-stone-700">
                             <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-700">
                                 {t("demo.champion.reasoning")}
                             </h4>
-                            <p className="text-[#5a4a3a] dark:text-stone-300">{debate.championAnswer.reasoning}</p>
+                            <p className="text-slate-600 dark:text-stone-300">{debate.championAnswer.reasoning}</p>
                         </div>
 
                         {/* Champion Feedback */}
@@ -218,7 +218,7 @@ export default function DemoPage() {
 
                 {/* Footer CTAs */}
                 <section className="flex flex-col items-center gap-4 rounded-3xl border border-amber-200/70 bg-white/90 dark:border-stone-700 dark:bg-stone-900/50 p-8 text-center shadow-sm">
-                    <p className="text-lg text-[#5a4a3a] dark:text-stone-300">
+                    <p className="text-lg text-slate-600 dark:text-stone-300">
                         Ready to run your own debate with real AI models?
                     </p>
                     <div className="flex flex-wrap justify-center gap-4">

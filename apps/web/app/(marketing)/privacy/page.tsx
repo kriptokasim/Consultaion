@@ -5,15 +5,15 @@ export default async function PrivacyPage() {
     const { t } = await getServerTranslations();
 
     return (
-        <main className="min-h-screen bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] px-6 py-16">
+        <main className="min-h-screen bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] dark:from-stone-900 dark:via-stone-950 dark:to-black px-6 py-16">
             <div className="mx-auto max-w-4xl space-y-8">
                 <header className="space-y-4 text-center">
-                    <h1 className="text-4xl font-bold text-[#3a2a1a]">{t("pages.privacy.title")}</h1>
+                    <h1 className="text-4xl font-bold text-slate-900 dark:text-white">{t("pages.privacy.title")}</h1>
                 </header>
 
-                <div className="rounded-3xl border border-amber-100/80 bg-white/90 p-8 shadow-lg text-[#5a4a3a] space-y-6">
+                <div className="rounded-3xl border border-amber-100/80 bg-white/90 p-8 shadow-lg text-slate-600 dark:text-slate-400 dark:border-slate-800 dark:bg-slate-900 space-y-6">
                     <section className="space-y-2">
-                        <h2 className="text-xl font-semibold text-[#3a2a1a]">1. What We Collect</h2>
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">1. What We Collect</h2>
                         <ul className="list-disc pl-5 space-y-1">
                             <li><strong>Account Information:</strong> Email, display name, and plan details.</li>
                             <li><strong>Debate Content:</strong> Prompts, questions, and generated debate results.</li>
@@ -22,7 +22,7 @@ export default async function PrivacyPage() {
                     </section>
 
                     <section className="space-y-2">
-                        <h2 className="text-xl font-semibold text-[#3a2a1a]">2. How We Use Your Data</h2>
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">2. How We Use Your Data</h2>
                         <p>We use your data to:</p>
                         <ul className="list-disc pl-5 space-y-1">
                             <li>Provide the AI debate service and generate results.</li>
@@ -33,7 +33,7 @@ export default async function PrivacyPage() {
                     </section>
 
                     <section className="space-y-2">
-                        <h2 className="text-xl font-semibold text-[#3a2a1a]">3. Data Retention</h2>
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">3. Data Retention</h2>
                         <p>We retain data only as long as necessary:</p>
                         <ul className="list-disc pl-5 space-y-1">
                             <li><strong>Debates:</strong> Retained for 365 days, then anonymized or deleted.</li>
@@ -43,7 +43,7 @@ export default async function PrivacyPage() {
                     </section>
 
                     <section className="space-y-2">
-                        <h2 className="text-xl font-semibold text-[#3a2a1a]">4. Your Rights</h2>
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">4. Your Rights</h2>
                         <p>You have full control over your data:</p>
                         <ul className="list-disc pl-5 space-y-1">
                             <li><strong>Access:</strong> View your debate history at any time.</li>
@@ -53,7 +53,7 @@ export default async function PrivacyPage() {
                     </section>
 
                     <section className="space-y-2">
-                        <h2 className="text-xl font-semibold text-[#3a2a1a]">5. Third-Party Providers</h2>
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">5. Third-Party Providers</h2>
                         <p>We use trusted providers to deliver our service:</p>
                         <ul className="list-disc pl-5 space-y-1">
                             <li><strong>AI Models:</strong> OpenAI, Anthropic, Google (for debate generation).</li>
@@ -63,11 +63,11 @@ export default async function PrivacyPage() {
                     </section>
 
                     <section className="space-y-2">
-                        <h2 className="text-xl font-semibold text-[#3a2a1a]">6. Contact</h2>
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">6. Contact</h2>
                         <p>For privacy questions, contact us at <a href="mailto:privacy@consultaion.com" className="text-amber-700 underline">privacy@consultaion.com</a>.</p>
                     </section>
 
-                    <div className="pt-4 border-t border-amber-200/50 text-sm text-amber-900/60">
+                    <div className="pt-4 border-t border-amber-200/50 text-sm text-amber-900/60 dark:border-slate-800 dark:text-slate-400/60">
                         <p>Last Updated: December 2024</p>
                         <p>This document is for informational purposes and does not constitute legal advice.</p>
                     </div>

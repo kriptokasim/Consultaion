@@ -18,31 +18,31 @@ export default function GettingStartedPage() {
                 {t("nav.goBack")}
             </Link>
 
-            <h1 className="mb-4 text-4xl font-bold text-[#3a2a1a]">{t("docs.gettingStarted.title")}</h1>
-            <p className="mb-12 text-lg text-[#5a4a3a]">{t("docs.gettingStarted.description")}</p>
+            <h1 className="mb-4 text-4xl font-bold text-slate-900 dark:text-white">{t("docs.gettingStarted.title")}</h1>
+            <p className="mb-12 text-lg text-slate-600 dark:text-slate-400">{t("docs.gettingStarted.description")}</p>
 
             <div className="space-y-12">
                 <section>
                     <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
                             1
                         </div>
-                        <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("docs.gettingStarted.step1.title")}</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("docs.gettingStarted.step1.title")}</h2>
                     </div>
                     <div className="pl-11">
-                        <p className="text-[#5a4a3a]">{t("docs.gettingStarted.step1.description")}</p>
+                        <p className="text-slate-600 dark:text-slate-400">{t("docs.gettingStarted.step1.description")}</p>
                     </div>
                 </section>
 
                 <section>
                     <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
                             2
                         </div>
-                        <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("docs.gettingStarted.step2.title")}</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("docs.gettingStarted.step2.title")}</h2>
                     </div>
                     <div className="pl-11">
-                        <p className="mb-4 text-[#5a4a3a]">{t("docs.gettingStarted.step2.description")}</p>
+                        <p className="mb-4 text-slate-600 dark:text-slate-400">{t("docs.gettingStarted.step2.description")}</p>
                         <Button variant="outline" asChild>
                             <Link href="/demo">{t("docs.gettingStarted.step2.link")}</Link>
                         </Button>
@@ -51,13 +51,13 @@ export default function GettingStartedPage() {
 
                 <section>
                     <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
                             3
                         </div>
-                        <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("docs.gettingStarted.step3.title")}</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("docs.gettingStarted.step3.title")}</h2>
                     </div>
                     <div className="pl-11">
-                        <p className="mb-4 text-[#5a4a3a]">{t("docs.gettingStarted.step3.description")}</p>
+                        <p className="mb-4 text-slate-600 dark:text-slate-400">{t("docs.gettingStarted.step3.description")}</p>
                         <Button variant="amber" asChild>
                             <Link href="/dashboard">{t("docs.gettingStarted.step3.link")}</Link>
                         </Button>
@@ -66,13 +66,13 @@ export default function GettingStartedPage() {
 
                 <section>
                     <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 font-bold text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
                             4
                         </div>
-                        <h2 className="text-2xl font-semibold text-[#3a2a1a]">{t("docs.gettingStarted.step4.title")}</h2>
+                        <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("docs.gettingStarted.step4.title")}</h2>
                     </div>
                     <div className="pl-11">
-                        <p className="text-[#5a4a3a]">{t("docs.gettingStarted.step4.description")}</p>
+                        <p className="text-slate-600 dark:text-slate-400">{t("docs.gettingStarted.step4.description")}</p>
                     </div>
                 </section>
             </div>
