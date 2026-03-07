@@ -176,6 +176,7 @@ def test_ensure_rate_limiter_ready_handles_missing_redis(monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_BACKEND", "redis")
     monkeypatch.delenv("REDIS_URL", raising=False)
     import config as config_module
+    monkeypatch.setattr(config_module.settings, "RATE_LIMIT_BACKEND", "redis")
     config_module.settings.reload()
     module = importlib.reload(ratelimit_module)
     backend, redis_ok = module.ensure_rate_limiter_ready()

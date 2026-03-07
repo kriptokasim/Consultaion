@@ -94,8 +94,12 @@ class DebateCreate(BaseModel):
     )
     panel_config: Optional[PanelConfig] = Field(None, description="Optional Parliament-style panel configuration.")
     mode: Optional[str] = Field(
-        "debate",
-        description="Operation mode: 'debate' (adversarial) or 'conversation' (collaborative). Defaults to 'debate'."
+        "conversation",
+        description="Operation mode: 'conversation' (default), 'compare', or 'debate'."
+    )
+    compare_models: Optional[List[str]] = Field(
+        None,
+        description="List of explicit model IDs to use for compare mode."
     )
     locale: Optional[str] = Field(
         None,

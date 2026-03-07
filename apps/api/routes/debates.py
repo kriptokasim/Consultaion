@@ -341,6 +341,11 @@ async def create_debate(
     # Store locale in config so the engine can instruct LLMs to respond in user's language
     if body.locale:
         config_payload["locale"] = body.locale
+    if body.mode == "compare":
+        if not body.compare_models or len(body.compare_models) < 2:
+            raise ValidationError(message="Compare mode requires at least 2 models", code="debate.invalid_compare_models")
+        config_payload["compare_models"] = body.compare_models
+
     debate = Debate(
         id=debate_id,
         prompt=body.prompt,
@@ -356,6 +361,7 @@ async def create_debate(
         },
         panel_config=panel.model_dump(),
         engine_version=panel.engine_version,
+        mode=body.mode or "conversation",
     )
     session.add(debate)
     session.add(debate)

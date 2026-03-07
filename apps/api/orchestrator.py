@@ -549,6 +549,32 @@ async def run_debate(
         state_manager = DebateStateManager(debate_id, debate_user_id)
         await state_manager.set_status("running")
 
+        if debate_mode == "compare":
+            from compare.engine import run_compare_debate
+            
+            result = await run_compare_debate(debate_id)
+            
+            await state_manager.complete_debate(
+                final_content=result.final_answer,
+                final_meta=result.final_meta,
+                status=result.status,
+                tokens_total=float(result.usage_tracker.total_tokens)
+            )
+            
+            await backend.publish(
+                channel_id,
+                {
+                    "type": "final",
+                    "round": 0,
+                    "debate_id": debate_id,
+                    "payload": {
+                        "content": result.final_answer,
+                        "meta": result.final_meta,
+                    }
+                },
+            )
+            return
+
         if debate_mode == "conversation":
             if not settings.ENABLE_CONVERSATION_MODE:
                 raise ValueError("Conversation mode is disabled by configuration.")

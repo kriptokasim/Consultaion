@@ -6,6 +6,7 @@ import { Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import DebateArena from "@/components/debate/DebateArena";
 import ParliamentRunView from "@/components/parliament/ParliamentRunView";
+import CompareRunView from "@/components/compare/CompareRunView";
 import { Button } from "@/components/ui/button";
 import { useDebate } from "@/lib/api/hooks/useDebate";
 import { timelineReducer, initialTimelineState } from "@/lib/timeline/reducer";
@@ -181,8 +182,15 @@ export default function RunDetailClient() {
     );
   }
 
-  // Completed debates → rich results view (ParliamentRunView)
+  // Completed debates → rich results view (ParliamentRunView or CompareRunView)
   if (isCompleted && resultsFetched) {
+    if (debate?.mode === "compare") {
+      return (
+        <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
+          <CompareRunView debate={debate} events={resultsEvents} />
+        </div>
+      );
+    }
     return (
       <div className="container max-w-6xl py-6">
         <ParliamentRunView
@@ -211,7 +219,15 @@ export default function RunDetailClient() {
     );
   }
 
-  // Running / queued debates → live stream view (DebateArena)
+  // Running / queued debates → live stream view (DebateArena or Compare)
+  if (debate?.mode === "compare") {
+    return (
+      <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
+        <CompareRunView debate={debate as any} events={state.events as any} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       <DebateArena

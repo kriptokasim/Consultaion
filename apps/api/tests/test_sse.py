@@ -20,6 +20,8 @@ from schemas import default_debate_config  # noqa: E402
 from sse_backend import (  # noqa: E402
     MemoryChannelBackend,
 )
+from auth import create_access_token
+from models import User
 
 init_db()
 
@@ -67,6 +69,14 @@ async def test_stream_events_uses_backend():
     await backend.create_channel(channel_id)
 
     with Session(engine) as session:
+        # Create user for token validation
+        user = User(id="test-user", email="test@example.com", password_hash="...", role="user")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        token = create_access_token(user_id=user.id, email=user.email, role=user.role)
+
         debate = session.get(Debate, debate_id)
         if not debate:
             session.add(
@@ -80,11 +90,11 @@ async def test_stream_events_uses_backend():
             session.commit()
 
         from fastapi import Request
-        mock_request = Request(scope={"type": "http", "state": {}})
+        mock_request = Request(scope={"type": "http", "headers": [], "state": {}})
         response = await stream_events(
             debate_id, 
             request=mock_request,
-            token="test-token",
+            token=token,
             session=session, 
             sse_backend=backend
         )

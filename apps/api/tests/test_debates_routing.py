@@ -18,6 +18,16 @@ def mock_choose_model():
     with patch("routes.debates.choose_model") as mock:
         yield mock
 
+@pytest.fixture(autouse=True)
+def mock_dispatch_debate_run():
+    with patch("routes.debates.dispatch_debate_run") as mock:
+        yield mock
+
+@pytest.fixture(autouse=True)
+def mock_rate_limiter():
+    with patch("routes.debates.increment_ip_bucket", return_value=(True, 0)) as mock:
+        yield mock
+
 def test_create_debate_uses_routing(authenticated_client, db_session: Session, mock_choose_model):
     # Setup mock return
     mock_choose_model.return_value = ("routed-model-id", [
@@ -35,7 +45,8 @@ def test_create_debate_uses_routing(authenticated_client, db_session: Session, m
     
     payload = {
         "prompt": "Test routing prompt",
-        "routing_policy": "router-deep"
+        "routing_policy": "router-deep",
+        "mode": "debate"
     }
     
     # Patchset 49.2: Validation requires checking model tier, so we must mock enabled models
@@ -80,7 +91,8 @@ def test_create_debate_explicit_model_routing(authenticated_client, db_session: 
     
     payload = {
         "prompt": "Test explicit model",
-        "model_id": "gpt-4o"
+        "model_id": "gpt-4o",
+        "mode": "debate"
     }
     
     # We need to ensure gpt-4o is enabled in registry for validation to pass

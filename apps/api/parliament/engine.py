@@ -435,47 +435,76 @@ async def _execute_round(
     usage_tracker: UsageAccumulator,
     locale: str | None = None,
 ) -> tuple[RoundOutcome, List[SeatTurn]]:
+    import asyncio
+    
     turns: list[SeatTurn] = []
     success_count = 0
     failure_count = 0
     fail_ratio_limit, min_required, fail_fast = _resolve_tolerance(panel)
-    for seat in panel.seats:
-        role_profile = ROLE_PROFILES.get(seat.role_profile)
-        seat_role = role_profile.title if role_profile else seat.role_profile
-        try:
-            messages = build_messages_for_seat(
-                debate_id=debate_id,
-                prompt=prompt,
-                seat=seat.model_dump(),
-                round_info=round_info,
-                transcript=transcript_summary,
-                locale=locale,
-            )
-            text, call_usage = await call_llm_for_role(
-                messages,
-                role=seat.display_name,
-                temperature=seat.temperature or 0.5,
-                model_override=seat.model,
-                model_id=debate_model_id,
-                debate_id=debate_id,
-            )
-            envelope = parse_seat_llm_output(text)
-            usage_tracker.add_call(call_usage)
-            turns.append(
-                SeatTurn(
-                    seat_id=seat.seat_id,
-                    seat_name=seat.display_name,
-                    role_profile=seat.role_profile,
-                    round_index=round_info["index"],
-                    phase=round_info["phase"],
-                    provider=seat.provider_key,
-                    model=seat.model,
-                    content=envelope.content,
-                    stance=envelope.stance,
-                    reasoning=envelope.reasoning,
-                    usage=call_usage,
+    
+    participants = [s for s in panel.seats if s.role_profile not in ("critic", "researcher", "chair")]
+    critics = [s for s in panel.seats if s.role_profile in ("critic", "researcher")]
+    
+    current_transcript = transcript_summary
+
+    for seat_group in [participants, critics]:
+        if not seat_group:
+            continue
+            
+        async def _run_seat(seat, ctx_transcript):
+            role_profile = ROLE_PROFILES.get(seat.role_profile)
+            seat_role = role_profile.title if role_profile else seat.role_profile
+            try:
+                messages = build_messages_for_seat(
+                    debate_id=debate_id,
+                    prompt=prompt,
+                    seat=seat.model_dump(),
+                    round_info=round_info,
+                    transcript=ctx_transcript,
+                    locale=locale,
                 )
+                text, call_usage = await call_llm_for_role(
+                    messages,
+                    role=seat.display_name,
+                    temperature=seat.temperature or 0.5,
+                    model_override=seat.model,
+                    model_id=debate_model_id,
+                    debate_id=debate_id,
+                )
+                envelope = parse_seat_llm_output(text)
+                return seat, envelope, call_usage, None
+            except Exception as exc:
+                return seat, None, None, exc
+
+        results = await asyncio.gather(*[_run_seat(seat, current_transcript) for seat in seat_group])
+        
+        for seat, envelope, call_usage, exc in results:
+            if exc:
+                logger.error(
+                    "Seat %s failed in round %s: %s",
+                    seat.seat_id,
+                    round_info.get("index"),
+                    exc,
+                )
+                failure_count += 1
+                continue
+                
+            usage_tracker.add_call(call_usage)
+            turn = SeatTurn(
+                seat_id=seat.seat_id,
+                seat_name=seat.display_name,
+                role_profile=seat.role_profile,
+                round_index=round_info["index"],
+                phase=round_info["phase"],
+                provider=seat.provider_key,
+                model=seat.model,
+                content=envelope.content,
+                stance=envelope.stance,
+                reasoning=envelope.reasoning,
+                usage=call_usage,
             )
+            turns.append(turn)
+            
             with session_scope() as session:
                 session.add(
                     Message(
@@ -497,15 +526,8 @@ async def _execute_round(
                     )
                 )
             success_count += 1
-        except Exception as exc:  # pragma: no cover - counted for tolerance
-            logger.error(
-                "Seat %s failed in round %s: %s",
-                seat.seat_id,
-                round_info.get("index"),
-                exc,
-            )
-            failure_count += 1
-            continue
+            current_transcript += f"\n{turn.seat_name}: {turn.content}"
+
 
     total_seats = len(panel.seats) or (success_count + failure_count)
     fail_ratio = (failure_count / total_seats) if total_seats else 1.0

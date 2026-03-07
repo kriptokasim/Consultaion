@@ -161,7 +161,8 @@ def test_run_debate_emits_final_events():
         assert seat_events, f"No seat_message events: {events}"
     final_events = [event for event in events if event.get("type") == "final"]
     assert final_events, f"No final event emitted: {events}"
-    meta = final_events[-1]["meta"]
+    event = final_events[-1]
+    meta = event.get("meta") or event.get("payload", {}).get("meta", {})
     assert "ranking" in meta
     assert "usage" in meta
 

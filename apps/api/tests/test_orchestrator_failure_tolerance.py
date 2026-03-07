@@ -65,6 +65,7 @@ async def test_orchestrator_marks_debate_failed(monkeypatch, disable_fast_debate
             id=debate_id,
             prompt="Abort path",
             status="queued",
+            mode="debate",
             panel_config=panel.model_dump(),
             engine_version=panel.engine_version,
         )

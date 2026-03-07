@@ -72,7 +72,7 @@ def test_create_debate_invalid_model(monkeypatch):
     monkeypatch.setenv("USE_MOCK", "1")
     monkeypatch.setenv("DISABLE_AUTORUN", "1")
     # init_db() handled by conftest
-    body = DebateCreate(prompt="This is a sufficiently long prompt text", model_id="nope")
+    body = DebateCreate(prompt="This is a sufficiently long prompt text", model_id="nope", mode="debate")
     with Session(database.engine) as session:
         _ensure_plans(session)
         user = User(id=str(uuid.uuid4()), email="model-test@example.com", password_hash="secret", role="user")

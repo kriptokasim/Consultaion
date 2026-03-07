@@ -24,37 +24,54 @@ def _safe_auth_log(request) -> dict:
     """
     return {
         "path": request.url.path,
-        "has_session_cookie": COOKIE_NAME in request.cookies,
+        "has_session_cookie": settings.COOKIE_NAME in request.cookies,
         "has_auth_header": bool(request.headers.get("Authorization")),
         "cookie_names": sorted(request.cookies.keys()),
     }
 
+# Helper properties to access settings dynamically (respecting reloads)
+def _get_jwt_secret() -> str:
+    secret = settings.JWT_SECRET
+    if not secret:
+        raise RuntimeError("JWT_SECRET must be set")
+    if secret == "change_me_in_prod":
+        settings.reload()
+        secret = settings.JWT_SECRET
+    if secret == "change_me_in_prod" and not settings.IS_LOCAL_ENV:
+        raise RuntimeError("JWT_SECRET must be changed from default value")
+    return secret
+
+def _get_cookie_samesite() -> str:
+    val = settings.COOKIE_SAMESITE.strip().lower()
+    if val not in {"lax", "strict", "none"}:
+        return "Lax"
+    return "none" if val == "none" else val.capitalize()
+
+# Re-export key settings for module-level imports in main.py and other routers
+# Note: These values will not reflect settings.reload() unless they are re-imported.
+# For dynamic behavior, use settings.X directly or the helper functions above.
 COOKIE_NAME = settings.COOKIE_NAME
 JWT_SECRET = settings.JWT_SECRET
-if not JWT_SECRET:
-    raise RuntimeError("JWT_SECRET must be set")
-if JWT_SECRET == "change_me_in_prod":
-    settings.reload()
-    JWT_SECRET = settings.JWT_SECRET
-if JWT_SECRET == "change_me_in_prod" and not settings.IS_LOCAL_ENV:
-    raise RuntimeError("JWT_SECRET must be changed from default value")
-JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = settings.JWT_TTL_SECONDS
 PBKDF2_ITERATIONS = settings.PASSWORD_ITERATIONS
 COOKIE_SECURE = settings.COOKIE_SECURE
-_SAMESITE_VALUE = settings.COOKIE_SAMESITE.strip().lower()
-if _SAMESITE_VALUE not in {"lax", "strict", "none"}:
-    _SAMESITE_VALUE = "lax"
-COOKIE_SAMESITE = "none" if _SAMESITE_VALUE == "none" else _SAMESITE_VALUE.capitalize()
 COOKIE_PATH = settings.COOKIE_PATH
 COOKIE_DOMAIN = settings.COOKIE_DOMAIN
 ENABLE_CSRF = settings.ENABLE_CSRF
 CSRF_COOKIE_NAME = settings.CSRF_COOKIE_NAME
 
+# Samesite needs normalization for export
+_SAMESITE_RAW = settings.COOKIE_SAMESITE.strip().lower()
+if _SAMESITE_RAW not in {"lax", "strict", "none"}:
+    _SAMESITE_RAW = "lax"
+COOKIE_SAMESITE = "none" if _SAMESITE_RAW == "none" else _SAMESITE_RAW.capitalize()
+
+JWT_ALGORITHM = "HS256"
+
 
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), PBKDF2_ITERATIONS)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), settings.PASSWORD_ITERATIONS)
     return f"pbkdf2_sha256${salt}${digest.hex()}"
 
 
@@ -63,13 +80,13 @@ def verify_password(password: str, password_hash: str) -> bool:
         _, salt, stored = password_hash.split("$")
     except ValueError:
         return False
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), PBKDF2_ITERATIONS)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), settings.PASSWORD_ITERATIONS)
     return hmac.compare_digest(digest.hex(), stored)
 
 
 def _build_claims(payload: Dict[str, Any], ttl_seconds: int | None = None) -> Dict[str, Any]:
     now = int(time.time())
-    ttl = ttl_seconds or JWT_TTL_SECONDS
+    ttl = ttl_seconds or settings.JWT_TTL_SECONDS
     return {
         **payload,
         "iat": now,
@@ -87,7 +104,7 @@ def create_access_token(*, user_id: str, email: str, role: str, ttl_seconds: int
         },
         ttl_seconds=ttl_seconds,
     )
-    token = jwt.encode(claims, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(claims, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
     return token
 
 
@@ -100,7 +117,7 @@ def decode_access_token(token: str) -> Dict[str, Any]:
     try:
         return jwt.decode(
             token,
-            JWT_SECRET,
+            _get_jwt_secret(),
             algorithms=[JWT_ALGORITHM],
             options={"require": ["exp", "iat"]},
         )
@@ -140,7 +157,7 @@ def get_optional_user(
     request: Request,
     session: Session = Depends(get_session),
 ) -> Optional[User]:
-    token = request.cookies.get(COOKIE_NAME)
+    token = request.cookies.get(settings.COOKIE_NAME)
     if not token:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
@@ -182,36 +199,36 @@ def get_current_admin(user: User = Depends(get_current_user)) -> User:
 def set_auth_cookie(response: Response, token: str) -> None:
     # TODO: For browser auth in production, add CSRF tokens for state-changing routes when using cookies.
     response.set_cookie(
-        key=COOKIE_NAME,
+        key=settings.COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE,
-        max_age=JWT_TTL_SECONDS,
-        path=COOKIE_PATH,
-        domain=COOKIE_DOMAIN,
+        secure=settings.COOKIE_SECURE,
+        samesite=_get_cookie_samesite(),
+        max_age=settings.JWT_TTL_SECONDS,
+        path=settings.COOKIE_PATH,
+        domain=settings.COOKIE_DOMAIN,
     )
 
 
 def set_csrf_cookie(response: Response, token: str) -> None:
     response.set_cookie(
-        key=CSRF_COOKIE_NAME,
+        key=settings.CSRF_COOKIE_NAME,
         value=token,
         httponly=False,
-        secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE,
-        max_age=JWT_TTL_SECONDS,
-        path=COOKIE_PATH,
-        domain=COOKIE_DOMAIN,
+        secure=settings.COOKIE_SECURE,
+        samesite=_get_cookie_samesite(),
+        max_age=settings.JWT_TTL_SECONDS,
+        path=settings.COOKIE_PATH,
+        domain=settings.COOKIE_DOMAIN,
     )
 
 
 def clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH, domain=COOKIE_DOMAIN)
+    response.delete_cookie(settings.COOKIE_NAME, path=settings.COOKIE_PATH, domain=settings.COOKIE_DOMAIN)
 
 
 def clear_csrf_cookie(response: Response) -> None:
-    response.delete_cookie(CSRF_COOKIE_NAME, path=COOKIE_PATH, domain=COOKIE_DOMAIN)
+    response.delete_cookie(settings.CSRF_COOKIE_NAME, path=settings.COOKIE_PATH, domain=settings.COOKIE_DOMAIN)
 
 
 def generate_csrf_token() -> str:

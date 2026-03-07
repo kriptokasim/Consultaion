@@ -8,17 +8,18 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-chars-long")
-os.environ.setdefault("USE_MOCK", "1")
-os.environ.setdefault("COOKIE_SECURE", "0")
+import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 
-def test_local_env_cookie_settings():
+def test_local_env_cookie_settings(monkeypatch):
     """Test that local env uses safe cookie defaults"""
-    os.environ["ENV"] = "development"
-    os.environ.pop("RENDER", None)  # Remove RENDER flag if present
+    monkeypatch.setenv("ENV", "development")
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.setenv("JWT_SECRET", "test-secret-at-least-32-chars-long")
+    monkeypatch.setenv("USE_MOCK", "1")
+    monkeypatch.setenv("COOKIE_SECURE", "0")
     
     # Force reload to pick up env change
     from config import settings
@@ -29,14 +30,17 @@ def test_local_env_cookie_settings():
     assert settings.COOKIE_SAMESITE.lower() == "lax"
 
 
-def test_production_env_cookie_settings():
+def test_production_env_cookie_settings(monkeypatch):
     """Test that production env uses secure cookie settings"""
-    os.environ["ENV"] = "production"
-    os.environ["RENDER"] = "true"
-    os.environ["JWT_SECRET"] = "production-test-secret-at-least-32-characters-long"
-    os.environ["STRIPE_WEBHOOK_VERIFY"] = "0"  # Not testing Stripe in this test
-    os.environ["REDIS_URL"] = "redis://localhost:6379/0"  # Dummy — prod requires redis
-    os.environ["REQUIRE_REAL_LLM"] = "0"  # No provider keys in test
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("JWT_SECRET", "production-test-secret-at-least-32-characters-long")
+    monkeypatch.setenv("STRIPE_WEBHOOK_VERIFY", "0")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("REQUIRE_REAL_LLM", "1")
+    monkeypatch.setenv("USE_MOCK", "0")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key-at-least-32-chars-long")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
     
     # Force reload
     from config import settings

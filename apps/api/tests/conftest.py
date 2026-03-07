@@ -143,12 +143,12 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     os.environ["ENV"] = "test"
     os.environ.pop("RENDER", None)
     
-    # Force the shared settings/engine to the session database even if other tests mutated env.
-    if settings.DATABASE_URL != test_database_url:
-        os.environ["DATABASE_URL"] = test_database_url
-        settings.reload()
-        reset_engine()
-        reset_async_engine()
+    # Force the shared settings/engine to the session database and restore defaults
+    os.environ["DATABASE_URL"] = test_database_url
+    # Ensure any previous test monkeypatches to ENV are cleared from settings object
+    settings.reload()
+    reset_engine()
+    reset_async_engine()
 
     # Truncate all tables to ensure clean state before each test
     truncate_all_tables()

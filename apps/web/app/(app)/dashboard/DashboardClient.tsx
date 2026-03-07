@@ -62,6 +62,8 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [mode, setMode] = useState<"conversation" | "compare" | "debate">("conversation");
+  const [compareModels, setCompareModels] = useState<string[]>([]);
 
   // Bootstrap: process token from Google OAuth redirect
   useEffect(() => {
@@ -172,7 +174,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
 
   // Create debate mutation using React Query
   const createDebateMutation = useMutation({
-    mutationFn: async (params: { prompt: string; model_id: string; locale: string }) => {
+    mutationFn: async (params: { prompt: string; model_id?: string; locale: string; mode: string; compare_models?: string[] }) => {
       return startDebate(params);
     },
     onSuccess: (data) => {
@@ -225,10 +227,17 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
 
   const handleCreate = () => {
     if (!prompt.trim()) return;
-    if (!selectedModel) {
+    if (mode === "conversation" && !selectedModel) {
       setErrorBanner({
         type: "error",
         message: t("dashboard.errors.noModels"),
+      });
+      return;
+    }
+    if (mode === "compare" && compareModels.length < 2) {
+      setErrorBanner({
+        type: "error",
+        message: "Please select at least 2 models to compare.",
       });
       return;
     }
@@ -236,7 +245,9 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     setError(null);
     createDebateMutation.mutate({
       prompt: prompt.trim(),
-      model_id: selectedModel,
+      model_id: mode === "conversation" ? selectedModel! : undefined,
+      mode,
+      compare_models: mode === "compare" ? compareModels : undefined,
       locale,
     });
   };
@@ -436,23 +447,70 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                     </span>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground" htmlFor="model">
-                    {t("dashboard.modal.modelLabel")}
-                  </label>
-                  {modelError ? (
-                    <p className="text-sm font-medium text-error">{modelError}</p>
-                  ) : models.length > 0 ? (
-                    <ModelSelector
-                      models={models}
-                      selectedModel={selectedModel}
-                      onSelect={setSelectedModel}
-                      allowedTiers={allowedTiers}
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">
-                      <p className="font-medium text-warning">{t("dashboard.errors.noModels")}</p>
-                      <p className="mt-1 text-muted-foreground">{t("dashboard.errors.noModelsHint")}</p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Mode</label>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setMode("conversation")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "conversation" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>Conversation</button>
+                      <button type="button" onClick={() => setMode("compare")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>Compare</button>
+                      <button type="button" onClick={() => setMode("debate")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "debate" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>Debate</button>
+                    </div>
+                  </div>
+
+                  {mode === "conversation" && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <label className="text-sm font-semibold text-foreground" htmlFor="model">
+                        {t("dashboard.modal.modelLabel")}
+                      </label>
+                      {modelError ? (
+                        <p className="text-sm font-medium text-error">{modelError}</p>
+                      ) : models.length > 0 ? (
+                        <ModelSelector
+                          models={models}
+                          selectedModel={selectedModel}
+                          onSelect={setSelectedModel}
+                          allowedTiers={allowedTiers}
+                        />
+                      ) : (
+                        <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">
+                          <p className="font-medium text-warning">{t("dashboard.errors.noModels")}</p>
+                          <p className="mt-1 text-muted-foreground">{t("dashboard.errors.noModelsHint")}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {mode === "compare" && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <label className="text-sm font-semibold text-foreground">Select Models to Compare (Up to 4)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {models.map(m => {
+                          const isSelected = compareModels.includes(m.id);
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setCompareModels(prev => prev.filter(id => id !== m.id));
+                                } else if (compareModels.length < 4) {
+                                  setCompareModels(prev => [...prev, m.id]);
+                                }
+                              }}
+                              className={`flex flex-col items-start p-3 rounded-xl border text-left transition ${isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-card hover:bg-secondary"} ${!isSelected && compareModels.length >= 4 ? "opacity-50 cursor-not-allowed" : ""}`}
+                              disabled={!isSelected && compareModels.length >= 4}
+                            >
+                              <span className="font-medium text-sm text-foreground truncate w-full">{m.display_name}</span>
+                              <span className="text-xs text-muted-foreground">{m.provider}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {mode === "debate" && (
+                    <div className="rounded-xl border border-border bg-secondary/50 p-4 text-sm text-muted-foreground animate-in fade-in slide-in-from-top-2 duration-300">
+                      Debate mode runs the prompt through an AI Parliament (Optimist, Risk Officer, Architect) for structured adversarial critique and synthesis.
                     </div>
                   )}
                 </div>
@@ -466,7 +524,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                 <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
                   {t("dashboard.modal.cancel")}
                 </Button>
-                <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (!selectedModel && models.length > 0)}>
+                <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (mode === "conversation" && (!selectedModel && models.length > 0)) || (mode === "compare" && compareModels.length < 2)}>
                   {saving ? t("dashboard.modal.creating") : t("dashboard.modal.submit")}
                 </Button>
               </div>
