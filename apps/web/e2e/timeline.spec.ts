@@ -64,3 +64,55 @@ test.describe('Timeline Logic', () => {
         await expect(page.getByText('Test Agent')).toBeVisible();
     });
 });
+
+test.describe('DebateView — friendly event labels', () => {
+    test('renders friendly labels instead of raw event type strings', async ({ page }) => {
+        const debateId = 'label-test-id';
+
+        await page.route(`*/**/api/debates/${debateId}`, async (route) => {
+            await route.fulfill({
+                json: {
+                    id: debateId,
+                    topic: 'Label test',
+                    status: 'completed',
+                    config: {}
+                }
+            });
+        });
+
+        // Mock timeline with multiple event types
+        const events = [
+            {
+                id: 'e1',
+                debate_id: debateId,
+                type: 'seat_message',
+                ts: new Date().toISOString(),
+                payload: { text: 'Agent seat statement', seat_name: 'Optimist', role: 'agent' }
+            },
+            {
+                id: 'e2',
+                debate_id: debateId,
+                type: 'score',
+                ts: new Date().toISOString(),
+                payload: { judge: 'Judge1', persona: 'Optimist', score: 8.5, rationale: 'Good points' }
+            }
+        ];
+
+        await page.route(`*/**/api/debates/${debateId}/timeline`, async (route) => {
+            await route.fulfill({ json: events });
+        });
+        await page.route(`*/**/api/debates/${debateId}/stream`, async (route) => {
+            await route.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body: '' });
+        });
+
+        await page.goto(`/runs/${debateId}`);
+
+        // Friendly label "Seat statement" should appear, not raw "seat_message"
+        await expect(page.getByText('Seat statement')).toBeVisible();
+        // Friendly label "Score update" should appear, not raw "score"
+        await expect(page.getByText('Score update')).toBeVisible();
+
+        // Raw internal labels must NOT appear in the UI
+        await expect(page.getByText('seat_message')).not.toBeVisible();
+    });
+});

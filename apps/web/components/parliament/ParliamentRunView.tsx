@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { formatModelLabel } from "@/lib/ui/formatters";
 import VotingSection from "./VotingSection";
 import DebateView from "./DebateView";
 import ExportButton from "./ExportButton";
@@ -44,6 +45,7 @@ interface ModelAnswer {
   fullText?: string;
   snippet?: string;
   rounds?: number[];
+  provider?: string;
 }
 
 export default function ParliamentRunView({
@@ -305,7 +307,12 @@ export default function ParliamentRunView({
               >
                 <summary className="flex cursor-pointer flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-medium text-stone-900">{answer.persona}</span>
+                    <div>
+                      <span className="font-medium text-stone-900">{answer.persona}</span>
+                      {formatModelLabel(answer.provider) && (
+                        <p className="text-[0.68rem] text-stone-400">{formatModelLabel(answer.provider)}</p>
+                      )}
+                    </div>
                     {typeof answer.score === "number" && (
                       <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-mono text-amber-700">
                         {answer.score.toFixed(2)}
@@ -322,7 +329,16 @@ export default function ParliamentRunView({
                     {answer.snippet ? (
                       <span>{answer.snippet}</span>
                     ) : (
-                      <span className="italic text-stone-400">No text captured for this persona.</span>
+                      <span className="italic text-stone-400">
+                        Contribution available in the full transcript.{" "}
+                        <a
+                          href="#transcript"
+                          onClick={(e) => e.stopPropagation()}
+                          className="not-italic text-amber-700 underline hover:text-amber-600"
+                        >
+                          View in transcript ↓
+                        </a>
+                      </span>
                     )}
                     <span className="ml-2 text-amber-700 group-open:hidden">Show full answer</span>
                     <span className="ml-2 hidden text-amber-700 group-open:inline">Hide answer</span>
@@ -400,7 +416,7 @@ export default function ParliamentRunView({
           title="Live timeline"
           description="Raw events emitted during the run."
         >
-          <DebateView events={events} />
+          <DebateView events={events} embedded />
         </SummaryCard>
       </section>
       <BillingLimitModal
@@ -413,22 +429,30 @@ export default function ParliamentRunView({
 }
 
 function buildModelAnswers(events: DebateEvent[], sortedScores: ScoreItem[]): ModelAnswer[] {
-  // Treat all agent messages as model answers, grouped by persona
+  // Collect all agent-role messages, grouped by persona
   const agentMessages = events.filter(
-    (event) => event.type === "message" && (event as any).role === "agent",
-  ) as Array<DebateEvent & { actor?: string; text?: string; round?: number }>;
+    (event) =>
+      (event.type === "message" && (event as any).role === "agent") ||
+      event.type === "seat_message",
+  ) as Array<DebateEvent & { actor?: string; seat_name?: string; text?: string; content?: string; round?: number; provider?: string; model?: string }>;
 
-  const byPersona = new Map<string, { fullText: string; rounds: number[] }>();
+  const byPersona = new Map<string, { fullText: string; rounds: number[]; provider?: string }>();
 
   for (const event of agentMessages) {
-    const actor = (event as any).actor as string | undefined;
-    const text = (event as any).text as string | undefined;
+    const actor = event.type === "seat_message"
+      ? (event as any).seat_name
+      : (event as any).actor as string | undefined;
+    const text = event.type === "seat_message"
+      ? (event as any).content
+      : (event as any).text as string | undefined;
     const round = (event as any).round as number | undefined;
+    const provider = (event as any).provider ?? (event as any).model;
     if (!actor || !text) continue;
 
     const existing = byPersona.get(actor) ?? { fullText: "", rounds: [] as number[] };
     existing.fullText = existing.fullText ? `${existing.fullText}\n\n${text}` : text;
     if (typeof round === "number") existing.rounds.push(round);
+    if (!existing.provider && provider) existing.provider = provider;
     byPersona.set(actor, existing);
   }
 
@@ -443,6 +467,7 @@ function buildModelAnswers(events: DebateEvent[], sortedScores: ScoreItem[]): Mo
       fullText: entry?.fullText,
       snippet: makeSnippet(entry?.fullText),
       rounds: entry?.rounds,
+      provider: entry?.provider,
     });
   }
 
@@ -454,6 +479,7 @@ function buildModelAnswers(events: DebateEvent[], sortedScores: ScoreItem[]): Mo
         fullText: entry.fullText,
         snippet: makeSnippet(entry.fullText),
         rounds: entry.rounds,
+        provider: entry.provider,
       });
     }
   }
@@ -521,7 +547,7 @@ function ChampionSummary({
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Why it won</p>
               <ul className="list-disc space-y-1 pl-5 text-sm text-stone-800">
                 {reasons.map((reason, idx) => (
-                  <li key={idx}>{reason}</li>
+                  <li key={`reason-${idx}`}>{reason}</li>
                 ))}
               </ul>
             </div>

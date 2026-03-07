@@ -4,6 +4,17 @@ import CIPill from "@/components/parliament/CIPill";
 import type { LeaderboardEntry } from "@/lib/api";
 import { useI18n } from "@/lib/i18n/client";
 
+function relativeLeaderboardTime(ts: string): string {
+  const diffMs = Date.now() - new Date(ts).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 60) return diffMin <= 1 ? "just now" : `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  if (diffDays < 30) return `${diffDays}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
 interface LeaderboardTableProps {
   items: LeaderboardEntry[];
 }
@@ -37,13 +48,15 @@ export default function LeaderboardTable({ items }: LeaderboardTableProps) {
                 </span>
               </td>
               <td className="px-4 py-3 text-muted-foreground">{entry.category ?? t("leaderboard.filters.categoryAll")}</td>
-              <td className="px-4 py-3 text-right font-mono text-base">{entry.elo.toFixed(1)}</td>
+              <td className="px-4 py-3 text-right font-mono text-base text-foreground">{entry.elo.toFixed(1)}</td>
               <td className="px-4 py-3 text-right">
                 <CIPill winRate={entry.win_rate} low={entry.ci.low} high={entry.ci.high} className="justify-end" />
               </td>
-              <td className="px-4 py-3 text-right font-mono">{entry.n_matches}</td>
+              <td className="px-4 py-3 text-right font-mono text-foreground">{entry.n_matches}</td>
               <td className="px-4 py-3 text-right text-xs text-muted-foreground">
-                {entry.last_updated ? new Date(entry.last_updated).toLocaleString() : "—"}
+                {entry.last_updated
+                  ? relativeLeaderboardTime(entry.last_updated)
+                  : "—"}
               </td>
             </tr>
           ))}
