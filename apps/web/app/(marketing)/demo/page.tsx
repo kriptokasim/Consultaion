@@ -41,7 +41,7 @@ export default function DemoPage() {
     }, [scenarioParam])
 
     return (
-        <main className="min-h-screen bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] dark:from-stone-900 dark:via-stone-950 dark:to-black px-6 py-16">
+        <main className="min-h-screen bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] dark:from-slate-900 dark:via-slate-950 dark:to-black px-6 py-16">
             <div className="mx-auto max-w-5xl space-y-12">
                 {/* Header */}
                 <header className="space-y-6 text-center">
@@ -49,10 +49,10 @@ export default function DemoPage() {
                         <Sparkles className="h-4 w-4" />
                         {t("demo.badge")}
                     </div>
-                    <h1 className="text-4xl font-display font-bold text-slate-900 dark:text-stone-100">
+                    <h1 className="text-4xl font-display font-bold text-slate-900 dark:text-white">
                         {t("demo.gallery.title")}
                     </h1>
-                    <p className="mx-auto max-w-2xl text-lg text-slate-600 dark:text-stone-300">
+                    <p className="mx-auto max-w-2xl text-lg text-slate-600 dark:text-slate-300">
                         {t("demo.gallery.subtitle")}
                     </p>
                 </header>
@@ -66,8 +66,8 @@ export default function DemoPage() {
                                 key={scenario.id}
                                 onClick={() => handleScenarioSelect(scenario.id)}
                                 className={`group relative overflow-hidden rounded-2xl border-2 p-5 text-left transition-all duration-200 ${selectedScenarioId === scenario.id
-                                    ? "border-amber-500 bg-gradient-to-br from-amber-50 to-white shadow-lg scale-[1.02]"
-                                    : "border-amber-200/70 bg-white/90 hover:border-amber-400 hover:shadow-md hover:-translate-y-[2px]"
+                                    ? "border-amber-500 bg-gradient-to-br from-amber-50 to-white dark:from-slate-800 dark:to-slate-900 shadow-lg scale-[1.02]"
+                                    : "border-amber-200/70 bg-white/90 dark:bg-slate-900/50 dark:border-slate-800 hover:border-amber-400 hover:shadow-md hover:-translate-y-[2px]"
                                     }`}
                             >
                                 <div className="mb-3">
@@ -78,10 +78,10 @@ export default function DemoPage() {
                                         {t(`demo.tags.${scenario.tag.toLowerCase().replace(' & ', '')}`)}
                                     </span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-stone-100 mb-2">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
                                     {t(`demo.scenarios.${scenario.id.replace('-', '')}.title`)}
                                 </h3>
-                                <p className="text-sm text-slate-600 dark:text-stone-300">
+                                <p className="text-sm text-slate-600 dark:text-slate-300">
                                     {t(`demo.scenarios.${scenario.id.replace('-', '')}.description`)}
                                 </p>
                                 {selectedScenarioId === scenario.id && (
@@ -99,38 +99,38 @@ export default function DemoPage() {
                 </section>
 
                 {/* Context */}
-                <section className="rounded-2xl border border-amber-100/80 bg-white/90 dark:border-stone-700 dark:bg-stone-900/50 p-6 shadow-sm">
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700">
+                <section className="rounded-2xl border border-amber-100/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-sm">
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                         {t("demo.context.label")}
                     </h2>
-                    <p className="text-slate-600 dark:text-stone-300">{debate.context}</p>
+                    <p className="text-slate-600 dark:text-slate-300">{debate.context}</p>
                 </section>
 
                 {/* Question */}
-                <section className="rounded-3xl border-2 border-amber-200 bg-gradient-to-br from-white to-amber-50/50 dark:border-amber-700 dark:from-stone-900 dark:to-stone-800 p-8 shadow-md">
-                    <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-amber-700">
+                <section className="rounded-3xl border-2 border-amber-200 bg-gradient-to-br from-white to-amber-50/50 dark:border-slate-700 dark:from-slate-900 dark:to-slate-800 p-8 shadow-md">
+                    <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                         <MessageSquare className="h-4 w-4" />
                         {t("demo.question.label")}
                     </h2>
-                    <p className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{debate.question}</p>
+                    <p className="text-2xl font-semibold text-slate-900 dark:text-white">{debate.question}</p>
                 </section>
 
                 {/* Agents */}
                 <section className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{t("demo.agents.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("demo.agents.title")}</h2>
                     <div className="grid gap-4 md:grid-cols-3">
                         {debate.agents.map((agent) => (
                             <div
                                 key={agent.id}
-                                className="rounded-2xl border border-amber-100/80 bg-white/90 dark:border-stone-700 dark:bg-stone-900/50 p-5 shadow-sm"
+                                className="rounded-2xl border border-amber-100/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/50 p-5 shadow-sm"
                             >
                                 <div className="mb-2 flex items-center justify-between">
-                                    <Brain className="h-5 w-5 text-amber-600" />
-                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                                    <Brain className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                                         {agent.role}
                                     </span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-stone-100">{agent.name}</h3>
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{agent.name}</h3>
                                 <p className="mt-1 text-sm text-amber-700">
                                     {agent.model} <span className="text-amber-600/70">• {agent.provider}</span>
                                 </p>
@@ -141,11 +141,11 @@ export default function DemoPage() {
 
                 {/* Debate Rounds */}
                 <section className="space-y-6">
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{t("demo.rounds.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("demo.rounds.title")}</h2>
                     {debate.rounds.map((round) => (
                         <div key={round.number} className="space-y-4">
                             <h3 className="flex items-center gap-2 text-lg font-semibold text-amber-800 dark:text-amber-400">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-sm font-bold text-amber-700 dark:from-amber-900 dark:to-amber-800 dark:text-amber-200">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-sm font-bold text-amber-700 dark:from-amber-400 dark:to-amber-500 dark:text-white">
                                     {round.number}
                                 </span>
                                 {t("demo.round.label")} {round.number}: {round.title}
@@ -154,10 +154,10 @@ export default function DemoPage() {
                                 {round.arguments.map((arg, idx) => (
                                     <div
                                         key={`${round.number}-${idx}`}
-                                        className="rounded-xl border border-amber-100/70 bg-white/80 dark:border-stone-700 dark:bg-stone-900/50 p-5 shadow-sm"
+                                        className="rounded-xl border border-amber-100/70 bg-white/80 dark:border-slate-800 dark:bg-slate-900/50 p-5 shadow-sm"
                                     >
                                         <div className="mb-2 font-semibold text-amber-900 dark:text-amber-300">{arg.agentName}</div>
-                                        <p className="text-slate-600 dark:text-stone-300 leading-relaxed">{arg.content}</p>
+                                        <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{arg.content}</p>
                                     </div>
                                 ))}
                             </div>
@@ -167,12 +167,12 @@ export default function DemoPage() {
 
                 {/* Judge Commentary */}
                 <section className="space-y-4">
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{t("demo.judges.title")}</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">{t("demo.judges.title")}</h2>
                     <div className="space-y-3">
                         {debate.judgeCommentary.map((judge, idx) => (
                             <div
                                 key={idx}
-                                className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white dark:border-stone-700 dark:from-stone-800 dark:to-stone-900 p-5 shadow-sm"
+                                className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white dark:border-slate-800 dark:from-slate-900 dark:to-slate-950 p-5 shadow-sm"
                             >
                                 <div className="mb-2 flex items-center justify-between">
                                     <span className="font-semibold text-slate-800 dark:text-slate-100">{judge.judge}</span>
@@ -188,11 +188,11 @@ export default function DemoPage() {
 
                 {/* Champion Answer */}
                 <section className="space-y-4">
-                    <h2 className="flex items-center gap-2 text-2xl font-semibold text-slate-900 dark:text-stone-100">
-                        <Trophy className="h-6 w-6 text-amber-600" />
+                    <h2 className="flex items-center gap-2 text-2xl font-semibold text-slate-900 dark:text-white">
+                        <Trophy className="h-6 w-6 text-amber-600 dark:text-amber-400" />
                         {t("demo.champion.title")}
                     </h2>
-                    <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 via-amber-100/50 to-white dark:border-amber-700 dark:from-stone-900 dark:via-stone-800 dark:to-stone-900 p-8 shadow-lg">
+                    <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 via-amber-100/50 to-white dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-black p-8 shadow-lg">
                         <div className="mb-4 flex items-center gap-3">
                             <div className="rounded-full bg-gradient-to-br from-amber-500 to-amber-600 px-4 py-1.5 text-sm font-bold text-white shadow-md">
                                 {t("demo.champion.winner")}: {debate.championAnswer.winner}
@@ -201,14 +201,14 @@ export default function DemoPage() {
                                 ({debate.championAnswer.winnerModel})
                             </span>
                         </div>
-                        <p className="mb-6 text-lg font-medium text-slate-900 dark:text-stone-100 leading-relaxed">
+                        <p className="mb-6 text-lg font-medium text-slate-900 dark:text-white leading-relaxed">
                             {debate.championAnswer.synthesis}
                         </p>
-                        <div className="rounded-xl bg-white/80 dark:bg-stone-800/50 p-5 border border-amber-200/70 dark:border-stone-700">
-                            <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-700">
+                        <div className="rounded-xl bg-white/80 dark:bg-slate-800/50 p-5 border border-amber-200/70 dark:border-slate-800">
+                            <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                                 {t("demo.champion.reasoning")}
                             </h4>
-                            <p className="text-slate-600 dark:text-stone-300">{debate.championAnswer.reasoning}</p>
+                            <p className="text-slate-600 dark:text-slate-300">{debate.championAnswer.reasoning}</p>
                         </div>
 
                         {/* Champion Feedback */}
@@ -217,8 +217,8 @@ export default function DemoPage() {
                 </section>
 
                 {/* Footer CTAs */}
-                <section className="flex flex-col items-center gap-4 rounded-3xl border border-amber-200/70 bg-white/90 dark:border-stone-700 dark:bg-stone-900/50 p-8 text-center shadow-sm">
-                    <p className="text-lg text-slate-600 dark:text-stone-300">
+                <section className="flex flex-col items-center gap-4 rounded-3xl border border-amber-200/70 bg-white/90 dark:border-slate-800 dark:bg-slate-900/50 p-8 text-center shadow-sm">
+                    <p className="text-lg text-slate-600 dark:text-slate-300">
                         Ready to run your own debate with real AI models?
                     </p>
                     <div className="flex flex-wrap justify-center gap-4">
@@ -231,7 +231,7 @@ export default function DemoPage() {
                         </Link>
                         <Link
                             href="/"
-                            className="rounded-lg border-2 border-amber-300 bg-white px-8 py-3 font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                            className="rounded-lg border-2 border-amber-300 bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-amber-200 px-8 py-3 font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                         >
                             {t("demo.cta.secondary")}
                         </Link>
