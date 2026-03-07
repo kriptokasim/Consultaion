@@ -30,9 +30,9 @@ export default async function AnalyticsPage() {
   if (!analytics.totals.debates) {
     return (
       <main id="main" className="flex h-full items-center justify-center p-6">
-        <div className="space-y-3 rounded-3xl border border-amber-200/70 bg-white p-6 text-center shadow-sm">
-          <h2 className="text-xl font-semibold text-stone-900">{t("analytics.empty.overviewTitle")}</h2>
-          <p className="text-sm text-stone-600">{t("analytics.empty.overviewDescription")}</p>
+        <div className="space-y-3 rounded-3xl border border-amber-200/70 bg-white p-6 text-center shadow-sm dark:border-amber-900/50 dark:bg-stone-900">
+          <h2 className="text-xl font-semibold text-stone-900 dark:text-white">{t("analytics.empty.overviewTitle")}</h2>
+          <p className="text-sm text-stone-600 dark:text-stone-400">{t("analytics.empty.overviewDescription")}</p>
           <Link
             href="/live"
             className="inline-flex items-center justify-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-500"
@@ -61,9 +61,9 @@ function buildAnalytics(debates: DebateRecord[]): AnalyticsData {
       const end = debate.updated_at ? new Date(debate.updated_at).getTime() : start;
       return acc + Math.max(0, end - start);
     }, 0) /
-      (total || 1) /
-      1000 /
-      60 || 0;
+    (total || 1) /
+    1000 /
+    60 || 0;
 
   const winMap = new Map<string, AnalyticsWinRate>();
   debates.forEach((debate) => {
