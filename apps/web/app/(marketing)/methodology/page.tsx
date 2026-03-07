@@ -56,9 +56,9 @@ function BrandCell({
   variant?: "mark" | "logotype";
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-100/80 bg-white p-4 text-center shadow-sm dark:border-amber-900/40 dark:bg-stone-900">
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-amber-100/80 bg-white p-4 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <Brand variant={variant} tone={tone} height={variant === "mark" ? 48 : 32} />
-      <p className="text-xs font-semibold uppercase tracking-wide text-stone-600 dark:text-amber-100">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">{label}</p>
     </div>
   );
 }

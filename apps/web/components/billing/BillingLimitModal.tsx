@@ -26,8 +26,8 @@ export function BillingLimitModal({ open, code, onClose }: BillingLimitModalProp
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-xl">
-        <h3 className="heading-serif text-2xl text-[#3a2a1a]">{content.title}</h3>
-        <p className="mt-2 text-sm text-[#5a4a3a]">{content.message}</p>
+        <h3 className="heading-serif text-2xl text-slate-900 dark:text-white">{content.title}</h3>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{content.message}</p>
         <div className="mt-4 space-x-2">
           <Button asChild variant="secondary" className="bg-stone-100 text-stone-900">
             <a href="/pricing">View pricing</a>

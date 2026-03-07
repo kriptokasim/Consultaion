@@ -24,7 +24,7 @@ export function ModelUsageChart() {
 
   if (!rows.length) {
     return (
-      <Card className="border-amber-200 bg-white/80 p-4 text-sm text-[#5a4a3a]">
+      <Card className="border-amber-200 bg-white/80 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
         {t("settings.billing.usagePlaceholder")}
       </Card>
     );
@@ -34,13 +34,13 @@ export function ModelUsageChart() {
 
   return (
     <Card className="space-y-3 border-amber-200 bg-white/80 p-4">
-      <h4 className="font-semibold text-sm text-[#3a2a1a]">{t("settings.billing.usageHeading")}</h4>
+      <h4 className="font-semibold text-sm text-slate-900 dark:text-white">{t("settings.billing.usageHeading")}</h4>
       <div className="space-y-3">
         {rows.map((row) => {
           const width = maxTokens ? Math.max(6, Math.round((row.tokens_used / maxTokens) * 100)) : 0;
           return (
             <div key={row.model_id}>
-              <div className="flex items-center justify-between text-xs text-[#5a4a3a]">
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                 <span>{row.display_name}</span>
                 <span>
                   {row.tokens_used.toLocaleString()} {t("settings.billing.tokensLabel")}

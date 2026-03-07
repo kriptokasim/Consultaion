@@ -58,7 +58,7 @@ export function ModelDetailsDialog({ open, onOpenChange, model }: ModelDetailsDi
                 {/* Header */}
                 <div className="mb-6 flex items-start justify-between">
                     <div>
-                        <h2 id="model-dialog-title" className="text-3xl font-display font-bold text-[#3a2a1a]">
+                        <h2 id="model-dialog-title" className="text-3xl font-display font-bold text-slate-900 dark:text-white">
                             {model.name}
                         </h2>
                         <p className="mt-1 text-sm text-amber-700">{model.provider}</p>
@@ -80,7 +80,7 @@ export function ModelDetailsDialog({ open, onOpenChange, model }: ModelDetailsDi
                     </h3>
                     <ul className="space-y-2">
                         {model.strengths.map((strength, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-[#5a4a3a]">
+                            <li key={idx} className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
                                 <span className="mt-1 text-green-600">✓</span>
                                 <span>{strength}</span>
                             </li>
@@ -96,7 +96,7 @@ export function ModelDetailsDialog({ open, onOpenChange, model }: ModelDetailsDi
                     </h3>
                     <ul className="space-y-2">
                         {model.limitations.map((limitation, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-[#5a4a3a]">
+                            <li key={idx} className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
                                 <span className="mt-1 text-amber-600">⚠</span>
                                 <span>{limitation}</span>
                             </li>
@@ -112,7 +112,7 @@ export function ModelDetailsDialog({ open, onOpenChange, model }: ModelDetailsDi
                     </h3>
                     <ul className="space-y-2">
                         {model.bestFor.map((use, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-[#5a4a3a]">
+                            <li key={idx} className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
                                 <span className="mt-1 text-amber-600">🎯</span>
                                 <span>{use}</span>
                             </li>

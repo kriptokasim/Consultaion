@@ -74,7 +74,7 @@ export default function HomeContent() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2]">
+    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] dark:from-slate-900 dark:via-slate-950 dark:to-black">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute top-10 left-8 h-64 w-64 rounded-full bg-amber-200 blur-3xl opacity-30" />
         <div className="absolute top-40 right-12 h-80 w-80 rounded-full bg-[#d4c5a0] blur-3xl opacity-25" />
@@ -86,14 +86,14 @@ export default function HomeContent() {
         <MarketingHero>
           <div className="grid gap-12 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-6">
-              <h1 className="text-5xl font-display font-bold tracking-tight text-[#3a2a1a] leading-[1.1] sm:text-6xl md:leading-[1.05]">
+              <h1 className="text-5xl font-display font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] sm:text-6xl md:leading-[1.05]">
                 {t("landing.hero.title")}
                 <span className="block bg-gradient-to-r from-amber-600 to-amber-400 bg-clip-text text-transparent">
                   {t("landing.hero.accent")}
                 </span>
               </h1>
-              <p className="text-lg font-semibold text-amber-900">{t("landing.hero.tagline")}</p>
-              <p className="max-w-2xl text-lg text-[#5a4a3a]">{t("landing.hero.description")}</p>
+              <p className="text-lg font-semibold text-amber-900 dark:text-amber-300">{t("landing.hero.tagline")}</p>
+              <p className="max-w-2xl text-lg text-slate-600 dark:text-slate-300">{t("landing.hero.description")}</p>
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap gap-3">
                   <Button variant="amber" size="lg" className="px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
@@ -102,24 +102,24 @@ export default function HomeContent() {
                   <Link
                     href="/demo"
                     onClick={() => trackEvent("landing_demo_cta_clicked")}
-                    className="inline-flex items-center gap-2 rounded-lg border-2 border-amber-300 bg-white px-6 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                    className="inline-flex items-center gap-2 rounded-lg border-2 border-amber-300 bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-amber-200 px-6 py-2.5 text-sm font-semibold text-amber-900 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                   >
                     {t("landing.hero.viewDemo")}
                   </Link>
                 </div>
                 {!user ? (
                   <>
-                    <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 underline-offset-4 hover:underline" onClick={() => trackEvent("landing_hero_secondary_cta_clicked")}>
+                    <Link href="/login?next=/dashboard" className="text-sm font-semibold text-amber-800 dark:text-amber-400 underline-offset-4 hover:underline" onClick={() => trackEvent("landing_hero_secondary_cta_clicked")}>
                       {t("landing.hero.secondaryCta")}
                     </Link>
-                    <p className="text-xs text-amber-900/70">{t("landing.hero.secondaryHint")}</p>
+                    <p className="text-xs text-amber-900/70 dark:text-amber-100/50">{t("landing.hero.secondaryHint")}</p>
                   </>
                 ) : null}
               </div>
             </div>
 
-            <div className="relative rounded-3xl border border-amber-100/80 bg-white/80 p-8 shadow-[0_20px_50px_rgba(112,73,28,0.12)] backdrop-blur">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">{t("landing.snapshot.caption")}</p>
+            <div className="relative rounded-3xl border border-amber-100/80 bg-white/80 dark:border-slate-800 dark:bg-slate-900/80 p-8 shadow-[0_20px_50px_rgba(112,73,28,0.12)] dark:shadow-none backdrop-blur">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">{t("landing.snapshot.caption")}</p>
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <HeroStat label={t("landing.stats.agents")} value={8} animate />
                 <HeroStat label={t("landing.stats.judges")} value={3} animate />
@@ -128,7 +128,7 @@ export default function HomeContent() {
               </div>
               <div className="mt-8 flex flex-col items-center gap-3">
                 <ArcDots />
-                <p className="max-w-sm text-center text-sm text-[#5a4a3a]">{t("landing.snapshot.description")}</p>
+                <p className="max-w-sm text-center text-sm text-slate-600 dark:text-slate-300">{t("landing.snapshot.description")}</p>
               </div>
             </div>
           </div>
@@ -136,13 +136,13 @@ export default function HomeContent() {
 
         <section className="space-y-8">
           <div className="text-center">
-            <h2 className="text-3xl font-semibold text-[#3a2a1a]">{t("landing.who.title")}</h2>
+            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("landing.who.title")}</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="rounded-2xl border border-amber-100/60 bg-white/60 p-6 shadow-sm transition hover:bg-white/80 hover:shadow-md">
-                <h3 className="font-semibold text-[#3a2a1a]">{t(`landing.who.persona${i}.title`)}</h3>
-                <p className="mt-2 text-sm text-[#5a4a3a]">{t(`landing.who.persona${i}.description`)}</p>
+              <div key={i} className="rounded-2xl border border-amber-100/60 bg-white/60 dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-sm transition hover:bg-white/80 dark:hover:bg-slate-800/80 hover:shadow-md">
+                <h3 className="font-semibold text-slate-900 dark:text-white">{t(`landing.who.persona${i}.title`)}</h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t(`landing.who.persona${i}.description`)}</p>
               </div>
             ))}
           </div>
@@ -150,38 +150,38 @@ export default function HomeContent() {
 
         <section className="space-y-8">
           <div className="text-center">
-            <h2 className="text-3xl font-semibold text-[#3a2a1a]">{t("landing.features.title")}</h2>
+            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("landing.features.title")}</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
-            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 <MessageSquare className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t("landing.features.multi.title")}</h3>
-              <p className="mt-2 mb-6 text-sm text-[#5a4a3a]">{t("landing.features.multi.description")}</p>
-              <Link href="/demo" className="text-sm font-semibold text-amber-700 hover:underline">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t("landing.features.multi.title")}</h3>
+              <p className="mt-2 mb-6 text-sm text-slate-600 dark:text-slate-300">{t("landing.features.multi.description")}</p>
+              <Link href="/demo" className="text-sm font-semibold text-amber-700 dark:text-amber-400 hover:underline">
                 {t("landing.features.multi.cta")} →
               </Link>
             </div>
 
-            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 <Vote className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t("landing.features.templates.title")}</h3>
-              <p className="mt-2 mb-6 text-sm text-[#5a4a3a]">{t("landing.features.templates.description")}</p>
-              <button onClick={handleStartDebate} className="text-sm font-semibold text-amber-700 hover:underline">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t("landing.features.templates.title")}</h3>
+              <p className="mt-2 mb-6 text-sm text-slate-600 dark:text-slate-300">{t("landing.features.templates.description")}</p>
+              <button onClick={handleStartDebate} className="text-sm font-semibold text-amber-700 dark:text-amber-400 hover:underline">
                 {t("landing.features.templates.cta")} →
               </button>
             </div>
 
-            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
-              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+            <div className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-white dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 <Brain className="h-5 w-5" />
               </div>
-              <h3 className="text-lg font-semibold text-[#3a2a1a]">{t("landing.features.traces.title")}</h3>
-              <p className="mt-2 mb-6 text-sm text-[#5a4a3a]">{t("landing.features.traces.description")}</p>
-              <Link href={user ? "/dashboard" : "/login?next=/dashboard"} className="text-sm font-semibold text-amber-700 hover:underline">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t("landing.features.traces.title")}</h3>
+              <p className="mt-2 mb-6 text-sm text-slate-600 dark:text-slate-300">{t("landing.features.traces.description")}</p>
+              <Link href={user ? "/dashboard" : "/login?next=/dashboard"} className="text-sm font-semibold text-amber-700 dark:text-amber-400 hover:underline">
                 {t("landing.features.traces.cta")} →
               </Link>
             </div>
@@ -191,19 +191,19 @@ export default function HomeContent() {
         {/* How it Works Section */}
         <section className="space-y-6">
           <div className="text-center">
-            <h2 className="text-3xl font-semibold text-[#3a2a1a]">{t("landing.howItWorks.title")}</h2>
+            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("landing.howItWorks.title")}</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map((step) => (
               <div
                 key={step}
-                className="rounded-2xl border border-amber-100/80 bg-white/80 p-6 shadow-sm transition hover:-translate-y-[2px] hover:shadow-md"
+                className="rounded-2xl border border-amber-100/80 bg-white/80 dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-sm transition hover:-translate-y-[2px] hover:shadow-md"
               >
-                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-lg font-bold text-amber-700">
+                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-lg font-bold text-amber-700 dark:from-amber-400 dark:to-amber-500 dark:text-white">
                   {step}
                 </div>
-                <h3 className="text-lg font-semibold text-[#3a2a1a]">{t(`landing.howItWorks.step${step}.title`)}</h3>
-                <p className="mt-2 text-sm text-[#5a4a3a]">{t(`landing.howItWorks.step${step}.description`)}</p>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t(`landing.howItWorks.step${step}.title`)}</h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t(`landing.howItWorks.step${step}.description`)}</p>
               </div>
             ))}
           </div>
@@ -216,10 +216,10 @@ export default function HomeContent() {
             onClick={() => trackEvent("landing_demo_cta_clicked")}
             className="group inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 px-8 py-4 text-lg font-semibold text-white shadow-[0_16px_40px_rgba(255,190,92,0.4)] transition hover:-translate-y-[2px] hover:shadow-[0_20px_50px_rgba(255,190,92,0.5)]"
           >
-            <span className="text-lg font-semibold text-[#3a2a1a]">
+            <span className="text-lg font-semibold text-white">
               {t("landing.demo.cta")}
             </span>
-            <span className="text-xs text-amber-700">
+            <span className="text-xs text-amber-100">
               {t("landing.demo.subtitle")}
             </span>
           </Link>
@@ -233,24 +233,24 @@ export default function HomeContent() {
 
         <DynamicLLMSelector onStart={handleStartDebate} />
 
-        <section className="relative z-10 mt-12 flex flex-col items-center gap-3 rounded-3xl border border-amber-100/70 bg-white/80 p-8 text-center shadow-[0_20px_50px_rgba(112,73,28,0.08)]">
-          <p className="text-sm text-[#5a4a3a]">{t("landing.footer.prompt")}</p>
+        <section className="relative z-10 mt-12 flex flex-col items-center gap-3 rounded-3xl border border-amber-100/70 bg-white/80 dark:border-slate-800 dark:bg-slate-900/50 p-8 text-center shadow-[0_20px_50px_rgba(112,73,28,0.08)] dark:shadow-none">
+          <p className="text-sm text-slate-600 dark:text-slate-300">{t("landing.footer.prompt")}</p>
           <Button variant="amber" size="lg" className="px-8 focus-amber" onClick={handleStartDebate} disabled={loading}>
             {t("landing.selector.cta")}
           </Button>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-6 border-t border-amber-200/50 pt-6">
-            <Link href="/docs" className="flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-600" onClick={() => trackEvent("landing_docs_clicked")}>
+          <div className="mt-8 flex flex-wrap justify-center gap-6 border-t border-amber-200/50 dark:border-slate-800 pt-6">
+            <Link href="/docs" className="flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300" onClick={() => trackEvent("landing_docs_clicked")}>
               <BookOpen className="h-4 w-4" />
               {t("landing.devs.docs")}
             </Link>
-            <a href="https://github.com/kriptokasim/Consultaion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-600" onClick={() => trackEvent("landing_github_clicked")}>
+            <a href="https://github.com/kriptokasim/Consultaion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300" onClick={() => trackEvent("landing_github_clicked")}>
               <Github className="h-4 w-4" />
               {t("landing.devs.github")}
             </a>
           </div>
         </section>
-        <footer className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs font-semibold uppercase tracking-wide text-[#7a6653]">
+        <footer className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           {marketingLinks.map((item) => (
             <Link key={item.href} href={item.href} className="transition hover:text-amber-700">
               {item.label}
@@ -270,7 +270,7 @@ export default function HomeContent() {
 
 function LLMSelectorFallback() {
   const { t } = useI18n();
-  return <div className="rounded-3xl border border-amber-100/70 bg-white/60 p-12 text-center text-sm text-[#5a4a3a]">{t("landing.model.loading")}</div>;
+  return <div className="rounded-3xl border border-amber-100/70 bg-white/60 dark:border-slate-800 dark:bg-slate-900/50 p-12 text-center text-sm text-slate-600 dark:text-slate-300">{t("landing.model.loading")}</div>;
 }
 
 const DynamicLLMSelector = dynamic<{ onStart?: () => void }>(() => import("@/components/ui/LLMSelector"), {
@@ -280,9 +280,9 @@ const DynamicLLMSelector = dynamic<{ onStart?: () => void }>(() => import("@/com
 
 function HeroStat({ label, value, animate }: { label: string; value: string | number; animate?: boolean }) {
   return (
-    <div className="rounded-2xl border border-amber-100/80 bg-white p-4 text-left shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-[#3a2a1a]">
+    <div className="rounded-2xl border border-amber-100/80 bg-white dark:border-slate-800 dark:bg-slate-900/50 p-4 text-left shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">
         {typeof value === "number" && animate ? <AnimatedCounter value={value} /> : value}
       </p>
     </div>

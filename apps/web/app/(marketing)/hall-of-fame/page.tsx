@@ -42,13 +42,13 @@ export default async function HallOfFamePage({
         <div className="flex items-center gap-3">
           <Brand height={40} />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("hall.kicker")}</p>
-            <h1 className="text-3xl font-semibold text-stone-900">{t("hall.title")}</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("hall.kicker")}</p>
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("hall.title")}</h1>
           </div>
         </div>
-        <div className="rounded-3xl border border-dashed border-stone-200 bg-white/80 p-6 text-center shadow-sm">
-          <p className="text-base font-semibold text-stone-900">{t("hall.empty.title")}</p>
-          <p className="mt-2 text-sm text-stone-600">{t("hall.empty.description")}</p>
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-800/80 p-6 text-center shadow-sm">
+          <p className="text-base font-semibold text-slate-900 dark:text-white">{t("hall.empty.title")}</p>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t("hall.empty.description")}</p>
           <div className="mt-4">
             <Link
               href="/"
@@ -64,22 +64,22 @@ export default async function HallOfFamePage({
 
   return (
     <main id="main" className="space-y-8 p-6">
-      <header className="space-y-3 rounded-3xl border border-amber-100/70 bg-gradient-to-r from-white via-amber-50 to-stone-50 p-5 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:from-stone-900 dark:via-stone-900/80 dark:to-stone-900">
+      <header className="space-y-3 rounded-3xl border border-amber-100/70 bg-gradient-to-r from-white via-amber-50 to-stone-50 p-5 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/80 dark:to-slate-900 dark:shadow-none">
         <div className="flex items-center gap-3">
           <Brand height={40} className="drop-shadow-sm" />
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-200">{t("hall.kicker")}</p>
-            <h1 className="text-3xl font-semibold text-stone-900 dark:text-amber-50">{t("hall.title")}</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("hall.kicker")}</p>
+            <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("hall.title")}</h1>
           </div>
         </div>
-        <p className="max-w-3xl text-sm text-stone-700 dark:text-stone-300">{t("hall.description")}</p>
+        <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-300">{t("hall.description")}</p>
       </header>
 
-      <form className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4 shadow-sm dark:border-amber-900/40 dark:bg-stone-900/70" method="get">
+      <form className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70" method="get">
         <div className="grid gap-4 md:grid-cols-3">
-          <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
+          <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
             <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.model")}</span>
-            <select name="model" defaultValue={model ?? ""} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50">
+            <select name="model" defaultValue={model ?? ""} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
               {modelOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>
                   {opt.name}
@@ -87,29 +87,29 @@ export default async function HallOfFamePage({
               ))}
             </select>
           </label>
-          <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
+          <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
             <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.startDate")}</span>
             <input
               type="date"
               name="start"
               defaultValue={toDate(start)}
-              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50"
+              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </label>
-          <label className="flex flex-col text-sm text-stone-700 dark:text-amber-100/80">
+          <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
             <span className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.endDate")}</span>
             <input
               type="date"
               name="end"
               defaultValue={toDate(end)}
-              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50"
+              className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">{t("hall.filters.sort")}</span>
-            <select name="sort" defaultValue={sort} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-stone-900 dark:border-amber-900/40 dark:bg-stone-900 dark:text-amber-50">
+            <select name="sort" defaultValue={sort} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white">
               {sortOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
@@ -127,50 +127,50 @@ export default async function HallOfFamePage({
       </form>
 
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 p-6 text-sm text-stone-600">{t("hall.notice.emptyFiltered")}</div>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 p-6 text-sm text-slate-600 dark:text-slate-300">{t("hall.notice.emptyFiltered")}</div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {items.map((card: any) => (
             <ChampionGlow key={card.id} active={true}>
-              <article className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
+              <article className="flex h-full flex-col rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-stone-50 dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/80 dark:to-slate-950 p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
                 <div className="mb-3 space-y-2">
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700">{t("hall.card.prompt")}</p>
-                  <p className="line-clamp-3 text-sm leading-relaxed text-stone-900">{card.prompt}</p>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("hall.card.prompt")}</p>
+                  <p className="line-clamp-3 text-sm leading-relaxed text-slate-900 dark:text-slate-100">{card.prompt}</p>
                 </div>
-                <div className="mb-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
-                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-amber-800">
+                <div className="mb-3 rounded-2xl border border-amber-100 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-900/20 p-3">
+                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
                     <span className="inline-flex items-center gap-2">
                       <Brand height={16} />
                       {t("hall.card.championLabel")}
                     </span>
                     {typeof card.champion_score === "number" ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 font-mono text-amber-800">
+                      <span className="rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 font-mono text-amber-800 dark:text-amber-300">
                         {card.champion_score.toFixed(2)}
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-sm font-semibold text-stone-900">
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                     {card.champion ?? t("hall.card.noChampion")}
                     {typeof card.runner_up_score === "number" && typeof card.champion_score === "number" ? (
-                      <span className="ml-2 text-xs font-normal text-amber-700">
+                      <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-400">
                         {t("hall.card.winDeltaPrefix")} {(card.champion_score - card.runner_up_score).toFixed(2)}
                       </span>
                     ) : (
-                      <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[0.7rem] text-amber-800">
+                      <span className="ml-2 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[0.7rem] text-amber-800 dark:text-amber-300">
                         {t("hall.card.mockBadge")}
                       </span>
                     )}
                   </p>
                   {card.champion_excerpt ? (
-                    <p className="mt-2 line-clamp-3 text-sm text-stone-800">{card.champion_excerpt}</p>
+                    <p className="mt-2 line-clamp-3 text-sm text-slate-700 dark:text-slate-300">{card.champion_excerpt}</p>
                   ) : (
-                    <p className="mt-2 text-sm text-stone-600">{t("hall.card.noExcerpt")}</p>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{t("hall.card.noExcerpt")}</p>
                   )}
                 </div>
                 <div className="flex-1" />
                 <Link
                   href={`/runs/${card.id}`}
-                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 transition hover:border-amber-400 hover:text-amber-900"
+                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white dark:border-slate-700 dark:bg-slate-800 px-3 py-2 text-sm font-semibold text-amber-800 dark:text-amber-300 transition hover:border-amber-400 hover:text-amber-900 dark:hover:border-amber-600 dark:hover:text-amber-200"
                 >
                   {t("hall.card.cta")} →
                 </Link>

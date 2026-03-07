@@ -39,9 +39,9 @@ export function PromotionArea({ location }: { location: string }) {
   return (
     <div className="space-y-3">
       {promos.map((promo) => (
-        <Card key={promo.id} className="border-amber-200 bg-gradient-to-br from-white via-[#fff7eb] to-[#fde7c6] p-4 text-[#3a2a1a]">
+        <Card key={promo.id} className="border-amber-200 bg-gradient-to-br from-white via-[#fff7eb] to-[#fde7c6] p-4 text-slate-900 dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 dark:text-white">
           <h4 className="font-semibold text-sm">{promo.title}</h4>
-          <p className="mt-1 text-xs text-[#5a4a3a]">{promo.body}</p>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{promo.body}</p>
           {promo.cta_url && promo.cta_label ? (
             <Button asChild size="sm" className="mt-3 bg-amber-600 text-white hover:bg-amber-700">
               <a href={promo.cta_url}>{promo.cta_label}</a>

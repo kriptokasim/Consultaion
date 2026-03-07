@@ -35,7 +35,7 @@ export function ChampionFeedback({ source, scenarioId, debateId }: ChampionFeedb
     return (
         <div className="flex items-center gap-4 rounded-lg border border-amber-200 bg-amber-50/50 px-4 py-3">
             {/* Question */}
-            <span className="text-sm font-medium text-[#3a2a1a]">
+            <span className="text-sm font-medium text-slate-900 dark:text-white">
                 {t("feedback.champion.question")}
             </span>
 
@@ -45,8 +45,8 @@ export function ChampionFeedback({ source, scenarioId, debateId }: ChampionFeedb
                     onClick={() => handleFeedback(true)}
                     disabled={feedback !== null}
                     className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${feedback === true
-                            ? "bg-green-500 text-white"
-                            : "bg-white text-[#3a2a1a] hover:bg-amber-100 disabled:opacity-50"
+                        ? "bg-green-500 text-white"
+                        : "bg-white text-slate-900 dark:bg-slate-800 dark:text-white hover:bg-amber-100 dark:hover:bg-slate-700 disabled:opacity-50"
                         }`}
                     aria-label={t("feedback.champion.yes")}
                 >
@@ -58,8 +58,8 @@ export function ChampionFeedback({ source, scenarioId, debateId }: ChampionFeedb
                     onClick={() => handleFeedback(false)}
                     disabled={feedback !== null}
                     className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${feedback === false
-                            ? "bg-red-500 text-white"
-                            : "bg-white text-[#3a2a1a] hover:bg-amber-100 disabled:opacity-50"
+                        ? "bg-red-500 text-white"
+                        : "bg-white text-slate-900 dark:bg-slate-800 dark:text-white hover:bg-amber-100 dark:hover:bg-slate-700 disabled:opacity-50"
                         }`}
                     aria-label={t("feedback.champion.no")}
                 >
