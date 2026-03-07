@@ -15,6 +15,20 @@ from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_auth_log(request) -> dict:
+    """Return a safe dict of auth indicators for debug logging.
+
+    NEVER includes raw token/header values — only presence booleans and
+    non-sensitive metadata.
+    """
+    return {
+        "path": request.url.path,
+        "has_session_cookie": COOKIE_NAME in request.cookies,
+        "has_auth_header": bool(request.headers.get("Authorization")),
+        "cookie_names": sorted(request.cookies.keys()),
+    }
+
 COOKIE_NAME = settings.COOKIE_NAME
 JWT_SECRET = settings.JWT_SECRET
 if not JWT_SECRET:
@@ -142,17 +156,16 @@ def get_current_user(
     if not user:
         # [AUTH_DEBUG] Patchset 53.0: Log unauthorized access attempt
         if settings.AUTH_DEBUG:
-            has_cookie = COOKIE_NAME in request.cookies
-            has_cookie = COOKIE_NAME in request.cookies
-            log_msg = (
-                f"[AUTH_DEBUG] Protected endpoint unauthorized. "
-                f"Path: {request.url.path}, "
-                f"Cookies: {list(request.cookies.keys())}, "
-                f"AuthHeader: {request.headers.get('Authorization')}, "
-                f"TargetCookie: {COOKIE_NAME}"
+            ctx = _safe_auth_log(request)
+            logger.warning(
+                "[AUTH_DEBUG] Unauthorized: path=%s has_session_cookie=%s "
+                "has_auth_header=%s cookie_names=%s",
+                ctx["path"],
+                ctx["has_session_cookie"],
+                ctx["has_auth_header"],
+                ctx["cookie_names"],
             )
-            logger.warning(log_msg)
-        
+
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
     if hasattr(user, "is_active") and not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")

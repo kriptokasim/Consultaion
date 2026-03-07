@@ -126,10 +126,10 @@ export default function RunDetailClient() {
   }, [id, debate, state.isRecovering]);
 
   // 2. Live Updates (SSE) — only for non-completed debates
-  const authToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  // Auth is via session cookie (withCredentials: true). No token in URL.
   const streamUrl =
     id && !isCompleted
-      ? `${API_ORIGIN}/debates/${id}/stream${authToken ? `?token=${authToken}` : ""}`
+      ? `${API_ORIGIN}/debates/${id}/stream`
       : null;
   const { lastEvent, status: sseStatus } = useEventSource<any>(streamUrl, {
     enabled: !!id && !isCompleted,

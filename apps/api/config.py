@@ -111,10 +111,11 @@ class AppSettings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
     
-    # Sentry Configuration
+    # Sentry Configuration — opt-in only.
+    # Set SENTRY_DSN env var to enable error tracking. Default is empty (disabled).
     SENTRY_DSN: str | None = Field(
-        "https://ddf2ec99d4dc9d15066c4e4927534818@o4510567771406336.ingest.de.sentry.io/4510567774027856",
-        description="Sentry DSN for error tracking"
+        default=None,
+        description="Sentry DSN for error tracking. Set via environment variable to enable.",
     )
 
     ENABLE_SEC_HEADERS: bool = True
@@ -196,7 +197,6 @@ class AppSettings(BaseSettings):
     # Safety & security (Patchset 29.0)
     ENABLE_PII_SCRUB: bool = Field(True, description="Enable PII scrubbing before LLM calls")
 
-    SENTRY_DSN: str | None = None
     SENTRY_ENV: str = "local"
     SENTRY_SAMPLE_RATE: float = 0.1
     

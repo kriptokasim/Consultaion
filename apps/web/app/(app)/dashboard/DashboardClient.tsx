@@ -63,24 +63,19 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
 
-  // Fallback to reload if token was processed
+  // Bootstrap: process token from Google OAuth redirect
   useEffect(() => {
     if (authToken && typeof window !== "undefined") {
-      // 1. Save to localStorage for API clients
-      localStorage.setItem("auth_token", authToken);
-
-      // 2. Set 'consultaion_session' cookie for SSR (Cross-Origin Bootstrapping)
-      // Note: Backend uses 'consultaion_session' cookie name (defined in Render env vars).
-      // We duplicate it here on Frontend domain to allow SSR to see it.
+      // Set 'consultaion_session' cookie for SSR cross-origin bootstrapping.
+      // NOTE: We do NOT persist the token in localStorage — cookie-only is the secure path.
       document.cookie = `consultaion_session=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
 
-      // SECURITY: Strip token from URL immediately after capture to prevent
-      // accidental leakage via browser history, referrer headers, or copy-paste
+      // Strip token from URL to prevent leakage via browser history / referrers
       const url = new URL(window.location.href);
       url.searchParams.delete("token");
       window.history.replaceState({}, "", url.toString());
 
-      // Reload to retry SSR 'getMe' check now that cookie is set
+      // Reload so SSR 'getMe' can see the newly set cookie
       window.location.reload();
     }
   }, [authToken]);

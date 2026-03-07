@@ -10,6 +10,7 @@ apps/api/node_modules/
 *.log
 *.db
 *.sqlite3
+apps/api/=*
 *.deb
 *.tar
 *.tar.gz

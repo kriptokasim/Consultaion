@@ -113,12 +113,8 @@ export async function apiRequest<TResponse = unknown, TBody = unknown>(
         (init.headers as Record<string, string>)["X-CSRF-Token"] = csrfToken;
       }
     }
-
-    // Fallback Auth: Inject Bearer token if present (for when cookies fail)
-    const storedToken = localStorage.getItem("auth_token");
-    if (storedToken) {
-      (init.headers as Record<string, string>)["Authorization"] = `Bearer ${storedToken}`;
-    }
+    // Auth is handled exclusively via session cookie (credentials: "include").
+    // Do not inject tokens from browser storage — cookie-only is the secure path.
   }
 
   const res = await fetch(url, init);
