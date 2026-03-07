@@ -11,7 +11,7 @@ type BrandProps = {
 export default function Brand({ variant = "mark", tone = "stone", className, height = 32 }: BrandProps) {
   const src =
     variant === "logotype"
-      ? "/brand/rc-logotype.svg"
+      ? "/brand/consultaion-logo.svg"
       : tone === "amber"
         ? "/brand/rc-mark-amber.svg"
         : "/brand/rc-mark.svg";
