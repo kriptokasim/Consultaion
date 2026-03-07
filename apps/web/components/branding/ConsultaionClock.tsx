@@ -3,7 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import anime from "animejs";
 
-export const RosettaClock: React.FC = () => {
+export const ConsultaionClock: React.FC = () => {
   const hourRef = useRef<SVGLineElement | null>(null);
   const minuteRef = useRef<SVGLineElement | null>(null);
   const secondRef = useRef<SVGLineElement | null>(null);

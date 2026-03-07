@@ -8,21 +8,19 @@ type BrandProps = {
   height?: number;
 };
 
-export default function Brand({ variant = "mark", tone = "stone", className, height = 32 }: BrandProps) {
-  const src =
-    variant === "logotype"
-      ? "/brand/consultaion-logo.svg"
-      : tone === "amber"
-        ? "/brand/rc-mark-amber.svg"
-        : "/brand/rc-mark.svg";
+export default function Brand({ variant = "mark", className, height = 32 }: BrandProps) {
+  const src = "/brand/consultaion-logo.svg";
   return (
-    <Image
-      src={src}
-      alt={variant === "logotype" ? "Consultaion" : "Consultaion mark"}
-      priority={variant === "mark"}
-      width={height}
-      height={height}
-      className={cn("select-none", className)}
-    />
+    <div
+      className={cn("flex items-center justify-center shrink-0", className)}
+      style={{ height: `${height}px` }}
+    >
+      <img
+        src={src}
+        alt="Consultaion"
+        className="h-full w-auto object-contain"
+        draggable={false}
+      />
+    </div>
   );
 }

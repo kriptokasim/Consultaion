@@ -14,7 +14,7 @@ import StatusBadge from "./StatusBadge";
 import { DebateTimerRing } from "./DebateTimerRing";
 import { ChampionGlow } from "./ChampionGlow";
 import { VoteWave } from "./VoteWave";
-import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
+import Brand from "@/components/parliament/Brand";
 import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
 
 import type {
@@ -196,7 +196,7 @@ export default function ParliamentRunView({
                 <dd className="mt-1">{updatedAt}</dd>
               </div>
             </dl>
-            <DebateTimerRing durationMs={60000} running={debate?.status === "running"} label="Rosetta clock" />
+            <DebateTimerRing durationMs={60000} running={debate?.status === "running"} label="Consultaion clock" />
           </div>
         </div>
       </section>
@@ -513,7 +513,7 @@ function ChampionSummary({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <RosettaGlyphMini className="h-4 w-4 text-amber-700" />
+        <Brand height={16} className="text-amber-700" />
         <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
           Winning answer
         </span>

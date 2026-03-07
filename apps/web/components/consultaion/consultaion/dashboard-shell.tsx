@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { logout } from "@/lib/auth"
 import { ToastProvider } from "@/components/ui/toast"
-import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo"
+import Brand from "@/components/parliament/Brand"
 import LanguageSwitcher from "@/components/LanguageSwitcher"
 import { useI18n } from "@/lib/i18n/client"
 import { BrandWordmark } from "@/components/brand"
@@ -155,7 +155,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           aria-label="Primary navigation"
         >
           <Link href="/dashboard" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
-            <RosettaChamberLogo size={32} className="drop-shadow" />
+            <Brand height={32} className="drop-shadow" />
             <div className="leading-tight">
               <div className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700 dark:text-amber-400">
                 <BrandWordmark size="sm" className="text-[0.65rem]" />
@@ -248,7 +248,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                 </Button>
               ) : null}
               <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
-                <RosettaChamberLogo size={32} className="drop-shadow-sm" />
+                <Brand height={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">
                   <BrandWordmark size="md" inline />
                 </span>
