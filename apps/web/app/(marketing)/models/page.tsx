@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getModelLeaderboard } from "@/lib/api";
-import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
+import Brand from "@/components/parliament/Brand";
 import { getServerTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export default async function ModelsPage() {
     return (
       <main id="main" className="space-y-6 p-6">
         <div className="flex items-center gap-3">
-          <RosettaChamberLogo size={36} />
+          <Brand height={36} />
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("models.kicker")}</p>
             <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("models.title")}</h1>
@@ -37,7 +37,7 @@ export default async function ModelsPage() {
     <main id="main" className="space-y-6 p-6">
       <header className="space-y-2">
         <div className="flex items-center gap-3">
-          <RosettaChamberLogo size={36} />
+          <Brand height={36} />
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">{t("models.kicker")}</p>
             <h1 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("models.title")}</h1>

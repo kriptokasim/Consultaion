@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getModelDetail } from "@/lib/api";
-import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
-import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
+import Brand from "@/components/parliament/Brand";
 import { getServerTranslations } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +22,7 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
     <main id="main" className="space-y-6 p-6">
       <header className="space-y-2">
         <div className="flex items-center gap-3">
-          <RosettaChamberLogo size={32} />
+          <Brand height={32} />
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("modelDetail.kicker")}</p>
             <h1 className="text-3xl font-semibold text-stone-900">{data.model}</h1>
@@ -36,7 +35,7 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
         <StatCard
           label={t("modelDetail.stats.winRate")}
           value={`${(data.win_rate * 100).toFixed(1)}%`}
-          icon={<RosettaGlyphMini className="h-4 w-4 text-amber-700" />}
+          icon={<Brand height={16} className="text-amber-700" />}
         />
         <StatCard label={t("modelDetail.stats.total")} value={data.total_debates} />
         <StatCard
@@ -58,9 +57,8 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-stone-900">{debate.prompt}</span>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${
-                      debate.was_champion ? "bg-emerald-100 text-emerald-800" : "bg-stone-100 text-stone-700"
-                    }`}
+                    className={`rounded-full px-2 py-0.5 text-xs ${debate.was_champion ? "bg-emerald-100 text-emerald-800" : "bg-stone-100 text-stone-700"
+                      }`}
                   >
                     {debate.was_champion ? t("modelDetail.recent.champion") : t("modelDetail.recent.participant")}
                   </span>
@@ -88,7 +86,7 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
             data.champion_samples.map((sample: any) => (
               <article key={sample.debate_id} className="flex h-full flex-col rounded-2xl border border-amber-100 bg-amber-50/60 p-4 shadow-sm">
                 <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                  <RosettaGlyphMini className="h-4 w-4" />
+                  <Brand height={16} />
                   {t("modelDetail.samples.prompt")}
                 </p>
                 <p className="mb-2 text-sm font-semibold text-stone-900">{sample.prompt}</p>

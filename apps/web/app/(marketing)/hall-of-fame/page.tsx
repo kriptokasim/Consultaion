@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getHallOfFame, getMembers } from "@/lib/api";
-import RosettaChamberLogo from "@/components/branding/RosettaChamberLogo";
-import RosettaGlyphMini from "@/components/branding/RosettaGlyphMini";
+import Brand from "@/components/parliament/Brand";
 import { ChampionGlow } from "@/components/parliament/ChampionGlow";
 import { getServerTranslations } from "@/lib/i18n/server";
 
@@ -41,7 +40,7 @@ export default async function HallOfFamePage({
     return (
       <main id="main" className="space-y-8 p-6">
         <div className="flex items-center gap-3">
-          <RosettaChamberLogo size={40} />
+          <Brand height={40} />
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t("hall.kicker")}</p>
             <h1 className="text-3xl font-semibold text-stone-900">{t("hall.title")}</h1>
@@ -67,7 +66,7 @@ export default async function HallOfFamePage({
     <main id="main" className="space-y-8 p-6">
       <header className="space-y-3 rounded-3xl border border-amber-100/70 bg-gradient-to-r from-white via-amber-50 to-stone-50 p-5 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:from-stone-900 dark:via-stone-900/80 dark:to-stone-900">
         <div className="flex items-center gap-3">
-          <RosettaChamberLogo size={40} className="drop-shadow-sm" />
+          <Brand height={40} className="drop-shadow-sm" />
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-200">{t("hall.kicker")}</p>
             <h1 className="text-3xl font-semibold text-stone-900 dark:text-amber-50">{t("hall.title")}</h1>
@@ -141,7 +140,7 @@ export default async function HallOfFamePage({
                 <div className="mb-3 rounded-2xl border border-amber-100 bg-amber-50/80 p-3">
                   <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-amber-800">
                     <span className="inline-flex items-center gap-2">
-                      <RosettaGlyphMini className="h-4 w-4" />
+                      <Brand height={16} />
                       {t("hall.card.championLabel")}
                     </span>
                     {typeof card.champion_score === "number" ? (

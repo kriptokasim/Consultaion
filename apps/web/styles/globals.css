@@ -191,7 +191,7 @@
       linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
   }
 
-  .rosetta-glyph::before {
+  .consultaion-glyph::before {
     content: "\25CB";
   }
 
