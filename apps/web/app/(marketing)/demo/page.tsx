@@ -144,8 +144,8 @@ export default function DemoPage() {
                     <h2 className="text-2xl font-semibold text-slate-900 dark:text-stone-100">{t("demo.rounds.title")}</h2>
                     {debate.rounds.map((round) => (
                         <div key={round.number} className="space-y-4">
-                            <h3 className="flex items-center gap-2 text-lg font-semibold text-amber-800">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-sm font-bold text-amber-700">
+                            <h3 className="flex items-center gap-2 text-lg font-semibold text-amber-800 dark:text-amber-400">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-sm font-bold text-amber-700 dark:from-amber-900 dark:to-amber-800 dark:text-amber-200">
                                     {round.number}
                                 </span>
                                 {t("demo.round.label")} {round.number}: {round.title}
@@ -156,7 +156,7 @@ export default function DemoPage() {
                                         key={`${round.number}-${idx}`}
                                         className="rounded-xl border border-amber-100/70 bg-white/80 dark:border-stone-700 dark:bg-stone-900/50 p-5 shadow-sm"
                                     >
-                                        <div className="mb-2 font-semibold text-amber-900">{arg.agentName}</div>
+                                        <div className="mb-2 font-semibold text-amber-900 dark:text-amber-300">{arg.agentName}</div>
                                         <p className="text-slate-600 dark:text-stone-300 leading-relaxed">{arg.content}</p>
                                     </div>
                                 ))}
@@ -175,12 +175,12 @@ export default function DemoPage() {
                                 className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white dark:border-stone-700 dark:from-stone-800 dark:to-stone-900 p-5 shadow-sm"
                             >
                                 <div className="mb-2 flex items-center justify-between">
-                                    <span className="font-semibold text-slate-800">{judge.judge}</span>
-                                    <span className="text-sm font-medium text-amber-700">
+                                    <span className="font-semibold text-slate-800 dark:text-slate-100">{judge.judge}</span>
+                                    <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
                                         Leaning: {judge.leaning}
                                     </span>
                                 </div>
-                                <p className="text-slate-700 leading-relaxed">{judge.comment}</p>
+                                <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{judge.comment}</p>
                             </div>
                         ))}
                     </div>
