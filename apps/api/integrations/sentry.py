@@ -19,7 +19,6 @@ def init_sentry() -> None:
             traces_sample_rate=float(settings.SENTRY_SAMPLE_RATE),
             # Send PII only if explicitly desired or if you have data scrubbing rules
             send_default_pii=True,
-            enable_logs=True,
             profile_session_sample_rate=1.0,  # Or configure via settings if desired
             profile_lifecycle="trace",
             integrations=[FastApiIntegration(), SqlalchemyIntegration()],
