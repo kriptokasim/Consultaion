@@ -159,6 +159,7 @@ export type BillingUsageSummary = {
 };
 
 export type BillingMeResponse = {
+  is_owner?: boolean;
   plan: BillingPlanSummary;
   usage: BillingUsageSummary;
 };

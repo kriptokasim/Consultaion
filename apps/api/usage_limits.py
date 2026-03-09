@@ -117,6 +117,19 @@ def _ensure_daily_token_headroom(session: Session, user_id: str) -> None:
 def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
     if not user_id:
         return
+        
+    # Patchset 114: Owner unlimited bypass
+    from models import User
+    from security.owner import is_owner
+    user = session.get(User, user_id)
+    if is_owner(user) and settings.OWNER_UNLIMITED:
+        import logging
+        logging.getLogger(__name__).info(
+            "owner_override_applied",
+            extra={"user_id": user.id, "email": user.email, "override_type": "reserve_run_slot"}
+        )
+        return
+
     quota = _get_or_create_quota(session, user_id, "hour")
     counter = _get_or_reset_counter(session, user_id, "hour")
     if quota.max_runs is not None and counter.runs_used + 1 > quota.max_runs:

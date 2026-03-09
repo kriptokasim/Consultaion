@@ -11,6 +11,7 @@ import { ApiClientError } from "@/lib/apiClient";
 import { useI18n } from "@/lib/i18n/client";
 
 interface BillingState {
+  is_owner?: boolean;
   plan?: BillingPlanSummary;
   usage?: {
     period: string;
@@ -71,12 +72,15 @@ export default function BillingSettingsClient() {
       <div className="flex-1 space-y-4">
         <Card className="border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800 p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">{t("settings.billing.currentPlan")}</p>
-          <h2 className="heading-serif text-3xl text-slate-900 dark:text-white">{billing.plan?.name ?? t("settings.billing.planUnknown")}</h2>
+          <h2 className="heading-serif text-3xl text-slate-900 dark:text-white">
+            {billing.plan?.name ?? t("settings.billing.planUnknown")}
+            {billing.is_owner ? " (Owner Override)" : ""}
+          </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
             {t("settings.billing.periodLabel")} {billing.usage?.period ?? t("settings.billing.periodUnknown")}.{" "}
             {t("settings.billing.usagePrefix")} {billing.usage?.debates_created ?? 0} {t("settings.billing.debateSuffix")}
           </p>
-          {billing.plan?.limits?.max_debates_per_month ? (
+          {billing.plan?.limits?.max_debates_per_month && !billing.is_owner ? (
             <div className="mt-4">
               <p className="text-xs text-slate-500 dark:text-slate-400">{t("settings.billing.debatesThisMonth")}</p>
               <div className="mt-2 h-2 w-full rounded-full bg-slate-100 dark:bg-slate-700">
@@ -94,32 +98,38 @@ export default function BillingSettingsClient() {
                 {billing.usage?.debates_created ?? 0} / {billing.plan.limits.max_debates_per_month} {t("settings.billing.debateProgress")}
               </p>
             </div>
+          ) : billing.is_owner ? (
+            <p className="mt-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              Quota bypassed for owner accounts.
+            </p>
           ) : null}
         </Card>
 
         <ModelUsageChart />
 
-        <Card className="border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800 p-5">
-          <h3 className="heading-serif text-xl text-slate-900 dark:text-white">{t("settings.billing.upgradeTitle")}</h3>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {plans.map((plan) => (
-              <Card key={plan.slug} className="border border-slate-200 dark:border-slate-600 bg-white/80 dark:bg-slate-800 p-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-amber-700 dark:text-amber-400">{plan.is_default_free ? t("settings.billing.planBadge.free") : t("settings.billing.planBadge.pro")}</p>
-                <h4 className="heading-serif text-xl text-slate-900 dark:text-white">{plan.name}</h4>
-                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                  {plan.limits?.max_debates_per_month ?? "?"} {t("settings.billing.planLimitLabel")}
-                </p>
-                <Button
-                  className="mt-3 w-full"
-                  disabled={checkoutLoading === plan.slug}
-                  onClick={() => handleCheckout(plan.slug)}
-                >
-                  {checkoutLoading === plan.slug ? t("settings.billing.preparing") : t("settings.billing.select")}
-                </Button>
-              </Card>
-            ))}
-          </div>
-        </Card>
+        {!billing.is_owner && (
+          <Card className="border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800 p-5">
+            <h3 className="heading-serif text-xl text-slate-900 dark:text-white">{t("settings.billing.upgradeTitle")}</h3>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {plans.map((plan) => (
+                <Card key={plan.slug} className="border border-slate-200 dark:border-slate-600 bg-white/80 dark:bg-slate-800 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-amber-700 dark:text-amber-400">{plan.is_default_free ? t("settings.billing.planBadge.free") : t("settings.billing.planBadge.pro")}</p>
+                  <h4 className="heading-serif text-xl text-slate-900 dark:text-white">{plan.name}</h4>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                    {plan.limits?.max_debates_per_month ?? "?"} {t("settings.billing.planLimitLabel")}
+                  </p>
+                  <Button
+                    className="mt-3 w-full"
+                    disabled={checkoutLoading === plan.slug}
+                    onClick={() => handleCheckout(plan.slug)}
+                  >
+                    {checkoutLoading === plan.slug ? t("settings.billing.preparing") : t("settings.billing.select")}
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
       <BillingLimitModal open={limitModal.open} code={limitModal.code} onClose={() => setLimitModal({ open: false })} />
     </div>

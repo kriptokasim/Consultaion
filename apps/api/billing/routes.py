@@ -122,7 +122,9 @@ def get_billing_me(
 ):
     plan = get_active_plan(session, current_user.id)
     usage = get_or_create_usage(session, current_user.id)
+    from security.owner import is_owner
     return {
+        "is_owner": is_owner(current_user),
         "plan": {
             "slug": plan.slug,
             "name": plan.name,

@@ -28,6 +28,19 @@ def _current_period() -> str:
 
 def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
     uid = _normalize_user_id(user_id)
+    
+    # Patchset 114: Check owner override
+    from models import User
+    from security.owner import is_owner
+    from config import settings
+    
+    user = db.get(User, uid)
+    if is_owner(user):
+        owner_slug = settings.OWNER_PLAN
+        plan_ref = db.exec(select(BillingPlan).where(BillingPlan.slug == owner_slug)).first()
+        if plan_ref:
+            return plan_ref
+
     now = _now()
     stmt = (
         select(BillingSubscription)
