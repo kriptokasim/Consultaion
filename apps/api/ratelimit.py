@@ -67,7 +67,14 @@ class RedisRateLimiterBackend(BaseRateLimiterBackend):
     def __init__(self, url: str, max_events: int = RECENT_EVENTS_MAX) -> None:
         if redis is None:  # pragma: no cover - import guard
             raise RuntimeError("redis library is required for Redis rate limiting")
-        self._client = redis.Redis.from_url(url)
+        # Patchset 112: Use shared Redis connection pool
+        from redis_pool import get_sync_redis_client
+        pooled_client = get_sync_redis_client()
+        if pooled_client is not None:
+            self._client = pooled_client
+        else:
+            # Fallback to direct connection if pool fails
+            self._client = redis.Redis.from_url(url)
         self._max_events = max_events
         # Patchset 64: Fallback memory backend
         self._fallback = MemoryRateLimiterBackend()

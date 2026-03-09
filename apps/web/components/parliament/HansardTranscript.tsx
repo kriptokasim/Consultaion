@@ -217,15 +217,24 @@ function FilterSelect({
   onChange: (value: string) => void;
   options: { label: string; value: string }[];
 }) {
+  // Patchset 112: Improved accessibility with focus-visible states
+  const selectId = `filter-${label.toLowerCase().replace(/\s+/g, '-')}`;
   return (
-    <label className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-muted-foreground">
-      {label}
-      <div className="mt-2 flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm shadow-inner dark:border-border dark:bg-card">
-        <Filter className="h-4 w-4 text-stone-400 dark:text-muted-foreground" />
+    <div>
+      <label
+        htmlFor={selectId}
+        className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-muted-foreground"
+      >
+        {label}
+      </label>
+      <div className="mt-2 flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-2 text-sm shadow-inner focus-within:ring-2 focus-within:ring-amber-500 focus-within:ring-offset-1 dark:border-border dark:bg-card">
+        <Filter className="h-4 w-4 text-stone-400 dark:text-muted-foreground" aria-hidden="true" />
         <select
+          id={selectId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className="w-full bg-transparent text-stone-800 focus:outline-none dark:text-foreground"
+          aria-label={`Filter by ${label}`}
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
@@ -234,7 +243,7 @@ function FilterSelect({
           ))}
         </select>
       </div>
-    </label>
+    </div>
   );
 }
 

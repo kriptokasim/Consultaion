@@ -7,6 +7,7 @@
     "prebuild": "mkdir -p ./.tmp",
     "dev": "TMPDIR=./.tmp next dev -p 3000",
     "build": "TMPDIR=./.tmp next build",
+    "build:analyze": "ANALYZE=true TMPDIR=./.tmp next build",
     "start": "next start -p 3000",
     "test:e2e": "playwright test",
     "lint": "next lint"

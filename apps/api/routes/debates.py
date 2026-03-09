@@ -160,9 +160,13 @@ async def get_debate_timeline(
     timeline = build_debate_timeline(session, debate)
     
     elapsed_ms = (time.time() - start_time) * 1000
+    # Patchset 112: Track timeline fetch performance
     if elapsed_ms > 500:
         logger.warning(f"timeline_fetch_slow: debate_id={debate_id} elapsed_ms={elapsed_ms:.1f} events={len(timeline)}")
-        
+        track_metric("timeline.fetch.slow")
+    else:
+        track_metric("timeline.fetch.ok")
+
     return timeline
 
 
@@ -399,6 +403,11 @@ async def create_debate(
         session=session,
     )
     track_metric("debates_created")
+    # Patchset 112: Track mode usage metrics
+    mode = body.mode or "conversation"
+    # Replaced legacy mode.{mode}.started with consistent mode.debate.started 
+    # and tracking the specific mode as a tag or sub-metric if needed, but for now just:
+    track_metric(f"mode.debate.{mode}.started")
     return {"id": debate_id}
 
 
@@ -487,22 +496,22 @@ async def list_debates(
         base_query = base_query.where(*filters)
 
     # Caching for total count
+    # Patchset 112: Use shared Redis connection pool
     total = None
     cache_key = None
     redis_client = None
     if settings.REDIS_URL:
         try:
-            import redis
-            redis_client = redis.Redis.from_url(settings.REDIS_URL)
-            # Create a simple cache key based on filters (this is a simplification)
-            # For strict correctness, we'd hash the compiled query params, but here we rely on user_id/status/q
-            # Cache Key Pattern: count:debates:<hash(user_id + status + q)>
-            # TTL: 30 seconds
-            key_parts = [str(current_user.id), str(status), str(q)]
-            cache_key = f"count:debates:{hash(''.join(key_parts))}"
-            cached = redis_client.get(cache_key)
-            if cached:
-                total = int(cached)
+            from redis_pool import get_sync_redis_client
+            redis_client = get_sync_redis_client()
+            if redis_client:
+                # Cache Key Pattern: count:debates:<hash(user_id + status + q)>
+                # TTL: 30 seconds
+                key_parts = [str(current_user.id), str(status), str(q)]
+                cache_key = f"count:debates:{hash(''.join(key_parts))}"
+                cached = redis_client.get(cache_key)
+                if cached:
+                    total = int(cached)
         except Exception:
             pass
 

@@ -127,7 +127,10 @@ class Debate(SQLModel, table=True):
     model_config = SQLModel.model_config.copy()
     model_config["protected_namespaces"] = ()
     __table_args__ = (
-        Index("ix_debate_user_status", "user_id", "status"),
+        # Patchset 112: Covering index for list_debates query
+        # Replaces ix_debate_user_status (user_id, status) with version that includes created_at
+        # Covers: WHERE user_id=? AND status=? ORDER BY created_at DESC
+        Index("ix_debate_user_status_created", "user_id", "status", "created_at"),
         Index("ix_debate_status_lease", "status", "lease_expires_at"),
     )
     id: str = Field(primary_key=True)

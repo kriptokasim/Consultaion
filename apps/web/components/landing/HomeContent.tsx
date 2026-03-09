@@ -76,9 +76,9 @@ export default function HomeContent() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-[#fff7eb] to-[#f8e6c2] dark:from-slate-900 dark:via-slate-950 dark:to-black">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute top-10 left-8 h-64 w-64 rounded-full bg-amber-200 blur-3xl opacity-30" />
-        <div className="absolute top-40 right-12 h-80 w-80 rounded-full bg-[#d4c5a0] blur-3xl opacity-25" />
-        <div className="absolute -bottom-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-amber-300 blur-3xl opacity-20" />
+        <div className="absolute top-10 left-8 h-64 w-64 rounded-full bg-amber-200 blur-3xl opacity-30 dark:bg-blue-500 dark:opacity-10" />
+        <div className="absolute top-40 right-12 h-80 w-80 rounded-full bg-[#d4c5a0] blur-3xl opacity-25 dark:bg-indigo-500 dark:opacity-10" />
+        <div className="absolute -bottom-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-amber-300 blur-3xl opacity-20 dark:bg-blue-600 dark:opacity-10" />
       </div>
 
       <div className="relative mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16">
@@ -223,7 +223,7 @@ export default function HomeContent() {
               {t("landing.demo.subtitle")}
             </span>
           </Link>
-          <p className="text-xs text-amber-900/60">
+          <p className="text-xs text-amber-900/60 dark:text-amber-100/50">
             {t("landing.demo.footerHint")}
           </p>
         </section>
@@ -292,19 +292,19 @@ function HeroStat({ label, value, animate }: { label: string; value: string | nu
 function ArcDots() {
   return (
     <div className="relative h-40 w-72">
-      <div className="absolute inset-0 rounded-full border border-amber-100/70 bg-gradient-to-b from-amber-50/60 to-white shadow-inner shadow-amber-200/40"></div>
+      <div className="absolute inset-0 rounded-full border border-amber-100/70 bg-gradient-to-b from-amber-50/60 to-white shadow-inner shadow-amber-200/40 dark:border-slate-700/70 dark:from-slate-800/60 dark:to-slate-900 dark:shadow-slate-900/40"></div>
       <div className="absolute left-1/2 top-4 flex -translate-x-1/2 gap-6">
         {[...Array(7)].map((_, idx) => (
           <span
             key={idx}
-            className="h-2 w-2 rounded-full bg-amber-500"
+            className="h-2 w-2 rounded-full bg-amber-500 dark:bg-amber-400"
             style={{ transform: `translateY(${Math.sin((idx / 6) * Math.PI) * 18}px)` }}
           />
         ))}
       </div>
       <div className="absolute inset-x-8 bottom-6 flex justify-between">
         {[...Array(6)].map((_, idx) => (
-          <span key={idx} className="h-2 w-2 rounded-full bg-amber-300" />
+          <span key={idx} className="h-2 w-2 rounded-full bg-amber-300 dark:bg-amber-500/60" />
         ))}
       </div>
     </div>

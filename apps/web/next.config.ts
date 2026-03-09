@@ -10,6 +10,14 @@ const withBundleAnalyzer = bundleAnalyzer({
 const workspaceRoot = path.join(__dirname, '..', '..')
 
 const nextConfig: NextConfig = {
+  // Patchset 112: Optimize package imports to reduce bundle size
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'date-fns',
+      '@radix-ui/react-icons',
+    ],
+  },
   eslint: {
     // Allow production builds to complete even with ESLint errors
     // This prevents the circular JSON structure error during Vercel builds

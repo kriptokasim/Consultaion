@@ -79,24 +79,49 @@ export default function VotingChamber({
   const [showDetails, setShowDetails] = useState(false);
   const margin = Math.abs(ayeVotes.length - nayVotes.length);
 
+  // Patchset 112: Live region announcements for accessibility
+  const [announcement, setAnnouncement] = useState<string>("");
+
+  useEffect(() => {
+    if (phase === "results") {
+      const msg = winner === "aye"
+        ? `Voting complete. The Ayes have it with ${ayeVotes.length} votes. Margin: ${margin} votes.`
+        : `Voting complete. The Nays have it with ${nayVotes.length} votes. Margin: ${margin} votes.`;
+      setAnnouncement(msg);
+    } else if (phase === "voting" && currentIndex > 0 && currentIndex <= roster.length) {
+      const lastVoter = roster[currentIndex - 1];
+      setAnnouncement(`${lastVoter.name} voted ${lastVoter.vote}.`);
+    }
+  }, [phase, currentIndex, winner, ayeVotes.length, nayVotes.length, margin, roster]);
+
   return (
-    <section className="space-y-8 rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-50 via-white to-amber-50 p-6 shadow-[0_35px_65px_rgba(120,113,108,0.15)]">
+    <section
+      className="space-y-8 rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-50 via-white to-amber-50 p-6 shadow-[0_35px_65px_rgba(120,113,108,0.15)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900"
+      role="region"
+      aria-label="Voting Chamber"
+      aria-live="polite"
+    >
+      {/* Patchset 112: Screen reader announcements */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
+
       <header className="text-center space-y-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
-          <Scale className="h-4 w-4" />
+        <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-700 dark:bg-slate-800 dark:text-amber-400">
+          <Scale className="h-4 w-4" aria-hidden="true" />
           Division chamber
         </div>
-        <h1 className="text-3xl font-semibold text-stone-900">Voting Simulation</h1>
-        <p className="flex items-center justify-center gap-2 text-sm text-stone-500">
-          <Info className="h-4 w-4 text-amber-600" />
+        <h1 className="text-3xl font-semibold text-stone-900 dark:text-slate-100">Voting Simulation</h1>
+        <p className="flex items-center justify-center gap-2 text-sm text-stone-500 dark:text-slate-400">
+          <Info className="h-4 w-4 text-amber-600" aria-hidden="true" />
           {basis === "pairwise"
             ? "Derived from pairwise judge outcomes."
             : `Scores above ${threshold.toFixed(1)} march through the Aye lobby.`}
         </p>
         {phase === "results" ? (
-          <p className="text-sm font-semibold text-stone-700">
+          <p className="text-sm font-semibold text-stone-700 dark:text-slate-300">
             Current outcome:{" "}
-            <span className="text-amber-800">
+            <span className="text-amber-800 dark:text-amber-400">
               {winner === "aye" ? "The Ayes have it" : "The Nays have it"}
             </span>
           </p>

@@ -164,9 +164,9 @@ class MemoryChannelBackend:
 
 class RedisChannelBackend:
     """Redis-backed SSE backend for multi-instance deployments.
-    
+
     Features:
-    - Connection pooling with health check interval
+    - Connection pooling with health check interval (Patchset 112: shared pool)
     - Retry with exponential backoff for publish operations
     - Auto-reconnect for subscriptions on connection loss
     """
@@ -175,17 +175,23 @@ class RedisChannelBackend:
             raise RuntimeError("redis library is required for RedisChannelBackend")
         self._url = url
         self._ttl_seconds = ttl_seconds
-        # Patchset 75: Enhanced connection options
-        self._redis = redis.from_url(
-            url, 
-            encoding="utf-8", 
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=10,  # Timeout for operations
-            socket_keepalive=True,
-            health_check_interval=30,  # Check connection health periodically
-            retry_on_timeout=True
-        )
+        # Patchset 112: Use shared async Redis connection pool
+        from redis_pool import get_async_redis_client
+        pooled_client = get_async_redis_client()
+        if pooled_client is not None:
+            self._redis = pooled_client
+        else:
+            # Fallback to direct connection if pool not available
+            self._redis = redis.from_url(
+                url,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=10,
+                socket_keepalive=True,
+                health_check_interval=30,
+                retry_on_timeout=True
+            )
 
     async def start(self) -> None:
         # Verify connection

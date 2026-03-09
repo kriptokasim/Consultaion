@@ -31,6 +31,12 @@ class AppSettings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./consultaion.db"
     DATABASE_URL_ASYNC: str | None = None
     REDIS_URL: str | None = None
+
+    # Patchset 112: Redis pool strict mode
+    # When true, Redis pool failures raise RuntimeError (production default)
+    # When false, failures return None allowing fallback (local default)
+    # If not set, defaults to strict=true in non-local environments
+    REDIS_POOL_STRICT: bool | None = None
     
     # LLM Provider Timeouts
     LLM_TIMEOUT_SECONDS: int = 30  # Timeout for individual model calls
