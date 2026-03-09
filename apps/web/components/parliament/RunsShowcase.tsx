@@ -15,6 +15,7 @@ export type RunSummary = {
   status: string;
   created_at: string;
   updated_at: string;
+  mode?: string;
 };
 
 type RunsShowcaseProps = {
@@ -52,7 +53,14 @@ export default function RunsShowcase({ runs }: RunsShowcaseProps) {
                   </p>
                 </div>
               </div>
-              <StatusBadge status={run.status} />
+              <div className="flex items-center gap-2">
+                {run.mode && (
+                  <span className="rounded-md border border-amber-200/50 bg-amber-100/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/30 dark:text-amber-200">
+                    {run.mode}
+                  </span>
+                )}
+                <StatusBadge status={run.status} />
+              </div>
             </header>
             <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-stone-800 dark:text-amber-50/80">
               {run.prompt}

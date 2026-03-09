@@ -9,7 +9,11 @@ interface CompareRunViewProps {
 }
 
 export default function CompareRunView({ debate, events }: CompareRunViewProps) {
-    const modelReplies = events.filter((e: any) => e.type === "seat_message" && e.mode === "compare" || (e.seat_name && e.content && debate.mode === "compare"));
+    // Hydration events come from REST as e.text, live SSE events drop as reply.content
+    const modelReplies = events.filter((e: any) =>
+        (e.type === "seat_message" && e.mode === "compare") ||
+        (e.seat_name && (e.content || e.text) && debate.mode === "compare")
+    );
 
     return (
         <div className="flex flex-col h-full gap-6">
@@ -41,7 +45,7 @@ export default function CompareRunView({ debate, events }: CompareRunViewProps) 
                                     </div>
                                 </div>
                                 <div className="p-5 overflow-y-auto flex-1 prose prose-sm dark:prose-invert max-w-none custom-scrollbar whitespace-pre-wrap">
-                                    {reply.content || ""}
+                                    {reply.content || reply.text || ""}
                                 </div>
                             </div>
                         ))

@@ -24,6 +24,7 @@ type Run = {
   updated_at: string
   user_id?: string | null
   team_id?: string | null
+  mode?: string
 }
 
 type Scope = "mine" | "team" | "all"
@@ -244,7 +245,14 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                 </TableCell>
                 <TableCell className="text-sm text-stone-900">{truncate(run.prompt, 80)}</TableCell>
                 <TableCell>
-                  <StatusBadge status={normalizeStatus(run.status)} />
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={normalizeStatus(run.status)} />
+                    {run.mode && (
+                      <span className="rounded-md border border-amber-200/50 bg-amber-100/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/30 dark:text-amber-200">
+                        {run.mode}
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {run.team_id ? (

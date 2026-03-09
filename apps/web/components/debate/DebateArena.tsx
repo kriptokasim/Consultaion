@@ -181,8 +181,12 @@ export default function DebateArena({
         <section className="rounded-2xl border border-accent-secondary/20 bg-card p-4 shadow-sm lg:col-span-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-accent-secondary">{t("arena.hansard")}</p>
-              <h3 className="text-lg font-semibold text-foreground">{t("arena.hansard.subtitle")}</h3>
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent-secondary">
+                {debate?.mode === "conversation" ? "Conversation Flow" : t("arena.hansard")}
+              </p>
+              <h3 className="text-lg font-semibold text-foreground">
+                {debate?.mode === "conversation" ? "Live Transcript" : t("arena.hansard.subtitle")}
+              </h3>
             </div>
             <span className="text-xs text-muted-foreground">{transcriptEvents.length} {t("arena.entriesLabel")}</span>
           </div>

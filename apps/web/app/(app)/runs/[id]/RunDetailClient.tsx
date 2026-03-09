@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import DebateArena from "@/components/debate/DebateArena";
 import ParliamentRunView from "@/components/parliament/ParliamentRunView";
 import CompareRunView from "@/components/compare/CompareRunView";
+import ConversationRunView from "@/components/conversation/ConversationRunView";
 import { Button } from "@/components/ui/button";
 import { useDebate } from "@/lib/api/hooks/useDebate";
 import { timelineReducer, initialTimelineState } from "@/lib/timeline/reducer";
@@ -182,12 +183,38 @@ export default function RunDetailClient() {
     );
   }
 
+  // Handle explicitly failed debates
+  if (debate?.status === "failed") {
+    const errorReason = debate?.final_meta?.error || debate?.error_reason || "Run encountered a terminal error and failed.";
+    return (
+      <div className="container py-8 max-w-2xl">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Run Failed</AlertTitle>
+          <AlertDescription>
+            <p className="mt-2 text-sm">{errorReason}</p>
+            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+              Retry / Refresh
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   // Completed debates → rich results view (ParliamentRunView or CompareRunView)
   if (isCompleted && resultsFetched) {
     if (debate?.mode === "compare") {
       return (
         <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
           <CompareRunView debate={debate} events={resultsEvents} />
+        </div>
+      );
+    }
+    if (debate?.mode === "conversation") {
+      return (
+        <div className="container max-w-5xl h-[calc(100vh-4rem)] py-6">
+          <ConversationRunView debate={debate} events={resultsEvents} />
         </div>
       );
     }
@@ -224,6 +251,14 @@ export default function RunDetailClient() {
     return (
       <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
         <CompareRunView debate={debate as any} events={state.events as any} />
+      </div>
+    );
+  }
+
+  if (debate?.mode === "conversation") {
+    return (
+      <div className="container max-w-5xl h-[calc(100vh-4rem)] py-6">
+        <ConversationRunView debate={debate as any} events={state.events as any} />
       </div>
     );
   }

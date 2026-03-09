@@ -38,6 +38,7 @@ export interface DebateDetail extends DebateSummary {
         name: string;
         error_type: string;
     }>;
+    error_reason?: string;
     // Add other fields as needed from the API response
 }
 
