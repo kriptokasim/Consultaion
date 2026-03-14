@@ -193,8 +193,8 @@ export default function AdminUserDetailPage() {
                                 <div className="mt-2 flex items-center gap-3">
                                     <span
                                         className={`inline-block rounded-full px-3 py-1 text-sm font-semibold ${user.is_active
-                                                ? "bg-green-100 text-green-800"
-                                                : "bg-red-100 text-red-800"
+                                            ? "bg-green-100 text-green-800"
+                                            : "bg-red-100 text-red-800"
                                             }`}
                                     >
                                         {user.is_active ? "Active" : "Disabled"}
@@ -234,10 +234,10 @@ export default function AdminUserDetailPage() {
                                 <div className="h-3 overflow-hidden rounded-full bg-stone-200">
                                     <div
                                         className={`h-full transition-all ${quota.token_usage_pct >= 90
-                                                ? "bg-red-500"
-                                                : quota.token_usage_pct >= 70
-                                                    ? "bg-amber-500"
-                                                    : "bg-green-500"
+                                            ? "bg-red-500"
+                                            : quota.token_usage_pct >= 70
+                                                ? "bg-amber-500"
+                                                : "bg-green-500"
                                             }`}
                                         style={{ width: `${Math.min(quota.token_usage_pct, 100)}%` }}
                                     />
@@ -258,10 +258,10 @@ export default function AdminUserDetailPage() {
                                 <div className="h-3 overflow-hidden rounded-full bg-stone-200">
                                     <div
                                         className={`h-full transition-all ${quota.export_usage_pct >= 90
-                                                ? "bg-red-500"
-                                                : quota.export_usage_pct >= 70
-                                                    ? "bg-amber-500"
-                                                    : "bg-green-500"
+                                            ? "bg-red-500"
+                                            : quota.export_usage_pct >= 70
+                                                ? "bg-amber-500"
+                                                : "bg-green-500"
                                             }`}
                                         style={{ width: `${Math.min(quota.export_usage_pct, 100)}%` }}
                                     />
@@ -276,11 +276,11 @@ export default function AdminUserDetailPage() {
 
                 {/* Right Column */}
                 <div className="space-y-6">
-                    {/* Recent Debates */}
+                    {/* Recent Runs */}
                     <div className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
-                        <h2 className="mb-4 text-xl font-bold text-stone-900">Recent Debates</h2>
+                        <h2 className="mb-4 text-xl font-bold text-stone-900">Recent Runs</h2>
                         {recent_debates.length === 0 ? (
-                            <p className="text-sm text-stone-500">No debates yet</p>
+                            <p className="text-sm text-stone-500">No runs yet</p>
                         ) : (
                             <div className="space-y-3">
                                 {recent_debates.map((debate) => (
@@ -294,10 +294,10 @@ export default function AdminUserDetailPage() {
                                             </span>
                                             <span
                                                 className={`ml-2 rounded px-2 py-0.5 text-xs font-semibold ${debate.status === "completed"
-                                                        ? "bg-green-100 text-green-800"
-                                                        : debate.status === "failed"
-                                                            ? "bg-red-100 text-red-800"
-                                                            : "bg-amber-100 text-amber-800"
+                                                    ? "bg-green-100 text-green-800"
+                                                    : debate.status === "failed"
+                                                        ? "bg-red-100 text-red-800"
+                                                        : "bg-amber-100 text-amber-800"
                                                     }`}
                                             >
                                                 {debate.status}
