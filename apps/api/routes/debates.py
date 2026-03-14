@@ -649,6 +649,25 @@ async def get_debate_events(
                     "provider": meta.get("provider"),
                     "model": meta.get("model"),
                     "text": message.content,
+                    "content": message.content,
+                    "at": message.created_at.isoformat() if message.created_at else None,
+                }
+            )
+        elif message.role == "delegate":
+            # Conversation mode messages stored as 'delegate'
+            meta = message.meta or {}
+            events.append(
+                {
+                    "type": "seat_message",
+                    "round": message.round_index,
+                    "seat_id": meta.get("seat_id"),
+                    "seat_name": message.persona,
+                    "role": "agent",
+                    "provider": meta.get("provider"),
+                    "model": meta.get("model"),
+                    "text": message.content,
+                    "content": message.content,
+                    "mode": "conversation",
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }
             )

@@ -10,8 +10,8 @@ interface ConversationRunViewProps {
 export default function ConversationRunView({ debate, events }: ConversationRunViewProps) {
     // Filter down to just the messages spoken by models in the conversation
     const messages = events.filter((e: any) =>
-        (e.type === "seat_message" && e.mode === "conversation") ||
-        (e.seat_name && (e.content || e.text) && debate.mode === "conversation") ||
+        e.type === "seat_message" ||
+        (e.type === "message" && e.seat_name && (e.content || e.text)) ||
         e.type === "conversation_summary"
     );
 

@@ -9,6 +9,12 @@ connect_args = {}
 if "sqlite" in settings.DATABASE_URL_ASYNC:
     connect_args["check_same_thread"] = False
 
+# Patchset: PgBouncer safety for async engine
+# Disable prepared statements when using Supabase pooler (transaction mode)
+# to avoid "prepared statement does not exist" errors
+if ":6543" in settings.DATABASE_URL_ASYNC or "pooler.supabase.com" in settings.DATABASE_URL_ASYNC:
+    connect_args["prepare_threshold"] = None
+
 async_engine = create_async_engine(
     settings.DATABASE_URL_ASYNC,
     echo=settings.DB_ECHO,
