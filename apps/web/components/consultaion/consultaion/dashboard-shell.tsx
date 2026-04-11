@@ -163,13 +163,6 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
               <p className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">Parliament</p>
             </div>
           </Link>
-          <button
-            type="button"
-            className="mt-4 inline-flex items-center gap-2 rounded-md bg-gray-100 dark:bg-stone-800 px-3 py-1 text-sm font-medium text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-stone-700"
-            onClick={() => router.back()}
-          >
-            ← Go Back
-          </button>
           <nav className="mt-4 flex-1 space-y-1" role="navigation">
             {navItems.map((item) => {
               const isActive = pathname === item.href
@@ -247,7 +240,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   <span>{t("nav.goBack")}</span>
                 </Button>
               ) : null}
-              <Link href="/dashboard" className="hidden items-center gap-2 md:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
+              <Link href="/dashboard" className="flex items-center gap-2 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
                 <Brand height={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">
                   <BrandWordmark size="md" inline />

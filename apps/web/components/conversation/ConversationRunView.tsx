@@ -12,7 +12,8 @@ export default function ConversationRunView({ debate, events }: ConversationRunV
     const messages = events.filter((e: any) =>
         (e.type === "seat_message" && (e.content || e.text)) ||
         (e.type === "message" && (e.text || e.content)) ||
-        e.type === "conversation_summary"
+        e.type === "conversation_summary" ||
+        e.type === "final"
     );
 
     return (
@@ -43,12 +44,12 @@ export default function ConversationRunView({ debate, events }: ConversationRunV
                     </div>
                 ) : (
                     messages.map((msg: any, i) => {
-                        const isSummary = msg.type === "conversation_summary";
+                        const isSummary = msg.type === "conversation_summary" || msg.type === "final";
                         const speakerName = isSummary ? "Facilitator Summary" : (msg.seat_name || msg.actor || "Agent");
                         const content = msg.content || msg.text || "";
 
                         return (
-                            <div key={i} className={`flex flex-col border rounded-xl shadow-sm overflow-hidden ${isSummary ? 'border-primary/50 bg-primary/5' : 'border-border bg-card'}`}>
+                            <div key={i} className={`flex flex-col border rounded-xl shadow-sm overflow-hidden shrink-0 ${isSummary ? 'border-primary/50 bg-primary/5' : 'border-border bg-card'}`}>
                                 <div className={`p-3 border-b flex items-center justify-between shrink-0 ${isSummary ? 'bg-primary/10 border-primary/20' : 'bg-secondary/50 border-border'}`}>
                                     <div className="flex items-center gap-2">
                                         <div className={`p-1.5 rounded-lg ${isSummary ? 'bg-primary/20 text-primary' : 'bg-primary/10 text-primary'}`}>
