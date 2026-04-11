@@ -108,9 +108,9 @@ export default function DebateArena({
 
   return (
     <section className="font-sans">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-9 lg:gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
 
-        {/* Left Sidebar: Scoreboard */}
+        {/* Left Sidebar: Status + Metrics */}
         <aside className="space-y-4 lg:col-span-3 lg:col-start-1">
           <div className="rounded-2xl border border-border bg-card/50 p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -149,6 +149,31 @@ export default function DebateArena({
                 ) : null}
               </dl>
 
+              {/* Vote Stats */}
+              {totalVotes > 0 && (
+                <div className="mt-4 border-t border-border pt-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-2">
+                    <Gavel className="h-4 w-4 text-muted-foreground" /> Vote Tally
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">Aye</span>
+                      <span className="font-semibold">{voteTotals.aye} ({ayePct.toFixed(0)}%)</span>
+                    </div>
+                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${ayePct}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-rose-700 dark:text-rose-400 font-medium">Nay</span>
+                      <span className="font-semibold">{voteTotals.nay} ({nayPct.toFixed(0)}%)</span>
+                    </div>
+                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full bg-rose-500 transition-all duration-500" style={{ width: `${nayPct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-4 border-t border-border pt-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-2">
                   <Terminal className="h-4 w-4 text-muted-foreground" /> Logs
@@ -178,7 +203,7 @@ export default function DebateArena({
         </aside>
 
         {/* Main Area: Transcript */}
-        <section className="rounded-2xl border border-accent-secondary/20 bg-card p-4 shadow-sm lg:col-span-6">
+        <section className="rounded-2xl border border-accent-secondary/20 bg-card p-4 shadow-sm lg:col-span-9">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-accent-secondary">
@@ -198,7 +223,7 @@ export default function DebateArena({
                 const payload = event.payload || {};
                 const isScore = event.type === 'score';
                 const isNotice = event.type === 'notice';
-                // Fallbacks
+                // Fallbacks: prefer content, then text, then message
                 const text = payload.text || payload.content || payload.message || "—";
                 const actor = payload.seat_name || payload.actor || payload.seat_id || event.seat || "Member";
                 const judge = payload.judge || "Judge";
@@ -213,16 +238,17 @@ export default function DebateArena({
                       </span>
                       <span>{formatTime(event.ts)}</span>
                     </div>
-                    <p className="mt-2 text-sm text-foreground/80">
-                      {isScore
-                        ? `Score ${typeof score === 'number' ? score.toFixed(2) : score} for ${payload.persona || 'agent'}`
-                        : text}
-                    </p>
+                    {isScore ? (
+                      <p className="mt-2 text-sm text-foreground/80">
+                        Score {typeof score === 'number' ? score.toFixed(2) : score} for {payload.persona || 'agent'}
+                      </p>
+                    ) : isNotice ? (
+                      <p className="mt-2 text-xs text-accent-secondary">{text}</p>
+                    ) : (
+                      <p className="mt-2 text-sm text-foreground/80">{text}</p>
+                    )}
                     {isScore && rationale ? (
                       <p className="mt-2 text-xs text-muted-foreground">{rationale}</p>
-                    ) : null}
-                    {isNotice && text ? (
-                      <p className="mt-2 text-xs text-accent-secondary">{text}</p>
                     ) : null}
                   </article>
                 )

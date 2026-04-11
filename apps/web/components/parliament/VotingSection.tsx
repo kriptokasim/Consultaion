@@ -21,6 +21,16 @@ const getMethodLabel = (method: string) => {
 };
 
 export default function VotingSection({ scores, vote, onExportMarkdown }: VotingSectionProps) {
+  if (scores.length === 0) {
+    return (
+      <section className="space-y-6 rounded-3xl border border-border bg-card p-6 shadow-sm" aria-labelledby="voting-title">
+        <div className="container mx-auto px-4 text-center">
+          <h2 id="voting-title" className="text-2xl font-semibold text-foreground">Voting Results</h2>
+          <p className="mt-2 text-sm text-muted-foreground">No scores have been recorded yet.</p>
+        </div>
+      </section>
+    );
+  }
   const maxScore = Math.max(...scores.map((s) => s.score), 1);
   const sortedScores = [...scores].sort((a, b) => b.score - a.score);
   const winner = sortedScores[0];
@@ -109,8 +119,8 @@ export default function VotingSection({ scores, vote, onExportMarkdown }: Voting
                     <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
                       <div
                         className={`h-full transition-all duration-500 ${isWinner
-                            ? "bg-gradient-to-r from-amber-500 to-amber-300"
-                            : "bg-gradient-to-r from-muted-foreground/30 to-muted-foreground/15"
+                          ? "bg-gradient-to-r from-amber-500 to-amber-300"
+                          : "bg-gradient-to-r from-muted-foreground/30 to-muted-foreground/15"
                           }`}
                         style={{ width: `${percentage}%` }}
                         role="progressbar"
@@ -144,8 +154,8 @@ export default function VotingSection({ scores, vote, onExportMarkdown }: Voting
                       className="flex items-center gap-3 rounded-xl border border-border bg-secondary/50 p-3 text-sm text-muted-foreground"
                     >
                       <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${index === 0
-                          ? "bg-accent-secondary text-white"
-                          : "bg-card text-muted-foreground border border-border"
+                        ? "bg-accent-secondary text-white"
+                        : "bg-card text-muted-foreground border border-border"
                         }`}>
                         {index + 1}
                       </div>

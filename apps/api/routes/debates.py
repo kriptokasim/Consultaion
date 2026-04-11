@@ -368,7 +368,6 @@ async def create_debate(
         mode=body.mode or "conversation",
     )
     session.add(debate)
-    session.add(debate)
     session.commit()
 
     channel_id = debate_channel_id(debate_id)

@@ -261,6 +261,8 @@ function TranscriptRow({
   if (event.type === "seat_message") {
     personaLabel = event.seat_name ?? "Parliament";
     providerModel = event.provider ?? (event as any).model;
+  } else if (event.type === "conversation_summary") {
+    personaLabel = event.seat_name ?? "Facilitator";
   } else if (event.type === "score") {
     personaLabel = event.persona;
   } else if ("actor" in event && event.actor) {
@@ -283,7 +285,9 @@ function TranscriptRow({
       </>
     );
   } else if (event.type === "seat_message") {
-    content = <p>{event.content || "—"}</p>;
+    content = <p>{event.content || event.text || "—"}</p>;
+  } else if (event.type === "conversation_summary") {
+    content = <p>{event.content || event.text || "—"}</p>;
   } else {
     content = <p>{("text" in event && event.text) || "—"}</p>;
   }

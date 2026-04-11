@@ -9,10 +9,11 @@ interface CompareRunViewProps {
 }
 
 export default function CompareRunView({ debate, events }: CompareRunViewProps) {
-    // Hydration events come from REST as e.text, live SSE events drop as reply.content
+    // Events from the backend /events endpoint don't carry a per-event `mode` field.
+    // Since this component only renders for compare-mode debates, simply match
+    // seat_message events that have content (text or content field).
     const modelReplies = events.filter((e: any) =>
-        (e.type === "seat_message" && e.mode === "compare") ||
-        (e.seat_name && (e.content || e.text) && debate.mode === "compare")
+        e.type === "seat_message" && (e.content || e.text)
     );
 
     return (

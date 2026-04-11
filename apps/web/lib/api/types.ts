@@ -107,8 +107,10 @@ export type DebateEvent =
         seat_name?: string;
         seat_id?: string;
         content?: string;
+        text?: string;
         provider?: string;
         model?: string;
+        round?: number;
         at?: string;
     }
     | JudgeScoreEvent
@@ -139,6 +141,13 @@ export type DebateEvent =
     | {
         type: "debate_failed"; // Added
         reason?: string;
+        at?: string;
+    }
+    | {
+        type: "conversation_summary";
+        text?: string;
+        content?: string;
+        seat_name?: string;
         at?: string;
     };
 

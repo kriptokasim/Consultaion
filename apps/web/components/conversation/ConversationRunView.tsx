@@ -8,10 +8,10 @@ interface ConversationRunViewProps {
 }
 
 export default function ConversationRunView({ debate, events }: ConversationRunViewProps) {
-    // Filter down to just the messages spoken by models in the conversation
+    // Filter down to messages that carry text content
     const messages = events.filter((e: any) =>
-        e.type === "seat_message" ||
-        (e.type === "message" && e.seat_name && (e.content || e.text)) ||
+        (e.type === "seat_message" && (e.content || e.text)) ||
+        (e.type === "message" && (e.text || e.content)) ||
         e.type === "conversation_summary"
     );
 
@@ -34,7 +34,7 @@ export default function ConversationRunView({ debate, events }: ConversationRunV
                 ) : (
                     messages.map((msg: any, i) => {
                         const isSummary = msg.type === "conversation_summary";
-                        const speakerName = isSummary ? "Facilitator Summary" : (msg.seat_name || "Agent");
+                        const speakerName = isSummary ? "Facilitator Summary" : (msg.seat_name || msg.actor || "Agent");
                         const content = msg.content || msg.text || "";
 
                         return (
