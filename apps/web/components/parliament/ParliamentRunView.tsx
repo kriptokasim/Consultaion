@@ -16,6 +16,7 @@ import { ChampionGlow } from "./ChampionGlow";
 import { VoteWave } from "./VoteWave";
 import Brand from "@/components/parliament/Brand";
 import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
+import { SectionErrorBoundary } from "@/components/ui/SectionErrorBoundary";
 
 import type {
   ScoreItem,
@@ -245,180 +246,188 @@ export default function ParliamentRunView({
       ) : null}
 
       {/* Champion answer + scoreboard */}
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)]">
-        <SummaryCard
-          title="Winning Answer"
-          description="Ranked #1 by AI judges in this session."
-        >
-          <ChampionGlow active={Boolean(winnerPersona)}>
-            <div className="space-y-4">
-              <ChampionSummary
-                persona={winnerPersona}
-                score={winnerScore}
-                hasTie={hasTie}
-                actor={championActor}
-                text={championText}
-                reasons={championReasons}
-                status={debate?.status}
-              />
+      <SectionErrorBoundary title="Champion & Scoreboard">
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)]">
+          <SummaryCard
+            title="Winning Answer"
+            description="Ranked #1 by AI judges in this session."
+          >
+            <ChampionGlow active={Boolean(winnerPersona)}>
+              <div className="space-y-4">
+                <ChampionSummary
+                  persona={winnerPersona}
+                  score={winnerScore}
+                  hasTie={hasTie}
+                  actor={championActor}
+                  text={championText}
+                  reasons={championReasons}
+                  status={debate?.status}
+                />
 
-              <a
-                href="#answers"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-amber-800 hover:text-amber-700"
-              >
-                View full debate details ↴
-              </a>
+                <a
+                  href="#answers"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-amber-800 hover:text-amber-700"
+                >
+                  View full debate details ↴
+                </a>
+              </div>
+            </ChampionGlow>
+          </SummaryCard>
+
+          <SummaryCard
+            title="Judge’s Scoreboard"
+            description="How each persona performed across the debate."
+          >
+            <ScoreboardCard scores={scores} method={vote?.method} />
+            <VoteWave ids={scores.map((s) => `score-pill-${s.persona}`)} triggerKey={id} />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <ExportButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
+              <ExportCSVButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
             </div>
-          </ChampionGlow>
-        </SummaryCard>
-
-        <SummaryCard
-          title="Judge’s Scoreboard"
-          description="How each persona performed across the debate."
-        >
-          <ScoreboardCard scores={scores} method={vote?.method} />
-          <VoteWave ids={scores.map((s) => `score-pill-${s.persona}`)} triggerKey={id} />
-          <div className="mt-4 flex flex-wrap gap-3">
-            <ExportButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
-            <ExportCSVButton debateId={id} apiBase={apiBase} onBillingLimit={handleBillingLimit} />
-          </div>
-        </SummaryCard>
-      </section>
+          </SummaryCard>
+        </section>
+      </SectionErrorBoundary>
 
       {/* All model answers ("show more" style) */}
-      <SummaryCard title="Model answers" description="Each model’s own answer to the prompt, ordered by their final score.">
-        {modelAnswers.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500">
-            {(debate?.status === "running" || debate?.status === "queued")
-              ? "Debate is running in the background. Events will appear here shortly."
-              : "No agent messages were recorded for this run."}
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {modelAnswers.map((answer) => (
-              <details
-                key={answer.persona}
-                ref={(node) => {
-                  if (node) {
-                    answerRefs.current[answer.persona] = node;
-                  }
-                }}
-                className="group rounded-2xl border border-stone-200 bg-white/85 p-3 shadow-sm transition hover:shadow-md"
-              >
-                <summary className="flex cursor-pointer flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <div>
-                      <span className="font-medium text-stone-900">{answer.persona}</span>
-                      {formatModelLabel(answer.provider) && (
-                        <p className="text-[0.68rem] text-stone-400">{formatModelLabel(answer.provider)}</p>
+      <SectionErrorBoundary title="Model Answers">
+        <SummaryCard title="Model answers" description="Each model’s own answer to the prompt, ordered by their final score.">
+          {modelAnswers.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500">
+              {(debate?.status === "running" || debate?.status === "queued")
+                ? "Debate is running in the background. Events will appear here shortly."
+                : "No agent messages were recorded for this run."}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {modelAnswers.map((answer) => (
+                <details
+                  key={answer.persona}
+                  ref={(node) => {
+                    if (node) {
+                      answerRefs.current[answer.persona] = node;
+                    }
+                  }}
+                  className="group rounded-2xl border border-stone-200 bg-white/85 p-3 shadow-sm transition hover:shadow-md"
+                >
+                  <summary className="flex cursor-pointer flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <div>
+                        <span className="font-medium text-stone-900">{answer.persona}</span>
+                        {formatModelLabel(answer.provider) && (
+                          <p className="text-[0.68rem] text-stone-400">{formatModelLabel(answer.provider)}</p>
+                        )}
+                      </div>
+                      {typeof answer.score === "number" && (
+                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-mono text-amber-700">
+                          {answer.score.toFixed(2)}
+                        </span>
+                      )}
+                      {answer.rounds && answer.rounds.length > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-stone-50 px-2 py-0.5 text-[0.7rem] text-stone-600">
+                          Rounds {Array.from(new Set(answer.rounds)).sort((a, b) => a - b).join(", ")}
+                        </span>
                       )}
                     </div>
-                    {typeof answer.score === "number" && (
-                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-mono text-amber-700">
-                        {answer.score.toFixed(2)}
-                      </span>
-                    )}
-                    {answer.rounds && answer.rounds.length > 0 && (
-                      <span className="inline-flex items-center rounded-full bg-stone-50 px-2 py-0.5 text-[0.7rem] text-stone-600">
-                        Rounds {Array.from(new Set(answer.rounds)).sort((a, b) => a - b).join(", ")}
-                      </span>
-                    )}
-                  </div>
 
-                  <div className="text-xs text-stone-600">
-                    {answer.snippet ? (
-                      <span>{answer.snippet}</span>
-                    ) : (
-                      <span className="italic text-stone-400">
-                        Contribution available in the full transcript.{" "}
-                        <a
-                          href="#transcript"
-                          onClick={(e) => e.stopPropagation()}
-                          className="not-italic text-amber-700 underline hover:text-amber-600"
-                        >
-                          View in transcript ↓
-                        </a>
-                      </span>
-                    )}
-                    <span className="ml-2 text-amber-700 group-open:hidden">Show full answer</span>
-                    <span className="ml-2 hidden text-amber-700 group-open:inline">Hide answer</span>
-                  </div>
-                </summary>
+                    <div className="text-xs text-stone-600">
+                      {answer.snippet ? (
+                        <span>{answer.snippet}</span>
+                      ) : (
+                        <span className="italic text-stone-400">
+                          Contribution available in the full transcript.{" "}
+                          <a
+                            href="#transcript"
+                            onClick={(e) => e.stopPropagation()}
+                            className="not-italic text-amber-700 underline hover:text-amber-600"
+                          >
+                            View in transcript ↓
+                          </a>
+                        </span>
+                      )}
+                      <span className="ml-2 text-amber-700 group-open:hidden">Show full answer</span>
+                      <span className="ml-2 hidden text-amber-700 group-open:inline">Hide answer</span>
+                    </div>
+                  </summary>
 
-                {answer.fullText && (
-                  <div className="mt-3 border-t border-stone-100 pt-3">
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-800">
-                      {answer.fullText}
-                    </p>
-                  </div>
-                )}
-              </details>
-            ))}
-          </div>
-        )}
-      </SummaryCard>
+                  {answer.fullText && (
+                    <div className="mt-3 border-t border-stone-100 pt-3">
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-800">
+                        {answer.fullText}
+                      </p>
+                    </div>
+                  )}
+                </details>
+              ))}
+            </div>
+          )}
+        </SummaryCard>
+      </SectionErrorBoundary>
 
       {/* Parliament chamber visualization + decision explanation */}
-      <SummaryCard
-        title="Division in the Chamber"
-        description={
-          voteBasis === "pairwise"
-            ? "Visualizing pairwise judge preferences between personas."
-            : `Visualizing judge scores against a threshold of ${threshold}.`
-        }
-      >
-        <div className="space-y-4">
-          {/* Mini chamber map inspired by real seating diagrams */}
-          <MiniChamberMap winnerPersona={winnerPersona} />
+      <SectionErrorBoundary title="Voting Chamber">
+        <SummaryCard
+          title="Division in the Chamber"
+          description={
+            voteBasis === "pairwise"
+              ? "Visualizing pairwise judge preferences between personas."
+              : `Visualizing judge scores against a threshold of ${threshold}.`
+          }
+        >
+          <div className="space-y-4">
+            {/* Mini chamber map inspired by real seating diagrams */}
+            <MiniChamberMap winnerPersona={winnerPersona} />
 
-          <div className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-4">
-            <VotingChamber
-              scores={scores}
-              members={members}
-              threshold={threshold}
-              flows={judgeVotes}
-              basis={voteBasis}
-            />
+            <div className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-4">
+              <VotingChamber
+                scores={scores}
+                members={members}
+                threshold={threshold}
+                flows={judgeVotes}
+                basis={voteBasis}
+              />
+            </div>
+
+            <VotingSection scores={scores} vote={vote} />
           </div>
-
-          <VotingSection scores={scores} vote={vote} />
-        </div>
-      </SummaryCard>
+        </SummaryCard>
+      </SectionErrorBoundary>
 
       {/* Hansard + live timeline */}
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)]">
-        <SummaryCard
-          title="Hansard transcript"
-          description="Line-by-line proceedings of the AI Parliament session."
-        >
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-            <button
-              type="button"
-              onClick={() => setTranscriptMode("highlights")}
-              className={`rounded-full px-3 py-1 ${transcriptMode === "highlights" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
-                }`}
-            >
-              Highlights
-            </button>
-            <button
-              type="button"
-              onClick={() => setTranscriptMode("full")}
-              className={`rounded-full px-3 py-1 ${transcriptMode === "full" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
-                }`}
-            >
-              Full transcript
-            </button>
-          </div>
-          <HansardTranscript events={transcriptEvents} members={members} />
-        </SummaryCard>
+      <SectionErrorBoundary title="Hansard Transcript">
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)]">
+          <SummaryCard
+            title="Hansard transcript"
+            description="Line-by-line proceedings of the AI Parliament session."
+          >
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+              <button
+                type="button"
+                onClick={() => setTranscriptMode("highlights")}
+                className={`rounded-full px-3 py-1 ${transcriptMode === "highlights" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
+                  }`}
+              >
+                Highlights
+              </button>
+              <button
+                type="button"
+                onClick={() => setTranscriptMode("full")}
+                className={`rounded-full px-3 py-1 ${transcriptMode === "full" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
+                  }`}
+              >
+                Full transcript
+              </button>
+            </div>
+            <HansardTranscript events={transcriptEvents} members={members} />
+          </SummaryCard>
 
-        <SummaryCard
-          title="Live timeline"
-          description="Raw events emitted during the run."
-        >
-          <DebateView events={events} embedded />
-        </SummaryCard>
-      </section>
+          <SummaryCard
+            title="Live timeline"
+            description="Raw events emitted during the run."
+          >
+            <DebateView events={events} embedded />
+          </SummaryCard>
+        </section>
+      </SectionErrorBoundary>
       <BillingLimitModal
         open={limitModal.open}
         code={limitModal.code}

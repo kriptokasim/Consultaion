@@ -28,8 +28,18 @@ export default function ConversationRunView({ debate, events }: ConversationRunV
 
             <div className="flex-1 flex flex-col gap-4 overflow-y-auto pb-8 custom-scrollbar">
                 {messages.length === 0 ? (
-                    <div className="flex items-center justify-center w-full h-32 text-muted-foreground animate-pulse border border-border rounded-xl bg-card">
-                        Waiting for conversation to start...
+                    <div className="flex flex-col border border-border rounded-xl bg-card shadow-sm opacity-50">
+                        <div className="p-3 border-b border-border bg-secondary/50 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="h-6 w-6 rounded-lg bg-primary/10 animate-pulse" />
+                                <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-2">
+                            <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                            <div className="h-4 w-5/6 bg-muted animate-pulse rounded" />
+                            <div className="h-4 w-4/6 bg-muted animate-pulse rounded" />
+                        </div>
                     </div>
                 ) : (
                     messages.map((msg: any, i) => {

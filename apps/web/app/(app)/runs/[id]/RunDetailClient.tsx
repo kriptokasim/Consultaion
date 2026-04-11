@@ -15,6 +15,7 @@ import { TimelineEvent } from "@/lib/timeline/types";
 import { useEventSource } from "@/lib/sse";
 import { fetchWithAuth } from "@/lib/auth";
 import { API_ORIGIN } from "@/lib/config/runtime";
+import { normalizeEvent } from "@/lib/api/normalizeEvent";
 import type { DebateEvent, ScoreItem, Member, JudgeVoteFlow, VotePayload } from "@/lib/api/types";
 
 /** Statuses that indicate a debate has finished and results should be shown */
@@ -45,7 +46,7 @@ export default function RunDetailClient() {
       fetchWithAuth(`/debates/${id}/members`).then((r) => (r.ok ? r.json() : { members: [] })),
     ])
       .then(([eventsData, membersData]) => {
-        setResultsEvents(eventsData.items || []);
+        setResultsEvents((eventsData.items || []).map(normalizeEvent));
         setResultsMembers(membersData.members || []);
         setResultsFetched(true);
       })
@@ -143,6 +144,7 @@ export default function RunDetailClient() {
     if (!lastEvent) return;
 
     try {
+      const normalized = normalizeEvent(lastEvent);
       const event: TimelineEvent = {
         id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
         debate_id: id,
@@ -150,7 +152,7 @@ export default function RunDetailClient() {
         type: lastEvent.type,
         round: lastEvent.round || 0,
         seat: lastEvent.seat,
-        payload: lastEvent.payload || lastEvent,
+        payload: normalized as unknown as Record<string, unknown>,
       };
       dispatch({ type: "APPEND", event });
     } catch (err) {

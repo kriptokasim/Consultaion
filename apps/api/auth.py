@@ -129,8 +129,41 @@ def decode_access_token(token: str) -> Dict[str, Any]:
     except jwt.InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
         ) from exc
+
+
+def create_stream_token(user_id: str, debate_id: str) -> str:
+    """Create a short-lived token scope specifically to streaming a single debate."""
+    claims = _build_claims(
+        {
+            "sub": user_id,
+            "type": "stream",
+            "debate_id": debate_id,
+        },
+        ttl_seconds=300, # 5 minutes
+    )
+    return jwt.encode(claims, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+
+def resolve_stream_token(token: Optional[str], session: Session, required_debate_id: str) -> Optional[User]:
+    """Resolve a user from a scoped stream token."""
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+    except HTTPException:
+        return None
+        
+    if payload.get("type") != "stream" or payload.get("debate_id") != required_debate_id:
+        return None
+        
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    user = session.get(User, user_id)
+    if user:
+        update_log_context(user_id=user.id)
+    return user
 
 
 def resolve_user_from_token(token: Optional[str], session: Session) -> Optional[User]:

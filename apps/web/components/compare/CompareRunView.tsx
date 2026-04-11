@@ -26,9 +26,22 @@ export default function CompareRunView({ debate, events }: CompareRunViewProps) 
             <div className="flex-1 overflow-x-auto pb-4 custom-scrollbar">
                 <div className="flex gap-4 min-w-max h-full">
                     {modelReplies.length === 0 ? (
-                        <div className="flex items-center justify-center w-full h-32 text-muted-foreground animate-pulse">
-                            Waiting for models to respond...
-                        </div>
+                        Array.from({ length: 2 }).map((_, i) => (
+                            <div key={i} className="flex flex-col w-[450px] border border-border bg-card rounded-xl shadow-sm overflow-hidden flex-shrink-0 max-h-full opacity-50">
+                                <div className="bg-secondary/50 p-4 border-b border-border flex items-center justify-between shrink-0">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-9 w-9 rounded-lg bg-primary/10 animate-pulse" />
+                                        <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+                                    </div>
+                                    <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                                </div>
+                                <div className="p-5 space-y-2">
+                                    <div className="h-4 w-full bg-muted animate-pulse rounded" />
+                                    <div className="h-4 w-5/6 bg-muted animate-pulse rounded" />
+                                    <div className="h-4 w-4/6 bg-muted animate-pulse rounded" />
+                                </div>
+                            </div>
+                        ))
                     ) : (
                         modelReplies.map((reply: any, i) => (
                             <div key={i} className="flex flex-col w-[450px] border border-border bg-card rounded-xl shadow-sm overflow-hidden flex-shrink-0 max-h-full">

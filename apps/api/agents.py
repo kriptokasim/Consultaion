@@ -332,11 +332,13 @@ async def _raw_llm_call(
             extra={"provider": provider_name, "model_used": model_used, "debate_id": debate_id, "cost_usd": call_usage.cost_usd, **(extra_tags or {})},
         )
         
-        # Patchset v2.0: Persist usage log for cost tracking
+        from log_config import get_log_context
+        ctx_user_id = get_log_context().get("user_id")
+        
         asyncio.create_task(persist_usage_log(
             call_usage,
             debate_id=debate_id,
-            user_id=None,  # TODO: pass user_id from context
+            user_id=ctx_user_id,
             role=role,
             latency_ms=latency_ms,
             success=True,

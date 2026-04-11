@@ -1,0 +1,134 @@
+import type { DebateEvent } from "./types";
+
+/**
+ * Shape of a raw SSE / timeline event from the backend.
+ * The SSE stream wraps payload inside a `payload` envelope,
+ * while the REST `/events` endpoint returns flat objects.
+ */
+interface RawEvent {
+    id?: string;
+    type: string;
+    payload?: Record<string, unknown>;
+    [key: string]: unknown;
+}
+
+/**
+ * Normalise a raw backend event (SSE envelope or REST shape)
+ * into the canonical `DebateEvent` discriminated union used by all
+ * frontend components.
+ *
+ * Calling this once at the API boundary means downstream components
+ * never need `as any` casts to access event fields.
+ */
+export function normalizeEvent(raw: RawEvent): DebateEvent {
+    // SSE events wrap data inside `payload`; REST events are flat.
+    const flat: Record<string, unknown> = {
+        ...raw,
+        ...(raw.payload && typeof raw.payload === "object" ? raw.payload : {}),
+    };
+
+    const type = (flat.type as string) || "notice";
+    const at = (flat.at as string) ?? (flat.ts as string) ?? undefined;
+
+    switch (type) {
+        case "seat_message":
+            return {
+                type: "seat_message",
+                seat_name: (flat.seat_name as string) ?? undefined,
+                seat_id: (flat.seat_id as string) ?? undefined,
+                content: (flat.content as string) ?? (flat.text as string) ?? undefined,
+                text: (flat.text as string) ?? (flat.content as string) ?? undefined,
+                provider: (flat.provider as string) ?? undefined,
+                model: (flat.model as string) ?? undefined,
+                round: (flat.round as number) ?? undefined,
+                at,
+            };
+
+        case "message":
+            return {
+                type: "message",
+                round: (flat.round as number) ?? undefined,
+                actor: (flat.actor as string) ?? (flat.seat_name as string) ?? undefined,
+                role: (flat.role as DebateEvent & { type: "message" } extends { role?: infer R } ? R : never) ?? undefined,
+                text: (flat.text as string) ?? (flat.content as string) ?? undefined,
+                at,
+                seatId: (flat.seatId as string) ?? (flat.seat_id as string) ?? undefined,
+                provider: (flat.provider as string) ?? undefined,
+                model: (flat.model as string) ?? undefined,
+            };
+
+        case "score":
+            return {
+                type: "score",
+                persona: (flat.persona as string) ?? "",
+                judge: (flat.judge as string) ?? "",
+                score: Number(flat.score) || 0,
+                rationale: (flat.rationale as string) ?? undefined,
+                at,
+                role: "judge",
+            };
+
+        case "pairwise":
+            return {
+                type: "pairwise",
+                winner: (flat.winner as string) ?? "",
+                loser: (flat.loser as string) ?? "",
+                judge: (flat.judge as string) ?? undefined,
+                at,
+            };
+
+        case "final":
+            return {
+                type: "final",
+                actor: (flat.actor as string) ?? undefined,
+                text: (flat.text as string) ?? (flat.content as string) ?? undefined,
+                at,
+                role: "synthesizer",
+            };
+
+        case "conversation_summary":
+            return {
+                type: "conversation_summary",
+                text: (flat.text as string) ?? (flat.content as string) ?? undefined,
+                content: (flat.content as string) ?? (flat.text as string) ?? undefined,
+                seat_name: (flat.seat_name as string) ?? undefined,
+                at,
+            };
+
+        case "round_started":
+            return {
+                type: "round_started",
+                round: (flat.round as number) ?? undefined,
+                at,
+            };
+
+        case "error":
+            return {
+                type: "error",
+                message: (flat.message as string) ?? (flat.text as string) ?? undefined,
+                at,
+            };
+
+        case "debate_failed":
+            return {
+                type: "debate_failed",
+                reason: (flat.reason as string) ?? (flat.message as string) ?? undefined,
+                at,
+            };
+
+        case "notice":
+        default:
+            return {
+                type: "notice",
+                text: (flat.text as string) ?? (flat.message as string) ?? undefined,
+                at,
+            };
+    }
+}
+
+/**
+ * Normalise a batch of raw events — convenience wrapper for arrays.
+ */
+export function normalizeEvents(raw: RawEvent[]): DebateEvent[] {
+    return raw.map(normalizeEvent);
+}

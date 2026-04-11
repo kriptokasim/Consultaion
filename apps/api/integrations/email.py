@@ -38,7 +38,7 @@ async def send_debate_summary_email(
                 f"{RESEND_API_BASE}/emails",
                 headers={"Authorization": f"Bearer {api_key}"},
                 json={
-                    "from": "noreply@consultaion.local",  # TODO: configure
+                    "from": __import__("os").environ.get("EMAIL_FROM", "noreply@consultaion.com"),
                     "to": [user_email],
                     "subject": subject,
                     "html": html,

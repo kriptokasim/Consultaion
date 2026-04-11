@@ -451,9 +451,9 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Mode</label>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => setMode("conversation")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "conversation" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>Conversation</button>
-                      <button type="button" onClick={() => setMode("compare")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>Compare</button>
-                      <button type="button" onClick={() => setMode("debate")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "debate" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>Debate</button>
+                      <button type="button" onClick={() => setMode("conversation")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "conversation" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.conversation") || "Conversation"}</button>
+                      <button type="button" onClick={() => setMode("compare")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.compare") || "Compare"}</button>
+                      <button type="button" onClick={() => setMode("debate")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "debate" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.debate") || "Debate"}</button>
                     </div>
                   </div>
 

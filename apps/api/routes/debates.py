@@ -457,7 +457,16 @@ async def start_debate_run(
     return {"id": debate_id, "status": "scheduled"}
 
 
-@router.get("/debates")
+from pydantic import BaseModel
+
+class DebateListResponse(BaseModel):
+    items: list[Debate]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+@router.get("/debates", response_model=DebateListResponse)
 async def list_debates(
     status: Optional[str] = Query(default=None),
     limit: int = Query(20, ge=1, le=100),
@@ -648,7 +657,6 @@ async def get_debate_events(
                     "provider": meta.get("provider"),
                     "model": meta.get("model"),
                     "text": message.content,
-                    "content": message.content,
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }
             )
@@ -665,7 +673,6 @@ async def get_debate_events(
                     "provider": meta.get("provider"),
                     "model": meta.get("model"),
                     "text": message.content,
-                    "content": message.content,
                     "mode": "conversation",
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }
@@ -791,20 +798,33 @@ async def export_scores_csv(
     )
 
 
+@router.post("/debates/{debate_id}/stream-token")
+async def get_stream_token(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a short-lived token scoped only to this debate stream."""
+    require_debate_access(session.get(Debate, debate_id), current_user, session)
+    from auth import create_stream_token
+    token = create_stream_token(current_user.id, debate_id)
+    return {"token": token, "expires_in": 300}
+
+
 @router.get("/debates/{debate_id}/stream")
 async def stream_events(
     debate_id: str,
     request: Request,
-    token: Optional[str] = Query(default=None, description="JWT for EventSource auth fallback"),
+    token: Optional[str] = Query(default=None, description="Stream-scoped JWT for EventSource auth fallback"),
     session: Session = Depends(get_session),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
-    # Resolve user: cookie/Bearer first, then query token fallback
-    # (EventSource API cannot set Authorization header, so token param is needed)
-    from auth import get_optional_user, resolve_user_from_token
+    # Resolve user: cookie/Bearer first, then scoped stream token fallback
+    # (EventSource API cannot set Authorization header, so token param is needed for 3P clients)
+    from auth import get_optional_user, resolve_stream_token
     user = get_optional_user(request=request, session=session)
     if not user and token:
-        user = resolve_user_from_token(token, session)
+        user = resolve_stream_token(token, session, debate_id)
     if not user:
         from fastapi import HTTPException
         raise HTTPException(status_code=401, detail="authentication required")
