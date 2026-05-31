@@ -549,6 +549,35 @@ async def run_debate(
         state_manager = DebateStateManager(debate_id, debate_user_id)
         await state_manager.set_status("running")
 
+        if debate_mode == "arena":
+            from arena.engine import run_arena
+
+            result = await run_arena(debate_id, model_id=model_id)
+
+            await state_manager.complete_debate(
+                final_content=result.final_answer,
+                final_meta=result.final_meta,
+                status=result.status,
+                tokens_total=float(result.usage_tracker.total_tokens),
+            )
+
+            await backend.publish(
+                channel_id,
+                {
+                    "type": "arena_synthesis",
+                    "debate_id": debate_id,
+                    "round": 0,
+                    "payload": {
+                        "content": result.final_answer,
+                        "meta": result.final_meta,
+                    },
+                },
+            )
+
+            if result.status == "completed":
+                await _build_and_send_summary(debate_id, debate_user_id)
+            return
+
         if debate_mode == "compare":
             from compare.engine import run_compare_debate
             

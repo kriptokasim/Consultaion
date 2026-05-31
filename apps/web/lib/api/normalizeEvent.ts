@@ -116,6 +116,37 @@ export function normalizeEvent(raw: RawEvent): DebateEvent {
                 at,
             };
 
+        case "arena_response":
+            return {
+                type: "arena_response",
+                model_id: (flat.model_id as string) ?? undefined,
+                display_name: (flat.display_name as string) ?? (flat.seat_name as string) ?? undefined,
+                provider: (flat.provider as string) ?? undefined,
+                content: (flat.content as string) ?? (flat.text as string) ?? undefined,
+                logo_url: (flat.logo_url as string) ?? undefined,
+                persona_type: (flat.persona_type as string) ?? undefined,
+                persona_tagline: (flat.persona_tagline as string) ?? undefined,
+                success: (flat.success as boolean) ?? true,
+                at,
+            };
+
+        case "arena_synthesis":
+            return {
+                type: "arena_synthesis",
+                actor: (flat.actor as string) ?? "Synthesizer",
+                text: (flat.text as string) ?? (flat.content as string) ?? undefined,
+                content: (flat.content as string) ?? (flat.text as string) ?? undefined,
+                role: "synthesizer",
+                at,
+            };
+
+        case "arena_started":
+            return {
+                type: "arena_started",
+                models: (flat.models as any[]) ?? undefined,
+                at,
+            };
+
         case "notice":
         default:
             return {

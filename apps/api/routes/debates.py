@@ -365,7 +365,7 @@ async def create_debate(
         },
         panel_config=panel.model_dump(),
         engine_version=panel.engine_version,
-        mode=body.mode or "conversation",
+        mode=body.mode or "arena",
     )
     session.add(debate)
     session.commit()
@@ -674,6 +674,36 @@ async def get_debate_events(
                     "model": meta.get("model"),
                     "text": message.content,
                     "mode": "conversation",
+                    "at": message.created_at.isoformat() if message.created_at else None,
+                }
+            )
+        elif message.role == "arena_response":
+            meta = message.meta or {}
+            events.append(
+                {
+                    "type": "arena_response",
+                    "round": message.round_index,
+                    "model_id": meta.get("model_id"),
+                    "display_name": message.persona,
+                    "provider": meta.get("provider"),
+                    "content": message.content,
+                    "logo_url": meta.get("logo_url"),
+                    "persona_type": meta.get("persona_type"),
+                    "persona_tagline": meta.get("persona_tagline"),
+                    "success": meta.get("success", True),
+                    "mode": "arena",
+                    "at": message.created_at.isoformat() if message.created_at else None,
+                }
+            )
+        elif message.role == "arena_synthesis":
+            events.append(
+                {
+                    "type": "arena_synthesis",
+                    "round": message.round_index,
+                    "actor": "Synthesizer",
+                    "role": "synthesizer",
+                    "text": message.content,
+                    "mode": "arena",
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }
             )

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Play, BarChart3, Trophy, Plus } from "lucide-react";
+import { Play, BarChart3, Trophy, Plus, Zap, Scale, MessageCircle, GitCompare, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -62,7 +62,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [mode, setMode] = useState<"conversation" | "compare" | "debate">("conversation");
+  const [mode, setMode] = useState<"arena" | "conversation" | "compare" | "debate">("arena");
   const [compareModels, setCompareModels] = useState<string[]>([]);
 
   // Bootstrap: process token from Google OAuth redirect
@@ -450,12 +450,58 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Mode</label>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => setMode("conversation")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "conversation" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.conversation") || "Conversation"}</button>
-                      <button type="button" onClick={() => setMode("compare")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.compare") || "Compare"}</button>
-                      <button type="button" onClick={() => setMode("debate")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "debate" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.debate") || "Debate"}</button>
+                    <div className="space-y-2">
+                      {/* Arena - Primary Option */}
+                      <button
+                        type="button"
+                        onClick={() => setMode("arena")}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl text-left border-2 transition-all ${
+                          mode === "arena"
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border bg-card hover:bg-secondary/50"
+                        }`}
+                      >
+                        <div className={`shrink-0 rounded-lg p-2 ${mode === "arena" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                          <Zap className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`font-semibold text-sm ${mode === "arena" ? "text-primary" : "text-foreground"}`}>
+                            Arena — SOTA Comparison
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            4 top AI models answer, then a synthesizer gives the final verdict
+                          </p>
+                        </div>
+                      </button>
+
+                      {/* Secondary modes */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <button type="button" onClick={() => setMode("conversation")} className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-center border transition-colors ${mode === "conversation" ? "border-primary bg-primary/5 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>
+                          <MessageCircle className="h-4 w-4" />
+                          <span className="text-xs font-medium">Conversation</span>
+                        </button>
+                        <button type="button" onClick={() => setMode("compare")} className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-center border transition-colors ${mode === "compare" ? "border-primary bg-primary/5 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>
+                          <GitCompare className="h-4 w-4" />
+                          <span className="text-xs font-medium">Compare</span>
+                        </button>
+                        <button type="button" onClick={() => setMode("debate")} className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-center border transition-colors ${mode === "debate" ? "border-primary bg-primary/5 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>
+                          <Scale className="h-4 w-4" />
+                          <span className="text-xs font-medium">Debate</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
+
+                  {mode === "arena" && (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground animate-in fade-in slide-in-from-top-2 duration-300">
+                      <p className="font-medium text-foreground mb-1">⚡ How Arena works:</p>
+                      <ol className="list-decimal list-inside space-y-0.5 text-xs">
+                        <li>GPT-4o, Claude, Gemini, and DeepSeek all answer your question</li>
+                        <li>Responses shown side-by-side with model branding</li>
+                        <li>A synthesizer combines the strongest insights into a final verdict</li>
+                      </ol>
+                    </div>
+                  )}
 
                   {mode === "conversation" && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">

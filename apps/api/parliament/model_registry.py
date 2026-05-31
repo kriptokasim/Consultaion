@@ -212,7 +212,26 @@ ALL_MODELS: List[ModelInfo] = [
         persona_tagline="Efficient solutions, minimal waste",
         description="Strong for European languages and enterprise reasoning tasks",
     ),
+    ModelInfo(
+        id="deepseek-r1",
+        display_name="DeepSeek R1",
+        provider="openrouter",
+        litellm_model="openrouter/deepseek/deepseek-r1",
+        capabilities={"chat", "reasoning"},
+        tier="advanced",
+        cost_tier="medium",
+        latency_class="normal",
+        quality_tier="flagship",
+        safety_profile="normal",
+        logo_url="/logos/deepseek.svg",
+        persona_type="The Deep Thinker",
+        persona_tagline="Chain-of-thought reasoning at scale",
+        description="Excels at mathematical reasoning and step-by-step analysis",
+    ),
 ]
+
+# The fixed quartet of SOTA models used in Arena mode
+ARENA_MODELS: List[str] = ["gpt4o-deep", "claude-sonnet", "gemini-2-5-pro", "deepseek-r1"]
 
 
 def _provider_enabled(provider: str) -> bool:
@@ -275,3 +294,14 @@ def get_model(model_id: str) -> ModelInfo:
     if not info:
         raise ValueError(f"Unknown model: {model_id}")
     return info
+
+
+def get_arena_models() -> List[ModelInfo]:
+    """Return the SOTA models used in Arena mode, filtered to only enabled providers."""
+    enabled = {m.id for m in list_enabled_models()}
+    arena = []
+    for model_id in ARENA_MODELS:
+        info = get_model_info(model_id)
+        if info and model_id in enabled:
+            arena.append(info)
+    return arena

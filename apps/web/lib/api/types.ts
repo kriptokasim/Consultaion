@@ -24,7 +24,7 @@ export interface DebateSummary {
     team_id?: string;
     model_id?: string;
     score?: number; // derived or from meta
-    mode?: 'conversation' | 'compare' | 'debate';
+    mode?: 'arena' | 'conversation' | 'compare' | 'debate';
 }
 
 export interface DebateDetail extends DebateSummary {
@@ -148,6 +148,36 @@ export type DebateEvent =
         text?: string;
         content?: string;
         seat_name?: string;
+        at?: string;
+    }
+    | {
+        type: "arena_response";
+        model_id?: string;
+        display_name?: string;
+        provider?: string;
+        content?: string;
+        logo_url?: string;
+        persona_type?: string;
+        persona_tagline?: string;
+        success?: boolean;
+        at?: string;
+    }
+    | {
+        type: "arena_synthesis";
+        actor?: string;
+        text?: string;
+        content?: string;
+        role?: Role;
+        at?: string;
+    }
+    | {
+        type: "arena_started";
+        models?: Array<{
+            model_id: string;
+            display_name: string;
+            provider: string;
+            logo_url?: string;
+        }>;
         at?: string;
     };
 
