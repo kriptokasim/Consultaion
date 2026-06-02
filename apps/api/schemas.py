@@ -94,8 +94,8 @@ class DebateCreate(BaseModel):
     )
     panel_config: Optional[PanelConfig] = Field(None, description="Optional Parliament-style panel configuration.")
     mode: Optional[str] = Field(
-        "arena",
-        description="Operation mode: 'arena' (default), 'conversation', 'compare', or 'debate'."
+        "conversation",
+        description="Operation mode: 'conversation' (default), 'compare', or 'debate'."
     )
     compare_models: Optional[List[str]] = Field(
         None,
