@@ -62,7 +62,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [mode, setMode] = useState<"arena" | "conversation" | "compare" | "debate">("arena");
+  const [mode, setMode] = useState<"conversation" | "compare" | "debate">("conversation");
   const [compareModels, setCompareModels] = useState<string[]>([]);
 
   // Bootstrap: process token from Google OAuth redirect
@@ -451,18 +451,11 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Mode</label>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => setMode("arena")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "arena" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>Arena</button>
                       <button type="button" onClick={() => setMode("conversation")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "conversation" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.conversation") || "Conversation"}</button>
                       <button type="button" onClick={() => setMode("compare")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.compare") || "Compare"}</button>
                       <button type="button" onClick={() => setMode("debate")} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${mode === "debate" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>{t("dashboard.mode.debate") || "Debate"}</button>
                     </div>
                   </div>
-
-                  {mode === "arena" && (
-                    <div className="rounded-xl border border-border bg-secondary/50 p-4 text-sm text-muted-foreground animate-in fade-in slide-in-from-top-2 duration-300">
-                      Arena mode runs your prompt against top models (GPT-4o, Claude 3.5 Sonnet, Gemini 2.5 Pro, Deepseek Chat) concurrently and uses Claude to synthesize the best final answer.
-                    </div>
-                  )}
 
                   {mode === "conversation" && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
