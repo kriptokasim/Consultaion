@@ -24,7 +24,7 @@ export interface DebateSummary {
     team_id?: string;
     model_id?: string;
     score?: number; // derived or from meta
-    mode?: 'arena' | 'conversation' | 'compare' | 'debate';
+    mode?: 'conversation' | 'compare' | 'debate';
 }
 
 export interface DebateDetail extends DebateSummary {

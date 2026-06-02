@@ -13,17 +13,15 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("SSE_BACKEND", "memory")
 os.environ.setdefault("USE_MOCK", "1")
 
-from auth import create_access_token
 from database import engine, init_db  # noqa: E402
-from models import (
-    Debate,  # noqa: E402
-    User,
-)
+from models import Debate  # noqa: E402
 from routes.debates import stream_events  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
 from sse_backend import (  # noqa: E402
     MemoryChannelBackend,
 )
+from auth import create_access_token
+from models import User
 
 init_db()
 

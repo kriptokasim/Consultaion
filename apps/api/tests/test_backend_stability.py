@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-
+from config import settings
 
 def test_config_production_safety_validation(monkeypatch):
     """Test that config defaults and validation enforce production safety (A1/A2)."""

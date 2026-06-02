@@ -4,8 +4,11 @@ Patchset 53.0: Auth Cookie Configuration Tests
 Verifies cookie settings match environment expectations.
 """
 
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 

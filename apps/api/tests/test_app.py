@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import os
 import sys
 import time
@@ -38,6 +39,7 @@ from main import (  # noqa: E402
     start_debate_run,
     update_debate,
 )
+from routes.ops import healthz
 from models import (  # noqa: E402
     AuditLog,
     Debate,
@@ -51,7 +53,6 @@ from models import (  # noqa: E402
 from orchestrator import run_debate  # noqa: E402
 from parliament.provider_health import clear_all_health_states, record_call_result  # noqa: E402
 from ratings import update_ratings_for_debate, wilson_interval  # noqa: E402
-from routes.ops import healthz
 from schemas import default_debate_config, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 
@@ -68,6 +69,7 @@ def test_debate_create_prompt_validation():
 
 
 def test_jwt_secret_default_rejected(monkeypatch):
+    import auth as auth_module
 
     try:
         monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
