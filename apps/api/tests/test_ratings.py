@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from sqlmodel import select
+
 from tests.utils import settings_context
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))

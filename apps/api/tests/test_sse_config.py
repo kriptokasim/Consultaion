@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 import pytest
-from sse_backend import MemoryChannelBackend, RedisChannelBackend, create_sse_backend, _is_strict
+from sse_backend import MemoryChannelBackend, RedisChannelBackend, _is_strict, create_sse_backend
 
 
 class TestSSEConfig:

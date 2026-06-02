@@ -7,8 +7,9 @@ from sqlmodel import Session, create_engine, text
 BASE_DIR = Path(__file__).resolve().parents[1]
 DB_URL = os.environ.get("DATABASE_URL")
 
-import pytest
 import sys
+
+import pytest
 
 
 def _run_alembic(database_url: str):
