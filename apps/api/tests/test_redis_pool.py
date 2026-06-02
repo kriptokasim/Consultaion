@@ -1,7 +1,8 @@
 """
 Patchset 112: Tests for centralized Redis connection pooling.
 """
-from unittest.mock import MagicMock, patch
+import pytest
+from unittest.mock import patch, MagicMock
 
 
 class TestRedisPool:

@@ -1,11 +1,13 @@
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 from models import Debate
 from parliament.router_v2 import CandidateDecision
 from sqlmodel import Session
+
+
+import os
 
 os.environ["RL_MAX_CALLS"] = "1000"
 os.environ["AUTH_RL_MAX_CALLS"] = "1000"

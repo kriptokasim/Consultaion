@@ -1,10 +1,12 @@
 import pytest
+from sqlmodel import Session
+
 from agents import UsageCall
+from database import engine
 from models import Debate
 from parliament.engine import run_parliament_debate
 from parliament.prompts import build_messages_for_seat
 from schemas import default_panel_config
-from sqlmodel import Session
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests
 
 

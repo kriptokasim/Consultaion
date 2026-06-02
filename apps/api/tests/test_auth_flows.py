@@ -43,6 +43,7 @@ from auth import COOKIE_NAME, create_access_token, hash_password  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from main import app  # noqa: E402
 from models import User  # noqa: E402
+from routes.auth import OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE  # noqa: E402
 
 init_db()
 

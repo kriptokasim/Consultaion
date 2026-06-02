@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -29,6 +30,7 @@ from orchestrator import (  # noqa: E402
     run_debate,
 )
 from schemas import AgentConfig, BudgetConfig, DebateConfig, JudgeConfig  # noqa: E402
+from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 
 
 def _usage(tokens: int) -> UsageAccumulator:
