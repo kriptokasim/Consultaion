@@ -257,10 +257,12 @@ export default function RunDetailClient() {
   }
 
   // Running / queued debates → live stream view
+  const liveEvents = state.events.map((e: any) => e.payload || e);
+
   if (debate?.mode === "arena") {
     return (
       <div className="container max-w-[1400px] py-6">
-        <ArenaRunView debate={debate as any} events={state.events as any} />
+        <ArenaRunView debate={debate as any} events={liveEvents as any} />
       </div>
     );
   }
@@ -268,7 +270,7 @@ export default function RunDetailClient() {
   if (debate?.mode === "compare") {
     return (
       <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
-        <CompareRunView debate={debate as any} events={state.events as any} />
+        <CompareRunView debate={debate as any} events={liveEvents as any} />
       </div>
     );
   }
@@ -276,7 +278,7 @@ export default function RunDetailClient() {
   if (debate?.mode === "conversation") {
     return (
       <div className="container max-w-5xl h-[calc(100vh-4rem)] py-6">
-        <ConversationRunView debate={debate as any} events={state.events as any} />
+        <ConversationRunView debate={debate as any} events={liveEvents as any} />
       </div>
     );
   }
