@@ -8,6 +8,7 @@ import DebateArena from "@/components/debate/DebateArena";
 import ParliamentRunView from "@/components/parliament/ParliamentRunView";
 import CompareRunView from "@/components/compare/CompareRunView";
 import ConversationRunView from "@/components/conversation/ConversationRunView";
+import ArenaRunView from "@/components/arena/ArenaRunView";
 import { Button } from "@/components/ui/button";
 import { useDebate } from "@/lib/api/hooks/useDebate";
 import { timelineReducer, initialTimelineState } from "@/lib/timeline/reducer";
@@ -206,6 +207,13 @@ export default function RunDetailClient() {
 
   // Completed debates → rich results view (ParliamentRunView or CompareRunView)
   if (isCompleted && resultsFetched) {
+    if (debate?.mode === "arena") {
+      return (
+        <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
+          <ArenaRunView debate={debate} events={resultsEvents} />
+        </div>
+      );
+    }
     if (debate?.mode === "compare") {
       return (
         <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
@@ -249,6 +257,14 @@ export default function RunDetailClient() {
   }
 
   // Running / queued debates → live stream view (DebateArena or Compare)
+  if (debate?.mode === "arena") {
+    return (
+      <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
+        <ArenaRunView debate={debate as any} events={state.events as any} />
+      </div>
+    );
+  }
+
   if (debate?.mode === "compare") {
     return (
       <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
