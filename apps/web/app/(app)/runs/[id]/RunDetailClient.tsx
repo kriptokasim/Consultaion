@@ -37,6 +37,28 @@ export default function RunDetailClient() {
 
   const isCompleted = !!debate && COMPLETED_STATUSES.has(debate.status);
 
+  // Fetch profile to know if user is authenticated for PLG CTAs
+  const [profile, setProfile] = useState<any>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  useEffect(() => {
+    fetchWithAuth('/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        setProfile(data);
+        setProfileLoaded(true);
+        if (!data) {
+          import("@/lib/analytics").then(({ trackEvent }) => {
+            trackEvent("public_run_viewed", { debate_id: id, is_authenticated: false, referrer: document.referrer });
+          });
+        }
+      })
+      .catch(() => {
+        setProfile(null);
+        setProfileLoaded(true);
+      });
+  }, [id]);
+
   // Fetch events + members for completed debates
   useEffect(() => {
     if (!isCompleted || !id || resultsFetched) return;
@@ -206,11 +228,11 @@ export default function RunDetailClient() {
   }
 
   // Completed debates → rich results view (ParliamentRunView or CompareRunView)
-  if (isCompleted && resultsFetched) {
+  if (isCompleted && resultsFetched && profileLoaded) {
     if (debate?.mode === "arena") {
       return (
         <div className="container max-w-[1400px] py-6">
-          <ArenaRunView debate={debate} events={resultsEvents} />
+          <ArenaRunView debate={debate} events={resultsEvents} profile={profile} />
         </div>
       );
     }

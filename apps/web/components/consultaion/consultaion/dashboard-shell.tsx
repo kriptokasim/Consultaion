@@ -130,6 +130,38 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
     navItems.push({ labelKey: "nav.ops", tooltipKey: "nav.tooltip.ops", name: t("nav.ops"), href: "/admin/ops", icon: Shield, tooltip: t("nav.tooltip.ops") })
   }
 
+  const isPublicRunView = !profile && !loadingProfile && pathname.startsWith("/runs/");
+
+  if (isPublicRunView) {
+    return (
+      <ToastProvider>
+        <div className="flex min-h-screen flex-col bg-background text-foreground">
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur shadow-sm md:px-6">
+            <div className="flex items-center gap-3">
+              <Brand height={32} />
+              <div className="leading-tight">
+                <span className="heading-serif text-lg font-semibold"><BrandWordmark size="md" inline /></span>
+              </div>
+              <span className="ml-4 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hidden sm:inline-block">
+                Shared Arena Run
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button asChild variant="default" size="sm">
+                <Link href={`/login?source=public_run&intent=create_own_run`}>
+                  Create your own Arena run
+                </Link>
+              </Button>
+            </div>
+          </header>
+          <main className="flex-1 overflow-auto app-surface">
+            {children}
+          </main>
+        </div>
+      </ToastProvider>
+    );
+  }
+
   return (
     <ToastProvider>
       <div className="flex min-h-screen overflow-hidden bg-background text-foreground">

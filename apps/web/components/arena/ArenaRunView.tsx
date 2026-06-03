@@ -5,6 +5,9 @@ import { Trophy, Sparkles, Bot, CheckCircle2, XCircle, AlertTriangle, ChevronDow
 import type { DebateDetail, DebateEvent } from "@/lib/api/types";
 import Image from "next/image";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { trackEvent } from "@/lib/analytics";
 
 /* ─── Extract a human-readable error from raw content ─── */
 function extractFriendlyError(raw: string): { friendly: string; technical: string | null } {
@@ -126,9 +129,10 @@ function SkeletonCard({ index }: { index: number }) {
 interface ArenaRunViewProps {
     debate: DebateDetail;
     events: DebateEvent[];
+    profile?: any;
 }
 
-export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, profile }: ArenaRunViewProps) {
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
         const responses: Array<{
@@ -199,6 +203,20 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
 
     return (
         <div className="flex flex-col gap-6 pb-8">
+            {!profile && (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                        <h3 className="font-semibold text-foreground text-sm">Want to compare models yourself?</h3>
+                        <p className="text-muted-foreground text-sm mt-0.5">Run prompts across multiple models and get a synthesized answer.</p>
+                    </div>
+                    <Button asChild size="sm" onClick={() => trackEvent("public_run_cta_clicked", { debate_id: debate.id, cta_location: "top_banner", is_authenticated: false })}>
+                        <Link href={`/login?source=public_run&ref_run=${debate.id}&intent=create_own_run`}>
+                            Create your own run
+                        </Link>
+                    </Button>
+                </div>
+            )}
+
             {/* Question Banner */}
             <div className="rounded-2xl border border-border bg-gradient-to-br from-card via-card to-primary/5 p-6 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
@@ -216,9 +234,14 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
                         </div>
                     </div>
                     {/* Share Button */}
-                    {debate.status === "completed" || debate.status === "completed_budget" ? (
+                    {(debate.status === "completed" || debate.status === "completed_budget") && profile && (!debate.user_id || profile.id === debate.user_id) ? (
                         <div className="shrink-0">
-                            <ShareRunButton debateId={debate.id} initiallyPublic={(debate.config as any)?.is_public} />
+                            <ShareRunButton 
+                                debateId={debate.id} 
+                                initiallyPublic={(debate.config as any)?.is_public} 
+                                modelCount={expectedModels}
+                                hasSynthesis={!!synthesis}
+                            />
                         </div>
                     ) : null}
                 </div>
@@ -461,6 +484,27 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
                         <p className="text-sm text-muted-foreground">
                             Combining the strongest insights from {modelResponses.filter(r => r.success).length} models
                         </p>
+                    </div>
+                </div>
+            )}
+
+            {!profile && debate.status === "completed" && (
+                <div className="mt-8 rounded-2xl bg-slate-900 px-6 py-10 text-center flex flex-col items-center justify-center">
+                    <h3 className="text-xl font-semibold text-white mb-2">Want to compare AI models on your own question?</h3>
+                    <p className="text-slate-400 max-w-md mb-6">
+                        Run the same prompt across multiple models, compare the answers, and get one synthesized result.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <Button asChild size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => trackEvent("public_run_cta_clicked", { debate_id: debate.id, cta_location: "footer", is_authenticated: false })}>
+                            <Link href={`/login?source=public_run&ref_run=${debate.id}&intent=create_own_run`}>
+                                Start your own Arena run
+                            </Link>
+                        </Button>
+                        <Button asChild variant="outline" size="lg" className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white bg-transparent">
+                            <Link href="/">
+                                See how it works
+                            </Link>
+                        </Button>
                     </div>
                 </div>
             )}
