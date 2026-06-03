@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Terms of Service',
+  description: 'Understand the terms and conditions for using the Consultaion AI simulation and comparison platform.',
+};
 
 export default async function TermsPage() {
     const { t } = await getServerTranslations();

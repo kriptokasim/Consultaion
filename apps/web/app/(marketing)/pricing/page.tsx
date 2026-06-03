@@ -2,6 +2,12 @@ import { getBillingPlans, type BillingPlanSummary } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Pricing & Plans',
+  description: 'Find the perfect plan for comparing LLM responses. Choose between our Starter and Premium tiers.',
+};
 
 export const revalidate = 3600;
 

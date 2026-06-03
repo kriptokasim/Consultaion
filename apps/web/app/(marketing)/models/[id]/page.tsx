@@ -2,8 +2,22 @@ import Link from "next/link";
 import { getModelDetail } from "@/lib/api";
 import Brand from "@/components/parliament/Brand";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
 
 export const dynamic = "force-dynamic";
+
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const decodedId = decodeURIComponent(id);
+  return {
+    title: `${decodedId} Performance & Stats`,
+    description: `Detailed analysis of ${decodedId}'s ELO rating, total matches, win rate, and champion answers.`,
+  };
+}
 
 export default async function ModelDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { t } = await getServerTranslations();

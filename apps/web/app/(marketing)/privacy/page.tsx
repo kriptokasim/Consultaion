@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Privacy Policy',
+  description: 'Learn how Consultaion protects your account data, debate telemetry, and usage privacy.',
+};
 
 export default async function PrivacyPage() {
     const { t } = await getServerTranslations();

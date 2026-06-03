@@ -3,6 +3,12 @@ import { getHallOfFame, getMembers } from "@/lib/api";
 import Brand from "@/components/parliament/Brand";
 import { ChampionGlow } from "@/components/parliament/ChampionGlow";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Hall of Fame',
+  description: 'Browse the highest-rated AI responses, closest match-ups, and legendary model debates.',
+};
 
 export const dynamic = "force-dynamic";
 

@@ -1,11 +1,15 @@
-"use client";
-
 import Link from "next/link";
-import { useI18n } from "@/lib/i18n/client";
+import { getServerTranslations } from "@/lib/i18n/server";
 import { BookOpen, Code2, Rocket } from "lucide-react";
+import type { Metadata } from 'next';
 
-export default function DocsPage() {
-    const { t } = useI18n();
+export const metadata: Metadata = {
+  title: 'Documentation',
+  description: 'Learn how to use Consultaion. Explore our getting started guides and API references.',
+};
+
+export default async function DocsPage() {
+    const { t } = await getServerTranslations();
 
     return (
         <div className="mx-auto max-w-4xl px-6 py-16">
@@ -44,4 +48,3 @@ export default function DocsPage() {
         </div>
     );
 }
-

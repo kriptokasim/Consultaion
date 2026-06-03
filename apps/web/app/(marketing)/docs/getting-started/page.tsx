@@ -1,12 +1,16 @@
-"use client";
-
 import Link from "next/link";
-import { useI18n } from "@/lib/i18n/client";
+import { getServerTranslations } from "@/lib/i18n/server";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { Metadata } from 'next';
 
-export default function GettingStartedPage() {
-    const { t } = useI18n();
+export const metadata: Metadata = {
+  title: 'Getting Started Guide',
+  description: 'Learn how to create accounts, run simulated AI debate matches, and synthesize multi-model outputs.',
+};
+
+export default async function GettingStartedPage() {
+    const { t } = await getServerTranslations();
 
     return (
         <div className="mx-auto max-w-3xl px-6 py-12">

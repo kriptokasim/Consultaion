@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Play, BarChart3, Trophy, Plus, Zap, Scale, MessageCircle, GitCompare, ChevronDown } from "lucide-react";
+import { Play, BarChart3, Trophy, Plus, Zap, Scale, MessageCircle, GitCompare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

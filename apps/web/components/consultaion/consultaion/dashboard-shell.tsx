@@ -16,6 +16,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher"
 import { useI18n } from "@/lib/i18n/client"
 import { BrandWordmark } from "@/components/brand"
 import { API_ORIGIN } from "@/lib/config/runtime"
+import { useTheme } from "next-themes"
 
 // NOTE: Marketing-only routes (pricing, leaderboard, hall-of-fame, models, methodology)
 // live under (marketing) and are not linked from the authenticated sidebar to avoid
@@ -45,7 +46,8 @@ type DashboardShellProps = {
 export default function DashboardShell({ children, initialProfile }: DashboardShellProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const [theme, setTheme] = useState<"light" | "dark">("light")
+  const { theme, setTheme, resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const hasInitialProfile = typeof initialProfile !== "undefined"
   const [profile, setProfile] = useState<CurrentUserProfile | null>(hasInitialProfile ? initialProfile ?? null : null)
   const [loadingProfile, setLoadingProfile] = useState(!hasInitialProfile)
@@ -54,23 +56,8 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
   const { t } = useI18n()
 
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? localStorage.getItem("consultaion-theme") : null
-    if (stored === "light" || stored === "dark") {
-      setTheme(stored)
-    }
+    setMounted(true)
   }, [])
-
-  useEffect(() => {
-    const root = document.documentElement
-    if (theme === "dark") {
-      root.classList.add("dark")
-    } else {
-      root.classList.remove("dark")
-    }
-    if (typeof window !== "undefined") {
-      localStorage.setItem("consultaion-theme", theme)
-    }
-  }, [theme])
 
   useEffect(() => {
     if (hasInitialProfile) {
@@ -107,7 +94,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
   }, [apiBase, hasInitialProfile, initialProfile])
 
   const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark")
+    setTheme(resolvedTheme === "dark" ? "light" : "dark")
   }
 
   const handleBackClick = () => {
@@ -261,6 +248,21 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {mounted && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  aria-label="Toggle theme"
+                  className="rounded-full text-muted-foreground hover:text-foreground h-9 w-9"
+                >
+                  {resolvedTheme === "dark" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
               {profile ? (
                 <UserDropdown
                   profile={profile}

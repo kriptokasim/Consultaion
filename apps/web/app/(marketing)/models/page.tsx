@@ -2,6 +2,12 @@ import Link from "next/link";
 import { getModelLeaderboard } from "@/lib/api";
 import Brand from "@/components/parliament/Brand";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Supported AI Models',
+  description: 'Explore the full list of supported SOTA models including GPT-4o, Claude, Gemini, and DeepSeek, with detailed win rates.',
+};
 
 export const dynamic = "force-dynamic";
 

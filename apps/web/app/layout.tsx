@@ -5,10 +5,30 @@ import { Providers } from './providers';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
-  title: 'Consultaion',
-  description: 'AI Parliament for multi-agent deliberation',
+  title: {
+    default: 'Consultaion — Ask Once, Get Answers from Every Top AI',
+    template: '%s | Consultaion',
+  },
+  description: 'Submit one question and get simultaneous answers from GPT-4o, Claude, Gemini, and DeepSeek. Compare AI perspectives side-by-side and get a synthesized final verdict.',
+  keywords: ['AI comparison', 'multi-model AI', 'GPT-4o', 'Claude', 'Gemini', 'DeepSeek', 'AI arena', 'LLM comparison'],
   icons: {
     icon: '/icon.png',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    siteName: 'Consultaion',
+    title: 'Consultaion — Ask Once, Get Answers from Every Top AI',
+    description: 'Submit one question and get simultaneous answers from GPT-4o, Claude, Gemini, and DeepSeek. Compare AI perspectives side-by-side and get a synthesized final verdict.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Consultaion — Ask Once, Get Answers from Every Top AI',
+    description: 'Compare GPT-4o, Claude, Gemini, and DeepSeek answers side-by-side.',
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 }
 

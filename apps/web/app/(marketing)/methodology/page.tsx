@@ -1,5 +1,11 @@
 import Brand from "@/components/parliament/Brand";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Methodology & Rankings Science',
+  description: 'Learn how Consultaion ranks AI models using pairwise Elo matching, Wilson intervals, and anti-gaming algorithms.',
+};
 
 export const dynamic = "force-dynamic";
 

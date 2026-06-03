@@ -4,6 +4,12 @@ import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import { ApiError, getLeaderboard, getRateLimitInfo, isAuthError } from "@/lib/api";
 import { redirect } from "next/navigation";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'AI Leaderboard & Rankings',
+  description: 'See which SOTA AI models perform best in side-by-side matches. Ranked by actual win rates and user votes.',
+};
 
 type LeaderboardPageProps = {
   searchParams: Promise<{ category?: string; min_matches?: string }>;

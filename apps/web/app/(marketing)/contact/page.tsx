@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { getServerTranslations } from "@/lib/i18n/server";
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Contact Us',
+  description: 'Get in touch with the Consultaion team for feedback, support, and inquiries.',
+};
 
 export default async function ContactPage() {
     const { t } = await getServerTranslations();

@@ -1,9 +1,34 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { Trophy, Sparkles, Bot, CheckCircle2, XCircle } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Trophy, Sparkles, Bot, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import type { DebateDetail, DebateEvent } from "@/lib/api/types";
 import Image from "next/image";
+
+/* ─── Extract a human-readable error from raw content ─── */
+function extractFriendlyError(raw: string): { friendly: string; technical: string | null } {
+    if (!raw) return { friendly: "This model did not return a response.", technical: null };
+
+    const lower = raw.toLowerCase();
+
+    if (lower.includes("credit balance is too low") || lower.includes("insufficient") || lower.includes("requires more credits"))
+        return { friendly: "This provider's API credits have been exhausted. The account needs to be topped up.", technical: raw };
+
+    if (lower.includes("api key not valid") || lower.includes("invalid api key") || lower.includes("authentication"))
+        return { friendly: "The API key for this provider is invalid or expired.", technical: raw };
+
+    if (lower.includes("rate limit") || lower.includes("429") || lower.includes("too many requests"))
+        return { friendly: "This provider is temporarily rate-limited. Please try again in a moment.", technical: raw };
+
+    if (lower.includes("timeout") || lower.includes("timed out"))
+        return { friendly: "This model took too long to respond and was timed out.", technical: raw };
+
+    if (lower.includes("error") || lower.includes("exception") || lower.includes("traceback") || lower.includes("failed"))
+        return { friendly: "This model encountered an error while processing your request.", technical: raw };
+
+    // Content looks normal — not an error
+    return { friendly: "", technical: null };
+}
 
 /* ─── provider accent colours ─── */
 const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string; accent: string; glow: string }> = {
@@ -169,6 +194,7 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
 
     const isLoading = modelResponses.length === 0 && !synthesis;
     const expectedModels = debate.final_meta?.models?.length || 4;
+    const [activeTab, setActiveTab] = useState<number>(0);
 
     return (
         <div className="flex flex-col gap-6 pb-8">
@@ -203,17 +229,114 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
                     <Bot className="h-4 w-4" />
                     Model Responses
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+
+                {/* Mobile Tab Selector */}
+                <div className="flex sm:hidden overflow-x-auto gap-2 pb-2 mb-4 custom-scrollbar">
+                    {isLoading
+                        ? Array.from({ length: expectedModels }).map((_, i) => (
+                              <div key={i} className="h-9 w-24 bg-muted animate-pulse rounded-xl shrink-0" />
+                          ))
+                        : modelResponses.map((resp, i) => {
+                              const colors = getColors(resp.provider);
+                              const isActive = activeTab === i;
+                              return (
+                                  <button
+                                      key={resp.model_id || i}
+                                      onClick={() => setActiveTab(i)}
+                                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                                          isActive
+                                              ? `${colors.accent} ${colors.text} ${colors.border} shadow-sm scale-105`
+                                              : "border-border bg-card text-muted-foreground hover:text-foreground"
+                                      }`}
+                                  >
+                                      <ModelLogo
+                                          logoUrl={resp.logo_url}
+                                          displayName={resp.display_name}
+                                          size={14}
+                                      />
+                                      <span>{resp.display_name}</span>
+                                  </button>
+                              );
+                          })}
+                </div>
+
+                {/* Mobile View: Render only active card */}
+                <div className="block sm:hidden">
+                    {isLoading ? (
+                        <SkeletonCard index={0} />
+                    ) : (
+                        modelResponses[activeTab] && (() => {
+                            const resp = modelResponses[activeTab];
+                            const colors = getColors(resp.provider);
+                            const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
+                            const isError = !resp.success && errorInfo;
+                            return (
+                                <article
+                                    className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm ${colors.glow} transition-all duration-200 overflow-hidden min-h-[350px]`}
+                                    aria-label={`Response from ${resp.display_name}`}
+                                >
+                                    {/* Card Header */}
+                                    <div className={`p-4 border-b ${colors.border} flex items-center gap-3`}>
+                                        <div className={`shrink-0 rounded-xl ${colors.accent} p-2`}>
+                                            <ModelLogo
+                                                logoUrl={resp.logo_url}
+                                                displayName={resp.display_name}
+                                            />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <p className={`font-semibold text-sm truncate ${colors.text}`}>
+                                                    {resp.display_name}
+                                                </p>
+                                                {resp.success ? (
+                                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                                                ) : (
+                                                    <XCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                                                )}
+                                            </div>
+                                            {resp.persona_tagline && (
+                                                <p className="text-xs text-muted-foreground truncate">
+                                                    {resp.persona_tagline}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Card Body */}
+                                    {isError ? (
+                                        <ErrorCardBody
+                                            friendly={errorInfo.friendly}
+                                            technical={errorInfo.technical}
+                                            displayName={resp.display_name}
+                                        />
+                                    ) : (
+                                        <div className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
+                                            <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+                                                {resp.content || <span className="italic text-muted-foreground">No response received.</span>}
+                                            </div>
+                                        </div>
+                                    )}
+                                </article>
+                            );
+                        })()
+                    )}
+                </div>
+
+                {/* Desktop View: Render grid of all cards */}
+                <div className="hidden sm:grid grid-cols-2 xl:grid-cols-4 gap-4">
                     {isLoading
                         ? Array.from({ length: expectedModels }).map((_, i) => (
                               <SkeletonCard key={i} index={i} />
                           ))
                         : modelResponses.map((resp, i) => {
                               const colors = getColors(resp.provider);
+                              const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
+                              const isError = !resp.success && errorInfo;
                               return (
-                                  <div
+                                  <article
                                       key={resp.model_id || i}
                                       className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm hover:shadow-md ${colors.glow} transition-all duration-200 overflow-hidden`}
+                                      aria-label={`Response from ${resp.display_name}`}
                                   >
                                       {/* Card Header */}
                                       <div className={`p-4 border-b ${colors.border} flex items-center gap-3`}>
@@ -243,12 +366,20 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
                                       </div>
 
                                       {/* Card Body */}
-                                      <div className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
-                                          <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
-                                              {resp.content}
+                                      {isError ? (
+                                          <ErrorCardBody
+                                              friendly={errorInfo.friendly}
+                                              technical={errorInfo.technical}
+                                              displayName={resp.display_name}
+                                          />
+                                      ) : (
+                                          <div className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
+                                              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+                                                  {resp.content || <span className="italic text-muted-foreground">No response received.</span>}
+                                              </div>
                                           </div>
-                                      </div>
-                                  </div>
+                                      )}
+                                  </article>
                               );
                           })}
                 </div>
@@ -318,6 +449,39 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
                         </p>
                     </div>
                 </div>
+            )}
+        </div>
+    );
+}
+
+/* ─── Friendly error card body ─── */
+function ErrorCardBody({ friendly, technical, displayName }: { friendly: string; technical: string | null; displayName: string }) {
+    const [showDetails, setShowDetails] = useState(false);
+    return (
+        <div className="p-5 flex-1 flex flex-col items-center justify-center text-center gap-3">
+            <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-3">
+                <AlertTriangle className="h-6 w-6 text-red-500 dark:text-red-400" />
+            </div>
+            <div>
+                <p className="text-sm font-medium text-foreground">{displayName} Unavailable</p>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed max-w-[240px] mx-auto">
+                    {friendly}
+                </p>
+            </div>
+            {technical && (
+                <button
+                    type="button"
+                    onClick={() => setShowDetails(!showDetails)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+                >
+                    {showDetails ? "Hide" : "Show"} details
+                    {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </button>
+            )}
+            {showDetails && technical && (
+                <pre className="mt-1 w-full max-h-32 overflow-auto rounded-lg bg-muted/50 p-2 text-[10px] text-muted-foreground text-left whitespace-pre-wrap break-all">
+                    {technical.slice(0, 500)}{technical.length > 500 ? "…" : ""}
+                </pre>
             )}
         </div>
     );
