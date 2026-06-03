@@ -26,6 +26,8 @@ export async function generateMetadata({ params }: RunDetailProps): Promise<Meta
           ? { index: false, follow: false }
           : { index: true, follow: true };
         
+        const ogUrl = `${baseUrl}/api/og?title=${encodeURIComponent(title)}&models=${debate?.final_meta?.models?.length || 4}`;
+
         return {
           title,
           description,
@@ -36,11 +38,20 @@ export async function generateMetadata({ params }: RunDetailProps): Promise<Meta
             description,
             type: "website",
             url: canonicalUrl,
+            images: [
+              {
+                url: ogUrl,
+                width: 1200,
+                height: 630,
+                alt: title,
+              },
+            ],
           },
           twitter: {
-            card: "summary",
+            card: "summary_large_image",
             title,
             description,
+            images: [ogUrl],
           },
         };
       }

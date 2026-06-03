@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, BarChart3, Trophy, Zap, MessageCircle, GitCompare, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +43,11 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [mode, setMode] = useState<"arena" | "conversation" | "compare" | "debate">("arena");
   const [compareModels, setCompareModels] = useState<string[]>([]);
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const prefillPromptFrom = searchParams?.get("prefill_prompt_from");
+  const source = searchParams?.get("source");
 
   // Bootstrap: process token from Google OAuth redirect
   useEffect(() => {
@@ -112,11 +118,32 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   }, [models, selectedModel]);
 
   useEffect(() => {
-    // Check if new user
-    if (!debatesLoading && debates.length === 0) {
+    if (!debatesLoading && debates.length === 0 && !prefillPromptFrom) {
       setShowOnboarding(true);
     }
-  }, [debatesLoading, debates.length]);
+  }, [debatesLoading, debates.length, prefillPromptFrom]);
+
+  // Handle Prompt Prefill
+  useEffect(() => {
+    if (prefillPromptFrom) {
+      // Clear URL params so it doesn't trigger again on reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("prefill_prompt_from");
+      window.history.replaceState({}, "", url.toString());
+
+      apiRequest<any>({ path: `/debates/${prefillPromptFrom}`, method: "GET" })
+        .then((data) => {
+          if (data.prompt) {
+            setPrompt(data.prompt);
+            setShowModal(true);
+            trackEvent("public_run_prompt_prefilled", { ref_run: prefillPromptFrom, source });
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch prefill prompt", err);
+        });
+    }
+  }, [prefillPromptFrom, source]);
 
   const maxDebates = billing?.plan?.limits?.debates_per_month;
   const debatesUsed = billing?.usage?.debates_created ?? 0;

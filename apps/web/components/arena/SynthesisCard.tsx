@@ -37,29 +37,42 @@ export function SynthesisCard({ synthesis, modelResponses, isSynthesisFailed = f
 
             {/* Model attribution chips */}
             {modelResponses.length > 0 && !isSynthesisFailed && (
-                <div className="mt-5 pt-4 border-t border-primary/10">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                        Contributing Models
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                        {modelResponses
-                            .filter((r) => r.success)
-                            .map((r) => {
-                                const colors = getColors(r.provider);
-                                return (
-                                    <span
-                                        key={r.model_id}
-                                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${colors.accent} ${colors.text} border ${colors.border}`}
-                                    >
-                                        <ModelLogo
-                                            logoUrl={r.logo_url}
-                                            displayName={r.display_name}
-                                            size={14}
-                                        />
-                                        {r.display_name}
-                                    </span>
-                                );
-                            })}
+                <div className="mt-6 border-t border-primary/10 pt-5">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+                        <div className="space-y-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Contributing Models
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {modelResponses
+                                    .filter((r) => r.success)
+                                    .map((r) => {
+                                        const colors = getColors(r.provider);
+                                        return (
+                                            <span
+                                                key={r.model_id}
+                                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${colors.accent} ${colors.text} border ${colors.border}`}
+                                            >
+                                                <ModelLogo
+                                                    logoUrl={r.logo_url}
+                                                    displayName={r.display_name}
+                                                    size={14}
+                                                />
+                                                {r.display_name}
+                                            </span>
+                                        );
+                                    })}
+                            </div>
+                        </div>
+
+                        <div className="md:max-w-xs rounded-xl bg-primary/5 p-4 border border-primary/10">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-1">
+                                Why this synthesis?
+                            </p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                An independent, top-tier model evaluated the outputs above, fact-checked for disagreements, and combined the most accurate reasoning into this single artifact.
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}

@@ -87,13 +87,13 @@ export default function HomeContent() {
           <div className="grid gap-12 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-6">
               <h1 className="text-5xl font-display font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] sm:text-6xl md:leading-[1.05]">
-                {t("landing.hero.title")}
+                Compare AI models. Find disagreement.
                 <span className="block bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  {t("landing.hero.accent")}
+                  Get one stronger answer.
                 </span>
               </h1>
-              <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">{t("landing.hero.tagline")}</p>
-              <p className="max-w-2xl text-lg text-slate-600 dark:text-slate-300">{t("landing.hero.description")}</p>
+              <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">The decision layer for multi-model AI.</p>
+              <p className="max-w-2xl text-lg text-slate-600 dark:text-slate-300">Consultaion runs your question across multiple leading AI models, highlights where they agree or disagree, and synthesizes the strongest answer into a shareable decision artifact.</p>
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap gap-3">
                   <Button variant="default" size="lg" className="px-8" onClick={handleStartDebate} disabled={loading}>
@@ -136,7 +136,8 @@ export default function HomeContent() {
 
         <section className="space-y-8">
           <div className="text-center">
-            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">{t("landing.who.title")}</h2>
+            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">Why single-model answers are risky</h2>
+            <p className="mt-4 text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">Single-model AI answers are often confident, incomplete, or wrong. Teams need a way to compare outputs, surface disagreement, and make better decisions.</p>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map((i) => (
@@ -217,14 +218,14 @@ export default function HomeContent() {
             className="group inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 px-8 py-4 text-lg font-semibold text-white shadow-[0_16px_40px_rgba(59,130,246,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_20px_50px_rgba(59,130,246,0.3)]"
           >
             <span className="text-lg font-semibold text-white">
-              {t("landing.demo.cta")}
+              Try Interactive Demo
             </span>
             <span className="text-xs text-indigo-100">
-              {t("landing.demo.subtitle")}
+              No sign up required
             </span>
           </Link>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t("landing.demo.footerHint")}
+            See how multi-model comparison works
           </p>
         </section>
 
