@@ -168,6 +168,69 @@ def require_debate_access(debate: Optional[Debate], user: Optional[User], sessio
     return debate
 
 
+def is_debate_public(debate: Optional[Debate]) -> bool:
+    """Check if a debate is explicitly shared as public."""
+    if not debate or not debate.config:
+        return False
+    return debate.config.get("is_public") is True
+
+
+def is_debate_owner(debate: Debate, user: Optional[User]) -> bool:
+    """Check if user is the owner of the debate or an admin."""
+    if not user:
+        return False
+    if user.role == "admin" or getattr(user, "is_admin", False):
+        return True
+    return debate.user_id == user.id
+
+
+def require_debate_owner(debate: Optional[Debate], user: Optional[User], session: Session) -> Debate:
+    """
+    Require that the user is the debate owner or an admin.
+
+    Used for mutation endpoints where only the owner should be able to act.
+    Returns 401 for unauthenticated users, 403 for non-owners, 404 if debate
+    doesn't exist.
+    """
+    from fastapi import HTTPException, status
+    from exceptions import NotFoundError, PermissionError as AppPermissionError
+
+    if not debate:
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    if not is_debate_owner(debate, user):
+        raise AppPermissionError(message="Insufficient permissions", code="permission.denied")
+    update_log_context(debate_id=getattr(debate, "id", None), team_id=getattr(debate, "team_id", None))
+    return debate
+
+
+def require_debate_mutation_access(debate: Optional[Debate], user: Optional[User], session: Session) -> Debate:
+    """
+    Require authenticated user with at least team-editor access for mutation.
+
+    More permissive than require_debate_owner — allows team editors.
+    Used for endpoints like start/restart where team members may act.
+    """
+    from fastapi import HTTPException, status
+    from exceptions import NotFoundError, PermissionError as AppPermissionError
+
+    if not debate:
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
+    if user.role == "admin" or getattr(user, "is_admin", False):
+        update_log_context(debate_id=debate.id, team_id=debate.team_id)
+        return debate
+    if debate.user_id == user.id:
+        update_log_context(debate_id=debate.id, team_id=debate.team_id)
+        return debate
+    if debate.team_id and user_is_team_editor(session, user, debate.team_id):
+        update_log_context(debate_id=debate.id, team_id=debate.team_id)
+        return debate
+    raise AppPermissionError(message="Insufficient permissions", code="permission.denied")
+
+
 def avg_scores_for_debate(session: Session, debate_id: str) -> list[tuple[str, float]]:
     rows = (
         session.exec(select(Score.persona, func.avg(Score.score)).where(Score.debate_id == debate_id).group_by(Score.persona)).all()

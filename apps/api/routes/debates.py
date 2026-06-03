@@ -46,11 +46,20 @@ from usage_limits import reserve_run_slot
 
 from routes.common import (
     champion_for_debate,
+    is_debate_owner,
+    is_debate_public,
     members_from_config,
     require_debate_access,
+    require_debate_mutation_access,
+    require_debate_owner,
     serialize_rating_persona,
     track_metric,
     user_is_team_member,
+)
+from serializers import (
+    serialize_debate_private,
+    serialize_debate_public,
+    serialize_events_public,
 )
 
 logger = logging.getLogger(__name__)
@@ -415,13 +424,13 @@ async def start_debate_run(
     debate_id: str,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     if not settings.DISABLE_AUTORUN:
         raise ValidationError(message="Manual start is disabled", code="debate.manual_start_disabled")
     debate = session.get(Debate, debate_id)
-    debate = require_debate_access(debate, current_user, session)
+    debate = require_debate_mutation_access(debate, current_user, session)
     if debate.status not in {"queued", "failed"}:
         raise ValidationError(message="Debate already started", code="debate.already_started")
 
@@ -558,14 +567,21 @@ async def get_debate(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     debate = session.get(Debate, debate_id)
-    return require_debate_access(debate, current_user, session)
+    debate = require_debate_access(debate, current_user, session)
+
+    # Public users get a stripped-down DTO — no config, routing_meta, etc.
+    if not current_user or not is_debate_owner(debate, current_user):
+        if is_debate_public(debate):
+            return serialize_debate_public(debate)
+        # Non-public, non-owner access was already rejected by require_debate_access
+    return serialize_debate_private(debate)
 
 
 @router.get("/debates/{debate_id}/report")
 async def get_debate_report(
     debate_id: str,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     from services.reporting import build_report
     data = build_report(session, debate_id, current_user)
@@ -770,7 +786,11 @@ async def get_debate_events(
     elapsed_ms = (time.time() - start_time) * 1000
     if elapsed_ms > 500:
         logger.warning(f"timeline_fetch_slow: debate_id={debate_id} elapsed_ms={elapsed_ms:.1f} events={len(events)}")
-        
+
+    # Filter events for unauthenticated public users — strip internal metadata
+    if not current_user and is_debate_public(debate):
+        return {"items": serialize_events_public(events)}
+
     return {"items": events}
 
 
