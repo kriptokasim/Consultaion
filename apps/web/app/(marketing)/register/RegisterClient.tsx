@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/PasswordInput"
 import { Label } from "@/components/ui/label"
-import { SkeletonLoader } from "@/components/ui/SkeletonLoader"
+import { SkeletonLoader } from "@/components/ui/skeleton"
 import { apiRequest } from "@/lib/apiClient"
 import { useI18n } from "@/lib/i18n/client"
 

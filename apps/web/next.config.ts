@@ -19,9 +19,8 @@ const nextConfig: NextConfig = {
     ],
   },
   eslint: {
-    // Allow production builds to complete even with ESLint errors
-    // This prevents the circular JSON structure error during Vercel builds
-    ignoreDuringBuilds: true,
+    // Re-enable ESLint during production builds to maintain code quality
+    ignoreDuringBuilds: false,
   },
   images: {
     remotePatterns: [

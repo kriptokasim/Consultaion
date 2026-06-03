@@ -8,7 +8,7 @@ import { FileText, PlayCircle, Settings, Search, Moon, Sun, Shield, Scale, BarCh
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { logout } from "@/lib/auth"
 import { ToastProvider } from "@/components/ui/toast"
 import Brand from "@/components/parliament/Brand"
@@ -133,6 +133,15 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
   return (
     <ToastProvider>
       <div className="flex min-h-screen overflow-hidden bg-background text-foreground">
+        {/* Mobile Sidebar Overlay */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden" 
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+        
         {/* Sidebar */}
         <aside
           className={cn(
@@ -302,10 +311,64 @@ function UserDropdown({
 }) {
   const [open, setOpen] = useState(false)
   const { t } = useI18n()
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false)
+        triggerRef.current?.focus()
+        return
+      }
+
+      if (e.key === "Tab" && dropdownRef.current) {
+        const focusableElements = dropdownRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex="0"]'
+        )
+        if (focusableElements.length === 0) return
+
+        const first = focusableElements[0]
+        const last = focusableElements[focusableElements.length - 1]
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus()
+            e.preventDefault()
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus()
+            e.preventDefault()
+          }
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    
+    // Focus first focusable element inside the dropdown when opened
+    const timer = setTimeout(() => {
+      const focusable = dropdownRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex="0"]'
+      )
+      if (focusable && focusable.length > 0) {
+        focusable[0].focus()
+      }
+    }, 50)
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      clearTimeout(timer)
+    }
+  }, [open])
 
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(!open)}
         className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-amber-50 text-xs font-bold uppercase text-slate-700 shadow-inner shadow-slate-900/5 transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
@@ -321,7 +384,10 @@ function UserDropdown({
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
-          <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-1 shadow-lg">
+          <div
+            ref={dropdownRef}
+            className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-1 shadow-lg"
+          >
             <div className="border-b border-slate-100 dark:border-slate-700 px-4 py-2">
               <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">
                 {profile.display_name || profile.email}

@@ -3,10 +3,8 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Play, BarChart3, Trophy, Plus, Zap, Scale, MessageCircle, GitCompare } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Plus, BarChart3, Trophy, Zap, MessageCircle, GitCompare, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { startDebate } from "@/lib/api";
 import { PromotionArea } from "@/components/PromotionArea";
@@ -19,6 +17,13 @@ import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist"
 import { OnboardingPanel } from "@/components/dashboard/OnboardingPanel";
 import { ErrorBanner } from "@/components/errors/ErrorBanner";
 import { ProviderHealthBanner } from "@/components/ui/provider-health-banner";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
+import { getBillingMe } from "@/lib/api";
+import { apiRequest } from "@/lib/apiClient";
+import { ModelSelector } from "@/components/dashboard/ModelSelector";
+import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
+import { DashboardTemplatesSection } from "@/components/dashboard/DashboardTemplatesSection";
 
 type ModelOption = {
   id: string;
@@ -29,33 +34,6 @@ type ModelOption = {
   recommended: boolean;
   tier?: "standard" | "advanced";
 };
-
-function formatTimestamp(ts?: string | null) {
-  if (!ts) return "Just now";
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return "Just now";
-  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function statusTone(status?: string | null) {
-  switch ((status || "").toLowerCase()) {
-    case "running":
-      return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/50 dark:text-amber-200 dark:border-amber-700";
-    case "completed":
-    case "done":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-200 dark:border-emerald-700";
-    case "queued":
-    default:
-      return "bg-secondary text-foreground border-border";
-  }
-}
-
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
-import { getBillingMe } from "@/lib/api";
-import { apiRequest } from "@/lib/apiClient";
-import { DebateListSkeleton } from "@/components/ui/skeleton";
-import { ModelSelector } from "@/components/dashboard/ModelSelector";
 
 export default function DashboardClient({ email, authToken }: { email?: string; authToken?: string }) {
   const { t, locale } = useI18n();
@@ -69,7 +47,6 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
   useEffect(() => {
     if (authToken && typeof window !== "undefined") {
       // Set 'consultaion_session' cookie for SSR cross-origin bootstrapping.
-      // NOTE: We do NOT persist the token in localStorage — cookie-only is the secure path.
       document.cookie = `consultaion_session=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
 
       // Strip token from URL to prevent leakage via browser history / referrers
@@ -156,6 +133,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     else if (templateId === "risk-bank-governance") setPrompt(t("dashboard.templates.governance.description"));
     else if (templateId === "product-roadmap") setPrompt(t("dashboard.templates.product.description"));
   };
+
   // Draft persistence: restore on modal open
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only trigger on modal open
   useEffect(() => {
@@ -317,7 +295,6 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
             <OnboardingPanel
               onDismiss={handleDismissOnboarding}
               onOpenTemplates={() => {
-                // Scroll to templates section
                 document.getElementById("templates-section")?.scrollIntoView({ behavior: "smooth" });
               }}
               onNewDebate={() => setShowModal(true)}
@@ -332,87 +309,13 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
             onStep3Mark={handleStep3Mark}
           />
 
-          <section id="templates-section" className="rounded-3xl border border-border bg-gradient-to-br from-card to-blue-50/30 p-8 shadow-md dark:to-secondary">
-            <div className="mb-6 text-center">
-              <h2 className="text-2xl font-semibold text-foreground">{t("dashboard.onboarding.title")}</h2>
-              <p className="mt-2 text-sm text-muted-foreground">{t("dashboard.onboarding.subtitle")}</p>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <TemplateCard
-                title={t("dashboard.templates.strategy.title")}
-                description={t("dashboard.templates.strategy.description")}
-                onClick={() => handleTemplateClick("strategy-saas-rollout")}
-              />
-              <TemplateCard
-                title={t("dashboard.templates.governance.title")}
-                description={t("dashboard.templates.governance.description")}
-                onClick={() => handleTemplateClick("risk-bank-governance")}
-              />
-              <TemplateCard
-                title={t("dashboard.templates.product.title")}
-                description={t("dashboard.templates.product.description")}
-                onClick={() => handleTemplateClick("product-roadmap")}
-              />
-            </div>
-          </section>
+          {/* Onboarding Templates Section */}
+          <DashboardTemplatesSection onTemplateUse={handleTemplateClick} />
         </>
       )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-accent-secondary">{t("dashboard.section.recent.kicker")}</p>
-            <h2 className="heading-serif text-2xl font-semibold text-foreground">{t("dashboard.section.recent.title")}</h2>
-          </div>
-          <Link href="/runs" className="text-sm font-semibold text-primary hover:text-primary/80">
-            {t("dashboard.section.recent.link")}
-          </Link>
-        </div>
-        {debatesLoading ? (
-          <DebateListSkeleton />
-        ) : debates.length === 0 ? (
-          <Card className="bg-card">
-            <div className="space-y-3">
-              <h3 className="heading-serif text-xl font-semibold text-foreground">{t("dashboard.empty.title")}</h3>
-              <p className="text-sm text-muted-foreground">{t("dashboard.empty.description")}</p>
-              <Button variant="default" className="px-5" onClick={() => setShowModal(true)}>
-                {t("dashboard.empty.cta")}
-              </Button>
-            </div>
-          </Card>
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-smooth">
-            <div className="divide-y divide-border">
-              {debates.map((debate) => {
-                const replayAvailable = (debate.status || "").toLowerCase() === "completed" || (debate.status || "").toLowerCase() === "failed";
-                return (
-                  <Link
-                    key={debate.id}
-                    href={`/runs/${debate.id}`}
-                    className="flex items-center gap-4 px-5 py-4 transition hover:bg-secondary/50"
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-inner">
-                      <Play className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-foreground line-clamp-1">{debate.prompt || t("dashboard.prompt.untitled")}</p>
-                      <p className="text-xs text-muted-foreground">{t("dashboard.time.createdPrefix")} {formatTimestamp(debate.created_at)}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {replayAvailable ? (
-                        <Link href={`/runs/${debate.id}/replay`} className="text-xs font-semibold text-primary underline-offset-4 hover:underline">
-                          {t("dashboard.recentDebates.replay")}
-                        </Link>
-                      ) : null}
-                      <Badge className={`border ${statusTone(debate.status)}`}>{debate.status ?? "queued"}</Badge>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </section>
+      {/* Runs History Section */}
+      <DashboardRunsHistory debates={debates} debatesLoading={debatesLoading} onNewRun={() => setShowModal(true)} />
 
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
@@ -616,24 +519,5 @@ function LinkCard({ title, description, icon, href }: { title: string; descripti
         <p className="hidden md:block text-sm text-muted-foreground">{description}</p>
       </div>
     </Link>
-  );
-}
-
-function TemplateCard({ title, description, onClick }: { title: string; description: string; onClick: () => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <div>
-        <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-        <p className="text-sm text-muted-foreground mb-4">{description}</p>
-      </div>
-      <button
-        type="button"
-        onClick={onClick}
-        className="w-full rounded-lg border-2 border-primary/30 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
-      >
-        {t("dashboard.templates.useTemplate")}
-      </button>
-    </div>
   );
 }

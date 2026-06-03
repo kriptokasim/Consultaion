@@ -12,18 +12,21 @@ export function SocialProof() {
             name: t("landing.socialProof.testimonials.1.name"),
             role: t("landing.socialProof.testimonials.1.role"),
             companyType: t("landing.socialProof.testimonials.1.companyType"),
+            initials: "SK"
         },
         {
             quote: t("landing.socialProof.testimonials.2.quote"),
             name: t("landing.socialProof.testimonials.2.name"),
             role: t("landing.socialProof.testimonials.2.role"),
             companyType: t("landing.socialProof.testimonials.2.companyType"),
+            initials: "JM"
         },
         {
             quote: t("landing.socialProof.testimonials.3.quote"),
             name: t("landing.socialProof.testimonials.3.name"),
             role: t("landing.socialProof.testimonials.3.role"),
             companyType: t("landing.socialProof.testimonials.3.companyType"),
+            initials: "AR"
         },
     ]
 
@@ -38,7 +41,7 @@ export function SocialProof() {
             <div className="container mx-auto px-6">
                 {/* Header */}
                 <div className="mb-12 text-center">
-                    <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                    <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-primary dark:text-blue-400">
                         {t("landing.socialProof.label")}
                     </p>
                     <h2
@@ -57,23 +60,26 @@ export function SocialProof() {
                     {testimonials.map((testimonial, index) => (
                         <div
                             key={index}
-                            className="rounded-2xl border border-amber-200/70 bg-white dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-md transition hover:-translate-y-1 hover:shadow-lg"
+                            className="rounded-2xl border border-slate-200 bg-white/80 dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-md transition hover:-translate-y-1 hover:shadow-lg backdrop-blur-sm"
                         >
-                            {/* Quote Icon */}
+                            {/* Quote Icon & Initials Badge */}
                             <div className="mb-4 flex items-center justify-between">
-                                <Quote className="h-8 w-8 text-amber-500 dark:text-amber-400" aria-hidden="true" />
+                                <Quote className="h-8 w-8 text-primary/30 dark:text-blue-400/30" aria-hidden="true" />
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-primary dark:bg-slate-800 dark:text-blue-400">
+                                    {testimonial.initials}
+                                </span>
                             </div>
 
                             {/* Quote Text */}
-                            <blockquote className="mb-4 text-base italic leading-relaxed text-slate-900 dark:text-slate-100">
+                            <blockquote className="mb-4 text-base italic leading-relaxed text-slate-800 dark:text-slate-200">
                                 &quot;{testimonial.quote}&quot;
                             </blockquote>
 
                             {/* Attribution */}
-                            <div className="border-t border-amber-100 dark:border-slate-800 pt-4">
+                            <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
                                 <p className="font-semibold text-slate-900 dark:text-white">{testimonial.name}</p>
-                                <p className="text-sm text-slate-600 dark:text-slate-400">{testimonial.role}</p>
-                                <p className="text-xs text-amber-700 dark:text-amber-400">{testimonial.companyType}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">{testimonial.role}</p>
+                                <p className="text-xs font-medium text-primary dark:text-blue-400 mt-0.5">{testimonial.companyType}</p>
                             </div>
                         </div>
                     ))}
@@ -87,14 +93,12 @@ export function SocialProof() {
                     {tags.map((tag, index) => (
                         <span
                             key={index}
-                            className="rounded-full border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30 px-4 py-1.5 text-sm font-medium text-amber-900 dark:text-amber-200"
+                            className="rounded-full border border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/40 px-4 py-1.5 text-sm font-medium text-slate-800 dark:text-slate-200"
                         >
                             {tag}
                         </span>
                     ))}
                 </div>
-
-                {/* TODO: Replace with CMS-sourced testimonials and real company logos */}
             </div>
         </section>
     )

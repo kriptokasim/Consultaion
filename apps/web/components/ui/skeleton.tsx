@@ -2,9 +2,72 @@
 
 import { cn } from "@/lib/utils";
 
-export function Skeleton({ className }: { className?: string }) {
+export interface SkeletonProps {
+  className?: string;
+  variant?: "pulse" | "shimmer";
+}
+
+export function Skeleton({ className, variant = "pulse" }: SkeletonProps) {
+  if (variant === "shimmer") {
+    return <div className={cn("skeleton skeleton-shimmer rounded-lg", className)} />;
+  }
   return <div className={cn("animate-pulse rounded-md bg-amber-100/70 dark:bg-amber-900/40", className)} />;
 }
+
+export type SkeletonLoaderProps = {
+  className?: string;
+  lines?: number;
+  count?: number;
+  variant?: "text" | "circle" | "rect";
+};
+
+export function SkeletonLoader({
+  className,
+  lines = 1,
+  count,
+  variant,
+}: SkeletonLoaderProps) {
+  // If count or variant are specified, use the count/variant logic
+  if (count !== undefined || variant !== undefined) {
+    const finalCount = count ?? 1;
+    const finalVariant = variant ?? "rect";
+    const items = Array.from({ length: finalCount });
+    return (
+      <>
+        {items.map((_, idx) => (
+          <div
+            key={idx}
+            className={cn(
+              "animate-pulse rounded-lg bg-muted/50",
+              finalVariant === "circle" && "rounded-full",
+              finalVariant === "text" && "h-4 w-3/4",
+              finalVariant === "rect" && "h-12 w-full",
+              className
+            )}
+          />
+        ))}
+      </>
+    );
+  }
+
+  // Fallback to the lines logic
+  if (lines <= 1) {
+    return <div className={cn("skeleton skeleton-shimmer rounded-lg", className)} />;
+  }
+
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: lines }).map((_, idx) => (
+        <div
+          key={idx}
+          className={cn("skeleton skeleton-shimmer rounded-lg", className, idx === lines - 1 ? "w-2/3" : "w-full")}
+        />
+      ))}
+    </div>
+  );
+}
+
+export default SkeletonLoader;
 
 export function DebateCardSkeleton() {
   return (
@@ -55,6 +118,36 @@ export function ModelSelectorSkeleton() {
             <Skeleton className="h-4 w-3/4 rounded" />
             <Skeleton className="h-3 w-1/2 rounded" />
           </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function CardSkeleton() {
+  return (
+    <div className="space-y-4 rounded-lg border border-border p-6">
+      <SkeletonLoader variant="text" className="h-6 w-1/3" />
+      <div className="space-y-3">
+        <SkeletonLoader variant="text" className="h-4 w-full" />
+        <SkeletonLoader variant="text" className="h-4 w-5/6" />
+      </div>
+      <SkeletonLoader variant="rect" className="h-8 w-24" />
+    </div>
+  );
+}
+
+export function TableSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 5 }).map((_, idx) => (
+        <div key={idx} className="flex items-center gap-4 rounded-lg border border-border p-4">
+          <SkeletonLoader variant="circle" className="h-10 w-10 flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <SkeletonLoader variant="text" className="h-4 w-1/3" />
+            <SkeletonLoader variant="text" className="h-3 w-1/4" />
+          </div>
+          <SkeletonLoader variant="text" className="h-4 w-20" />
         </div>
       ))}
     </div>

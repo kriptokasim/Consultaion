@@ -6,7 +6,6 @@ export const metadata: Metadata = {
   description: 'Submit one question and get simultaneous answers from GPT-4o, Claude, Gemini, and DeepSeek. Compare AI perspectives side-by-side and get a synthesized final verdict.',
 };
 
-export const dynamic = "force-dynamic";
 
 export default function LandingPage() {
   return <HomeContent />;

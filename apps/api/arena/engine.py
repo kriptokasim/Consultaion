@@ -229,6 +229,7 @@ async def run_arena(
         model_id=model_id,
         locale=locale,
     )
+    synthesis_success = not synthesis_content.startswith("⚠️ Synthesis unavailable")
 
     # Persist synthesis
     async with async_session_scope() as session:
@@ -239,7 +240,7 @@ async def run_arena(
                 role="arena_synthesis",
                 persona="Synthesizer",
                 content=synthesis_content,
-                meta={"mode": "arena", "phase": "synthesis"},
+                meta={"mode": "arena", "phase": "synthesis", "synthesis_success": synthesis_success},
             )
         )
         await session.commit()
@@ -261,6 +262,7 @@ async def run_arena(
         ],
         "successful_count": len(successful),
         "total_count": len(model_responses),
+        "synthesis_success": synthesis_success,
         "usage": usage.snapshot(),
     }
 

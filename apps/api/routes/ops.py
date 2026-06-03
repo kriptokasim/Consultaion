@@ -79,3 +79,52 @@ async def provider_health() -> dict[str, Any]:
             })
     
     return {"providers": providers}
+
+
+@router.get("/api/status")
+async def api_status() -> dict[str, Any]:
+    """
+    Detailed API status endpoint.
+    
+    Returns the configuration and operational status of database, SSE, 
+    and SOTA AI model providers (OpenAI, Anthropic, Gemini, OpenRouter).
+    Used by the public status page.
+    """
+    db_ok, _ = check_db_readiness()
+    sse_ok, _ = await check_sse_readiness()
+    
+    providers = {
+        "openai": {
+            "configured": bool(settings.OPENAI_API_KEY),
+            "status": "operational" if settings.OPENAI_API_KEY else "not_configured"
+        },
+        "anthropic": {
+            "configured": bool(settings.ANTHROPIC_API_KEY),
+            "status": "operational" if settings.ANTHROPIC_API_KEY else "not_configured"
+        },
+        "gemini": {
+            "configured": bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY),
+            "status": "operational" if (settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY) else "not_configured"
+        },
+        "openrouter": {
+            "configured": bool(settings.OPENROUTER_API_KEY),
+            "status": "operational" if settings.OPENROUTER_API_KEY else "not_configured"
+        }
+    }
+    
+    # If any critical system or SOTA provider is down, we mark as degraded
+    overall_status = "operational"
+    if not db_ok or not sse_ok:
+        overall_status = "major_outage"
+    elif not all(p["configured"] for p in providers.values()):
+        overall_status = "degraded"
+
+    return {
+        "status": overall_status,
+        "database": "operational" if db_ok else "down",
+        "sse": "operational" if sse_ok else "down",
+        "providers": providers,
+        "version": settings.APP_VERSION,
+        "env": settings.ENV
+    }
+

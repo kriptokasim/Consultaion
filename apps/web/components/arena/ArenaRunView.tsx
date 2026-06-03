@@ -230,46 +230,44 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
                     Model Responses
                 </h2>
 
-                {/* Mobile Tab Selector */}
                 <div className="flex sm:hidden overflow-x-auto gap-2 pb-2 mb-4 custom-scrollbar">
-                    {isLoading
-                        ? Array.from({ length: expectedModels }).map((_, i) => (
-                              <div key={i} className="h-9 w-24 bg-muted animate-pulse rounded-xl shrink-0" />
-                          ))
-                        : modelResponses.map((resp, i) => {
-                              const colors = getColors(resp.provider);
-                              const isActive = activeTab === i;
-                              return (
-                                  <button
-                                      key={resp.model_id || i}
-                                      onClick={() => setActiveTab(i)}
-                                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
-                                          isActive
-                                              ? `${colors.accent} ${colors.text} ${colors.border} shadow-sm scale-105`
-                                              : "border-border bg-card text-muted-foreground hover:text-foreground"
-                                      }`}
-                                  >
-                                      <ModelLogo
-                                          logoUrl={resp.logo_url}
-                                          displayName={resp.display_name}
-                                          size={14}
-                                      />
-                                      <span>{resp.display_name}</span>
-                                  </button>
-                              );
-                          })}
+                    {Array.from({ length: expectedModels }).map((_, i) => {
+                        const resp = modelResponses[i];
+                        if (!resp) {
+                            return <div key={`skeleton-tab-${i}`} className="h-9 w-24 bg-muted animate-pulse rounded-xl shrink-0" />;
+                        }
+                        const colors = getColors(resp.provider);
+                        const isActive = activeTab === i;
+                        return (
+                            <button
+                                key={resp.model_id || i}
+                                onClick={() => setActiveTab(i)}
+                                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                                    isActive
+                                        ? `${colors.accent} ${colors.text} ${colors.border} shadow-sm scale-105`
+                                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                                }`}
+                            >
+                                <ModelLogo
+                                    logoUrl={resp.logo_url}
+                                    displayName={resp.display_name}
+                                    size={14}
+                                />
+                                <span>{resp.display_name}</span>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Mobile View: Render only active card */}
                 <div className="block sm:hidden">
-                    {isLoading ? (
-                        <SkeletonCard index={0} />
-                    ) : (
-                        modelResponses[activeTab] && (() => {
-                            const resp = modelResponses[activeTab];
-                            const colors = getColors(resp.provider);
-                            const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
-                            const isError = !resp.success && errorInfo;
+                    {(() => {
+                        const resp = modelResponses[activeTab];
+                        if (!resp) return <SkeletonCard index={activeTab} />;
+                        
+                        const colors = getColors(resp.provider);
+                        const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
+                        const isError = !resp.success && errorInfo;
                             return (
                                 <article
                                     className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm ${colors.glow} transition-all duration-200 overflow-hidden min-h-[350px]`}
@@ -318,28 +316,28 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
                                     )}
                                 </article>
                             );
-                        })()
-                    )}
+                    })()}
                 </div>
 
                 {/* Desktop View: Render grid of all cards */}
                 <div className="hidden sm:grid grid-cols-2 xl:grid-cols-4 gap-4">
-                    {isLoading
-                        ? Array.from({ length: expectedModels }).map((_, i) => (
-                              <SkeletonCard key={i} index={i} />
-                          ))
-                        : modelResponses.map((resp, i) => {
-                              const colors = getColors(resp.provider);
-                              const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
-                              const isError = !resp.success && errorInfo;
-                              return (
-                                  <article
-                                      key={resp.model_id || i}
-                                      className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm hover:shadow-md ${colors.glow} transition-all duration-200 overflow-hidden`}
-                                      aria-label={`Response from ${resp.display_name}`}
-                                  >
-                                      {/* Card Header */}
-                                      <div className={`p-4 border-b ${colors.border} flex items-center gap-3`}>
+                    {Array.from({ length: expectedModels }).map((_, i) => {
+                        const resp = modelResponses[i];
+                        if (!resp) {
+                            return <SkeletonCard key={`skeleton-card-${i}`} index={i} />;
+                        }
+                        
+                        const colors = getColors(resp.provider);
+                        const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
+                        const isError = !resp.success && errorInfo;
+                        return (
+                            <article
+                                key={resp.model_id || i}
+                                className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm hover:shadow-md ${colors.glow} transition-all duration-200 overflow-hidden`}
+                                aria-label={`Response from ${resp.display_name}`}
+                            >
+                                {/* Card Header */}
+                                <div className={`p-4 border-b ${colors.border} flex items-center gap-3`}>
                                           <div className={`shrink-0 rounded-xl ${colors.accent} p-2`}>
                                               <ModelLogo
                                                   logoUrl={resp.logo_url}
@@ -386,55 +384,62 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
             </div>
 
             {/* Synthesis / Final Verdict */}
-            {synthesis && (
-                <div className="rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 via-card to-primary/5 p-6 shadow-lg">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="rounded-xl bg-primary/15 p-2.5 text-primary">
-                            <Trophy className="h-6 w-6" />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold text-foreground">Final Verdict</h2>
-                            <p className="text-xs text-muted-foreground">
-                                Synthesized from the best insights of each model
-                            </p>
-                        </div>
-                    </div>
-                    <div className="prose prose-base dark:prose-invert max-w-none">
-                        <div className="whitespace-pre-wrap leading-relaxed text-foreground">
-                            {synthesis}
-                        </div>
-                    </div>
-
-                    {/* Model attribution chips */}
-                    {modelResponses.length > 0 && (
-                        <div className="mt-5 pt-4 border-t border-primary/10">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                Contributing Models
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                {modelResponses
-                                    .filter((r) => r.success)
-                                    .map((r) => {
-                                        const colors = getColors(r.provider);
-                                        return (
-                                            <span
-                                                key={r.model_id}
-                                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${colors.accent} ${colors.text} border ${colors.border}`}
-                                            >
-                                                <ModelLogo
-                                                    logoUrl={r.logo_url}
-                                                    displayName={r.display_name}
-                                                    size={14}
-                                                />
-                                                {r.display_name}
-                                            </span>
-                                        );
-                                    })}
+            {synthesis && (() => {
+                const isSynthesisFailed = synthesis.startsWith("⚠️ Synthesis unavailable") || debate.final_meta?.synthesis_success === false;
+                return (
+                    <div className={`rounded-2xl border-2 shadow-lg ${isSynthesisFailed ? "border-amber-300 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/10" : "border-primary/30 bg-gradient-to-br from-primary/5 via-card to-primary/5"} p-6`}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className={`rounded-xl p-2.5 ${isSynthesisFailed ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-primary/15 text-primary"}`}>
+                                {isSynthesisFailed ? <AlertTriangle className="h-6 w-6" /> : <Trophy className="h-6 w-6" />}
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-foreground">
+                                    {isSynthesisFailed ? "Synthesis Fallback" : "Final Verdict"}
+                                </h2>
+                                <p className="text-xs text-muted-foreground">
+                                    {isSynthesisFailed
+                                        ? "An error occurred during synthesis. Displaying top model response as fallback."
+                                        : "Synthesized from the best insights of each model"}
+                                </p>
                             </div>
                         </div>
-                    )}
-                </div>
-            )}
+                        <div className="prose prose-base dark:prose-invert max-w-none">
+                            <div className="whitespace-pre-wrap leading-relaxed text-foreground">
+                                {synthesis}
+                            </div>
+                        </div>
+
+                        {/* Model attribution chips */}
+                        {modelResponses.length > 0 && !isSynthesisFailed && (
+                            <div className="mt-5 pt-4 border-t border-primary/10">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                                    Contributing Models
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {modelResponses
+                                        .filter((r) => r.success)
+                                        .map((r) => {
+                                            const colors = getColors(r.provider);
+                                            return (
+                                                <span
+                                                    key={r.model_id}
+                                                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${colors.accent} ${colors.text} border ${colors.border}`}
+                                                >
+                                                    <ModelLogo
+                                                        logoUrl={r.logo_url}
+                                                        displayName={r.display_name}
+                                                        size={14}
+                                                    />
+                                                    {r.display_name}
+                                                </span>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {/* Loading synthesis indicator */}
             {modelResponses.length > 0 && !synthesis && (
