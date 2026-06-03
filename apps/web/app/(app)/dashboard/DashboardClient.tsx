@@ -339,6 +339,15 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
                     id="prompt"
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        const canSubmit = prompt.trim() && !saving && modelError === null && !(mode === "conversation" && (!selectedModel && models.length > 0)) && !(mode === "compare" && compareModels.length < 2);
+                        if (canSubmit) {
+                          handleCreate();
+                        }
+                      }
+                    }}
                     placeholder={t("dashboard.modal.placeholder")}
                     minLength={10}
                     maxLength={5000}

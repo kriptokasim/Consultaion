@@ -927,5 +927,44 @@ async def update_debate(
     }
 
 
+class DebateShare(BaseModel):
+    is_public: bool
+
+@router.post("/debates/{debate_id}/share")
+async def share_debate(
+    debate_id: str,
+    body: DebateShare,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
+    if not (current_user.role == "admin" or debate.user_id == current_user.id):
+        raise PermissionError(message="Insufficient permissions", code="permission.denied")
+
+    if not debate.config:
+        debate.config = {}
+    
+    config = dict(debate.config)
+    config["is_public"] = body.is_public
+    debate.config = config
+
+    session.add(debate)
+    session.commit()
+    
+    # Audit log
+    record_audit(
+        "debate_shared",
+        user_id=current_user.id,
+        target_type="debate",
+        target_id=debate.id,
+        meta={"is_public": body.is_public},
+        session=session,
+    )
+    
+    return {"id": debate.id, "is_public": body.is_public}
+
+
 # Alias for router inclusion and compatibility
 debates_router = router

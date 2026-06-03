@@ -143,6 +143,11 @@ def user_team_ids(session: Session, user_id: str) -> list[str]:
 def can_access_debate(debate: Debate, user: Optional[User], session: Session) -> bool:
     if debate.user_id is None:
         return True
+    
+    # Allow public access if debate is explicitly shared
+    if debate.config and debate.config.get("is_public") is True:
+        return True
+
     if not user:
         return False
     if user.role == "admin":

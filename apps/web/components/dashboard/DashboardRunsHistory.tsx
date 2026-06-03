@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { DebateListSkeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EmptyStateModern } from "@/components/ui/empty-state-modern";
 import type { DebateSummary } from "@/app/(app)/dashboard/types";
 import { useI18n } from "@/lib/i18n/client";
 
@@ -52,15 +53,16 @@ export function DashboardRunsHistory({ debates, debatesLoading, onNewRun }: Dash
       {debatesLoading ? (
         <DebateListSkeleton />
       ) : debates.length === 0 ? (
-        <Card className="bg-card">
-          <div className="space-y-3">
-            <h3 className="heading-serif text-xl font-semibold text-foreground">{t("dashboard.empty.title")}</h3>
-            <p className="text-sm text-muted-foreground">{t("dashboard.empty.description")}</p>
-            <Button variant="default" className="px-5" onClick={onNewRun}>
-              {t("dashboard.empty.cta")}
-            </Button>
-          </div>
-        </Card>
+        <EmptyStateModern
+          icon={<Play className="h-6 w-6" />}
+          title={t("dashboard.empty.title")}
+          description={t("dashboard.empty.description")}
+          action={{
+            label: t("dashboard.empty.cta"),
+            onClick: onNewRun
+          }}
+          className="bg-card shadow-smooth"
+        />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-smooth">
           <div className="divide-y divide-border">

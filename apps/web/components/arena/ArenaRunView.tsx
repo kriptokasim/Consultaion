@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Trophy, Sparkles, Bot, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import type { DebateDetail, DebateEvent } from "@/lib/api/types";
 import Image from "next/image";
+import { ShareRunButton } from "@/components/debate/ShareRunButton";
 
 /* ─── Extract a human-readable error from raw content ─── */
 function extractFriendlyError(raw: string): { friendly: string; technical: string | null } {
@@ -200,18 +201,26 @@ export default function ArenaRunView({ debate, events }: ArenaRunViewProps) {
         <div className="flex flex-col gap-6 pb-8">
             {/* Question Banner */}
             <div className="rounded-2xl border border-border bg-gradient-to-br from-card via-card to-primary/5 p-6 shadow-sm">
-                <div className="flex items-start gap-3">
-                    <div className="shrink-0 rounded-xl bg-primary/10 p-2.5 text-primary">
-                        <Sparkles className="h-5 w-5" />
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 min-w-0">
+                        <div className="shrink-0 rounded-xl bg-primary/10 p-2.5 text-primary">
+                            <Sparkles className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                                Your Question
+                            </p>
+                            <p className="text-lg font-medium text-foreground leading-relaxed whitespace-pre-wrap">
+                                {debate.prompt}
+                            </p>
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                            Your Question
-                        </p>
-                        <p className="text-lg font-medium text-foreground leading-relaxed whitespace-pre-wrap">
-                            {debate.prompt}
-                        </p>
-                    </div>
+                    {/* Share Button */}
+                    {debate.status === "completed" || debate.status === "completed_budget" ? (
+                        <div className="shrink-0">
+                            <ShareRunButton debateId={debate.id} initiallyPublic={(debate.config as any)?.is_public} />
+                        </div>
+                    ) : null}
                 </div>
                 {debate.final_meta?.successful_count != null && (
                     <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
