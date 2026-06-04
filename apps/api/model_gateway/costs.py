@@ -5,7 +5,7 @@ from model_gateway.types import GatewayQuotaExceededError
 MAX_COST_PER_RUN_USD = 0.50
 MAX_MONTHLY_SAFETY_LIMIT_USD = 50.0
 
-def check_credit_and_cost_safety(
+async def check_credit_and_cost_safety(
     user_id: Optional[str],
     user_plan: Optional[str],
     estimated_cost_usd: float = 0.0,
@@ -21,10 +21,22 @@ def check_credit_and_cost_safety(
     if db_session and user_id:
         try:
             from sqlalchemy import text
-            result = db_session.execute(
-                text("SELECT SUM(cost_usd) FROM llm_usage_log WHERE user_id = :user_id"),
-                {"user_id": user_id}
-            ).scalar()
+            from sqlalchemy.ext.asyncio import AsyncSession
+            import asyncio
+            
+            if isinstance(db_session, AsyncSession):
+                result = (await db_session.execute(
+                    text("SELECT SUM(cost_usd) FROM llm_usage_log WHERE user_id = :user_id"),
+                    {"user_id": user_id}
+                )).scalar()
+            else:
+                def _query():
+                    return db_session.execute(
+                        text("SELECT SUM(cost_usd) FROM llm_usage_log WHERE user_id = :user_id"),
+                        {"user_id": user_id}
+                    ).scalar()
+                result = await asyncio.get_running_loop().run_in_executor(None, _query)
+                
             total_spent = float(result or 0.0)
             if total_spent + estimated_cost_usd > MAX_MONTHLY_SAFETY_LIMIT_USD:
                 raise GatewayQuotaExceededError(

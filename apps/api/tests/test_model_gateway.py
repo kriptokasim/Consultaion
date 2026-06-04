@@ -23,13 +23,14 @@ def test_validate_user_access():
     with pytest.raises(GatewayModelRestrictedError):
         validate_user_access_to_model("gpt4o-deep", "free")
 
-def test_credit_and_cost_safety():
+@pytest.mark.asyncio
+async def test_credit_and_cost_safety():
     # Inside cap -> ok
-    check_credit_and_cost_safety(user_id="test-user", user_plan="free", estimated_cost_usd=0.01)
+    await check_credit_and_cost_safety(user_id="test-user", user_plan="free", estimated_cost_usd=0.01)
     
     # Exceeding single run cap -> quota exceeded error
     with pytest.raises(GatewayQuotaExceededError):
-        check_credit_and_cost_safety(user_id="test-user", user_plan="free", estimated_cost_usd=1.0)
+        await check_credit_and_cost_safety(user_id="test-user", user_plan="free", estimated_cost_usd=1.0)
 
 def test_determine_routing_strategy():
     # Auto policy with free plan -> OpenRouterAdapter

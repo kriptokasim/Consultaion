@@ -142,42 +142,43 @@ async def test_failed_run_refunds_credits(db_session: Session):
     """Verify that a failed debate runner triggers a hosted credit refund for free users."""
     from orchestrator import run_debate
     
-    # 1. Setup a unique free user with 1 used credit
-    import uuid
-    email = f"free_refund_{uuid.uuid4().hex[:8]}@example.com"
-    user = User(email=email, password_hash="hash", plan="free", hosted_credits_limit=5, hosted_credits_used=1)
-    db_session.add(user)
-    db_session.commit()
-    db_session.refresh(user)
-
+    with settings_context(FAST_DEBATE="1"):
+        # 1. Setup a unique free user with 1 used credit
+        import uuid
+        email = f"free_refund_{uuid.uuid4().hex[:8]}@example.com"
+        user = User(email=email, password_hash="hash", plan="free", hosted_credits_limit=5, hosted_credits_used=1)
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
     
-    # 2. Setup a dummy debate queued
-    debate = Debate(
-        id="dummy-failed-debate-id",
-        prompt="Test failed refund",
-        status="queued",
-        config={},
-        user_id=user.id,
-        model_id="gpt4o-deep",
-        mode="arena"
-    )
-    db_session.add(debate)
-    db_session.commit()
-    
-    # 3. Trigger run_debate, forcing an exception inside the mock run execution
-    # to test refund triggering
-    with patch("orchestrator._run_mock_debate", side_effect=TransientLLMError("Temporary provider fail")):
-        await run_debate(
-            debate_id="dummy-failed-debate-id",
+        # 2. Setup a dummy debate queued
+        debate = Debate(
+            id="dummy-failed-debate-id",
             prompt="Test failed refund",
-            channel_id="dummy-channel",
-            config_data={},
-            model_id="gpt4o-deep"
+            status="queued",
+            config={},
+            user_id=user.id,
+            model_id="gpt4o-deep",
+            mode="arena"
         )
+        db_session.add(debate)
+        db_session.commit()
         
-    # 4. Verify user was refunded (credits_used went from 1 -> 0)
-    db_session.refresh(user)
-    assert user.hosted_credits_used == 0
+        # 3. Trigger run_debate, forcing an exception inside the mock run execution
+        # to test refund triggering
+        with patch("orchestrator._run_mock_debate", side_effect=TransientLLMError("Temporary provider fail")):
+            await run_debate(
+                debate_id="dummy-failed-debate-id",
+                prompt="Test failed refund",
+                channel_id="dummy-channel",
+                config_data={},
+                model_id="gpt4o-deep"
+            )
+            
+        # 4. Verify user was refunded (credits_used went from 1 -> 0)
+        db_session.commit()
+        db_session.refresh(user)
+        assert user.hosted_credits_used == 0
 
 
 

@@ -360,9 +360,6 @@ from routes.votes import router as votes_router
 app.include_router(votes_router)
 
 
-app.include_router(votes_router)
-
-
 
 # Lifespan helpers
 

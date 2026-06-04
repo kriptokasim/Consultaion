@@ -20,7 +20,7 @@ async def route_llm_call(
     # 2. Estimate run cost (e.g., standard estimation: 0.015 per 1k input/output tokens)
     # Assume 1000 input, 1000 output tokens for credit check
     estimated_cost_usd = 0.00003 * (len(str(request.messages)) // 4)
-    check_credit_and_cost_safety(request.user_id, request.user_plan, estimated_cost_usd, db_session)
+    await check_credit_and_cost_safety(request.user_id, request.user_plan, estimated_cost_usd, db_session)
     
     # 3. Determine routing strategy
     adapter_cls, routing_policy = determine_routing_strategy(request)

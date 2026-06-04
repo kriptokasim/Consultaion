@@ -40,16 +40,19 @@ async def call_model_via_gateway(
     resolved_user_plan = user_plan
     if not resolved_user_plan and user_id:
         try:
+            import asyncio
+            from sqlalchemy.ext.asyncio import AsyncSession
             from billing.service import get_active_plan
-            if db_session:
+            if db_session and not isinstance(db_session, AsyncSession):
                 plan = get_active_plan(db_session, user_id)
                 if plan:
                     resolved_user_plan = plan.name
             else:
-                with Session(engine) as session:
-                    plan = get_active_plan(session, user_id)
-                    if plan:
-                        resolved_user_plan = plan.name
+                def _get_plan():
+                    with Session(engine) as session:
+                        plan = get_active_plan(session, user_id)
+                        return plan.name if plan else None
+                resolved_user_plan = await asyncio.get_running_loop().run_in_executor(None, _get_plan)
         except Exception as e:
             logger.warning(f"Failed to lookup user plan via billing service: {e}")
     
@@ -74,7 +77,8 @@ async def call_model_via_gateway(
         if db_session:
             gw_res = await route_llm_call(req, db_session=db_session)
         else:
-            with Session(engine) as session:
+            from database_async import async_session_scope
+            async with async_session_scope() as session:
                 gw_res = await route_llm_call(req, db_session=session)
     except (GatewayQuotaExceededError, GatewayModelRestrictedError) as e:
         logger.error(f"Gateway access control blocked call: {e}")

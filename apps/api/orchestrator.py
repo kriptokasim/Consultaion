@@ -729,16 +729,13 @@ async def run_debate(
                         try:
                             from database import engine
                             from sqlmodel import Session
-                            from models import User
-                            from billing.service import get_active_plan
-                            with Session(engine) as sync_session:
-                                user = sync_session.get(User, debate.user_id)
-                                if user:
-                                    plan = get_active_plan(sync_session, user.id)
-                                    if plan and plan.is_default_free:
-                                        user.hosted_credits_used = max(0, getattr(user, "hosted_credits_used", 0) - 1)
-                                        sync_session.add(user)
-                                        sync_session.commit()
+                            from billing.service import refund_hosted_credit
+                            
+                            def _run_refund():
+                                with Session(engine) as sync_session:
+                                    refund_hosted_credit(sync_session, debate.user_id)
+                                    sync_session.commit()
+                            await asyncio.get_running_loop().run_in_executor(None, _run_refund)
                         except Exception as refund_err:
                             logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except Exception:
@@ -782,16 +779,13 @@ async def run_debate(
                         try:
                             from database import engine
                             from sqlmodel import Session
-                            from models import User
-                            from billing.service import get_active_plan
-                            with Session(engine) as sync_session:
-                                user = sync_session.get(User, debate.user_id)
-                                if user:
-                                    plan = get_active_plan(sync_session, user.id)
-                                    if plan and plan.is_default_free:
-                                        user.hosted_credits_used = max(0, getattr(user, "hosted_credits_used", 0) - 1)
-                                        sync_session.add(user)
-                                        sync_session.commit()
+                            from billing.service import refund_hosted_credit
+                            
+                            def _run_refund():
+                                with Session(engine) as sync_session:
+                                    refund_hosted_credit(sync_session, debate.user_id)
+                                    sync_session.commit()
+                            await asyncio.get_running_loop().run_in_executor(None, _run_refund)
                         except Exception as refund_err:
                             logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except Exception:

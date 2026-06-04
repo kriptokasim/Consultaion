@@ -241,3 +241,57 @@ def add_tokens_usage(db: Session, user_id: UserID, model_id: str, tokens: int) -
     usage.last_updated_at = _now()
     log_event("billing.usage.increment", user_id=str(user_id), metric="tokens", value=tokens, model_id=model_id, total=usage.tokens_used)
     return usage
+
+
+def reserve_hosted_credit(db: Session, user_id: UserID) -> None:
+    """
+    Checks if a user is on the free plan, and if so, verifies and increments
+    their hosted_credits_used counter.
+    Raises ValidationError if they have exhausted their credits.
+    """
+    from models import User
+    from exceptions import ValidationError
+    
+    uid = _normalize_user_id(user_id)
+    user = db.get(User, uid)
+    if not user:
+        return
+        
+    plan = get_active_plan(db, uid)
+    if plan.is_default_free:
+        limit = getattr(user, "hosted_credits_limit", 10)
+        used = getattr(user, "hosted_credits_used", 0)
+        if used >= limit:
+            raise ValidationError(
+                message=f"You have exhausted your free hosted runs ({used}/{limit}).",
+                code="hosted_credits.exhausted",
+                hint="Please upgrade to a Pro plan, add your own API key under Settings, or run a mock/demo run.",
+            )
+        user.hosted_credits_used = used + 1
+        db.add(user)
+
+
+def refund_hosted_credit(db: Session, user_id: UserID) -> None:
+    """
+    Refunds a hosted credit for the user if they are on the free plan.
+    """
+    from models import User
+    
+    uid = _normalize_user_id(user_id)
+    user = db.get(User, uid)
+    if not user:
+        return
+        
+    plan = get_active_plan(db, uid)
+    if plan.is_default_free:
+        used = getattr(user, "hosted_credits_used", 0)
+        user.hosted_credits_used = max(0, used - 1)
+        db.add(user)
+
+
+def consume_hosted_credit(db: Session, user_id: UserID) -> None:
+    """
+    Finalize hosted credit consumption. Placed for lifecycle completion.
+    """
+    pass
+

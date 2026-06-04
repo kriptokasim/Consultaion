@@ -20,6 +20,12 @@ exports/
 .pytest_cache/
 .env
 .venv/
+.env.*
+!.env.example
+
+# SQLite engine sidecars
+*.db-wal
+*.db-shm
 __pycache__/
 .DS_Store
 .idea/

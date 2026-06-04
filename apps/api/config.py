@@ -483,6 +483,21 @@ class SettingsProxy:
     def __getattr__(self, name: str):  # pragma: no cover - passthrough
         return getattr(self._settings, name)
 
+    def __setattr__(self, name: str, value):
+        if name.startswith("_"):
+            super().__setattr__(name, value)
+        else:
+            setattr(self._settings, name, value)
+
+    def __delattr__(self, name: str):
+        if name.startswith("_"):
+            super().__delattr__(name)
+        else:
+            try:
+                delattr(self._settings, name)
+            except AttributeError:
+                pass
+
 
 # Keep a process-wide singleton so tests that reload modules still share the same settings proxy.
 _singleton = getattr(builtins, "_consultaion_settings_proxy", None)

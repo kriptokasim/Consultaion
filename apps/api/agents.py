@@ -302,24 +302,30 @@ async def _raw_llm_call(
     ctx_user_id = get_log_context().get("user_id")
     
     gateway_policy = "auto"
-    if debate_id:
+    if debate_id or ctx_user_id:
         try:
+            import asyncio
             from models import Debate
-            with Session(engine) as session:
-                db_debate = session.get(Debate, debate_id)
-                if db_debate:
-                    gateway_policy = db_debate.gateway_policy or "auto"
-                    if not ctx_user_id and db_debate.user_id:
-                        ctx_user_id = db_debate.user_id
-        except Exception:
-            pass
-
-    if ctx_user_id:
-        try:
             from billing.service import get_active_plan
-            with Session(engine) as session:
-                plan = get_active_plan(session, ctx_user_id)
-                user_plan = plan.name if plan else "free"
+
+            def _fetch_db_info():
+                policy = "auto"
+                uid = ctx_user_id
+                plan_name = "free"
+                with Session(engine) as session:
+                    if debate_id:
+                        db_debate = session.get(Debate, debate_id)
+                        if db_debate:
+                            policy = db_debate.gateway_policy or "auto"
+                            if not uid and db_debate.user_id:
+                                uid = db_debate.user_id
+                    if uid:
+                        plan = get_active_plan(session, uid)
+                        if plan:
+                            plan_name = plan.name
+                return policy, uid, plan_name
+
+            gateway_policy, ctx_user_id, user_plan = await asyncio.get_running_loop().run_in_executor(None, _fetch_db_info)
         except Exception:
             pass
 
@@ -329,7 +335,8 @@ async def _raw_llm_call(
     try:
         # Execute routing call through the Gateway Bridge
         from model_gateway.agent_bridge import call_model_via_gateway
-        with Session(engine) as session:
+        from database_async import async_session_scope
+        async with async_session_scope() as session:
             content, call_usage = await call_model_via_gateway(
                 messages=scrubbed_messages,
                 model_id=effective_model_id,
