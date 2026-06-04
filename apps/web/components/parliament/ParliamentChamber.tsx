@@ -73,6 +73,7 @@ export default function ParliamentChamber({
                         {(() => {
                           const avatar = getModelAvatarUrl(member.name);
                           if (avatar && avatar.startsWith('/logos/')) {
+                            // eslint-disable-next-line @next/next/no-img-element
                             return <img src={avatar} alt={member.name} className="w-8 h-8 object-contain" />;
                           }
                           return <Bot className="w-6 h-6 text-[--parl-gold]" aria-hidden="true" />;

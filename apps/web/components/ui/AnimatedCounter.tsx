@@ -13,6 +13,9 @@ type AnimatedCounterProps = {
 
 export function AnimatedCounter({ value, durationMs = 900, className, format }: AnimatedCounterProps) {
   const [display, setDisplay] = useState(0);
+  const displayRef = useRef(display);
+  displayRef.current = display;
+
   const prefersReducedMotion = useReducedMotion();
   const rafRef = useRef<number | undefined>(undefined);
   const startRef = useRef<number | null>(null);
@@ -27,7 +30,7 @@ export function AnimatedCounter({ value, durationMs = 900, className, format }: 
     const step = (timestamp: number) => {
       if (startRef.current === null) {
         startRef.current = timestamp;
-        startValueRef.current = display;
+        startValueRef.current = displayRef.current;
       }
 
       const progress = Math.min((timestamp - startRef.current) / durationMs, 1);

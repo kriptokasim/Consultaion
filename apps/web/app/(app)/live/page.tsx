@@ -52,6 +52,11 @@ function ArenaPageContent() {
   const [eventsLoading, setEventsLoading] = useState(false)
   const [currentDebateId, setCurrentDebateId] = useState<string | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const elapsedSecondsRef = useRef(0)
+  useEffect(() => {
+    elapsedSecondsRef.current = elapsedSeconds
+  }, [elapsedSeconds])
+
   const [sessionStatus, setSessionStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle')
   const [latestScores, setLatestScores] = useState<ScoreItem[]>([])
   const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
@@ -164,8 +169,8 @@ function ArenaPageContent() {
           setTruncateReason(msg.meta.truncate_reason)
         }
         track('debate_completed', {
-          debate_id: currentDebateId,
-          duration_ms: elapsedSeconds * 1000,
+          debate_id: currentDebateIdRef.current,
+          duration_ms: elapsedSecondsRef.current * 1000,
         })
         stopStreamRef.current?.('completed')
       }

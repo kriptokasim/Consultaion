@@ -65,6 +65,7 @@ export function EmptyStateModern({
           {gifUrl.endsWith('.mp4') ? (
             <video src={gifUrl} autoPlay loop muted playsInline className="max-h-40" />
           ) : (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={gifUrl} alt="Empty state" className="max-h-40" />
           )}
         </div>

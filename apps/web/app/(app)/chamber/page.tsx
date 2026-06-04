@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import VotingChamber from "@/components/parliament/VotingChamber";
 import type { ScoreItem, Member } from "@/components/parliament/types";
 
@@ -31,7 +32,7 @@ export default function ChamberPage() {
           </p>
         </div>
         <div className="mt-4 rounded-2xl border border-amber-100 bg-white/80 px-3 py-2 text-sm text-stone-600">
-          Latest debate on deck: Bring a prompt to the <a className="text-amber-700 underline" href="/">live page</a>{" "}
+          Latest debate on deck: Bring a prompt to the <Link className="text-amber-700 underline" href="/">live page</Link>{" "}
           and summon a session to watch the chamber animate in real time.
         </div>
       </section>

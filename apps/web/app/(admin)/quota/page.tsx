@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useI18n } from "@/lib/i18n/client"
 
 interface User {
@@ -23,7 +23,7 @@ export default function AdminQuotaUsagePage() {
     const [emailFilter, setEmailFilter] = useState("")
     const [planFilter, setPlanFilter] = useState("")
 
-    const fetchUsage = async () => {
+    const fetchUsage = useCallback(async () => {
         setLoading(true)
         const params = new URLSearchParams()
         if (emailFilter) params.set("email", emailFilter)
@@ -33,11 +33,11 @@ export default function AdminQuotaUsagePage() {
         const data = await res.json()
         setUsers(data.users || [])
         setLoading(false)
-    }
+    }, [emailFilter, planFilter])
 
     useEffect(() => {
         fetchUsage()
-    }, [emailFilter, planFilter])
+    }, [fetchUsage])
 
     return (
         <div className="container mx-auto p-6">

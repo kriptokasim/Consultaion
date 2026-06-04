@@ -176,7 +176,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
     return () => {
       active = false
     }
-  }, [debouncedSearch, statusFilter, pushToast])
+  }, [debouncedSearch, statusFilter, pushToast, t])
 
   return (
     <div className="space-y-4">

@@ -22,6 +22,7 @@ function getModelIcon(model: ModelOption) {
 
     // If it maps to one of our static brand logos, use it
     if (logoUrl && logoUrl.startsWith('/logos/')) {
+        // eslint-disable-next-line @next/next/no-img-element
         return <img src={logoUrl} alt={model.provider} className={iconClass} />;
     }
 

@@ -17,7 +17,7 @@ export function DebateReplay({ debateId }: Props) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
 
-  const events = data ?? [];
+  const events = useMemo(() => data ?? [], [data]);
 
   useEffect(() => {
     if (events.length === 0) {

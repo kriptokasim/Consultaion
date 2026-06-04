@@ -66,7 +66,7 @@ export default function ProfileSettings() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [t])
 
   const handleChange =
     (field: keyof typeof form) =>

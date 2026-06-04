@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { useI18n } from "@/lib/i18n/client"
 import Link from "next/link"
@@ -55,7 +55,7 @@ export default function AdminUserDetailPage() {
     const [newNote, setNewNote] = useState("")
     const [saving, setSaving] = useState(false)
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true)
         try {
             const [summaryRes, notesRes] = await Promise.all([
@@ -71,13 +71,13 @@ export default function AdminUserDetailPage() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [userId])
 
     useEffect(() => {
         if (userId) {
             fetchData()
         }
-    }, [userId])
+    }, [userId, fetchData])
 
     const handleAddNote = async () => {
         if (!newNote.trim()) return

@@ -124,6 +124,7 @@ export default function LLMSelector({ onStart }: { onStart?: () => void }) {
                   )}
                 >
                   {getModelAvatarUrl(model.name) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={getModelAvatarUrl(model.name)!}
                       alt={model.name}

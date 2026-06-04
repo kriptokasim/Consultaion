@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useI18n } from "@/lib/i18n/client"
 import Link from "next/link"
 
@@ -19,7 +19,7 @@ export default function AdminUsersPage() {
     const [loading, setLoading] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         if (!searchQuery.trim()) {
             setUsers([])
             return
@@ -36,7 +36,7 @@ export default function AdminUsersPage() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [searchQuery])
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -45,7 +45,7 @@ export default function AdminUsersPage() {
             }
         }, 300)
         return () => clearTimeout(timer)
-    }, [searchQuery])
+    }, [searchQuery, fetchUsers])
 
     return (
         <div className="container mx-auto p-6">
