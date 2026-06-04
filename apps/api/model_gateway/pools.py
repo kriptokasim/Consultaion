@@ -62,12 +62,15 @@ def load_pools_config() -> Dict:
 
 def get_model_pool(model_id: str) -> str:
     """Find which pool a model belongs to. Default to pro_pool if unknown."""
+    if model_id == "custom-model" or model_id.startswith("custom-"):
+        return "free_pool"
     config = load_pools_config()
     pools = config.get("pools", {})
     for pool_name, pool_info in pools.items():
         if model_id in pool_info.get("models", []):
             return pool_name
     return "pro_pool"
+
 
 def validate_user_access_to_model(model_id: str, user_plan: Optional[str]) -> None:
     """Standard plan or Free plan checks."""

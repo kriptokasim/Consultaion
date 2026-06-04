@@ -14,25 +14,32 @@ def determine_routing_strategy(
         not force_real and (
             os.getenv("MOCK_LLM") == "true" or
             os.getenv("TESTING") == "true" or
-            "pytest" in sys.modules or
-            (len(sys.argv) > 0 and "pytest" in sys.argv[0])
+            ("pytest" in sys.modules and os.getenv("USE_MOCK") != "0") or
+            (len(sys.argv) > 0 and "pytest" in sys.argv[0] and os.getenv("USE_MOCK") != "0")
         )
     )
     if is_testing:
-        return MockAdapter, "mock-policy"
+
+        return MockAdapter, "demo-pool"
     
     policy = request.gateway_policy
     
     if policy == "direct":
-        return DirectProviderAdapter, "direct-only"
+        return DirectProviderAdapter, "pro-direct-pool"
     
     if policy == "fallback":
-        # Primary is direct provider, fallback handles OpenRouter
-        return DirectProviderAdapter, "fallback-chain"
+        return DirectProviderAdapter, "openrouter-fallback-pool"
         
-    # Auto: default strategy
-    # Smart routing based on user plan and requested model
+    # Auto smart routing:
+    # If the user has an enterprise tier, direct/private routes only (no public aggregators).
+    if request.user_plan == "enterprise":
+        return DirectProviderAdapter, "enterprise-private-pool"
+        
+    # If free plan, route through the free hosted low-cost pool
     if request.user_plan == "free":
         return OpenRouterAdapter, "smart-router-free"
     
+    # Default to pro-direct-pool/direct-smart-pro for pro/other users
     return DirectProviderAdapter, "direct-smart-pro"
+
+

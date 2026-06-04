@@ -70,10 +70,14 @@ async def test_stream_events_uses_backend():
 
     with Session(engine) as session:
         # Create user for token validation
-        user = User(id="test-user", email="test@example.com", password_hash="...", role="user")
-        session.add(user)
-        session.commit()
-        session.refresh(user)
+        from sqlmodel import select
+        user = session.exec(select(User).where(User.email == "test@example.com")).first()
+        if not user:
+            user = User(id="test-user", email="test@example.com", password_hash="...", role="user")
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
 
         token = create_access_token(user_id=user.id, email=user.email, role=user.role)
 
@@ -90,7 +94,9 @@ async def test_stream_events_uses_backend():
             session.commit()
 
         from fastapi import Request
-        mock_request = Request(scope={"type": "http", "headers": [], "state": {}})
+        headers = [(b"authorization", f"Bearer {token}".encode())]
+        mock_request = Request(scope={"type": "http", "headers": headers, "state": {}})
+
         response = await stream_events(
             debate_id, 
             request=mock_request,

@@ -75,6 +75,22 @@ def init_db() -> None:
                         conn.commit()
             except Exception as e:
                 db_logger.warning("Failed to alter llm_usage_log table: %s", e)
+                
+            # 3. Alter user table for hosted credits
+            try:
+                columns = [c["name"] for c in inspector.get_columns("user")]
+                new_user_cols = {
+                    "hosted_credits_limit": "INTEGER DEFAULT 10",
+                    "hosted_credits_used": "INTEGER DEFAULT 0",
+                    "hosted_credit_source": "TEXT DEFAULT 'signup'"
+                }
+                for col, col_type in new_user_cols.items():
+                    if col not in columns:
+                        conn.execute(text(f"ALTER TABLE user ADD COLUMN {col} {col_type}"))
+                        conn.commit()
+            except Exception as e:
+                db_logger.warning("Failed to alter user table: %s", e)
+
 
 
 def get_session():

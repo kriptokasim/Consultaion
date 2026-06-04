@@ -24,9 +24,13 @@ from typing import TYPE_CHECKING, Optional
 
 from config import settings
 
-if TYPE_CHECKING:
+try:
     import redis
     import redis.asyncio as aioredis
+except ImportError:
+    redis = None
+    aioredis = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +72,10 @@ def get_sync_redis_client() -> Optional["redis.Redis"]:
         return _sync_client
 
     try:
-        import redis
+        if redis is None:
+            raise ImportError("redis library not installed")
         from metrics import increment_metric
+
 
         if _sync_pool is None:
             _sync_pool = redis.ConnectionPool.from_url(
@@ -124,8 +130,10 @@ def get_async_redis_client() -> Optional["aioredis.Redis"]:
         return _async_client
 
     try:
-        import redis.asyncio as aioredis
+        if aioredis is None:
+            raise ImportError("redis.asyncio not available")
         from metrics import increment_metric
+
 
         if _async_pool is None:
             _async_pool = aioredis.ConnectionPool.from_url(

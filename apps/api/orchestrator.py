@@ -723,8 +723,27 @@ async def run_debate(
                     debate.final_meta = {"error": f"Temporary AI provider issue: {exc}"}
                     session.add(debate)
                     await session.commit()
+                    
+                    # Refund free hosted credit
+                    if debate.user_id:
+                        try:
+                            from database import engine
+                            from sqlmodel import Session
+                            from models import User
+                            from billing.service import get_active_plan
+                            with Session(engine) as sync_session:
+                                user = sync_session.get(User, debate.user_id)
+                                if user:
+                                    plan = get_active_plan(sync_session, user.id)
+                                    if plan and plan.is_default_free:
+                                        user.hosted_credits_used = max(0, getattr(user, "hosted_credits_used", 0) - 1)
+                                        sync_session.add(user)
+                                        sync_session.commit()
+                        except Exception as refund_err:
+                            logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except Exception:
             pass
+
 
         await backend.publish(
             channel_id,
@@ -757,8 +776,27 @@ async def run_debate(
                     debate.final_meta = {"error": str(exc)}
                     session.add(debate)
                     await session.commit()
+                    
+                    # Refund free hosted credit
+                    if debate.user_id:
+                        try:
+                            from database import engine
+                            from sqlmodel import Session
+                            from models import User
+                            from billing.service import get_active_plan
+                            with Session(engine) as sync_session:
+                                user = sync_session.get(User, debate.user_id)
+                                if user:
+                                    plan = get_active_plan(sync_session, user.id)
+                                    if plan and plan.is_default_free:
+                                        user.hosted_credits_used = max(0, getattr(user, "hosted_credits_used", 0) - 1)
+                                        sync_session.add(user)
+                                        sync_session.commit()
+                        except Exception as refund_err:
+                            logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except Exception:
             pass
+
 
         await backend.publish(
             channel_id,

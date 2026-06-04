@@ -105,7 +105,15 @@ def test_call_llm_uses_registry_model(monkeypatch):
         return Response()
 
     monkeypatch.setattr(agents_module, "acompletion", fake_completion)
+    monkeypatch.setattr("model_gateway.adapters.acompletion", fake_completion)
     monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setattr("log_config.get_log_context", lambda: {"user_id": "test-pro-user"})
+    monkeypatch.setattr(
+        "billing.service.get_active_plan",
+        lambda db, user_id: type("Plan", (), {"name": "pro"})()
+    )
+
+
     monkeypatch.setattr(
         "parliament.model_registry.get_model",
         lambda model_id=None: ModelInfo(
@@ -132,7 +140,8 @@ def test_call_llm_uses_registry_model(monkeypatch):
     )
     assert text == "hello"
     assert usage.total_tokens == 8.0
-    assert usage.provider == "test-provider"
+    assert usage.provider == "direct"
+
     assert calls.get("model") == "openai/custom-model"
 
 

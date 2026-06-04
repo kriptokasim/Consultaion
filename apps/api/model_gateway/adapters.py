@@ -35,12 +35,19 @@ class DirectProviderAdapter(BaseAdapter):
     ) -> GatewayModelCallResult:
         # Map model_id to direct provider representation
         target_model = model_id
-        if model_id == "gpt4o-deep":
-            target_model = "openai/gpt-4o"
-        elif model_id == "claude-sonnet":
-            target_model = "anthropic/claude-3-5-sonnet-20240620"
-        elif model_id == "gemini-2-5-pro":
-            target_model = "gemini/gemini-2.5-pro-preview-06-05"
+        from parliament.model_registry import get_model
+        try:
+            model_cfg = get_model(model_id)
+            if model_cfg and model_cfg.litellm_model:
+                target_model = model_cfg.litellm_model
+        except Exception:
+            if model_id == "gpt4o-deep":
+                target_model = "openai/gpt-4o"
+            elif model_id == "claude-sonnet":
+                target_model = "anthropic/claude-3-5-sonnet-20240620"
+            elif model_id == "gemini-2-5-pro":
+                target_model = "gemini/gemini-2.5-pro-preview-06-05"
+
         
         start_ts = time.monotonic()
         response = await acompletion(

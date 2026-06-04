@@ -4,8 +4,10 @@ from model_gateway.pools import get_model_pool, validate_user_access_to_model
 from model_gateway.costs import check_credit_and_cost_safety
 from model_gateway.policy import determine_routing_strategy
 from model_gateway.adapters import OpenRouterAdapter
+from model_gateway.agent_bridge import call_model_via_gateway
 
 logger = logging.getLogger("model_gateway")
+
 
 async def route_llm_call(
     request: GatewayRequest,

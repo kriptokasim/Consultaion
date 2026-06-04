@@ -323,58 +323,39 @@ async def _raw_llm_call(
         except Exception:
             pass
 
-    gw_req = GatewayRequest(
-        messages=scrubbed_messages,
-        model_id=model_cfg.id,
-        role=role,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        gateway_policy=gateway_policy,
-        user_id=ctx_user_id,
-        user_plan=user_plan,
-        debate_id=debate_id,
-    )
-    
+    effective_model_id = model_override or model_cfg.id
+
     start_ts = time.monotonic()
     try:
-        # Execute routing call through the Gateway
+        # Execute routing call through the Gateway Bridge
+        from model_gateway.agent_bridge import call_model_via_gateway
         with Session(engine) as session:
-            gw_res = await route_llm_call(gw_req, db_session=session)
+            content, call_usage = await call_model_via_gateway(
+                messages=scrubbed_messages,
+                model_id=effective_model_id,
+                role=role,
+                user_id=ctx_user_id,
+                debate_id=debate_id,
+                user_plan=user_plan,
+                gateway_policy=gateway_policy,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                db_session=session,
+            )
             
         latency_ms = (time.monotonic() - start_ts) * 1000
         
-        if not gw_res.success:
-            raise ValueError(gw_res.error_message or "LLM response contained no content")
-            
-        content = gw_res.content
         token_counts = {
-            "prompt": float(gw_res.prompt_tokens),
-            "completion": float(gw_res.completion_tokens),
-            "total": float(gw_res.total_tokens),
+            "prompt": float(call_usage.prompt_tokens),
+            "completion": float(call_usage.completion_tokens),
+            "total": float(call_usage.total_tokens),
         }
-        
-        call_usage = UsageCall(
-            prompt_tokens=token_counts["prompt"],
-            completion_tokens=token_counts["completion"],
-            total_tokens=token_counts["total"],
-            cost_usd=gw_res.cost_usd,
-            provider=gw_res.provider,
-            model=gw_res.model_used,
-            gateway=gw_res.gateway,
-            model_pool=gw_res.model_pool,
-            routing_policy=gw_res.routing_policy,
-            fallback_used=gw_res.fallback_used,
-            fallback_reason=gw_res.fallback_reason,
-            user_plan=gw_res.user_plan,
-            estimated_cost_usd=gw_res.estimated_cost_usd,
-            retry_count=gw_res.retry_count,
-        )
         
         logger.info(
             "llm_usage",
             extra={
-                "model_id": model_cfg.id,
-                "provider": gw_res.provider,
+                "model_id": effective_model_id,
+                "provider": call_usage.provider,
                 "debate_id": debate_id,
                 "tokens_in": token_counts.get("prompt"),
                 "tokens_out": token_counts.get("completion"),
@@ -393,15 +374,15 @@ async def _raw_llm_call(
             latency_ms=latency_ms,
             success=True,
             extra={
-                "provider": gw_res.provider,
-                "model_used": gw_res.model_used,
+                "provider": call_usage.provider,
+                "model_used": call_usage.model,
                 "debate_id": debate_id,
                 "cost_usd": call_usage.cost_usd,
                 **(extra_tags or {})
             },
         )
         
-        ctx_user_id = get_log_context().get("user_id")
+        ctx_user_id = get_log_context().get("user_id") or ctx_user_id
         
         asyncio.create_task(persist_usage_log(
             call_usage,
@@ -413,6 +394,7 @@ async def _raw_llm_call(
         ))
         
         return content.strip(), call_usage
+
     except ProviderCircuitOpenError:
         # Don't track circuit breaker blocks as errors
         raise

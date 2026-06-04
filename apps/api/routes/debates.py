@@ -273,7 +273,22 @@ async def create_debate(
     # Patchset 49.2: Enforce model tier limits
     from billing.service import get_active_plan
     plan = get_active_plan(session, current_user.id)
+    
+    # Phase 8: Hosted Credits check for Free plan users
+    if plan.is_default_free:
+        limit = getattr(current_user, "hosted_credits_limit", 10)
+        used = getattr(current_user, "hosted_credits_used", 0)
+        if used >= limit:
+            raise ValidationError(
+                message=f"You have exhausted your free hosted runs ({used}/{limit}).",
+                code="hosted_credits.exhausted",
+                hint="Please upgrade to a Pro plan, add your own API key under Settings, or run a mock/demo run.",
+            )
+        current_user.hosted_credits_used = used + 1
+        session.add(current_user)
+
     allowed_tiers = plan.limits.get("allowed_model_tiers")
+
     
     # If allowed_tiers is not set, default to ["standard"] for Free plans (is_default_free=True)
     # and ["standard", "advanced"] for others, unless explicitly configured.

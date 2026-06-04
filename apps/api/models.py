@@ -30,9 +30,15 @@ class User(SQLModel, table=True):
     # Patchset 55.0: Subscription plan for quota enforcement
     plan: str = Field(default="free", max_length=50, nullable=False, index=True)
     
+    # Hosted Credits MVP fields
+    hosted_credits_limit: int = Field(default=10, nullable=False)
+    hosted_credits_used: int = Field(default=0, nullable=False)
+    hosted_credit_source: str = Field(default="signup", nullable=False)
+    
     # Patchset 58.0: Privacy controls
     deleted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True, index=True))
     analytics_opt_out: bool = Field(default=False, nullable=False)
+
 
     debates: List["Debate"] = Relationship(
         back_populates="user",

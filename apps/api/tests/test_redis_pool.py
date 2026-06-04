@@ -67,8 +67,9 @@ class TestRedisPool:
         """Gracefully handles Redis connection failures."""
         with patch("redis_pool.settings") as mock_settings:
             mock_settings.REDIS_URL = "redis://localhost:6379"
-
+            mock_settings.REDIS_POOL_STRICT = False
             with patch("redis_pool.redis") as mock_redis:
+
                 mock_redis.ConnectionPool.from_url.side_effect = Exception("Connection refused")
 
                 import redis_pool

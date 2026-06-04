@@ -186,7 +186,11 @@ def _register_user(email: str, password: str) -> User:
             else:
                 raise
         user = session.exec(select(User).where(User.email == email.strip().lower())).first()
+        if user:
+            # Touch attributes to load them before session closes
+            _ = (user.id, user.email, user.role, user.plan, user.hosted_credits_limit, user.hosted_credits_used, user.is_active, user.is_admin)
         return user
+
 
 
 def _create_debate_for_user(user: User, prompt: str) -> str:
@@ -215,7 +219,12 @@ def _create_debate_for_user(user: User, prompt: str) -> str:
             debate.user_id = user.id
             session.add(debate)
             session.commit()
+        # Refresh and cache user attributes to prevent DetachedInstanceError downstream
+        session.add(user)
+        session.refresh(user)
+        _ = (user.id, user.email, user.role, user.plan, user.hosted_credits_limit, user.hosted_credits_used, user.is_active, user.is_admin)
     return debate_id
+
 
 
 def _create_team_for_user(owner: User, name: str = "Sepia Team") -> str:
