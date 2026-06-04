@@ -14,6 +14,16 @@ class GatewayRequest(BaseModel):
     user_plan: Optional[str] = "free"
     debate_id: Optional[str] = None
 
+class GatewayDecision(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+    
+    selected_model: str
+    selected_provider: str
+    policy_used: str
+    model_pool: str
+    estimated_cost_usd: float
+    fallback_enabled: bool
+
 class GatewayModelCallResult(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     

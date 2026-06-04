@@ -24,6 +24,19 @@ async def route_llm_call(
     adapter_cls, routing_policy = determine_routing_strategy(request)
     model_pool = get_model_pool(request.model_id)
     
+    # Log gateway decision
+    from model_gateway.observability import log_gateway_decision, log_gateway_call_metrics
+    from model_gateway.types import GatewayDecision
+    decision = GatewayDecision(
+        selected_model=request.model_id,
+        selected_provider=adapter_cls.__name__,
+        policy_used=routing_policy,
+        model_pool=model_pool,
+        estimated_cost_usd=estimated_cost_usd,
+        fallback_enabled=(request.gateway_policy in ("auto", "fallback")),
+    )
+    log_gateway_decision(decision, user_id=request.user_id)
+    
     adapter = adapter_cls()
     fallback_used = False
     fallback_reason = None
@@ -41,6 +54,7 @@ async def route_llm_call(
             user_id=request.user_id,
         )
         result.user_plan = request.user_plan
+        log_gateway_call_metrics(result, user_id=request.user_id)
         return result
     except Exception as primary_error:
         # Fallback trigger: if policy is auto or fallback, retry using OpenRouter
@@ -69,10 +83,11 @@ async def route_llm_call(
                 result.fallback_reason = fallback_reason
                 result.retry_count = retry_count
                 result.user_plan = request.user_plan
+                log_gateway_call_metrics(result, user_id=request.user_id)
                 return result
             except Exception as fallback_error:
                 logger.error(f"Fallback model gateway route also failed: {str(fallback_error)}")
-                return GatewayModelCallResult(
+                result = GatewayModelCallResult(
                     content="",
                     model_used=request.model_id,
                     provider="failed",
@@ -85,9 +100,11 @@ async def route_llm_call(
                     retry_count=retry_count,
                     user_plan=request.user_plan
                 )
+                log_gateway_call_metrics(result, user_id=request.user_id)
+                return result
         
         # If fallback not configured or allowed
-        return GatewayModelCallResult(
+        result = GatewayModelCallResult(
             content="",
             model_used=request.model_id,
             provider="failed",
@@ -97,3 +114,5 @@ async def route_llm_call(
             routing_policy=routing_policy,
             user_plan=request.user_plan
         )
+        log_gateway_call_metrics(result, user_id=request.user_id)
+        return result
