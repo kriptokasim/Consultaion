@@ -3,51 +3,24 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams, useRouter } from "next/navigation";
-import { Plus, BarChart3, Trophy, Zap, MessageCircle, GitCompare, Scale } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { startDebate } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { Plus, BarChart3, Trophy } from "lucide-react";
 import { PromotionArea } from "@/components/PromotionArea";
-import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
-import { ApiClientError } from "@/lib/apiClient";
 import type { DebateSummary } from "./types";
 import { useI18n } from "@/lib/i18n/client";
 import { trackEvent } from "@/lib/analytics";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { OnboardingPanel } from "@/components/dashboard/OnboardingPanel";
-import { ErrorBanner } from "@/components/errors/ErrorBanner";
 import { ProviderHealthBanner } from "@/components/ui/provider-health-banner";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { getBillingMe } from "@/lib/api";
-import { apiRequest } from "@/lib/apiClient";
-import { ModelSelector } from "@/components/dashboard/ModelSelector";
 import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
 import { DashboardTemplatesSection } from "@/components/dashboard/DashboardTemplatesSection";
 
-type ModelOption = {
-  id: string;
-  display_name: string;
-  provider: string;
-  tags: string[];
-  max_context?: number | null;
-  recommended: boolean;
-  tier?: "standard" | "advanced";
-};
-
 export default function DashboardClient({ email, authToken }: { email?: string; authToken?: string }) {
-  const { t, locale } = useI18n();
-  const queryClient = useQueryClient();
-  const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [mode, setMode] = useState<"arena" | "conversation" | "compare" | "debate">("arena");
-  const [compareModels, setCompareModels] = useState<string[]>([]);
-
-  const searchParams = useSearchParams();
+  const { t } = useI18n();
   const router = useRouter();
-  const prefillPromptFrom = searchParams?.get("prefill_prompt_from");
-  const source = searchParams?.get("source");
 
   // Bootstrap: process token from Google OAuth redirect
   useEffect(() => {
@@ -65,21 +38,10 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     }
   }, [authToken]);
 
-  const [showModal, setShowModal] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
-  const [modelError, setModelError] = useState<string | null>(null);
-
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [templateUsed, setTemplateUsed] = useState(false);
   const [step3Reviewed, setStep3Reviewed] = useState(false);
-
-  const [errorBanner, setErrorBanner] = useState<{
-    type: "error" | "warning" | "timeout";
-    title?: string;
-    message: string;
-  } | null>(null);
 
   const { data: debatesData, isLoading: debatesLoading } = useDebatesList();
   const debates = (debatesData?.items || []) as DebateSummary[];
@@ -89,65 +51,14 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     queryFn: getBillingMe
   });
 
-  // Fetch available AI models from /models/ endpoint
-  const { data: modelsData } = useQuery({
-    queryKey: ["models"],
-    queryFn: async () => {
-      try {
-        return await apiRequest<{ models: any[] }>({ path: "/models/", method: "GET" });
-      } catch {
-        return { models: [] };
-      }
-    }
-  });
-
-  const models = (modelsData?.models || []).map((m: any) => ({
-    id: m.id,
-    display_name: m.display_name,
-    provider: m.provider,
-    tags: m.tags || [],
-    recommended: m.recommended ?? false,
-    tier: m.tier || "standard"
-  })) as ModelOption[];
-
   useEffect(() => {
-    if (models.length > 0 && !selectedModel) {
-      const recommended = models.find(m => m.recommended);
-      setSelectedModel(recommended?.id || models[0].id);
-    }
-  }, [models, selectedModel]);
-
-  useEffect(() => {
-    if (!debatesLoading && debates.length === 0 && !prefillPromptFrom) {
+    if (!debatesLoading && debates.length === 0) {
       setShowOnboarding(true);
     }
-  }, [debatesLoading, debates.length, prefillPromptFrom]);
-
-  // Handle Prompt Prefill
-  useEffect(() => {
-    if (prefillPromptFrom) {
-      // Clear URL params so it doesn't trigger again on reload
-      const url = new URL(window.location.href);
-      url.searchParams.delete("prefill_prompt_from");
-      window.history.replaceState({}, "", url.toString());
-
-      apiRequest<any>({ path: `/debates/${prefillPromptFrom}`, method: "GET" })
-        .then((data) => {
-          if (data.prompt) {
-            setPrompt(data.prompt);
-            setShowModal(true);
-            trackEvent("public_run_prompt_prefilled", { ref_run: prefillPromptFrom, source });
-          }
-        })
-        .catch((err) => {
-          console.error("Failed to fetch prefill prompt", err);
-        });
-    }
-  }, [prefillPromptFrom, source]);
+  }, [debatesLoading, debates.length]);
 
   const maxDebates = billing?.plan?.limits?.debates_per_month;
   const debatesUsed = billing?.usage?.debates_created ?? 0;
-  const allowedTiers = ["standard", "advanced"]; // TODO: get from plan
 
   const handleDismissOnboarding = () => setShowOnboarding(false);
   const handleStep3Mark = () => setStep3Reviewed(true);
@@ -163,116 +74,8 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     router.push(`/live?prefill_prompt=${encodeURIComponent(text)}`);
   };
 
-  // Draft persistence: restore on modal open
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only trigger on modal open
-  useEffect(() => {
-    if (showModal) {
-      const draft = localStorage.getItem('draft_prompt');
-      if (draft && !prompt) setPrompt(draft);
-    }
-  }, [showModal]);
-
-  // Draft persistence: save on prompt change
-  useEffect(() => {
-    if (prompt) {
-      localStorage.setItem('draft_prompt', prompt);
-    }
-  }, [prompt]);
-
-  // Create debate mutation using React Query
-  const createDebateMutation = useMutation({
-    mutationFn: async (params: { prompt: string; model_id?: string; locale: string; mode: string; compare_models?: string[] }) => {
-      return startDebate(params);
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['debates'] });
-      setShowModal(false);
-      setPrompt("");
-      localStorage.removeItem('draft_prompt');
-      window.location.href = `/runs/${data.id}`;
-    },
-    onError: (err) => {
-      if (err instanceof ApiClientError) {
-        if (err.status === 429) {
-          const body = err.body as any;
-          const kind = body?.kind === "tokens" ? t("quota.exceeded.tokens") : t("quota.exceeded.exports");
-          setErrorBanner({
-            type: "warning",
-            title: t("quota.exceeded.title"),
-            message: t("quota.exceeded.message", {
-              used: body?.used ?? 0,
-              limit: body?.limit ?? 0,
-              kind
-            }),
-          });
-          trackEvent("quota_exceeded", { kind: body?.kind, limit: body?.limit, used: body?.used, source: "debate_create" });
-        } else if (err.status === 403 && (err.body as any)?.error === "account_disabled") {
-          setErrorBanner({
-            type: "error",
-            title: t("errors.accountDisabled.title"),
-            message: t("errors.accountDisabled"),
-          });
-          trackEvent("account_disabled_action_blocked", { action: "create_debate" });
-        } else if (err.status === 402) {
-          setLimitModal({ open: true, code: (err.body as any)?.code });
-        } else {
-          setErrorBanner({
-            type: "error",
-            message: err.message || t("errors.generic"),
-          });
-          trackEvent("debate_run_error_generic", { source: "debate_create", message: err.message });
-        }
-      } else {
-        setErrorBanner({
-          type: "error",
-          message: t("errors.generic"),
-        });
-        trackEvent("debate_run_error_generic", { source: "debate_create", message: (err as Error).message });
-      }
-    },
-  });
-
-  const handleCreate = () => {
-    if (!prompt.trim()) return;
-    if (mode === "conversation" && !selectedModel) {
-      setErrorBanner({
-        type: "error",
-        message: t("dashboard.errors.noModels"),
-      });
-      return;
-    }
-    if (mode === "compare" && compareModels.length < 2) {
-      setErrorBanner({
-        type: "error",
-        message: "Please select at least 2 models to compare.",
-      });
-      return;
-    }
-    setErrorBanner(null);
-    setError(null);
-    createDebateMutation.mutate({
-      prompt: prompt.trim(),
-      model_id: mode === "conversation" ? selectedModel! : undefined,
-      mode,
-      compare_models: mode === "compare" ? compareModels : undefined,
-      locale,
-    });
-  };
-
-  const saving = createDebateMutation.isPending;
-
   return (
     <main className="space-y-10">
-      {errorBanner && (
-        <div className="mb-6">
-          <ErrorBanner
-            type={errorBanner.type}
-            title={errorBanner.title}
-            message={errorBanner.message}
-            onDismiss={() => setErrorBanner(null)}
-          />
-        </div>
-      )}
       <ProviderHealthBanner className="mb-6" />
       <section className="rounded-3xl border border-border bg-gradient-to-br from-card via-secondary to-blue-50 p-8 shadow-smooth dark:to-secondary">
         <div className="flex flex-wrap items-center gap-4">
@@ -346,185 +149,9 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       {/* Runs History Section */}
       <DashboardRunsHistory debates={debates} debatesLoading={debatesLoading} onNewRun={() => router.push("/live?focus=prompt")} />
 
-      {showModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
-          <div className="flex flex-col w-full max-w-lg max-h-[85vh] rounded-2xl border border-border bg-card shadow-smooth-xl">
-            {/* Header - Fixed */}
-            <div className="flex-shrink-0 p-6 pb-2">
-              <div className="space-y-2">
-                <h3 className="heading-serif text-2xl font-semibold text-foreground">{t("dashboard.modal.title")}</h3>
-                <p className="text-sm text-muted-foreground">{t("dashboard.modal.description")}</p>
-              </div>
-            </div>
-
-            {/* Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6 pt-2">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-foreground" htmlFor="prompt">
-                    {t("dashboard.modal.questionLabel")}
-                  </label>
-                  <Textarea
-                    id="prompt"
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        e.preventDefault();
-                        const canSubmit = prompt.trim() && !saving && modelError === null && !(mode === "conversation" && (!selectedModel && models.length > 0)) && !(mode === "compare" && compareModels.length < 2);
-                        if (canSubmit) {
-                          handleCreate();
-                        }
-                      }
-                    }}
-                    placeholder={t("dashboard.modal.placeholder")}
-                    minLength={10}
-                    maxLength={5000}
-                    className="min-h-[140px] bg-background text-foreground"
-                  />
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {prompt.length} {t("dashboard.modal.characters")}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-foreground">Mode</label>
-                    <div className="space-y-2">
-                      {/* Arena - Primary Option */}
-                      <button
-                        type="button"
-                        onClick={() => setMode("arena")}
-                        className={`w-full flex items-center gap-3 p-4 rounded-xl text-left border-2 transition-all ${
-                          mode === "arena"
-                            ? "border-primary bg-primary/5 shadow-sm"
-                            : "border-border bg-card hover:bg-secondary/50"
-                        }`}
-                      >
-                        <div className={`shrink-0 rounded-lg p-2 ${mode === "arena" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
-                          <Zap className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className={`font-semibold text-sm ${mode === "arena" ? "text-primary" : "text-foreground"}`}>
-                            Arena — SOTA Comparison
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            4 top AI models answer, then a synthesizer gives the final verdict
-                          </p>
-                        </div>
-                      </button>
-
-                      {/* Secondary modes */}
-                      <div className="grid grid-cols-3 gap-2">
-                        <button type="button" onClick={() => setMode("conversation")} className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-center border transition-colors ${mode === "conversation" ? "border-primary bg-primary/5 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>
-                          <MessageCircle className="h-4 w-4" />
-                          <span className="text-xs font-medium">Conversation</span>
-                        </button>
-                        <button type="button" onClick={() => setMode("compare")} className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-center border transition-colors ${mode === "compare" ? "border-primary bg-primary/5 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>
-                          <GitCompare className="h-4 w-4" />
-                          <span className="text-xs font-medium">Compare</span>
-                        </button>
-                        <button type="button" onClick={() => setMode("debate")} className={`flex flex-col items-center gap-1.5 p-3 rounded-xl text-center border transition-colors ${mode === "debate" ? "border-primary bg-primary/5 text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary"}`}>
-                          <Scale className="h-4 w-4" />
-                          <span className="text-xs font-medium">Debate</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {mode === "arena" && (
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground animate-in fade-in slide-in-from-top-2 duration-300">
-                      <p className="font-medium text-foreground mb-1">⚡ How Arena works:</p>
-                      <ol className="list-decimal list-inside space-y-0.5 text-xs">
-                        <li>GPT-4o, Claude, Gemini, and DeepSeek all answer your question</li>
-                        <li>Responses shown side-by-side with model branding</li>
-                        <li>A synthesizer combines the strongest insights into a final verdict</li>
-                      </ol>
-                    </div>
-                  )}
-
-                  {mode === "conversation" && (
-                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <label className="text-sm font-semibold text-foreground" htmlFor="model">
-                        {t("dashboard.modal.modelLabel")}
-                      </label>
-                      {modelError ? (
-                        <p className="text-sm font-medium text-error">{modelError}</p>
-                      ) : models.length > 0 ? (
-                        <ModelSelector
-                          models={models}
-                          selectedModel={selectedModel}
-                          onSelect={setSelectedModel}
-                          allowedTiers={allowedTiers}
-                        />
-                      ) : (
-                        <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">
-                          <p className="font-medium text-warning">{t("dashboard.errors.noModels")}</p>
-                          <p className="mt-1 text-muted-foreground">{t("dashboard.errors.noModelsHint")}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {mode === "compare" && (
-                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <label className="text-sm font-semibold text-foreground">Select Models to Compare (Up to 4)</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {models.map(m => {
-                          const isSelected = compareModels.includes(m.id);
-                          return (
-                            <button
-                              key={m.id}
-                              type="button"
-                              onClick={() => {
-                                if (isSelected) {
-                                  setCompareModels(prev => prev.filter(id => id !== m.id));
-                                } else if (compareModels.length < 4) {
-                                  setCompareModels(prev => [...prev, m.id]);
-                                }
-                              }}
-                              className={`flex flex-col items-start p-3 rounded-xl border text-left transition ${isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-card hover:bg-secondary"} ${!isSelected && compareModels.length >= 4 ? "opacity-50 cursor-not-allowed" : ""}`}
-                              disabled={!isSelected && compareModels.length >= 4}
-                            >
-                              <span className="font-medium text-sm text-foreground truncate w-full">{m.display_name}</span>
-                              <span className="text-xs text-muted-foreground">{m.provider}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {mode === "debate" && (
-                    <div className="rounded-xl border border-border bg-secondary/50 p-4 text-sm text-muted-foreground animate-in fade-in slide-in-from-top-2 duration-300">
-                      Debate mode runs the prompt through an AI Parliament (Optimist, Risk Officer, Architect) for structured adversarial critique and synthesis.
-                    </div>
-                  )}
-                </div>
-                {error ? <p className="text-sm font-medium text-error">{error}</p> : null}
-              </div>
-            </div>
-
-            {/* Footer - Sticky */}
-            <div className="flex-shrink-0 border-t border-border bg-card p-6 rounded-b-2xl">
-              <div className="flex items-center justify-end gap-3">
-                <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
-                  {t("dashboard.modal.cancel")}
-                </Button>
-                <Button onClick={handleCreate} disabled={!prompt.trim() || saving || modelError !== null || (mode === "conversation" && (!selectedModel && models.length > 0)) || (mode === "compare" && compareModels.length < 2)}>
-                  {saving ? t("dashboard.modal.creating") : t("dashboard.modal.submit")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <section>
         <PromotionArea location="dashboard_sidebar" />
       </section>
-
-      <BillingLimitModal open={limitModal.open} code={limitModal.code} onClose={() => setLimitModal({ open: false })} />
     </main>
   );
 }

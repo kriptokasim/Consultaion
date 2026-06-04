@@ -77,6 +77,16 @@ def _persist_usage_log_sync(
             latency_ms=latency_ms,
             success=success,
             error_message=error_message,
+            
+            # Gateway Metadata
+            gateway=call_usage.gateway,
+            model_pool=call_usage.model_pool,
+            routing_policy=call_usage.routing_policy,
+            fallback_used=call_usage.fallback_used,
+            fallback_reason=call_usage.fallback_reason,
+            user_plan=call_usage.user_plan,
+            estimated_cost_usd=call_usage.estimated_cost_usd,
+            retry_count=call_usage.retry_count,
         )
         with Session(engine) as session:
             session.add(log_entry)
@@ -119,6 +129,16 @@ class UsageCall:
     cost_usd: float = 0.0
     provider: Optional[str] = None
     model: Optional[str] = None
+    
+    # Gateway Metadata
+    gateway: Optional[str] = None
+    model_pool: Optional[str] = None
+    routing_policy: Optional[str] = None
+    fallback_used: bool = False
+    fallback_reason: Optional[str] = None
+    user_plan: Optional[str] = None
+    estimated_cost_usd: float = 0.0
+    retry_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -130,6 +150,9 @@ class UsageCall:
                 "total": self.total_tokens or self.prompt_tokens + self.completion_tokens,
             },
             "cost_usd": self.cost_usd,
+            "gateway": self.gateway,
+            "model_pool": self.model_pool,
+            "routing_policy": self.routing_policy,
         }
 
 
@@ -238,6 +261,10 @@ async def _raw_llm_call(
     extra_tags: Dict[str, Any] | None = None,
 ) -> Tuple[str, UsageCall]:
     from parliament.model_registry import get_default_model, get_model
+    from model_gateway.types import GatewayRequest
+    from model_gateway import route_llm_call
+    from database import engine
+    from sqlmodel import Session
 
     try:
         model_cfg = get_model(model_id) if model_id else get_default_model()
@@ -268,60 +295,96 @@ async def _raw_llm_call(
     # Patchset 29.0: Scrub PII from messages
     scrubbed_messages = scrub_messages(messages, enable=settings.ENABLE_PII_SCRUB)
     
+    # Resolve user plan and gateway policy
+    user_plan = "free"
+    ctx_user_id = None
+    from log_config import get_log_context
+    ctx_user_id = get_log_context().get("user_id")
+    
+    gateway_policy = "auto"
+    if debate_id:
+        try:
+            from models import Debate
+            with Session(engine) as session:
+                db_debate = session.get(Debate, debate_id)
+                if db_debate:
+                    gateway_policy = db_debate.gateway_policy or "auto"
+                    if not ctx_user_id and db_debate.user_id:
+                        ctx_user_id = db_debate.user_id
+        except Exception:
+            pass
+
+    if ctx_user_id:
+        try:
+            from billing.service import get_active_plan
+            with Session(engine) as session:
+                plan = get_active_plan(session, ctx_user_id)
+                user_plan = plan.name if plan else "free"
+        except Exception:
+            pass
+
+    gw_req = GatewayRequest(
+        messages=scrubbed_messages,
+        model_id=model_cfg.id,
+        role=role,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        gateway_policy=gateway_policy,
+        user_id=ctx_user_id,
+        user_plan=user_plan,
+        debate_id=debate_id,
+    )
+    
     start_ts = time.monotonic()
     try:
-        # Patchset 57.0: Enforce timeout on LLM call
-        async with asyncio.timeout(settings.LLM_TIMEOUT_SECONDS):
-            response = await acompletion(
-                model=target_model,
-                messages=scrubbed_messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+        # Execute routing call through the Gateway
+        with Session(engine) as session:
+            gw_res = await route_llm_call(gw_req, db_session=session)
+            
         latency_ms = (time.monotonic() - start_ts) * 1000
         
-        content = response.choices[0].message["content"]
-        if not content:
-            raise ValueError("LLM response contained no content")
-        usage = getattr(response, "usage", {}) or {}
+        if not gw_res.success:
+            raise ValueError(gw_res.error_message or "LLM response contained no content")
+            
+        content = gw_res.content
         token_counts = {
-            "prompt": float(usage.get("prompt_tokens") or 0.0),
-            "completion": float(usage.get("completion_tokens") or 0.0),
-            "total": float(
-                usage.get("total_tokens")
-                or (usage.get("prompt_tokens") or 0.0) + (usage.get("completion_tokens") or 0.0)
-            ),
+            "prompt": float(gw_res.prompt_tokens),
+            "completion": float(gw_res.completion_tokens),
+            "total": float(gw_res.total_tokens),
         }
-        cost = getattr(response, "response_cost", None)
-        if isinstance(cost, dict):
-            cost = cost.get("total_cost")
-        if cost is None:
-            cost = usage.get("total_cost")
-        provider = getattr(response, "provider", None)
-        hidden = getattr(response, "_hidden_params", {}) or {}
-        provider = hidden.get("api_provider") or hidden.get("provider") or provider
-        model_used = getattr(response, "model", None) or target_model
-        call_usage = _usage_call_from_counts(
-            token_counts,
-            cost if cost is not None else _estimate_cost(token_counts.get("total")),
-            model=model_used,
-            provider=provider,
+        
+        call_usage = UsageCall(
+            prompt_tokens=token_counts["prompt"],
+            completion_tokens=token_counts["completion"],
+            total_tokens=token_counts["total"],
+            cost_usd=gw_res.cost_usd,
+            provider=gw_res.provider,
+            model=gw_res.model_used,
+            gateway=gw_res.gateway,
+            model_pool=gw_res.model_pool,
+            routing_policy=gw_res.routing_policy,
+            fallback_used=gw_res.fallback_used,
+            fallback_reason=gw_res.fallback_reason,
+            user_plan=gw_res.user_plan,
+            estimated_cost_usd=gw_res.estimated_cost_usd,
+            retry_count=gw_res.retry_count,
         )
+        
         logger.info(
             "llm_usage",
             extra={
                 "model_id": model_cfg.id,
-                "provider": getattr(model_cfg.provider, "value", str(model_cfg.provider)),
+                "provider": gw_res.provider,
                 "debate_id": debate_id,
                 "tokens_in": token_counts.get("prompt"),
                 "tokens_out": token_counts.get("completion"),
             },
         )
         
-        # Patchset 28.0: Record successful call
+        # Record successful call
         record_call_result(provider_name, target_model, success=True, now=now)
 
-        # Patchset 41.0: Log observation
+        # Log observation
         log_model_observation(
             trace_id=current_trace_id.get(),
             model_name=model_cfg.id,
@@ -329,10 +392,15 @@ async def _raw_llm_call(
             output_tokens=int(token_counts["completion"]),
             latency_ms=latency_ms,
             success=True,
-            extra={"provider": provider_name, "model_used": model_used, "debate_id": debate_id, "cost_usd": call_usage.cost_usd, **(extra_tags or {})},
+            extra={
+                "provider": gw_res.provider,
+                "model_used": gw_res.model_used,
+                "debate_id": debate_id,
+                "cost_usd": call_usage.cost_usd,
+                **(extra_tags or {})
+            },
         )
         
-        from log_config import get_log_context
         ctx_user_id = get_log_context().get("user_id")
         
         asyncio.create_task(persist_usage_log(

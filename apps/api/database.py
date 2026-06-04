@@ -38,6 +38,43 @@ def init_db() -> None:
     backend = engine.url.get_backend_name()
     if backend == "sqlite" or settings.FORCE_CREATE_ALL:
         SQLModel.metadata.create_all(engine)
+        
+        # Safe dynamic column migrations for SQLite
+        from sqlalchemy import text, inspect
+        import logging
+        db_logger = logging.getLogger("database")
+        
+        with engine.connect() as conn:
+            inspector = inspect(engine)
+            
+            # 1. Alter debate table
+            try:
+                columns = [c["name"] for c in inspector.get_columns("debate")]
+                if "gateway_policy" not in columns:
+                    conn.execute(text("ALTER TABLE debate ADD COLUMN gateway_policy TEXT"))
+                    conn.commit()
+            except Exception as e:
+                db_logger.warning("Failed to alter debate table: %s", e)
+                
+            # 2. Alter llm_usage_log table
+            try:
+                columns = [c["name"] for c in inspector.get_columns("llm_usage_log")]
+                new_cols = {
+                    "gateway": "TEXT",
+                    "model_pool": "TEXT",
+                    "routing_policy": "TEXT",
+                    "fallback_used": "BOOLEAN DEFAULT 0",
+                    "fallback_reason": "TEXT",
+                    "user_plan": "TEXT",
+                    "estimated_cost_usd": "FLOAT DEFAULT 0.0",
+                    "retry_count": "INTEGER DEFAULT 0"
+                }
+                for col, col_type in new_cols.items():
+                    if col not in columns:
+                        conn.execute(text(f"ALTER TABLE llm_usage_log ADD COLUMN {col} {col_type}"))
+                        conn.commit()
+            except Exception as e:
+                db_logger.warning("Failed to alter llm_usage_log table: %s", e)
 
 
 def get_session():

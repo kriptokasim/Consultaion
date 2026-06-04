@@ -58,6 +58,7 @@ function ArenaPageContent() {
   const [authStatus, setAuthStatus] = useState<'unknown' | 'authed' | 'guest'>('unknown')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [mode, setMode] = useState<'arena' | 'debate' | 'conversation'>('arena')
+  const [gatewayPolicy, setGatewayPolicy] = useState<string>('auto')
   const [autoFocus, setAutoFocus] = useState(false)
   const [truncated, setTruncated] = useState(false)
   const [truncateReason, setTruncateReason] = useState<string | null>(null)
@@ -306,7 +307,7 @@ function ArenaPageContent() {
     runningRef.current = true
     manualStartAttemptedRef.current = false
     try {
-      const { id } = await startDebate({ prompt, panel_config: panelConfig, mode })
+      const { id } = await startDebate({ prompt, panel_config: panelConfig, mode, gateway_policy: gatewayPolicy })
       currentDebateIdRef.current = id
       setCurrentDebateId(id)
       setSessionStatus('running')
@@ -506,6 +507,8 @@ function ArenaPageContent() {
         onOpenChange={setAdvancedOpen}
         panelConfig={panelConfig.seats}
         onPanelConfigChange={handlePanelChange}
+        gatewayPolicy={gatewayPolicy}
+        onGatewayPolicyChange={setGatewayPolicy}
       />
       {currentDebateId ? (
         <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/70">

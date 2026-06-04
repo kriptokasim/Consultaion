@@ -368,6 +368,7 @@ async def create_debate(
         model_id=best_model_id,
         routed_model=best_model_id,
         routing_policy=body.routing_policy,
+        gateway_policy=body.gateway_policy or "auto",
         routing_meta={
             "candidates": [c.model_dump() for c in candidates],
             "requested_model": body.model_id,

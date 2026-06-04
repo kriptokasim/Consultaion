@@ -46,8 +46,8 @@ export function PromptPanel({
     autoFocus = false,
 }: PromptPanelProps) {
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-        // Enter submits (without Shift), Shift+Enter adds newline
-        if (e.key === 'Enter' && !e.shiftKey && value.trim().length > 0) {
+        // Cmd/Ctrl + Enter submits, plain Enter inserts a newline
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && value.trim().length > 0) {
             e.preventDefault()
             if (!disabled && status !== 'running') {
                 onSubmit()
@@ -58,7 +58,7 @@ export function PromptPanel({
     const canSubmit = value.trim().length > 0 && !disabled && status !== 'running'
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-4 sm:px-0">
+        <div className="mx-auto w-full max-w-4xl px-4 sm:px-0">
             <div
                 className={cn(
                     'rounded-3xl border bg-white/80 p-5 shadow-smooth-lg backdrop-blur-sm transition-all duration-200 sm:p-7',
@@ -78,7 +78,7 @@ export function PromptPanel({
                                     mode === 'arena'
                                         ? "bg-white shadow-sm text-slate-900 font-bold ring-1 ring-black/5"
                                         : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                                )}
+                                    )}
                             >
                                 <Scale className="h-3.5 w-3.5 text-amber-500" />
                                 Arena
@@ -132,11 +132,11 @@ export function PromptPanel({
                             ? "What topic should the panel explore collaboratively?" 
                             : mode === 'debate'
                             ? "What should the AI Parliament debate?"
-                            : "Ask a question to compare multiple AI models and synthesize the best decision..."
+                            : "Ask a high-stakes question, compare multiple AI models, and get one synthesized answer..."
                     }
                     className={cn(
                         'w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-400 sm:text-base',
-                        'min-h-[160px] text-slate-900 sm:min-h-[200px]',
+                        'min-h-[180px] text-slate-900 sm:min-h-[240px]',
                         (disabled || status === 'running') && 'cursor-not-allowed opacity-60'
                     )}
                 />
@@ -151,13 +151,14 @@ export function PromptPanel({
                 {/* Footer row */}
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     {/* Helper text */}
-                    <p className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-500">
                         {mode === 'conversation'
-                            ? 'Collaborative discussion to synthesize an answer.'
+                            ? 'Collaborative discussion to explore ideas.'
                             : mode === 'debate'
                             ? 'Adversarial debate to find the best argument.'
-                            : 'Multi-model compare and synthesis.'}
-                    </p>
+                            : 'Your question will be sent to multiple AI models and synthesized into one decision-ready answer.'}
+                        <span className="ml-2 text-slate-400 font-normal hidden sm:inline">(⌘/Ctrl + Enter to run)</span>
+                    </div>
 
                     {/* Right side controls */}
                     <div className="flex items-center gap-3">

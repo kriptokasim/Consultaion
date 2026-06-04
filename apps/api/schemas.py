@@ -93,6 +93,10 @@ class DebateCreate(BaseModel):
         description="Routing policy for model selection. Options: 'router-smart' (balanced), 'router-deep' (quality-focused). Defaults to 'router-smart'."
     )
     panel_config: Optional[PanelConfig] = Field(None, description="Optional Parliament-style panel configuration.")
+    gateway_policy: Optional[str] = Field(
+        "auto",
+        description="Model gateway policy: 'auto' (smart router), 'direct', or 'fallback'."
+    )
     mode: Optional[str] = Field(
         "arena",
         description="Operation mode: 'arena' (default), 'conversation', 'compare', or 'debate'."

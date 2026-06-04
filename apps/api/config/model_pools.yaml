@@ -1,0 +1,37 @@
+pools:
+  free_pool:
+    models:
+      - mimo-v2-free
+      - llama-3-free
+    policies:
+      - auto
+      - direct
+  pro_pool:
+    models:
+      - gpt4o-deep
+      - claude-sonnet
+      - gemini-2-5-pro
+      - groq-llama-3-3
+      - mistral-large
+    policies:
+      - auto
+      - direct
+      - fallback
+  fallback_pool:
+    models:
+      - router-smart
+      - router-deep
+    policies:
+      - auto
+      - fallback
+
+providers:
+  openai:
+    direct_model: "openai/gpt-4o"
+    fallback_model: "openrouter/openai/gpt-4o"
+  anthropic:
+    direct_model: "anthropic/claude-3-5-sonnet-20240620"
+    fallback_model: "openrouter/anthropic/claude-3.5-sonnet"
+  gemini:
+    direct_model: "gemini/gemini-2.5-pro-preview-06-05"
+    fallback_model: "openrouter/google/gemini-2.5-pro"

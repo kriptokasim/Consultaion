@@ -148,6 +148,7 @@ class Debate(SQLModel, table=True):
     team_id: Optional[str] = Field(foreign_key="team.id", default=None, index=True, nullable=True)
     routed_model: Optional[str] = Field(default=None, index=True, nullable=True)
     routing_policy: Optional[str] = Field(default=None, nullable=True)
+    gateway_policy: Optional[str] = Field(default=None, nullable=True)
     routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     mode: str = Field(default="conversation", nullable=False, index=True)
 
@@ -349,6 +350,16 @@ class LLMUsageLog(SQLModel, table=True):
     
     # Cost
     cost_usd: float = Field(default=0.0, nullable=False)
+    
+    # Gateway Metadata
+    gateway: Optional[str] = Field(default=None, nullable=True)
+    model_pool: Optional[str] = Field(default=None, nullable=True)
+    routing_policy: Optional[str] = Field(default=None, nullable=True)
+    fallback_used: bool = Field(default=False, nullable=False)
+    fallback_reason: Optional[str] = Field(default=None, nullable=True)
+    user_plan: Optional[str] = Field(default=None, nullable=True)
+    estimated_cost_usd: float = Field(default=0.0, nullable=False)
+    retry_count: int = Field(default=0, nullable=False)
     
     # Context
     role: Optional[str] = Field(default=None)  # e.g., "producer", "critic", "judge"
