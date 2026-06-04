@@ -2,6 +2,7 @@
     "name": "consultaion",
     "version": "1.0.0",
     "private": true,
+    "type": "module",
     "description": "AI-powered debate platform",
     "scripts": {
         "lint:urls": "npx tsx scripts/check_no_hardcoded_urls.ts",
@@ -9,7 +10,7 @@
         "sentry:pull": "npx tsx scripts/sentry_errors.ts --limit 10",
         "sentry:normalize": "npx tsx scripts/normalize_errors.ts",
         "sentry:patch": "npx tsx scripts/agent_patch_pr.ts",
-        "sentry:workflow": "npm run sentry:pull && npm run sentry:normalize && npm run sentry:patch --dry-run",
+        "sentry:workflow": "npm run sentry:pull && npm run sentry:normalize && npx tsx scripts/agent_patch_pr.ts --dry-run",
         "playwright:normalize": "npx tsx scripts/normalize_playwright_failures.ts",
         "smoke": "npx tsx scripts/prod_smoke.ts",
         "lint:colors": "npx tsx scripts/check_raw_colors.ts"

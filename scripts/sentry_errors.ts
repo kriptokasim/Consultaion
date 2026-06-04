@@ -92,7 +92,7 @@ async function fetchSentryIssues(limit: number): Promise<SentryIssue[]> {
         throw new Error(`Sentry API error: ${response.status} - ${text}`);
     }
 
-    return response.json();
+    return response.json() as Promise<SentryIssue[]>;
 }
 
 async function fetchLatestEvent(issueId: string): Promise<SentryEvent | null> {
@@ -109,7 +109,7 @@ async function fetchLatestEvent(issueId: string): Promise<SentryEvent | null> {
         });
 
         if (!response.ok) return null;
-        return response.json();
+        return response.json() as Promise<SentryEvent>;
     } catch {
         return null;
     }
