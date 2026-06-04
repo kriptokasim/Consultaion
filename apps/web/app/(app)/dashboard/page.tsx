@@ -15,7 +15,7 @@ export default async function DashboardPage(props: { searchParams: Promise<{ tok
   if (!token) {
     profile = await getMe();
     if (!profile) {
-      redirect("/login?next=/dashboard");
+      redirect("/login?next=/live");
     }
   }
 

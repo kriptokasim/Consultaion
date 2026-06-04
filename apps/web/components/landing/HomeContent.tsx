@@ -67,9 +67,9 @@ export default function HomeContent() {
     if (loading) return;
     trackEvent("landing_hero_cta_clicked");
     if (user) {
-      router.push("/dashboard");
+      router.push("/live");
     } else {
-      router.push("/login?next=/dashboard");
+      router.push("/login?next=/live");
     }
   };
 
@@ -109,7 +109,7 @@ export default function HomeContent() {
                 </div>
                 {!user ? (
                   <>
-                    <Link href="/login?next=/dashboard" className="text-sm font-semibold text-primary dark:text-blue-400 underline-offset-4 hover:underline" onClick={() => trackEvent("landing_hero_secondary_cta_clicked")}>
+                    <Link href="/login?next=/live" className="text-sm font-semibold text-primary dark:text-blue-400 underline-offset-4 hover:underline" onClick={() => trackEvent("landing_hero_secondary_cta_clicked")}>
                       {t("landing.hero.secondaryCta")}
                     </Link>
                     <p className="text-xs text-slate-500 dark:text-slate-400">{t("landing.hero.secondaryHint")}</p>
@@ -182,7 +182,7 @@ export default function HomeContent() {
               </div>
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{t("landing.features.traces.title")}</h3>
               <p className="mt-2 mb-6 text-sm text-slate-600 dark:text-slate-300">{t("landing.features.traces.description")}</p>
-              <Link href={user ? "/dashboard" : "/login?next=/dashboard"} className="text-sm font-semibold text-primary dark:text-blue-400 hover:underline">
+              <Link href={user ? "/live" : "/login?next=/live"} className="text-sm font-semibold text-primary dark:text-blue-400 hover:underline">
                 {t("landing.features.traces.cta")} →
               </Link>
             </div>

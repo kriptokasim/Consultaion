@@ -42,7 +42,7 @@ export default function ParliamentHome({
           <div className="inline-flex items-center gap-2 rounded-full border border-accent-secondary/30 bg-card/80 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-accent-secondary shadow-sm">
             <Brand height={20} tone="amber" />
             <Sparkles className="h-4 w-4" />
-            Sepia Parliament
+            Sepia AI Arena
           </div>
           <div className="space-y-4">
             <h1 className="text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
@@ -53,8 +53,8 @@ export default function ParliamentHome({
               speech, and Consultaion returns one champion answer back to you.
             </p>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Start by entering a question below, then <strong>Summon a Session</strong>. You can watch the full debate,
-              scores, and final ruling in real time.
+              Start by entering a question below, then click <strong>Run Arena</strong>. You can watch the models generate answers,
+              score responses, and get a synthesized decision artifact in real time.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -63,31 +63,31 @@ export default function ParliamentHome({
               disabled={running}
               onClick={onStart}
               aria-pressed={running}
-              aria-label="Summon a debate session"
+              aria-label="Run AI Arena session"
               className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-smooth transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              Summon a Session
+              Run Arena
             </button>
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-4 py-2 text-sm font-medium text-muted-foreground">
               <Clock className="h-4 w-4 text-accent-secondary" />
               <span aria-live="polite" aria-busy={running}>
-                {running ? "Session in progress" : "Standing by"}
+                {running ? "Arena in progress" : "Standing by"}
               </span>
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <MetricCard
-              label="Active rounds"
+              label="Rounds run"
               value={stats?.rounds ?? 0}
               icon={<Users className="h-4 w-4 text-accent-secondary" />}
             />
             <MetricCard
-              label="Speeches logged"
+              label="Responses logged"
               value={stats?.speeches ?? 0}
               icon={<Sparkles className="h-4 w-4 text-accent-secondary" />}
             />
             <MetricCard
-              label="Votes recorded"
+              label="Scores recorded"
               value={stats?.votes ?? 0}
               icon={<Trophy className="h-4 w-4 text-accent-secondary" />}
             />
@@ -96,7 +96,7 @@ export default function ParliamentHome({
         <div className="space-y-4 rounded-2xl border border-border bg-card/80 p-4 shadow-inner">
           <div className="rounded-xl border border-accent-secondary/20 bg-accent-secondary/5 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-accent-secondary">
-              Current Speaker
+              Active Model
             </p>
             {activeMember ? (
               <div className="mt-3 flex items-center gap-3">
@@ -112,23 +112,23 @@ export default function ParliamentHome({
                     {activeMember.name}
                   </p>
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Speaking for {speakerSeconds}s
+                    Generating for {speakerSeconds}s
                   </p>
                 </div>
               </div>
             ) : (
               <p className="mt-2 text-sm text-muted-foreground">
-                Session idle — start a debate to brief the chamber.
+                Arena idle — start a run to compare models and synthesize a decision.
               </p>
             )}
           </div>
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Latest Division
+              Latest Scores
             </p>
             {topScores.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border bg-secondary/40 p-4 text-sm text-muted-foreground">
-                Awaiting judges to issue their rulings.
+                Awaiting scores and synthesized results.
               </div>
             ) : (
               topScores.map((score, index) => (
@@ -143,7 +143,7 @@ export default function ParliamentHome({
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Members present
+              Models active
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {members.slice(0, 6).map((member) => (

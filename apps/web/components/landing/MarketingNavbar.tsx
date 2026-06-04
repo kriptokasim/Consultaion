@@ -91,7 +91,7 @@ export function MarketingNavbar() {
                             <LanguageSwitcher />
 
                             <Link
-                                href="/login?next=/dashboard"
+                                href="/login?next=/live"
                                 className="rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:-translate-y-[1px] hover:shadow-lg"
                             >
                                 {t("nav.cta")}
@@ -169,7 +169,7 @@ export function MarketingNavbar() {
 
                             {/* CTA Button */}
                             <Link
-                                href="/login?next=/dashboard"
+                                href="/login?next=/live"
                                 onClick={() => setMobileMenuOpen(false)}
                                 className="block w-full rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-3 text-center text-sm font-semibold text-white shadow-md transition hover:shadow-lg"
                             >

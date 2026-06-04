@@ -4,7 +4,7 @@ import ArenaRunView from "@/components/arena/ArenaRunView";
 import type { DebateDetail, DebateEvent } from "@/lib/api/types";
 import { useI18n } from "@/lib/i18n/client";
 
-const DEMO_DEBATE: Partial<DebateDetail> = {
+const DEMO_DEBATE: any = {
   id: "demo-run-investor",
   prompt: "Should a B2B SaaS startup prioritize growth or profitability in its first 12 months?",
   status: "completed",

@@ -63,7 +63,7 @@ export default async function GettingStartedPage() {
                     <div className="pl-11">
                         <p className="mb-4 text-slate-600 dark:text-slate-400">{t("docs.gettingStarted.step3.description")}</p>
                         <Button variant="amber" asChild>
-                            <Link href="/dashboard">{t("docs.gettingStarted.step3.link")}</Link>
+                            <Link href="/live">{t("docs.gettingStarted.step3.link")}</Link>
                         </Button>
                     </div>
                 </section>

@@ -10,7 +10,7 @@ type GoogleButtonProps = {
   className?: string;
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
-export default function GoogleButton({ nextPath = "/dashboard", label = "Continue with Google", className, ...props }: GoogleButtonProps) {
+export default function GoogleButton({ nextPath = "/live", label = "Continue with Google", className, ...props }: GoogleButtonProps) {
   const handleClick = () => {
     // Patchset 105: Use relative path to ensure we stay on same origin (web.consultaion.com)
     // and let Next.js rewrite handle the proxy to backend.

@@ -17,8 +17,9 @@ interface PromptPanelProps {
     submitLabel?: string
     isSubmitLoading?: boolean
     onAdvancedSettingsClick?: () => void
-    mode?: 'debate' | 'conversation'
-    onModeChange?: (mode: 'debate' | 'conversation') => void
+    mode?: 'arena' | 'debate' | 'conversation'
+    onModeChange?: (mode: 'arena' | 'debate' | 'conversation') => void
+    autoFocus?: boolean
 }
 
 /**
@@ -36,12 +37,13 @@ export function PromptPanel({
     onSubmit,
     status = 'idle',
     disabled = false,
-    helperText = 'Describe what you want the AI Parliament to debate…',
-    submitLabel = 'Start debate',
+    helperText = 'Describe what you want the AI Arena to run…',
+    submitLabel = 'Run Arena',
     isSubmitLoading = false,
     onAdvancedSettingsClick,
-    mode = 'debate',
+    mode = 'arena',
     onModeChange,
+    autoFocus = false,
 }: PromptPanelProps) {
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
         // Enter submits (without Shift), Shift+Enter adds newline
@@ -56,55 +58,64 @@ export function PromptPanel({
     const canSubmit = value.trim().length > 0 && !disabled && status !== 'running'
 
     return (
-        <div className="mx-auto w-full max-w-2xl px-4 sm:px-0">
+        <div className="mx-auto w-full max-w-3xl px-4 sm:px-0">
             <div
                 className={cn(
-                    'rounded-3xl border bg-white/80 p-4 shadow-sm backdrop-blur-sm transition-all duration-200 sm:p-6',
+                    'rounded-3xl border bg-white/80 p-5 shadow-smooth-lg backdrop-blur-sm transition-all duration-200 sm:p-7',
                     status === 'running' && 'opacity-95',
                     status === 'error' ? 'border-red-300' : 'border-brand-border/60'
                 )}
             >
-
-
-
-
                 {/* Header: Mode Toggle or Status */}
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between">
                     {onModeChange && status !== 'running' ? (
-                        <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+                        <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+                            <button
+                                type="button"
+                                onClick={() => onModeChange('arena')}
+                                className={cn(
+                                    "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all",
+                                    mode === 'arena'
+                                        ? "bg-white shadow-sm text-slate-900 font-bold ring-1 ring-black/5"
+                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                )}
+                            >
+                                <Scale className="h-3.5 w-3.5 text-amber-500" />
+                                Arena
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => onModeChange('debate')}
                                 className={cn(
-                                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                                    "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all",
                                     mode === 'debate'
-                                        ? "bg-white shadow-sm text-slate-900 font-semibold ring-1 ring-black/5"
+                                        ? "bg-white shadow-sm text-slate-900 font-bold ring-1 ring-black/5"
                                         : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                 )}
                             >
-                                <Scale className="h-3.5 w-3.5" />
+                                <Scale className="h-3.5 w-3.5 text-indigo-500" />
                                 Debate
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onModeChange('conversation')}
                                 className={cn(
-                                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                                    "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all",
                                     mode === 'conversation'
-                                        ? "bg-white shadow-sm text-indigo-700 font-semibold ring-1 ring-indigo-100"
+                                        ? "bg-white shadow-sm text-slate-950 font-bold ring-1 ring-indigo-100"
                                         : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                 )}
                             >
-                                <MessageCircle className="h-3.5 w-3.5" />
+                                <MessageCircle className="h-3.5 w-3.5 text-purple-500" />
                                 Conversation
                             </button>
                         </div>
                     ) : <div />}
 
                     {status === 'running' && (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3.5 py-1.5 text-xs font-bold text-amber-800">
                             <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
-                            {mode === 'conversation' ? 'Conversation in progress…' : 'Debate in progress…'}
+                            {mode === 'conversation' ? 'Conversation in progress…' : mode === 'debate' ? 'Debate in progress…' : 'Arena compare in progress…'}
                         </span>
                     )}
                 </div>
@@ -115,10 +126,17 @@ export function PromptPanel({
                     onChange={(e) => onChange(e.target.value)}
                     onKeyDown={handleKeyDown}
                     disabled={disabled || status === 'running'}
-                    placeholder={mode === 'conversation' ? "What topic should the panel explore collaboratively?" : "What should the AI Parliament debate?"}
+                    autoFocus={autoFocus}
+                    placeholder={
+                        mode === 'conversation' 
+                            ? "What topic should the panel explore collaboratively?" 
+                            : mode === 'debate'
+                            ? "What should the AI Parliament debate?"
+                            : "Ask a question to compare multiple AI models and synthesize the best decision..."
+                    }
                     className={cn(
                         'w-full resize-none bg-transparent text-sm outline-none placeholder:text-slate-400 sm:text-base',
-                        'min-h-[120px] text-slate-900 sm:min-h-[160px]',
+                        'min-h-[160px] text-slate-900 sm:min-h-[200px]',
                         (disabled || status === 'running') && 'cursor-not-allowed opacity-60'
                     )}
                 />
@@ -131,42 +149,48 @@ export function PromptPanel({
                 )}
 
                 {/* Footer row */}
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                     {/* Helper text */}
                     <p className="text-xs text-slate-500">
                         {mode === 'conversation'
                             ? 'Collaborative discussion to synthesize an answer.'
-                            : 'Adversarial debate to find the best argument.'}
+                            : mode === 'debate'
+                            ? 'Adversarial debate to find the best argument.'
+                            : 'Multi-model compare and synthesis.'}
                     </p>
 
                     {/* Right side controls */}
-                    {/* <div className="absolute right-2 top-2">
-                <Kbd>Cmd+Enter</Kbd>
-              </div> */}
-                    {/* Advanced settings trigger */}
-                    {onAdvancedSettingsClick && (
-                        <button
-                            type="button"
-                            className="text-xs text-slate-500 underline-offset-2 transition hover:text-slate-700 hover:underline"
-                            onClick={onAdvancedSettingsClick}
-                        >
-                            Advanced settings
-                        </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {/* Advanced settings trigger */}
+                        {onAdvancedSettingsClick && (
+                            <button
+                                type="button"
+                                className="text-xs text-slate-500 underline-offset-2 transition hover:text-slate-700 hover:underline"
+                                onClick={onAdvancedSettingsClick}
+                            >
+                                Advanced settings
+                            </button>
+                        )}
 
-                    {/* Submit button */}
-                    <Button
-                        type="button"
-                        size="sm"
-                        disabled={!canSubmit}
-                        onClick={onSubmit}
-                        className="bg-brand-accent text-white hover:bg-brand-accent/90"
-                    >
-                        {isSubmitLoading || status === 'running' ? 'Running…' : (mode === 'conversation' ? 'Start Conversation' : submitLabel)}
-                    </Button>
+                        {/* Submit button */}
+                        <Button
+                            type="button"
+                            size="default"
+                            disabled={!canSubmit}
+                            onClick={onSubmit}
+                            className="bg-brand-accent text-white hover:bg-brand-accent/90 rounded-xl px-5 font-semibold"
+                        >
+                            {isSubmitLoading || status === 'running' 
+                                ? 'Running…' 
+                                : (mode === 'conversation' 
+                                    ? 'Start Conversation' 
+                                    : mode === 'debate' 
+                                    ? 'Start Debate' 
+                                    : 'Run Arena')}
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
-
     )
 }

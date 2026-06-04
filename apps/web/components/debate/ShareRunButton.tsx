@@ -21,8 +21,8 @@ export function ShareRunButton({ debateId, initiallyPublic = false, modelCount =
         setTimeout(() => setCopied(false), 2000);
         pushToast({
             title: "Link copied!",
-            message: "Anyone with the link can view this run.",
-            type: "success"
+            description: "Anyone with the link can view this run.",
+            variant: "success"
         });
         trackEvent("arena_share_link_copied", { debate_id: debateId, is_public: isShared });
     };
@@ -47,16 +47,16 @@ export function ShareRunButton({ debateId, initiallyPublic = false, modelCount =
             } else {
                 pushToast({
                     title: "Run is now private",
-                    message: "This run is private again.",
-                    type: "success"
+                    description: "This run is private again.",
+                    variant: "success"
                 });
                 trackEvent("arena_share_disabled", { debate_id: debateId });
             }
         } catch (err) {
             pushToast({
                 title: "Error",
-                message: "Could not update share status.",
-                type: "error"
+                description: "Could not update share status.",
+                variant: "error"
             });
         } finally {
             setIsSharing(false);

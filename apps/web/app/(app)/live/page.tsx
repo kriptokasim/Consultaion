@@ -1,15 +1,15 @@
 'use client'
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import LivePanel from "@/components/consultaion/consultaion/live-panel";
 import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import type { Member, ScoreItem } from "@/components/parliament/types";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { ApiError, getRateLimitInfo, startDebate, startDebateRun } from "@/lib/api";
+import { ApiError, getRateLimitInfo, startDebate, startDebateRun, getDebate } from "@/lib/api";
 import { useEventSource } from "@/lib/sse";
 import { defaultPanelConfig, type PanelSeatConfig } from "@/lib/panels";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import { DebateReplay } from "@/components/debate/DebateReplay";
 import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar } from "@/components/prompt";
 import { track } from "@/lib/analytics";
 import { OnboardingHint } from "@/components/ui/onboarding-hint";
+import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
+import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
 
 const seatsToMembers = (seats: PanelSeatConfig[]): Member[] =>
   seats.map((seat) => ({
@@ -38,7 +40,7 @@ type VoteMeta = {
 
 const ENABLE_CONVERSATION_MODE = true
 
-export default function Page() {
+function ArenaPageContent() {
   const [prompt, setPrompt] = useState('Draft a national EV policy')
   const [panelConfig, setPanelConfig] = useState(() => defaultPanelConfig())
   const [running, setRunning] = useState(false)
@@ -55,10 +57,62 @@ export default function Page() {
   const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
   const [authStatus, setAuthStatus] = useState<'unknown' | 'authed' | 'guest'>('unknown')
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [mode, setMode] = useState<'debate' | 'conversation'>('debate')
+  const [mode, setMode] = useState<'arena' | 'debate' | 'conversation'>('arena')
+  const [autoFocus, setAutoFocus] = useState(false)
   const [truncated, setTruncated] = useState(false)
   const [truncateReason, setTruncateReason] = useState<string | null>(null)
   const [errorState, setErrorState] = useState<{ title?: string; message: string; hint?: string; retryable?: boolean } | null>(null)
+
+  const searchParams = useSearchParams()
+  const prefillPromptFrom = searchParams?.get('prefill_prompt_from')
+  const prefillPromptText = searchParams?.get('prefill_prompt')
+  const focusParam = searchParams?.get('focus')
+  const source = searchParams?.get('source')
+
+  useEffect(() => {
+    if (prefillPromptFrom) {
+      // Clear URL params so it doesn't trigger again on reload
+      const url = new URL(window.location.href)
+      url.searchParams.delete('prefill_prompt_from')
+      url.searchParams.delete('source')
+      window.history.replaceState({}, '', url.toString())
+
+      getDebate(prefillPromptFrom)
+        .then((data) => {
+          if (data && data.prompt) {
+            setPrompt(data.prompt)
+            track('public_run_prompt_prefilled_to_arena', { ref_run: prefillPromptFrom, source })
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to prefill prompt", err)
+        })
+    }
+  }, [prefillPromptFrom, source])
+
+  useEffect(() => {
+    if (prefillPromptText) {
+      setPrompt(decodeURIComponent(prefillPromptText))
+      setAutoFocus(true)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('prefill_prompt')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [prefillPromptText])
+
+  useEffect(() => {
+    if (focusParam === 'prompt') {
+      setAutoFocus(true)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('focus')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [focusParam])
+
+  const { data: debatesData, isLoading: debatesLoading } = useDebatesList()
+  const recentRuns = useMemo(() => {
+    return (debatesData?.items || []).slice(0, 5)
+  }, [debatesData])
 
   const { pushToast } = useToast()
   const { t } = useI18n()
@@ -393,7 +447,7 @@ export default function Page() {
             track('settings_opened', { source: 'prompt_panel' })
           }}
           mode={mode}
-          onModeChange={ENABLE_CONVERSATION_MODE ? (newMode: 'debate' | 'conversation') => {
+          onModeChange={ENABLE_CONVERSATION_MODE ? (newMode: 'arena' | 'debate' | 'conversation') => {
             setMode(newMode)
             setSessionStatus('idle')
             setErrorState(null)
@@ -401,11 +455,28 @@ export default function Page() {
             setCurrentDebateId(null)
             currentDebateIdRef.current = null
           } : undefined}
+          autoFocus={autoFocus}
         />
 
         <OnboardingHint id="live_prompt" text={t("onboarding.live.promptHint")} className="mt-2" />
 
         <PromptPresets onPresetSelected={handlePresetSelected} />
+
+        {authStatus === 'authed' && (
+          <div className="mt-8 border-t border-slate-100 pt-8 dark:border-slate-800">
+            <DashboardRunsHistory
+              debates={recentRuns}
+              debatesLoading={debatesLoading}
+              onNewRun={() => {
+                const textareas = document.getElementsByTagName('textarea');
+                if (textareas.length > 0) {
+                  textareas[0].focus();
+                  textareas[0].scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Keep existing LivePanel for events display */}
@@ -442,5 +513,13 @@ export default function Page() {
         </section>
       ) : null}
     </main>
+  )
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-slate-500">Loading Arena...</div>}>
+      <ArenaPageContent />
+    </Suspense>
   )
 }

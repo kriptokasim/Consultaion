@@ -154,11 +154,13 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
 
   const handleTemplateClick = (templateId: string) => {
     setTemplateUsed(true);
-    setShowModal(true);
-    // Prefill prompt based on template
-    if (templateId === "strategy-saas-rollout") setPrompt(t("dashboard.templates.strategy.description"));
-    else if (templateId === "risk-bank-governance") setPrompt(t("dashboard.templates.governance.description"));
-    else if (templateId === "product-roadmap") setPrompt(t("dashboard.templates.product.description"));
+    let text = "";
+    if (templateId === "strategy-saas-rollout") text = t("dashboard.templates.strategy.description");
+    else if (templateId === "risk-bank-governance") text = t("dashboard.templates.governance.description");
+    else if (templateId === "product-roadmap") text = t("dashboard.templates.product.description");
+    
+    trackEvent("overview_template_clicked", { template_id: templateId });
+    router.push(`/live?prefill_prompt=${encodeURIComponent(text)}`);
   };
 
   // Draft persistence: restore on modal open
@@ -287,7 +289,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
           ) : null}
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => setShowModal(true)} />
+          <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => { trackEvent("overview_go_to_arena_clicked"); router.push("/live?focus=prompt"); }} />
           <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
           {maxDebates ? (
             <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-smooth transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-smooth-lg">
@@ -324,7 +326,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
               onOpenTemplates={() => {
                 document.getElementById("templates-section")?.scrollIntoView({ behavior: "smooth" });
               }}
-              onNewDebate={() => setShowModal(true)}
+              onNewDebate={() => router.push("/live?focus=prompt")}
             />
           )}
 
@@ -342,7 +344,7 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
       )}
 
       {/* Runs History Section */}
-      <DashboardRunsHistory debates={debates} debatesLoading={debatesLoading} onNewRun={() => setShowModal(true)} />
+      <DashboardRunsHistory debates={debates} debatesLoading={debatesLoading} onNewRun={() => router.push("/live?focus=prompt")} />
 
       {showModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">

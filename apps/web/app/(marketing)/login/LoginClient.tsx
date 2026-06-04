@@ -16,7 +16,7 @@ import { useI18n } from "@/lib/i18n/client"
 export default function LoginClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextPath = searchParams.get("next") || "/dashboard"
+  const nextPath = searchParams.get("next") || "/live"
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)

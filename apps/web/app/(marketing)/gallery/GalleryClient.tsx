@@ -77,7 +77,7 @@ export default function GalleryClient() {
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="w-full">
-                  <Link href={`/login?next=${encodeURIComponent(`/dashboard?prefill_prompt_from=demo`)}`}>
+                  <Link href={`/login?next=${encodeURIComponent(`/live?prefill_prompt_from=demo`)}`}>
                     <Play className="h-4 w-4 mr-2" />
                     Run similar
                   </Link>

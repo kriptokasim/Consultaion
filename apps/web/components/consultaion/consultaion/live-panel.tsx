@@ -23,7 +23,7 @@ type LivePanelProps = {
   speakerTime: number
   vote?: { method?: string; ranking?: string[] }
   loading?: boolean
-  mode?: 'debate' | 'conversation'
+  mode?: 'arena' | 'debate' | 'conversation'
   truncated?: boolean
   truncateReason?: string | null
 }

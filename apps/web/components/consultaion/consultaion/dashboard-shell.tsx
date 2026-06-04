@@ -22,10 +22,9 @@ import { useTheme } from "next-themes"
 // live under (marketing) and are not linked from the authenticated sidebar to avoid
 // tearing down the DashboardShell. They remain reachable via the public header/footer.
 const BASE_NAV_LINKS = [
-  { labelKey: "nav.dashboard", href: "/dashboard", icon: BarChart3, tooltipKey: "nav.tooltip.dashboard" },
-  { labelKey: "nav.live", href: "/live", icon: PlayCircle, tooltipKey: "nav.tooltip.live" },
+  { labelKey: "nav.arena", href: "/live", icon: PlayCircle, tooltipKey: "nav.tooltip.arena" },
+  { labelKey: "nav.overview", href: "/dashboard", icon: BarChart3, tooltipKey: "nav.tooltip.overview" },
   { labelKey: "nav.runs", href: "/runs", icon: FileText, tooltipKey: "nav.tooltip.runs" },
-  { labelKey: "nav.chamber", href: "/chamber", icon: Scale, tooltipKey: "nav.tooltip.chamber" },
   { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, tooltipKey: "nav.tooltip.analytics" },
   { labelKey: "nav.settings", href: "/settings", icon: Settings, tooltipKey: "nav.tooltip.settings" },
 ]
@@ -98,12 +97,12 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
   }
 
   const handleBackClick = () => {
-    // Prefer history back when available, otherwise return to the main dashboard.
+    // Prefer history back when available, otherwise return to the Arena.
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back()
       return
     }
-    router.push("/dashboard")
+    router.push("/live")
   }
 
   const handleLogout = async () => {
@@ -148,7 +147,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
             </div>
             <div className="flex items-center gap-3">
               <Button asChild variant="default" size="sm">
-                <Link href={`/login?source=public_run&intent=create_own_run`}>
+                <Link href={`/login?source=public_run&intent=create_own_run&next=${encodeURIComponent('/live?focus=prompt')}`}>
                   Create your own Arena run
                 </Link>
               </Button>
@@ -182,13 +181,13 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           )}
           aria-label="Primary navigation"
         >
-          <Link href="/dashboard" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
+          <Link href="/live" className="flex items-center gap-3 border-b border-sidebar-border pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar">
             <Brand height={32} className="drop-shadow" />
             <div className="leading-tight">
               <div className="text-[0.65rem] font-semibold uppercase tracking-[0.05em] text-amber-700 dark:text-amber-400">
                 <BrandWordmark size="sm" className="text-[0.65rem]" />
               </div>
-              <p className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">Parliament</p>
+              <p className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">Arena</p>
             </div>
           </Link>
           <nav className="mt-4 flex-1 space-y-1" role="navigation">
@@ -256,7 +255,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
               >
                 <Menu className="h-4 w-4" />
               </button>
-              {pathname !== "/dashboard" ? (
+              {pathname !== "/live" ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -268,7 +267,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                   <span>{t("nav.goBack")}</span>
                 </Button>
               ) : null}
-              <Link href="/dashboard" className="flex items-center gap-2 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
+              <Link href="/live" className="flex items-center gap-2 md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-lg px-1">
                 <Brand height={32} className="drop-shadow-sm" />
                 <span className="heading-serif text-lg font-semibold text-slate-800 dark:text-white">
                   <BrandWordmark size="md" inline />
@@ -427,12 +426,12 @@ function UserDropdown({
               <p className="text-xs text-slate-600 dark:text-slate-300 truncate">{profile.email}</p>
             </div>
             <Link
-              href="/dashboard"
+              href="/live"
               onClick={() => setOpen(false)}
               className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700"
             >
-              <BarChart3 className="h-4 w-4" />
-              {t("nav.dashboard")}
+              <PlayCircle className="h-4 w-4" />
+              {t("nav.arena")}
             </Link>
             <Link
               href="/settings"
