@@ -30,7 +30,7 @@ export function sanitizeHTML(dirty: string): string {
     return DOMPurify.sanitize(dirty, {
         ALLOWED_TAGS: [
             'p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'a', 'span', 'div',
+            'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'a', 'span', 'div', 'hr',
         ],
         ALLOWED_ATTR: ['href', 'title', 'class', 'target', 'rel'],
         ALLOW_DATA_ATTR: false,
@@ -90,6 +90,14 @@ function parseMarkdownToHTML(markdown: string): string {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmed = line.trim();
+
+        // 0. Horizontal Rules
+        if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+            closeListIfNeeded();
+            closeBlockquoteIfNeeded();
+            processedLines.push('<hr />');
+            continue;
+        }
 
         // 1. Blockquote
         if (trimmed.startsWith('>')) {
@@ -157,6 +165,10 @@ function parseMarkdownToHTML(markdown: string): string {
     closeBlockquoteIfNeeded();
 
     html = processedLines.join('\n');
+
+    // Bold italic: ***text*** or ___text___
+    html = html.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/___([^_]+)___/g, '<strong><em>$1</em></strong>');
 
     // Bold: **text** or __text__
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');

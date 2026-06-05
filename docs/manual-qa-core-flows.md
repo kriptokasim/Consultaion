@@ -4,18 +4,18 @@ This guide outlines the step-by-step procedures for manually verifying the prima
 
 ---
 
-## 1. Arena Run Flow
-**Goal:** Verify multi-model SOTA analysis, streaming response rendering, and the synthesis summary.
+## 1. Arena Run Flow (Arena-First Live Flow)
+**Goal:** Verify multi-model SOTA analysis, streaming response rendering, and the synthesis summary using the primary Arena-first `/live` entry point.
 
-1. Log in to the application and navigate to the dashboard.
-2. Click **New Run** and select the **Arena** mode.
+1. Navigate directly to the live Arena page (e.g., `/live`).
+2. Verify that the input prompt area is visible and default SOTA models are pre-selected.
 3. Type a complex prompt (e.g., `"Should we build a web application in Next.js or pure HTML?"`).
-4. Click **Start Arena Run**.
+4. Click **Start Arena Run** (or press Enter).
 5. **Expected Behavior:**
-   - The UI shows a loading state.
+   - The UI transitions to the active run state.
    - SOTA models start generating in parallel.
    - Tab buttons for the SOTA models (`GPT-4o`, `Claude 3.5 Sonnet`, `Gemini 2.5 Pro`, `DeepSeek R1`) appear.
-   - On mobile, only the active model card is rendered with tab selection. On desktop, they render in a clean 2x2 or 4x1 grid.
+   - On mobile, only the active model card is rendered with tab selection. On desktop, they render in a clean grid layout.
    - Once all models finish, the **Synthesis Card** renders at the bottom.
    - Verify that there is no horizontal text overflow or broken markdown layout.
 
@@ -24,7 +24,7 @@ This guide outlines the step-by-step procedures for manually verifying the prima
 ## 2. Compare Run Flow
 **Goal:** Verify side-by-side comparison of selected models.
 
-1. Navigate to **New Run** and select **Compare** mode.
+1. Navigate to `/live` (or the sidebar/navigation panel) and select **Compare** mode.
 2. Under the model selection list, pick two or more models (e.g., `GPT-4o Mini` and `Claude 3 Haiku`).
 3. Enter a prompt and click **Compare**.
 4. **Expected Behavior:**
@@ -34,10 +34,10 @@ This guide outlines the step-by-step procedures for manually verifying the prima
 
 ---
 
-## 3. Conversation Run Flow
+## 3. Conversation Run Flow (Beta)
 **Goal:** Verify back-and-forth chat mode with a single model.
 
-1. Navigate to **New Run** and select **Conversation** mode.
+1. Navigate to `/live` (or the sidebar/navigation panel) and select **Conversation** (marked as Beta) mode.
 2. Select a target model and input your first message.
 3. Submit the message and observe the stream.
 4. **Expected Behavior:**
@@ -48,10 +48,10 @@ This guide outlines the step-by-step procedures for manually verifying the prima
 
 ---
 
-## 4. Debate / Parliament Run Flow
+## 4. Debate / Parliament Run Flow (Beta)
 **Goal:** Verify the multi-stage agent pipeline (Draft -> Critique -> Judge -> Synthesis).
 
-1. Navigate to **New Run** and select **Debate (Parliament)** mode.
+1. Navigate to `/live` (or the sidebar/navigation panel) and select **Debate (Parliament)** (marked as Beta) mode.
 2. Pick or configure the panel of agents (Optimist, Pessimist, Judge, etc.).
 3. Enter a debate prompt and click **Start Debate**.
 4. **Expected Behavior:**
@@ -99,3 +99,15 @@ This guide outlines the step-by-step procedures for manually verifying the prima
    - A helpful hint is displayed: *"Please upgrade to a Pro plan or configure your own API keys in Settings to continue."*
    - For individual model card failures, the card displays a clean error explanation and detail toggle.
    - A non-intrusive badge saying `"Retry coming soon"` is displayed instead of a broken button or a generic alert dialog.
+
+---
+
+## 8. Mode Status Matrix
+
+| Mode Name | Status | Primary Purpose | QA Status |
+| :--- | :--- | :--- | :--- |
+| **Arena** | Active | Parallel analysis across SOTA models with synthesized verdict | Passed & Automated |
+| **Compare** | Active | Side-by-side customizable model comparison | Passed & Automated |
+| **Conversation** | **Beta** | Interactive conversational thread with a selected model | Automated |
+| **Debate / Parliament** | **Beta** | Multi-round multi-agent debate pipeline with evaluation | Automated |
+

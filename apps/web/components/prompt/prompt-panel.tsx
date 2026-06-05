@@ -94,7 +94,7 @@ export function PromptPanel({
                                 )}
                             >
                                 <Scale className="h-3.5 w-3.5 text-indigo-500" />
-                                Debate
+                                Debate <span className="text-[9px] font-bold text-indigo-500/80 bg-indigo-50 px-1 py-0.5 rounded uppercase tracking-wider scale-90 origin-left">Beta</span>
                             </button>
                             <button
                                 type="button"
@@ -107,7 +107,7 @@ export function PromptPanel({
                                 )}
                             >
                                 <MessageCircle className="h-3.5 w-3.5 text-purple-500" />
-                                Conversation
+                                Conversation <span className="text-[9px] font-bold text-purple-500/80 bg-purple-50 px-1 py-0.5 rounded uppercase tracking-wider scale-90 origin-left">Beta</span>
                             </button>
                         </div>
                     ) : <div />}
