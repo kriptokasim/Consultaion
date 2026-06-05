@@ -29,6 +29,11 @@ PROVIDER_KEYS = (
     "OPENROUTER_API_KEY",
     "GROQ_API_KEY",
     "MISTRAL_API_KEY",
+    "DEEPINFRA_API_KEY",
+    "TOGETHER_API_KEY",
+    "FIREWORKS_API_KEY",
+    "XAI_API_KEY",
+    "PERPLEXITY_API_KEY",
 )
 _has_llm_key = any(getattr(settings, key, None) for key in PROVIDER_KEYS)
 REQUIRE_REAL_LLM = settings.REQUIRE_REAL_LLM

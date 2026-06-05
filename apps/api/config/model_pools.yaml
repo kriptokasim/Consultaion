@@ -1,37 +1,52 @@
 pools:
-  free_pool:
+  test_pool:
     models:
-      - mimo-v2-free
-      - llama-3-free
+      - mock
+      - groq_fast
+      - deepinfra_reasoning
     policies:
       - auto
       - direct
-  pro_pool:
+  free_hosted_pool:
     models:
-      - gpt4o-deep
-      - claude-sonnet
-      - gemini-2-5-pro
-      - groq-llama-3-3
-      - mistral-large
+      - groq_fast
+      - deepinfra_reasoning
+      - together_general
+      - fireworks_general
+    policies:
+      - auto
+      - direct
+  arena_primary_pool:
+    models:
+      - openai_fast
+      - anthropic_reasoning
+      - gemini_general
+      - groq_fast
+    policies:
+      - auto
+      - direct
+      - fallback
+  premium_pool:
+    models:
+      - openai_premium
+      - anthropic_reasoning
+      - gemini_pro
+      - perplexity_search
+      - xai_grok
+      - mistral_large
     policies:
       - auto
       - direct
       - fallback
   fallback_pool:
     models:
-      - router-smart
-      - router-deep
+      - openrouter_fallback
     policies:
       - auto
       - fallback
-
-providers:
-  openai:
-    direct_model: "openai/gpt-4o"
-    fallback_model: "openrouter/openai/gpt-4o"
-  anthropic:
-    direct_model: "anthropic/claude-3-5-sonnet-20240620"
-    fallback_model: "openrouter/anthropic/claude-3.5-sonnet"
-  gemini:
-    direct_model: "gemini/gemini-2.5-pro-preview-06-05"
-    fallback_model: "openrouter/google/gemini-2.5-pro"
+  demo_pool:
+    models:
+      - mock
+    policies:
+      - auto
+      - direct

@@ -140,7 +140,7 @@ def test_call_llm_uses_registry_model(monkeypatch):
     )
     assert text == "hello"
     assert usage.total_tokens == 8.0
-    assert usage.provider == "direct"
+    assert usage.provider == "openai"
 
     assert calls.get("model") == "openai/custom-model"
 

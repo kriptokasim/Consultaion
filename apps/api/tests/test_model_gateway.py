@@ -8,10 +8,10 @@ from model_gateway import route_llm_call
 from model_gateway.adapters import MockAdapter, DirectProviderAdapter, OpenRouterAdapter
 
 def test_model_pool_lookup():
-    assert get_model_pool("mimo-v2-free") == "free_pool"
-    assert get_model_pool("gpt4o-deep") == "pro_pool"
-    # Unknown model should default to pro_pool
-    assert get_model_pool("unknown-model") == "pro_pool"
+    assert get_model_pool("mimo-v2-free") == "free_hosted_pool"
+    assert get_model_pool("gpt4o-deep") == "premium_pool"
+    # Unknown model should default to premium_pool
+    assert get_model_pool("unknown-model") == "premium_pool"
 
 def test_validate_user_access():
     # Free user calling free model -> ok
@@ -42,8 +42,8 @@ def test_determine_routing_strategy():
         user_plan="free"
     )
     adapter_cls, policy = determine_routing_strategy(req_free, force_real=True)
-    assert adapter_cls == OpenRouterAdapter
-    assert policy == "smart-router-free"
+    assert adapter_cls == DirectProviderAdapter
+    assert policy == "free-direct-pool"
 
     # Auto policy with pro plan -> DirectProviderAdapter
     req_pro = GatewayRequest(
@@ -70,7 +70,7 @@ async def test_route_llm_call_success():
     res = await route_llm_call(req)
     assert res.success is True
     assert "[Mock response from mimo-v2-free]" in res.content
-    assert res.model_pool == "free_pool"
+    assert res.model_pool == "free_hosted_pool"
 
 @pytest.mark.asyncio
 async def test_route_llm_call_fallback_loop():

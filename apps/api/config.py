@@ -228,6 +228,11 @@ class AppSettings(BaseSettings):
     GEMINI_API_KEY: str | None = None
     AZURE_API_KEY: str | None = None
     LITELLM_API_KEY: str | None = None
+    DEEPINFRA_API_KEY: str | None = None
+    TOGETHER_API_KEY: str | None = None
+    FIREWORKS_API_KEY: str | None = None
+    XAI_API_KEY: str | None = None
+    PERPLEXITY_API_KEY: str | None = None
     LITELLM_MODEL: str = "gpt-4o-mini"
     LITELLM_API_BASE: str | None = None
     OPENROUTER_FALLBACK_MODEL: str = "openrouter/openai/gpt-4o-mini"

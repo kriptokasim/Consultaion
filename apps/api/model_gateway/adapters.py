@@ -35,20 +35,31 @@ class DirectProviderAdapter(BaseAdapter):
     ) -> GatewayModelCallResult:
         # Map model_id to direct provider representation
         target_model = model_id
-        from parliament.model_registry import get_model
-        try:
-            model_cfg = get_model(model_id)
-            if model_cfg and model_cfg.litellm_model:
-                target_model = model_cfg.litellm_model
-        except Exception:
-            if model_id == "gpt4o-deep":
-                target_model = "openai/gpt-4o"
-            elif model_id == "claude-sonnet":
-                target_model = "anthropic/claude-3-5-sonnet-20240620"
-            elif model_id == "gemini-2-5-pro":
-                target_model = "gemini/gemini-2.5-pro-preview-06-05"
-
+        provider_name = "direct"
         
+        from model_gateway.model_map import MODEL_MAP
+        if model_id in MODEL_MAP:
+            target_model = MODEL_MAP[model_id]["litellm_model"]
+            provider_name = MODEL_MAP[model_id]["provider"]
+        else:
+            from parliament.model_registry import get_model
+            try:
+                model_cfg = get_model(model_id)
+                if model_cfg:
+                    if model_cfg.litellm_model:
+                        target_model = model_cfg.litellm_model
+                    provider_name = model_cfg.provider
+            except Exception:
+                if model_id == "gpt4o-deep":
+                    target_model = "openai/gpt-4o"
+                    provider_name = "openai"
+                elif model_id == "claude-sonnet":
+                    target_model = "anthropic/claude-3-5-sonnet-20240620"
+                    provider_name = "anthropic"
+                elif model_id == "gemini-2-5-pro":
+                    target_model = "gemini/gemini-2.5-pro-preview-06-05"
+                    provider_name = "gemini"
+
         start_ts = time.monotonic()
         response = await acompletion(
             model=target_model,
@@ -68,7 +79,7 @@ class DirectProviderAdapter(BaseAdapter):
         return GatewayModelCallResult(
             content=content,
             model_used=target_model,
-            provider="direct",
+            provider=provider_name,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
@@ -93,12 +104,17 @@ class OpenRouterAdapter(BaseAdapter):
         user_id: Optional[str] = None
     ) -> GatewayModelCallResult:
         target_model = f"openrouter/{model_id}"
-        if model_id == "gpt4o-deep":
-            target_model = "openrouter/openai/gpt-4o"
-        elif model_id == "claude-sonnet":
-            target_model = "openrouter/anthropic/claude-3.5-sonnet"
-        elif model_id == "gemini-2-5-pro":
-            target_model = "openrouter/google/gemini-2.5-pro"
+        
+        from model_gateway.model_map import MODEL_MAP
+        if model_id in MODEL_MAP:
+            target_model = MODEL_MAP[model_id]["litellm_model"]
+        else:
+            if model_id == "gpt4o-deep":
+                target_model = "openrouter/openai/gpt-4o"
+            elif model_id == "claude-sonnet":
+                target_model = "openrouter/anthropic/claude-3.5-sonnet"
+            elif model_id == "gemini-2-5-pro":
+                target_model = "openrouter/google/gemini-2.5-pro"
         
         start_ts = time.monotonic()
         response = await acompletion(
