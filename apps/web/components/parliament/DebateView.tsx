@@ -7,6 +7,8 @@ import { useI18n } from "@/lib/i18n/client";
 import type { DebateEvent, Role } from "./types";
 import { formatEventType, formatModelLabel } from "@/lib/ui/formatters";
 
+import { sanitizeMarkdown } from "@/lib/sanitize";
+
 export interface DebateViewProps {
   events: DebateEvent[];
   className?: string;
@@ -202,10 +204,16 @@ export default function DebateView({ events, className = "", embedded = false }:
 
                   {/* Body text */}
                   {"text" in event && event.text && (
-                    <p className="mb-3 text-sm leading-relaxed text-foreground/80">{event.text}</p>
+                    <div 
+                      className="mb-3 text-sm leading-relaxed text-foreground/80 prose prose-sm dark:prose-invert max-w-none"
+                      dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(event.text) }}
+                    />
                   )}
                   {event.type === "seat_message" && event.content && (
-                    <p className="mb-3 text-sm leading-relaxed text-foreground/80">{event.content}</p>
+                    <div 
+                      className="mb-3 text-sm leading-relaxed text-foreground/80 prose prose-sm dark:prose-invert max-w-none"
+                      dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(event.content) }}
+                    />
                   )}
 
                   {/* Score detail box */}
@@ -219,7 +227,10 @@ export default function DebateView({ events, className = "", embedded = false }:
                         {t("debate.transcript.target")}: <span className="font-medium text-foreground">{event.persona}</span>
                       </div>
                       {event.rationale && (
-                        <p className="leading-relaxed text-muted-foreground">{event.rationale}</p>
+                        <div 
+                          className="leading-relaxed text-muted-foreground prose prose-sm dark:prose-invert max-w-none"
+                          dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(event.rationale) }}
+                        />
                       )}
                     </div>
                   )}

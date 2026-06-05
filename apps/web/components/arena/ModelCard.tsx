@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import Image from "next/image";
 
+import { sanitizeMarkdown } from "@/lib/sanitize";
+
 /* ─── provider accent colours ─── */
 const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string; accent: string; glow: string }> = {
     openai: {
@@ -223,9 +225,14 @@ export function ModelCard({ resp, className = "" }: { resp: ModelResponse; class
                 />
             ) : (
                 <div className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
-                        {resp.content || <span className="italic text-muted-foreground">No response received.</span>}
-                    </div>
+                    {resp.content ? (
+                        <div 
+                            className="text-sm leading-relaxed text-foreground/90"
+                            dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(resp.content) }}
+                        />
+                    ) : (
+                        <span className="italic text-muted-foreground">No response received.</span>
+                    )}
                 </div>
             )}
         </article>

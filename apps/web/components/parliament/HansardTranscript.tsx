@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Search, Filter, Download } from "lucide-react";
 import type { DebateEvent, Member } from "./types";
 import { formatModelLabel } from "@/lib/ui/formatters";
+import { sanitizeMarkdown } from "@/lib/sanitize";
 
 interface HansardTranscriptProps {
   events: DebateEvent[];
@@ -278,18 +279,43 @@ function TranscriptRow({
   if (event.type === "score") {
     content = (
       <>
-        <p className="font-semibold text-stone-900">
+        <p className="font-semibold text-stone-900 dark:text-foreground">
           Score: {event.score.toFixed(2)}
         </p>
-        <p>{event.rationale ?? "No rationale provided."}</p>
+        {event.rationale ? (
+          <div 
+            className="prose prose-sm dark:prose-invert max-w-none text-stone-700 dark:text-foreground/80 mt-1"
+            dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(event.rationale) }}
+          />
+        ) : (
+          <p className="text-stone-500 dark:text-muted-foreground mt-1">No rationale provided.</p>
+        )}
       </>
     );
   } else if (event.type === "seat_message") {
-    content = <p>{event.content || event.text || "—"}</p>;
+    const textVal = event.content || event.text || "—";
+    content = (
+      <div 
+        className="prose prose-sm dark:prose-invert max-w-none text-stone-700 dark:text-foreground/80"
+        dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(textVal) }}
+      />
+    );
   } else if (event.type === "conversation_summary") {
-    content = <p>{event.content || event.text || "—"}</p>;
+    const textVal = event.content || event.text || "—";
+    content = (
+      <div 
+        className="prose prose-sm dark:prose-invert max-w-none text-stone-700 dark:text-foreground/80"
+        dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(textVal) }}
+      />
+    );
   } else {
-    content = <p>{("text" in event && event.text) || "—"}</p>;
+    const textVal = ("text" in event && event.text) || "—";
+    content = (
+      <div 
+        className="prose prose-sm dark:prose-invert max-w-none text-stone-700 dark:text-foreground/80"
+        dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(textVal) }}
+      />
+    );
   }
 
   return (

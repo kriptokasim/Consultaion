@@ -5,6 +5,9 @@ from sqlmodel import Session, select
 
 def test_free_plan_restrictions(authenticated_client, db_session: Session, monkeypatch):
     user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user.hosted_credits_used = 10
+    db_session.add(user)
+    db_session.commit()
     standard_model = ModelInfo(id='standard-model', display_name='Standard', provider='openai', litellm_model='gpt-3.5', tier='standard', cost_tier='low', latency_class='fast', quality_tier='baseline', safety_profile='normal', enabled=True)
     advanced_model = ModelInfo(id='advanced-model', display_name='Advanced', provider='openai', litellm_model='gpt-4', tier='advanced', cost_tier='high', latency_class='normal', quality_tier='flagship', safety_profile='strict', enabled=True)
     payload_standard = {'prompt': 'Test Standard', 'model_id': 'gpt4o-mini', 'mode': 'debate'}

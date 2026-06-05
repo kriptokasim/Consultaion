@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { formatModelLabel } from "@/lib/ui/formatters";
+import { sanitizeMarkdown } from "@/lib/sanitize";
 import VotingSection from "./VotingSection";
 import DebateView from "./DebateView";
 import ExportButton from "./ExportButton";
@@ -351,9 +352,10 @@ export default function ParliamentRunView({
 
                   {answer.fullText && (
                     <div className="mt-3 border-t border-stone-100 pt-3">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-800">
-                        {answer.fullText}
-                      </p>
+                      <div 
+                        className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed text-stone-800"
+                        dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(answer.fullText) }}
+                      />
                     </div>
                   )}
                 </details>
@@ -550,7 +552,10 @@ function ChampionSummary({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
             {actor || "Synthesizer"}
           </p>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-800">{text}</p>
+          <div 
+            className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed text-stone-800"
+            dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(text) }}
+          />
           {reasons.length ? (
             <div className="mt-3 space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Why it won</p>

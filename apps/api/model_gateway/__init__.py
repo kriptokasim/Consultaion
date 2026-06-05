@@ -14,8 +14,31 @@ async def route_llm_call(
     db_session = None
 ) -> GatewayModelCallResult:
     """The central router routing incoming LLM calls through the Model Gateway."""
+    # 1. Check user hosted credits to bypass Pro pool restriction
+    has_credits = False
+    if db_session and request.user_id:
+        try:
+            from models import User
+            from sqlalchemy.ext.asyncio import AsyncSession
+            import asyncio
+            
+            if isinstance(db_session, AsyncSession):
+                user = await db_session.get(User, request.user_id)
+            else:
+                def _get_user():
+                    return db_session.get(User, request.user_id)
+                user = await asyncio.get_running_loop().run_in_executor(None, _get_user)
+                
+            if user:
+                limit = getattr(user, "hosted_credits_limit", 10)
+                used = getattr(user, "hosted_credits_used", 0)
+                if used <= limit:
+                    has_credits = True
+        except Exception as e:
+            logger.warning(f"Error checking hosted credits in gateway: {e}")
+
     # 1. Validate plan restriction
-    validate_user_access_to_model(request.model_id, request.user_plan)
+    validate_user_access_to_model(request.model_id, request.user_plan, has_credits=has_credits)
     
     # 2. Estimate run cost (e.g., standard estimation: 0.015 per 1k input/output tokens)
     # Assume 1000 input, 1000 output tokens for credit check

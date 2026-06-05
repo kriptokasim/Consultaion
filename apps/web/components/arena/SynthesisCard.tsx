@@ -5,6 +5,8 @@ import { Trophy, AlertTriangle } from "lucide-react";
 import type { ModelResponse } from "./ModelCard";
 import { ModelLogo, getColors } from "./ModelCard";
 
+import { sanitizeMarkdown } from "@/lib/sanitize";
+
 interface SynthesisCardProps {
     synthesis: string;
     modelResponses: ModelResponse[];
@@ -30,9 +32,10 @@ export function SynthesisCard({ synthesis, modelResponses, isSynthesisFailed = f
                 </div>
             </div>
             <div className="prose prose-base dark:prose-invert max-w-none">
-                <div className="whitespace-pre-wrap leading-relaxed text-foreground">
-                    {synthesis}
-                </div>
+                <div 
+                    className="leading-relaxed text-foreground"
+                    dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(synthesis) }}
+                />
             </div>
 
             {/* Model attribution chips */}

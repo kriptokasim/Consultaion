@@ -188,11 +188,41 @@ async def create_debate(
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    # 1. Account Active Check
+    from fastapi import HTTPException
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "account_disabled",
+                "message": "Your account has been disabled. Please contact support.",
+            }
+        )
+
+    # 2. IP Rate Limit Check
     ip = request.client.host if request.client else "anonymous"
     allowed, retry_after = increment_ip_bucket(ip, settings.RL_DEBATE_CREATE_WINDOW, settings.RL_DEBATE_CREATE_MAX_CALLS)
     if not allowed:
         record_429(ip, request.url.path)
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
+
+    # 3. Daily Token quota check
+    from usage_limits import QuotaExceededError, check_quota
+    estimated_tokens = 5000  # Average debate uses ~5k tokens
+    try:
+        check_quota(session, current_user, required_tokens=estimated_tokens)
+    except QuotaExceededError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "quota_exceeded",
+                "kind": exc.kind,
+                "limit": exc.limit,
+                "used": exc.used,
+            }
+        ) from exc
+
+    # 4. Hourly / Monthly Plan run limits check
     try:
         reserve_run_slot(session, current_user.id)
         increment_debate_usage(session, current_user.id)
@@ -213,93 +243,103 @@ async def create_debate(
         )
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
-    # Patchset 57.0: Check if account is disabled
-    from fastapi import HTTPException
-    if not current_user.is_active:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "account_disabled",
-                "message": "Your account has been disabled. Please contact support.",
-            }
-        )
-
-    # Patchset 55.0: Check quota before debate creation
-    from usage_limits import QuotaExceededError, check_quota
-    
-    estimated_tokens = 5000  # Average debate uses ~5k tokens
     try:
-        check_quota(session, current_user, required_tokens=estimated_tokens)
-    except QuotaExceededError as exc:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "error": "quota_exceeded",
-                "kind": exc.kind,
-                "limit": exc.limit,
-                "used": exc.used,
-            }
-        ) from exc
+        # Patchset 54.0: Check feature flag for conversation mode
+        if body.mode == "conversation":
+            if not settings.ENABLE_CONVERSATION_MODE:
+                raise ValidationError(
+                    message="Conversation mode is not available",
+                    code="feature.disabled",
+                    hint="This feature is currently disabled. Please contact support."
+                )
+            # Patchset 50.3: Check beta access for conversation mode
+            from beta_access import require_beta_access
+            require_beta_access(current_user, "conversation mode")
 
-    # Patchset 54.0: Check feature flag for conversation mode
-    if body.mode == "conversation":
-        if not settings.ENABLE_CONVERSATION_MODE:
-            raise ValidationError(
-                message="Conversation mode is not available",
-                code="feature.disabled",
-                hint="This feature is currently disabled. Please contact support."
+        config = body.config or default_debate_config()
+        enabled_models = {m.id: m for m in list_enabled_models()}
+        if not enabled_models:
+            raise ProviderCircuitOpenError(
+                message="No models available; configure provider keys.", 
+                code="models.unavailable",
+                hint="Please contact the administrator to configure model providers."
             )
-        # Patchset 50.3: Check beta access for conversation mode
-        from beta_access import require_beta_access
-        require_beta_access(current_user, "conversation mode")
+        
+        # Validate requested model if provided
+        if body.model_id and body.model_id not in enabled_models:
+            raise ValidationError(
+                message="Invalid or unavailable model_id", 
+                code="debate.invalid_model",
+                hint="Please select a different model from the list."
+            )
+        
+        # Patchset 49.2: Enforce model tier limits
+        from billing.service import get_active_plan, reserve_hosted_credit
+        plan = get_active_plan(session, current_user.id)
+        
+        # Check the model's tier
+        from parliament.model_registry import get_default_model
+        target_model_id = body.model_id or get_default_model().id
+        target_model_info = enabled_models.get(target_model_id)
+        model_tier = "standard"
+        if target_model_info:
+            model_tier = getattr(target_model_info, "tier", "standard")
 
-    config = body.config or default_debate_config()
-    enabled_models = {m.id: m for m in list_enabled_models()}
-    if not enabled_models:
-        raise ProviderCircuitOpenError(
-            message="No models available; configure provider keys.", 
-            code="models.unavailable",
-            hint="Please contact the administrator to configure model providers."
-        )
-    
-    # Validate requested model if provided
-    if body.model_id and body.model_id not in enabled_models:
-        raise ValidationError(
-            message="Invalid or unavailable model_id", 
-            code="debate.invalid_model",
-            hint="Please select a different model from the list."
-        )
-    
-    # Patchset 49.2: Enforce model tier limits
-    from billing.service import get_active_plan, reserve_hosted_credit
-    plan = get_active_plan(session, current_user.id)
-    
-    # Phase 8: Hosted Credits check for Free plan users
-    reserve_hosted_credit(session, current_user.id)
+        # Phase 8: Hosted Credits check for Free plan users - only for advanced/SOTA models
+        is_sota_run = (model_tier == "advanced" or body.mode == "arena")
+        has_hosted_credits = False
+        if plan.is_default_free and is_sota_run:
+            try:
+                reserve_hosted_credit(session, current_user.id)
+                has_hosted_credits = True
+            except ValidationError as exc:
+                if exc.code == "hosted_credits.exhausted" and body.model_id is not None:
+                    raise ValidationError(
+                        message=f"Model '{target_model_info.display_name if target_model_info else target_model_id}' is not available on your plan.",
+                        code="debate.model_tier_restricted",
+                        hint="Please upgrade to Pro to use advanced models."
+                    ) from exc
+                raise exc
 
-    allowed_tiers = plan.limits.get("allowed_model_tiers")
+        allowed_tiers = plan.limits.get("allowed_model_tiers")
 
-    
-    # If allowed_tiers is not set, default to ["standard"] for Free plans (is_default_free=True)
-    # and ["standard", "advanced"] for others, unless explicitly configured.
-    if allowed_tiers is None:
-        if plan.is_default_free:
-            allowed_tiers = ["standard"]
-        else:
-            allowed_tiers = ["standard", "advanced"]
-            
-    # Check the model's tier
-    from parliament.model_registry import get_default_model
-    target_model_id = body.model_id or get_default_model().id
-    target_model_info = enabled_models.get(target_model_id)
-    if target_model_info:
-        model_tier = getattr(target_model_info, "tier", "standard")
+        # If allowed_tiers is not set, default to ["standard"] for Free plans (is_default_free=True)
+        # and ["standard", "advanced"] for others, unless explicitly configured.
+        if allowed_tiers is None:
+            if plan.is_default_free:
+                allowed_tiers = ["standard"]
+            else:
+                allowed_tiers = ["standard", "advanced"]
+
+        # Free tier user who successfully reserved a hosted credit is permitted to run advanced models
+        if plan.is_default_free and has_hosted_credits:
+            allowed_tiers = list(allowed_tiers)
+            if "advanced" not in allowed_tiers:
+                allowed_tiers.append("advanced")
+                
         if model_tier not in allowed_tiers:
              raise ValidationError(
-                message=f"Model '{target_model_info.display_name}' is not available on your plan.",
+                message=f"Model '{target_model_info.display_name if target_model_info else target_model_id}' is not available on your plan.",
                 code="debate.model_tier_restricted",
                 hint="Please upgrade to Pro to use advanced models."
             )
+    except Exception as exc:
+        # Refund run slot & debate usage
+        try:
+            from usage_limits import _get_or_reset_counter
+            counter = _get_or_reset_counter(session, current_user.id, "hour")
+            if counter.runs_used > 0:
+                counter.runs_used -= 1
+                session.add(counter)
+            from billing.service import get_or_create_usage
+            usage = get_or_create_usage(session, current_user.id)
+            if usage.debates_created > 0:
+                usage.debates_created -= 1
+                session.add(usage)
+            session.commit()
+        except Exception as refund_err:
+            logger.error(f"Failed to refund quotas during creation failure: {refund_err}")
+        raise exc
 
     panel_config = body.panel_config or default_panel_config()
     try:

@@ -72,8 +72,10 @@ def get_model_pool(model_id: str) -> str:
     return "pro_pool"
 
 
-def validate_user_access_to_model(model_id: str, user_plan: Optional[str]) -> None:
+def validate_user_access_to_model(model_id: str, user_plan: Optional[str], has_credits: bool = False) -> None:
     """Standard plan or Free plan checks."""
+    if has_credits:
+        return
     plan = (user_plan or "free").lower()
     pool = get_model_pool(model_id)
     if plan == "free" and pool == "pro_pool":

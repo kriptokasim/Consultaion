@@ -1,6 +1,7 @@
 import React from "react";
 import { Bot, User as UserIcon } from "lucide-react";
 import type { DebateDetail, DebateEvent } from "@/lib/api/types";
+import { sanitizeMarkdown } from "@/lib/sanitize";
 
 interface ConversationRunViewProps {
     debate: DebateDetail;
@@ -65,9 +66,10 @@ export default function ConversationRunView({ debate, events }: ConversationRunV
                                         </div>
                                     )}
                                 </div>
-                                <div className="p-5 prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                                    {content}
-                                </div>
+                                <div 
+                                    className="p-5 prose prose-sm dark:prose-invert max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(content) }}
+                                />
                             </div>
                         );
                     })

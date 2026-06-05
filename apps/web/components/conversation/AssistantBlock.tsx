@@ -7,6 +7,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { sanitizeMarkdown } from "@/lib/sanitize";
 
 interface AssistantMessage {
     seat_name?: string;
@@ -89,9 +90,10 @@ export function AssistantBlock({
                             </div>
 
                             {/* Content */}
-                            <div className="prose prose-sm max-w-none whitespace-pre-wrap leading-relaxed">
-                                {msg.content}
-                            </div>
+                            <div 
+                                className="prose prose-sm max-w-none leading-relaxed dark:prose-invert"
+                                dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(msg.content) }}
+                            />
                         </div>
                     </div>
                 );
