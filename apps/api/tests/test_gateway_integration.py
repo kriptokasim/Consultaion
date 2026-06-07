@@ -222,3 +222,34 @@ def test_public_dto_safeguard(client: TestClient, authenticated_client: TestClie
     assert "model_pool" not in data
     assert "routing_meta" not in data
     assert "user_plan" not in data
+
+
+@pytest.mark.asyncio
+async def test_used_equals_limit_gateway_block(db_session: Session):
+    """Verify that when user's hosted_credits_used equals hosted_credits_limit, has_credits is False and pro pool is restricted."""
+    from model_gateway import route_llm_call
+    from model_gateway.types import GatewayRequest, GatewayModelRestrictedError
+    
+    # 1. Setup a unique free user with used == limit (e.g. 5 == 5)
+    import uuid
+    email = f"free_limit_{uuid.uuid4().hex[:8]}@example.com"
+    user = User(email=email, password_hash="hash", plan="free", hosted_credits_limit=5, hosted_credits_used=5)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    
+    # 2. Try to call a restricted Pro model (e.g., claude-3-5-sonnet) with this user ID
+    # Since has_credits is False, it should raise GatewayModelRestrictedError because the free user
+    # does not have active credits to bypass the plan restrictions.
+    req = GatewayRequest(
+        messages=[{"role": "user", "content": "hello"}],
+        model_id="claude-3-5-sonnet",
+        role="tester",
+        user_id=user.id,
+        user_plan="free"
+    )
+    
+    with pytest.raises(GatewayModelRestrictedError) as exc_info:
+        await route_llm_call(req, db_session=db_session)
+    assert "restricted" in str(exc_info.value).lower()
+

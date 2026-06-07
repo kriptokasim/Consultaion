@@ -63,7 +63,7 @@ async def route_llm_call(
             if user:
                 limit = getattr(user, "hosted_credits_limit", 10)
                 used = getattr(user, "hosted_credits_used", 0)
-                if used <= limit:
+                if used < limit:
                     has_credits = True
         except Exception as e:
             logger.warning(f"Error checking hosted credits in gateway: {e}")
@@ -231,7 +231,8 @@ async def route_llm_call(
         return successful_result
     else:
         # All failed - friendly error
-        friendly_error_message = f"The model service is temporarily unavailable. Details: {last_error}"
+        logger.error(f"Model gateway call failed. Internal details: {last_error}")
+        friendly_error_message = "The model service is temporarily unavailable. Please try again later."
         result = GatewayModelCallResult(
             content="",
             model_used=request.model_id,
@@ -241,7 +242,7 @@ async def route_llm_call(
             model_pool=model_pool,
             routing_policy=routing_policy,
             fallback_used=True if fallback_used else False,
-            fallback_reason=fallback_reason or str(last_error),
+            fallback_reason=fallback_reason or "All provider routes failed",
             retry_count=retry_count,
             user_plan=request.user_plan
         )
