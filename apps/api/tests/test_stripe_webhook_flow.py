@@ -169,3 +169,60 @@ def test_stripe_webhook_subscription_updated_and_deleted():
         session.refresh(user)
         assert sub.status == "canceled"
         assert user.plan == "free"
+
+
+def test_stripe_webhook_idempotency():
+    """Verify that processing the same checkout.session.completed event twice is idempotent."""
+    provider = StripeBillingProvider()
+    
+    with Session(engine) as session:
+        _ensure_plans(session)
+        unique_email = f"webhook-idem-{uuid.uuid4()}@example.com"
+        user = User(
+            id=str(uuid.uuid4()),
+            email=unique_email,
+            password_hash="hashed_pass",
+            plan="free",
+            is_active=True
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+        subscription_id = f"sub_idem_{uuid.uuid4().hex[:12]}"
+        customer_id = f"cus_idem_{uuid.uuid4().hex[:12]}"
+        
+        payload = {
+            "id": f"evt_{uuid.uuid4().hex}",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "subscription": subscription_id,
+                    "customer": customer_id,
+                    "metadata": {
+                        "user_id": user.id,
+                        "plan_slug": "pro"
+                    }
+                }
+            }
+        }
+        
+        # Process once
+        provider.handle_webhook(payload, {}, db_session=session)
+        session.refresh(user)
+        assert user.plan == "pro"
+        
+        # Process a second time (should be idempotent and not create duplicate or throw exception)
+        provider.handle_webhook(payload, {}, db_session=session)
+        
+        session.refresh(user)
+        assert user.plan == "pro"
+        
+        # Count subscriptions matching subscription_id
+        subs = session.exec(
+            select(BillingSubscription).where(
+                BillingSubscription.provider_subscription_id == subscription_id
+            )
+        ).all()
+        assert len(subs) == 1
+
