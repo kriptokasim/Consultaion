@@ -348,6 +348,7 @@ async def google_callback(
         user_id=user.id,
         target_type="user",
         target_id=user.id,
+        ip_address=ip,
         meta={"email": user.email, "provider": "google"},
         session=session,
     )
@@ -382,6 +383,7 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
         user_id=user.id,
         target_type="user",
         target_id=user.id,
+        ip_address=ip,
         meta={"email": user.email},
         session=session,
     )
@@ -443,6 +445,7 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
         user_id=user.id,
         target_type="user",
         target_id=user.id,
+        ip_address=ip,
         meta={"email": user.email},
         session=session,
     )

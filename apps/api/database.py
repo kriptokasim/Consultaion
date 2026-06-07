@@ -90,6 +90,20 @@ def init_db() -> None:
                         conn.commit()
             except Exception as e:
                 db_logger.warning("Failed to alter user table: %s", e)
+                
+            # 4. Alter api_keys table for expiration and rotation
+            try:
+                columns = [c["name"] for c in inspector.get_columns("api_keys")]
+                new_key_cols = {
+                    "expires_at": "TIMESTAMP",
+                    "rotation_reminder_sent": "BOOLEAN DEFAULT 0"
+                }
+                for col, col_type in new_key_cols.items():
+                    if col not in columns:
+                        conn.execute(text(f"ALTER TABLE api_keys ADD COLUMN {col} {col_type}"))
+                        conn.commit()
+            except Exception as e:
+                db_logger.warning("Failed to alter api_keys table: %s", e)
 
 
 

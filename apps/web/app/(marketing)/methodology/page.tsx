@@ -1,6 +1,7 @@
 import Brand from "@/components/parliament/Brand";
 import { getServerTranslations } from "@/lib/i18n/server";
 import type { Metadata } from 'next';
+import { Layers, Scale, ShieldCheck } from "lucide-react";
 
 export const metadata: Metadata = {
   title: 'Methodology & Rankings Science',
@@ -30,15 +31,54 @@ export default async function MethodologyPage() {
         </div>
         <p className="mt-3 max-w-3xl text-sm text-slate-600 dark:text-slate-300">{t("methodology.description")}</p>
       </header>
-      <section className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-600 dark:bg-slate-800">
+
+      {/* Executive Summary / Value Prop */}
+      <section id="executive-summary-section" className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-indigo-50/30 p-6 shadow-sm dark:border-slate-850 dark:from-slate-900/50 dark:to-slate-900/10">
+        <h2 className="text-xl font-semibold text-slate-950 dark:text-white">{t("methodology.executiveSummary.title")}</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t("methodology.executiveSummary.subtitle")}</p>
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-450">
+              <Layers className="h-5 w-5" />
+            </div>
+            <h3 className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">360° Risk Analysis</h3>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              {t("methodology.executiveSummary.benefit1")}
+            </p>
+          </div>
+          
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-450">
+              <Scale className="h-5 w-5" />
+            </div>
+            <h3 className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">Unbiased Decisions</h3>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              {t("methodology.executiveSummary.benefit2")}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-450">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <h3 className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">Defensible Outcomes</h3>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              {t("methodology.executiveSummary.benefit3")}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="rankings-science-section" className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-600 dark:bg-slate-800">
         {sections.map((section) => (
-          <article key={section.title}>
+          <article key={section.title} className="border-b border-slate-100 last:border-0 pb-6 last:pb-0 dark:border-slate-700">
             <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{section.title}</h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: section.body }} />
           </article>
         ))}
       </section>
-      <section className="mt-10 rounded-3xl border border-amber-100/70 bg-white p-6 shadow-[0_16px_36px_rgba(112,73,28,0.12)] dark:border-slate-600 dark:bg-slate-800">
+
+      <section id="enterprise-features-section" className="mt-10 rounded-3xl border border-amber-100/70 bg-white p-6 shadow-[0_16px_36px_rgba(112,73,28,0.12)] dark:border-slate-600 dark:bg-slate-800">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{t("methodology.section.brand.title")}</h2>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t("methodology.section.brand.body")}</p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

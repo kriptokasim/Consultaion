@@ -103,18 +103,29 @@ class OpenRouterAdapter(BaseAdapter):
         routing_policy: str,
         user_id: Optional[str] = None
     ) -> GatewayModelCallResult:
-        target_model = f"openrouter/{model_id}"
+        OPENROUTER_MODEL_MAPPING = {
+            "gpt4o-mini": "openrouter/openai/gpt-4o-mini",
+            "gpt4o-deep": "openrouter/openai/gpt-4o",
+            "claude-sonnet": "openrouter/anthropic/claude-3.5-sonnet",
+            "claude-haiku": "openrouter/anthropic/claude-3-haiku",
+            "gemini-2-flash": "openrouter/google/gemini-2.0-flash",
+            "gemini-2-5-pro": "openrouter/google/gemini-2.5-pro",
+            "groq-llama-3-3": "openrouter/meta-llama/llama-3.3-70b-instruct",
+            "mistral-large": "openrouter/mistralai/mistral-large",
+            "deepseek-r1": "openrouter/deepseek/deepseek-r1",
+            "openai_fast": "openrouter/openai/gpt-4o-mini",
+            "openai_premium": "openrouter/openai/gpt-4o",
+            "anthropic_reasoning": "openrouter/anthropic/claude-3.5-sonnet",
+            "gemini_general": "openrouter/google/gemini-2.0-flash",
+            "gemini_pro": "openrouter/google/gemini-2.5-pro",
+            "groq_fast": "openrouter/meta-llama/llama-3.3-70b-instruct",
+            "mistral_large": "openrouter/mistralai/mistral-large",
+            "openrouter_fallback": "openrouter/openai/gpt-4o-mini",
+            "router-smart": "openrouter/router",
+            "router-deep": "openrouter/auto",
+        }
         
-        from model_gateway.model_map import MODEL_MAP
-        if model_id in MODEL_MAP:
-            target_model = MODEL_MAP[model_id]["litellm_model"]
-        else:
-            if model_id == "gpt4o-deep":
-                target_model = "openrouter/openai/gpt-4o"
-            elif model_id == "claude-sonnet":
-                target_model = "openrouter/anthropic/claude-3.5-sonnet"
-            elif model_id == "gemini-2-5-pro":
-                target_model = "openrouter/google/gemini-2.5-pro"
+        target_model = OPENROUTER_MODEL_MAPPING.get(model_id, f"openrouter/{model_id}")
         
         start_ts = time.monotonic()
         response = await acompletion(

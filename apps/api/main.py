@@ -256,6 +256,15 @@ async def lifespan(app: FastAPI):
             with suppress(asyncio.CancelledError):
                 await cleanup_task
         await sse_backend.stop()
+
+        # Centralized Redis connection pool shutdown
+        try:
+            from redis_pool import close_async_redis, close_sync_redis
+            await close_async_redis()
+            close_sync_redis()
+            logger.info("Redis connection pools closed successfully during lifespan shutdown.")
+        except Exception as exc:
+            logger.warning("Error closing Redis connection pools during lifespan shutdown: %s", exc)
 app = FastAPI(
     title="Consultaion API",
     version="0.1.0",

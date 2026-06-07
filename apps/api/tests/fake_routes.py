@@ -8,10 +8,11 @@ from auth import (
     generate_csrf_token,
     hash_password,
     verify_password,
+    get_current_user_flexible,
 )
 from config import settings
 from database import engine
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from models import User
 from routes.auth import (
@@ -157,3 +158,10 @@ async def test_google_callback(code: str, state: str, request: Request):
     resp.set_cookie(OAUTH_NEXT_COOKIE, "", path="/auth/google")
     _set_auth_cookies(resp, token)
     return resp
+
+
+@test_router.get("/test-api-key-auth")
+async def test_api_key_auth(
+    current_user: User = Depends(get_current_user_flexible)
+):
+    return {"email": current_user.email}

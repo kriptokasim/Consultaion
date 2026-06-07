@@ -304,15 +304,54 @@ def get_user_from_api_key(
     stmt = select(APIKey).where(APIKey.prefix == prefix)
     api_key_record = session.exec(stmt).first()
     
+    from audit import record_audit
+
     if not api_key_record:
+        logger.warning(f"Attempted use of non-existent API key prefix: {prefix}")
         return None
     
     # Verify key is not revoked
     if api_key_record.revoked:
+        logger.warning(f"Attempted use of revoked API key: {prefix}")
+        record_audit(
+            "api_key_auth_failed",
+            user_id=api_key_record.user_id,
+            target_type="api_key",
+            target_id=api_key_record.id,
+            meta={"prefix": prefix, "reason": "revoked"},
+            session=session,
+        )
         return None
+
+    # Verify key is not expired
+    if api_key_record.expires_at:
+        expires_at = api_key_record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if expires_at < now:
+            logger.warning(f"Attempted use of expired API key: {prefix} (expired at {api_key_record.expires_at})")
+            record_audit(
+                "api_key_auth_failed",
+                user_id=api_key_record.user_id,
+                target_type="api_key",
+                target_id=api_key_record.id,
+                meta={"prefix": prefix, "reason": "expired"},
+                session=session,
+            )
+            return None
     
     # Verify the full key matches the hash
     if not verify_api_key(api_key_value, api_key_record.hashed_key):
+        logger.warning(f"Attempted use of API key with invalid secret: {prefix}")
+        record_audit(
+            "api_key_auth_failed",
+            user_id=api_key_record.user_id,
+            target_type="api_key",
+            target_id=api_key_record.id,
+            meta={"prefix": prefix, "reason": "invalid_secret"},
+            session=session,
+        )
         return None
     
     # Update last_used_at

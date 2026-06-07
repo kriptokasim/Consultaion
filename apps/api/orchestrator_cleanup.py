@@ -11,11 +11,87 @@ from typing import List, Tuple
 
 from config import settings
 from database import session_scope
-from models import Debate, DebateCheckpoint, DebateError, Vote
+from models import Debate, DebateCheckpoint, DebateError, Vote, APIKey, User
 from sqlmodel import select
 from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
+
+
+async def check_api_key_rotations() -> int:
+    """
+    Scan for API keys expiring within 7 days and trigger warnings/reminders.
+    
+    Returns the number of keys processed.
+    """
+    now = datetime.now(timezone.utc)
+    warning_threshold = now + timedelta(days=7)
+    
+    reminded_count = 0
+    
+    with session_scope() as session:
+        # Get all unexpired, unreminded, unrevoked keys
+        stmt = select(APIKey).where(
+            APIKey.rotation_reminder_sent == False,
+            APIKey.revoked == False
+        )
+        keys = session.exec(stmt).all()
+        
+        for key in keys:
+            if not key.expires_at:
+                continue
+            
+            expires_at = key.expires_at
+            # Handle naive datetimes (SQLite compatibility)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+                
+            if now < expires_at <= warning_threshold:
+                # Mark as reminded
+                key.rotation_reminder_sent = True
+                session.add(key)
+                
+                # Fetch user email for notification
+                user = session.get(User, key.user_id)
+                user_email = user.email if user else "unknown user"
+                
+                # Log warning banner
+                logger.warning(
+                    f"[SECURITY WARNING] API key '{key.name}' (prefix: {key.prefix}) "
+                    f"for user {user_email} will expire at {key.expires_at}. "
+                    f"Please rotate your API key to avoid disruption."
+                )
+                
+                # Best-effort email reminder if Resend API key is configured
+                from core.settings import settings as core_settings
+                if user and getattr(core_settings.notifications, "resend_api_key", None):
+                    try:
+                        from integrations.email import RESEND_API_BASE
+                        import httpx
+                        subject = f"[Security Warning] Your Consultaion API key is expiring soon"
+                        html = f"""
+                        <h1>API Key Expiration Warning</h1>
+                        <p>Your API key <strong>{key.name}</strong> (prefix: {key.prefix}) is set to expire on <strong>{key.expires_at}</strong>.</p>
+                        <p>Please log in to Consultaion and rotate your API key to avoid service disruption.</p>
+                        """
+                        async with httpx.AsyncClient(timeout=5) as client:
+                            resp = await client.post(
+                                f"{RESEND_API_BASE}/emails",
+                                headers={"Authorization": f"Bearer {core_settings.notifications.resend_api_key}"},
+                                json={
+                                    "from": __import__("os").environ.get("EMAIL_FROM", "security@consultaion.com"),
+                                    "to": [user_email],
+                                    "subject": subject,
+                                    "html": html,
+                                },
+                            )
+                            resp.raise_for_status()
+                    except Exception as e:
+                        logger.warning(f"Failed to send expiration email to {user_email}: {e}")
+                
+                reminded_count += 1
+                
+    return reminded_count
 
 
 async def cleanup_stale_debates() -> Tuple[int, int]:
@@ -215,6 +291,13 @@ async def cleanup_loop():
                     "Stale debate cleanup completed: failed=%d degraded=%d",
                     failed,
                     degraded,
+                )
+            
+            # Check for expiring API keys to trigger rotation reminders
+            reminded = await check_api_key_rotations()
+            if reminded > 0:
+                logger.info(
+                    "API key rotation check completed: sent %d reminders", reminded
                 )
         except asyncio.CancelledError:
             logger.info("Stale debate cleanup loop shutting down")

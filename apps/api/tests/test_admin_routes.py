@@ -41,9 +41,9 @@ from auth import get_current_admin, hash_password  # noqa: E402
 from billing.models import BillingPlan, BillingSubscription, BillingUsage  # noqa: E402
 from billing.service import _current_period  # noqa: E402
 from database import engine, init_db  # noqa: E402
-from models import Debate, User  # noqa: E402
+from models import Debate, User, AuditLog, LLMUsageLog  # noqa: E402
 from promotions.models import Promotion  # noqa: E402
-from routes.admin import admin_user_billing, admin_user_detail, admin_users  # noqa: E402
+from routes.admin import admin_user_billing, admin_user_detail, admin_users, admin_metrics  # noqa: E402
 from schemas import default_panel_config  # noqa: E402
 
 init_db()
@@ -140,3 +140,133 @@ def test_admin_payload_helpers_return_data():
     with Session(engine) as session:
         promo_count = session.exec(select(Promotion)).all()
     assert promo_count
+
+
+def test_admin_metrics():
+    admin_id, member_id, _ = _seed_admin_data()
+
+    # Seed additional logs and data for metrics calculations
+    with Session(engine) as session:
+        admin_db = session.get(User, admin_id)
+        
+        # 1. Ensure a pro plan and pro subscription exists
+        pro_plan = session.exec(select(BillingPlan).where(BillingPlan.slug == "pro")).first()
+        if not pro_plan:
+            pro_plan = BillingPlan(
+                slug="pro",
+                name="Pro Plan",
+                price_monthly=15.00,
+                is_default_free=False
+            )
+            session.add(pro_plan)
+            session.commit()
+            session.refresh(pro_plan)
+
+        # Make member_id a pro user
+        member = session.get(User, member_id)
+        member.plan = "pro"
+        session.add(member)
+
+        # Seed active pro subscription
+        sub = BillingSubscription(
+            user_id=member_id,
+            plan_id=pro_plan.id,
+            status="active",
+            provider="stripe",
+            provider_subscription_id=f"sub_metrics_{uuid.uuid4().hex[:6]}",
+            provider_customer_id=f"cus_metrics_{uuid.uuid4().hex[:6]}",
+            current_period_start=datetime.now(timezone.utc),
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
+        )
+        session.add(sub)
+
+        # 2. Seed a public debate
+        pub_debate = Debate(
+            id=str(uuid.uuid4()),
+            prompt="Is recursion beautiful?",
+            status="completed",
+            config={"is_public": True},
+            panel_config={},
+            user_id=member_id,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        session.add(pub_debate)
+
+        # 3. Seed views and signups from the same IP to test PLG referrals
+        view_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        view_log = AuditLog(
+            action="view_shared_debate",
+            target_type="debate",
+            target_id=pub_debate.id,
+            meta={"ip_address": "192.168.1.50"},
+            created_at=view_time
+        )
+        session.add(view_log)
+
+        signup_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        signup_log = AuditLog(
+            user_id=member_id,
+            action="register",
+            target_type="user",
+            target_id=member_id,
+            meta={"ip_address": "192.168.1.50"},
+            created_at=signup_time
+        )
+        session.add(signup_log)
+
+        # 4. Seed LLM usage costs
+        usage_log1 = LLMUsageLog(
+            provider="openai",
+            model="gpt-4o",
+            prompt_tokens=1000,
+            completion_tokens=500,
+            total_tokens=1500,
+            cost_usd=0.015,
+            success=True,
+            created_at=datetime.now(timezone.utc)
+        )
+        usage_log2 = LLMUsageLog(
+            provider="anthropic",
+            model="claude-3-5-sonnet",
+            prompt_tokens=2000,
+            completion_tokens=1000,
+            total_tokens=3000,
+            cost_usd=0.045,
+            success=True,
+            created_at=datetime.now(timezone.utc)
+        )
+        session.add(usage_log1)
+        session.add(usage_log2)
+
+        session.commit()
+
+        # Invoke admin_metrics
+        res = admin_metrics(session=session, _=admin_db)
+
+    # Assert results
+    assert "activation" in res
+    assert "plg_sharing" in res
+    assert "billing_conversion" in res
+    assert "economics" in res
+
+    # Activation asserts
+    assert res["activation"]["dau"] >= 1
+    assert res["activation"]["active_debates"] >= 1
+
+    # PLG asserts
+    assert res["plg_sharing"]["public_debates"] >= 1
+    assert res["plg_sharing"]["shared_views"] >= 1
+    assert res["plg_sharing"]["referred_signups"] >= 1
+    assert res["plg_sharing"]["conversion_rate"] > 0.0
+
+    # Billing asserts
+    assert res["billing_conversion"]["pro_users"] >= 1
+    assert res["billing_conversion"]["subscription_statuses"].get("active", 0) >= 1
+
+    # Economics asserts
+    assert res["economics"]["estimated_mrr"] >= 15.00
+    assert res["economics"]["cumulative_llm_cost"] >= 0.06
+    assert res["economics"]["provider_cost_breakdown"]["openai"] >= 0.015
+    assert res["economics"]["provider_cost_breakdown"]["anthropic"] >= 0.045
+

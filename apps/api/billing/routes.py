@@ -161,7 +161,11 @@ def create_checkout(
 
 
 @router.post("/webhook/{provider}")
-async def billing_webhook(provider: str, request: Request):
+async def billing_webhook(
+    provider: str,
+    request: Request,
+    session: Session = Depends(get_session),
+):
     provider_name = provider.lower()
     headers = dict(request.headers)
     raw_body = await request.body()
@@ -204,8 +208,13 @@ async def billing_webhook(provider: str, request: Request):
             except json.JSONDecodeError:
                 logger.warning("Stripe webhook received non-JSON payload during dev mode")
                 payload = None
-
-        get_billing_provider().handle_webhook(payload or {}, headers)
+        import inspect
+        provider = get_billing_provider()
+        sig = inspect.signature(provider.handle_webhook)
+        if "db_session" in sig.parameters:
+            provider.handle_webhook(payload or {}, headers, db_session=session)
+        else:
+            provider.handle_webhook(payload or {}, headers)
         return {"status": "ok"}
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="provider not supported")

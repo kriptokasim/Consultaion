@@ -30,6 +30,7 @@ router = APIRouter(tags=["api_keys"])
 class APIKeyCreate(BaseModel):
     name: str
     team_id: Optional[str] = None
+    expires_in_days: Optional[int] = None
 
 
 class APIKeyResponse(BaseModel):
@@ -38,6 +39,7 @@ class APIKeyResponse(BaseModel):
     prefix: str
     created_at: datetime
     last_used_at: Optional[datetime]
+    expires_at: Optional[datetime]
     revoked: bool
     team_id: Optional[str]
 
@@ -48,6 +50,7 @@ class APIKeyCreateResponse(BaseModel):
     name: str
     prefix: str
     created_at: datetime
+    expires_at: Optional[datetime]
     secret: str  # Full key, shown only once
 
 
@@ -74,6 +77,7 @@ async def list_api_keys(
             prefix=key.prefix,
             created_at=key.created_at,
             last_used_at=key.last_used_at,
+            expires_at=key.expires_at,
             revoked=key.revoked,
             team_id=key.team_id,
         )
@@ -109,6 +113,12 @@ async def create_api_key(
                 code="team.not_member"
             )
     
+    # Calculate expires_at
+    expires_at = None
+    if body.expires_in_days is not None and body.expires_in_days > 0:
+        from datetime import timedelta, timezone
+        expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+
     # Generate key
     full_key, prefix, hashed_key = generate_api_key()
     
@@ -119,6 +129,7 @@ async def create_api_key(
         name=body.name.strip(),
         prefix=prefix,
         hashed_key=hashed_key,
+        expires_at=expires_at,
         revoked=False,
     )
     
@@ -145,6 +156,7 @@ async def create_api_key(
         name=api_key.name,
         prefix=api_key.prefix,
         created_at=api_key.created_at,
+        expires_at=api_key.expires_at,
         secret=full_key,  # Only time we return this!
     )
 

@@ -14,6 +14,6 @@ class BillingProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def handle_webhook(self, payload: Dict, headers: Dict) -> None:
+    def handle_webhook(self, payload: Dict, headers: Dict, db_session = None) -> None:
         """Handle provider webhook events."""
         raise NotImplementedError

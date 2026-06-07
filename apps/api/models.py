@@ -125,6 +125,8 @@ class APIKey(SQLModel, table=True):
     hashed_key: str = Field(nullable=False)  # Full key hashed with bcrypt
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     last_used_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    expires_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    rotation_reminder_sent: bool = Field(default=False, nullable=False)
     revoked: bool = Field(default=False, nullable=False, index=True)
 
 

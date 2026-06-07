@@ -609,6 +609,7 @@ async def list_debates(
 @router.get("/debates/{debate_id}")
 async def get_debate(
     debate_id: str,
+    request: Request = None,
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
@@ -618,6 +619,15 @@ async def get_debate(
     # Public users get a stripped-down DTO — no config, routing_meta, etc.
     if not current_user or not is_debate_owner(debate, current_user):
         if is_debate_public(debate):
+            ip = request.client.host if (request and request.client) else None
+            record_audit(
+                "view_shared_debate",
+                user_id=current_user.id if current_user else None,
+                target_type="debate",
+                target_id=debate_id,
+                ip_address=ip,
+                session=session,
+            )
             return serialize_debate_public(debate)
         # Non-public, non-owner access was already rejected by require_debate_access
     return serialize_debate_private(debate)

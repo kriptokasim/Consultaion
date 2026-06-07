@@ -34,6 +34,9 @@ __pycache__/
 *.swo
 .coverage
 coverage/
+coverage.xml
+apps/api/coverage.xml
+test_output*.txt
 apps/api/dev.db
 apps/api/ci_migrate.db
 apps/web/.playwright-browsers/

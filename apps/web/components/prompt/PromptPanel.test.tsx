@@ -82,7 +82,7 @@ describe("PromptPanel Component", () => {
       />
     );
 
-    const debateButton = screen.getByRole("button", { name: "Debate" });
+    const debateButton = screen.getByRole("button", { name: /Debate/i });
     fireEvent.click(debateButton);
     expect(handleModeChange).toHaveBeenCalledWith("debate");
   });
