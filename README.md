@@ -1,7 +1,15 @@
 # Consultaion
-A platform that produces the best answer via multi-agent debate/voting.
+
+Consultaion is an enterprise-grade B2B SaaS platform designed to deliver unbiased, high-stakes LLM evaluations and side-by-side model arena battles. By leveraging a multi-agent debate and voting engine, it synthesizes optimal, defensible answers, tracks provider performance over time, and enforces robust usage-limiting, tenant isolation, and audit logging workflows for the enterprise.
 
 > **Brand note:** The spelling “Consultaion” is intentional – it’s the product name for this multi-agent AI parliament, not a typo. Keep it consistent across docs, UI, and deploys.
+
+## B2B SaaS & Enterprise Capabilities
+- **Side-by-Side Model Arenas**: Run real-time, multi-LLM tournaments with custom criteria to determine the best model configurations for specific business domains.
+- **Unbiased Multi-Agent Consensus**: Prevent model bias via critique-and-revision debate rounds judged by independent agent panels using Elo rating comparisons.
+- **Tenant Isolation & Multi-Tenancy**: Granular access control mapping team ownership and sharing limits, guaranteeing absolute isolation of run and arena data.
+- **Enterprise Rate Limiting & Quotas**: Advanced composite request fingerprinting to prevent service abuse, coupled with configurable monthly token and run limits per user/team.
+- **Auditable Observability**: Complete, tamper-proof logs tracking auth events, sharing controls, billing activities, and model health metrics.
 
 ## Quick Start
 1. `cp .env.example .env` and set `DATABASE_URL`/LLM keys.
@@ -18,6 +26,7 @@ A platform that produces the best answer via multi-agent debate/voting.
 Progress against the audit plan lives in `IMPROVEMENT_PLAN.md` / `IMPROVEMENTS_SUMMARY.md`.
 
 > **Python runtime:** The FastAPI backend and its pytest suite currently target **Python 3.11.x**. Running under newer interpreters (3.12/3.13) causes ASGI/TestClient hangs on POST requests, so stick to 3.11 for local dev, CI, and Docker builds until upstream fixes land.
+
 
 ### Local Database Setup
 

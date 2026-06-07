@@ -63,3 +63,36 @@ def test_config_workers_validation_redis_backend(monkeypatch):
     settings = AppSettings()
     assert settings.WEB_CONCURRENCY == 2
     assert settings.SSE_BACKEND == "redis"
+
+
+def test_config_jwt_secret_validation_missing_or_default(monkeypatch):
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost/db")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
+    monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
+
+    # Unsafe / default secret
+    monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
+    with pytest.raises(PydanticValidationError) as exc:
+        AppSettings()
+    assert "JWT_SECRET must be set to a secure value in production" in str(exc.value)
+
+
+def test_config_jwt_secret_validation_too_short(monkeypatch):
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost/db")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
+    monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
+
+    # Too short secret (< 32 chars)
+    monkeypatch.setenv("JWT_SECRET", "too-short-secret-123")
+    with pytest.raises(PydanticValidationError) as exc:
+        AppSettings()
+    assert "JWT_SECRET must be at least 32 characters in production" in str(exc.value)
+

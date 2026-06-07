@@ -233,3 +233,23 @@ def test_redis_backend_tracks_recent_events(monkeypatch):
     backend.record_429("ip-1", "/debates")
     events = backend.recent_429()
     assert events and events[-1]["path"] == "/debates"
+
+
+def test_increment_ip_bucket_composite():
+    # Test that when user_id is provided, it isolates rate limits correctly
+    ip = "192.168.1.1"
+    user_a = "user-a"
+    user_b = "user-b"
+
+    # User A uses up their limit of 1
+    allowed, _ = ratelimit_module.increment_ip_bucket(ip, 60, 1, user_id=user_a)
+    assert allowed
+
+    # User A gets blocked
+    allowed, _ = ratelimit_module.increment_ip_bucket(ip, 60, 1, user_id=user_a)
+    assert not allowed
+
+    # User B on the same IP still has access (isolation works!)
+    allowed, _ = ratelimit_module.increment_ip_bucket(ip, 60, 1, user_id=user_b)
+    assert allowed
+

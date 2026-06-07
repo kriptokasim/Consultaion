@@ -368,6 +368,30 @@ app.include_router(features_router)
 from routes.votes import router as votes_router
 app.include_router(votes_router)
 
+# Phase 4: API Versioning Strategy - Mount API v1 namespace router
+from fastapi import APIRouter
+
+v1_router = APIRouter(prefix="/api/v1")
+v1_router.include_router(auth_router)
+v1_router.include_router(ops_router)
+v1_router.include_router(stats_router)
+v1_router.include_router(models_router)
+v1_router.include_router(debates_router)
+v1_router.include_router(teams_router)
+v1_router.include_router(admin_router)
+if settings.IS_LOCAL_ENV or settings.AUTH_DEBUG:
+    v1_router.include_router(debug_router)
+v1_router.include_router(routing_admin_router)
+v1_router.include_router(billing_router)
+v1_router.include_router(promotions_router)
+v1_router.include_router(api_keys_router)
+v1_router.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
+v1_router.include_router(features_router)
+v1_router.include_router(votes_router)
+
+app.include_router(v1_router)
+
+
 
 
 # Lifespan helpers

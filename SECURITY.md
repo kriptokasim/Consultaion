@@ -1,6 +1,19 @@
 # Security Policy & Vulnerability Disclosure
 
-Consultaion handles user prompts, LLM traffic, and billing events. This document highlights key security controls and outlines our vulnerability reporting policy.
+Consultaion handles user prompts, LLM traffic, and billing events. This document highlights key security controls, supported versions, and outlines our vulnerability reporting policy.
+
+---
+
+## Supported Versions
+
+The security team actively supports and monitors the following versions of Consultaion:
+
+| Version | Supported |
+| ------- | --------- |
+| 1.0.x   | ✅ Yes    |
+| < 1.0.0 | ❌ No     |
+
+---
 
 ## Security Controls & Architecture
 
@@ -24,8 +37,11 @@ Consultaion handles user prompts, LLM traffic, and billing events. This document
 
 We take the security of our platform seriously. If you identify a security vulnerability, we appreciate your help in reporting it to us responsibly.
 
+> [!IMPORTANT]
+> **Please do not open public issues or pull requests for security vulnerabilities.** Instead, report security issues directly to our security team.
+
 ### Reporting a Vulnerability
-Please do not open public issues for security vulnerabilities. Instead, report security issues directly to our security team:
+Please report security issues directly to our security team:
 * **Email:** security@consultaion.com
 * Please include a detailed description of the vulnerability, steps to reproduce, and any proof of concept.
 

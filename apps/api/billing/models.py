@@ -69,3 +69,15 @@ class BillingUsage(SQLModel, table=True):
         sa_column=Column(JSON, nullable=False, server_default=text("'{}'")),
     )
     last_updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class BillingWebhookEvent(SQLModel, table=True):
+    __tablename__ = "billing_webhook_events"
+    __table_args__ = {"extend_existing": True}
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: str = Field(primary_key=True, nullable=False)  # Store the provider's event ID (e.g. Stripe evt_...)
+    provider: str = Field(nullable=False, index=True)
+    event_type: str = Field(nullable=False)
+    processed_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+

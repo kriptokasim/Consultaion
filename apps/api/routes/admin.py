@@ -100,6 +100,46 @@ def admin_users(
     activity = _activity_snapshot(session)
     filtered: List[Dict[str, Any]] = []
     q_lower = q.lower() if q else None
+
+    # Prefetch plans, subscriptions, and usages
+    from billing.models import BillingPlan, BillingSubscription, BillingUsage
+    from security.owner import is_owner
+    from datetime import datetime, timezone
+
+    plans = session.exec(select(BillingPlan)).all()
+    plan_map = {p.id: p for p in plans}
+    slug_map = {p.slug: p for p in plans}
+    default_free_plan = next((p for p in plans if p.is_default_free), None)
+
+    now_dt = datetime.now(timezone.utc)
+    user_ids = [u.id for u in users]
+
+    user_sub_map = {}
+    if user_ids:
+        subscriptions = session.exec(
+            select(BillingSubscription)
+            .where(
+                BillingSubscription.user_id.in_(user_ids),
+                BillingSubscription.status == "active",
+                BillingSubscription.current_period_end >= now_dt,
+            )
+            .order_by(BillingSubscription.current_period_end.desc())
+        ).all()
+        for sub in subscriptions:
+            if sub.user_id not in user_sub_map:
+                user_sub_map[sub.user_id] = sub
+
+    user_usage_map = {}
+    if user_ids:
+        usages = session.exec(
+            select(BillingUsage)
+            .where(BillingUsage.user_id.in_(user_ids))
+            .order_by(BillingUsage.period.desc())
+        ).all()
+        for usage in usages:
+            if usage.user_id not in user_usage_map:
+                user_usage_map[usage.user_id] = usage
+
     for user in users:
         if q_lower:
             display = (user.display_name or "").lower()
@@ -107,14 +147,23 @@ def admin_users(
             display_match = q_lower in display
             if not email_match and not display_match:
                 continue
+
+        # Resolve active plan in-memory
         plan = None
-        try:
-            plan = get_active_plan(session, user.id)
-        except HTTPException:
-            plan = None
+        if is_owner(user):
+            owner_slug = settings.OWNER_PLAN
+            plan = slug_map.get(owner_slug) or default_free_plan
+        else:
+            sub = user_sub_map.get(user.id)
+            if sub:
+                plan = plan_map.get(sub.plan_id)
+            if not plan:
+                plan = default_free_plan
+
         if plan_slug and (not plan or plan.slug != plan_slug):
             continue
-        usage = _latest_usage(session, user.id)
+
+        usage = user_usage_map.get(user.id)
         row = {
             **serialize_user(user),
             "created_at": user.created_at.isoformat() if user.created_at else None,
@@ -132,6 +181,7 @@ def admin_users(
     total = len(filtered)
     items = filtered[offset : offset + limit]
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
 
 
 @router.get("/users/{user_id}")
@@ -193,32 +243,72 @@ def admin_usage_overview(
         users_query = users_query.where(User.email.contains(email))
     
     users = session.exec(users_query.order_by(User.created_at.desc())).all()
+
+    # Prefetch active plans, subscriptions, and usages
+    from billing.models import BillingPlan, BillingSubscription, BillingUsage
+    from security.owner import is_owner
+    from collections import defaultdict
+
+    plans = session.exec(select(BillingPlan)).all()
+    plan_map = {p.id: p for p in plans}
+    slug_map = {p.slug: p for p in plans}
+    default_free_plan = next((p for p in plans if p.is_default_free), None)
+
+    user_ids = [u.id for u in users]
+
+    user_sub_map = {}
+    if user_ids:
+        subscriptions = session.exec(
+            select(BillingSubscription)
+            .where(
+                BillingSubscription.user_id.in_(user_ids),
+                BillingSubscription.status == "active",
+                BillingSubscription.current_period_end >= now,
+            )
+            .order_by(BillingSubscription.current_period_end.desc())
+        ).all()
+        for sub in subscriptions:
+            if sub.user_id not in user_sub_map:
+                user_sub_map[sub.user_id] = sub
+
+    user_latest_usage_map = {}
+    user_history_map = defaultdict(list)
+    if user_ids:
+        all_usages = session.exec(
+            select(BillingUsage)
+            .where(BillingUsage.user_id.in_(user_ids))
+            .order_by(BillingUsage.period.desc())
+        ).all()
+        for usage in all_usages:
+            if usage.user_id not in user_latest_usage_map:
+                user_latest_usage_map[usage.user_id] = usage
+            if usage.last_updated_at and usage.last_updated_at >= seven_days_ago:
+                user_history_map[usage.user_id].append(usage)
     
     items = []
     for user in users:
         # Get current period usage
-        current_usage = _latest_usage(session, user.id)
+        current_usage = user_latest_usage_map.get(user.id)
         
         # Get 7-day usage history
-        usage_history = session.exec(
-            select(BillingUsage)
-            .where(
-                BillingUsage.user_id == user.id,
-                BillingUsage.last_updated_at >= seven_days_ago
-            )
-            .order_by(BillingUsage.period.desc())
-        ).all()
+        usage_history = user_history_map.get(user.id, [])
         
         # Calculate 7-day totals
         tokens_7d = sum(u.tokens_used for u in usage_history)
         exports_7d = sum(u.exports_count for u in usage_history)
         debates_7d = sum(u.debates_created for u in usage_history)
         
+        # Resolve active plan in-memory
         plan = None
-        try:
-            plan = get_active_plan(session, user.id)
-        except HTTPException:
-            plan = None
+        if is_owner(user):
+            owner_slug = settings.OWNER_PLAN
+            plan = slug_map.get(owner_slug) or default_free_plan
+        else:
+            sub = user_sub_map.get(user.id)
+            if sub:
+                plan = plan_map.get(sub.plan_id)
+            if not plan:
+                plan = default_free_plan
         
         items.append({
             "user_id": user.id,
@@ -249,6 +339,7 @@ def admin_usage_overview(
         "limit": limit,
         "offset": offset,
     }
+
 
 
 @router.get("/users/{user_id}/billing")

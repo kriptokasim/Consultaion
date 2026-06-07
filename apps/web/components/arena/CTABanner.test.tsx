@@ -52,6 +52,40 @@ describe("CTABanner Components", () => {
       expect(
         screen.getByRole("link", { name: "Start your own Arena run" })
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "See how it works" })
+      ).toBeInTheDocument();
+    });
+
+    it("triggers event tracking on footer clicks", async () => {
+      const { trackEvent } = await import("@/lib/analytics");
+      render(<PublicRunCTAFooter debateId="test-debate-id" />);
+
+      const startOwnButton = screen.getByRole("link", {
+        name: "Start your own Arena run",
+      });
+      fireEvent.click(startOwnButton);
+      expect(trackEvent).toHaveBeenCalledWith(
+        "public_run_cta_clicked",
+        expect.objectContaining({
+          debate_id: "test-debate-id",
+          cta_location: "footer",
+          intent: "create_own_run",
+        })
+      );
+
+      const runSameButton = screen.getByRole("link", {
+        name: "Run this prompt yourself",
+      });
+      fireEvent.click(runSameButton);
+      expect(trackEvent).toHaveBeenCalledWith(
+        "public_run_cta_clicked",
+        expect.objectContaining({
+          debate_id: "test-debate-id",
+          cta_location: "footer_run_same",
+          intent: "run_same_prompt",
+        })
+      );
     });
   });
 });

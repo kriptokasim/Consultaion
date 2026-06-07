@@ -22,6 +22,8 @@ exports/
 .venv/
 .env.*
 !.env.example
+.mypy_cache/
+.ruff_cache/
 
 # SQLite engine sidecars
 *.db-wal

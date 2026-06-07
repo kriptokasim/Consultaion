@@ -201,7 +201,9 @@ async def create_debate(
 
     # 2. IP Rate Limit Check
     ip = request.client.host if request.client else "anonymous"
-    allowed, retry_after = increment_ip_bucket(ip, settings.RL_DEBATE_CREATE_WINDOW, settings.RL_DEBATE_CREATE_MAX_CALLS)
+    user_id = current_user.id if current_user else None
+    allowed, retry_after = increment_ip_bucket(ip, settings.RL_DEBATE_CREATE_WINDOW, settings.RL_DEBATE_CREATE_MAX_CALLS, user_id=user_id)
+
     if not allowed:
         record_429(ip, request.url.path)
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
@@ -613,8 +615,11 @@ async def get_debate(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    debate = session.get(Debate, debate_id)
+    from repositories.debate_repository import DebateRepository
+    repo = DebateRepository(session)
+    debate = repo.get_by_id(debate_id)
     debate = require_debate_access(debate, current_user, session)
+
 
     # Public users get a stripped-down DTO — no config, routing_meta, etc.
     if not current_user or not is_debate_owner(debate, current_user):

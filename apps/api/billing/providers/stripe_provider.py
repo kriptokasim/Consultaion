@@ -67,9 +67,16 @@ class StripeBillingProvider(BillingProvider):
         # Idempotency / Duplicate Check
         event_id = payload.get("id")
         if event_id and db_session:
-            # We can log or verify this event was not already processed
-            # For simplicity, we process based on the unique event / action
-            pass
+            from billing.models import BillingWebhookEvent
+            existing = db_session.get(BillingWebhookEvent, event_id)
+            if existing:
+                logger.info("Stripe webhook event=%s already processed, ignoring", event_id)
+                return
+            
+            # Record the event in session (will be committed with the transaction)
+            evt = BillingWebhookEvent(id=event_id, provider="stripe", event_type=event_type)
+            db_session.add(evt)
+
 
         if event_type == "checkout.session.completed" and db_session:
             metadata = data.get("metadata") or {}

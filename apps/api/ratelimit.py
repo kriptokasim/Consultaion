@@ -156,10 +156,12 @@ def reset_rate_limiter_backend_for_tests() -> None:
     _backend = None
 
 
-def increment_ip_bucket(ip: str, window_seconds: int, max_requests: int) -> tuple[bool, int | None]:
+def increment_ip_bucket(ip: str, window_seconds: int, max_requests: int, user_id: Optional[str] = None) -> tuple[bool, int | None]:
     """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
     backend = get_rate_limiter_backend()
-    return backend.allow(ip, window_seconds, max_requests)
+    key = f"{ip}:{user_id}" if user_id else ip
+    return backend.allow(key, window_seconds, max_requests)
+
 
 
 from log_config import log_event
