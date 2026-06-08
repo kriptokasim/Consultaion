@@ -1,6 +1,6 @@
 """Add expiration and rotation fields to APIKey
 
-Revision ID: p115_add_apikey_expiration_fields
+Revision ID: p115_add_apikey_expire_fields
 Revises: p114_add_user_hosted_credits
 Create Date: 2026-06-07
 
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 import sqlmodel
 
-revision: str = "p115_add_apikey_expiration_fields"
+revision: str = "p115_add_apikey_expire_fields"
 down_revision: Union[str, None] = "p114_add_user_hosted_credits"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
