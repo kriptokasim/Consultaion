@@ -144,7 +144,7 @@ export function PositionDriftIndicator({ drift }: { drift?: Node["position_drift
 
       {drift.text_justification && (
         <p className="mt-2 text-[10px] text-muted-foreground/90 italic leading-relaxed border-l-2 border-primary/20 pl-2">
-          "{drift.text_justification}"
+          &ldquo;{drift.text_justification}&rdquo;
         </p>
       )}
     </div>

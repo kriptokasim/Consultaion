@@ -240,7 +240,7 @@ export function VotingRunView({
                                 No Prediction Locked
                             </p>
                             <p className="text-[10px] text-slate-400 mt-1 max-w-[200px]">
-                                You didn't submit a prediction lock before the debate was completed.
+                                You didn&apos;t submit a prediction lock before the debate was completed.
                             </p>
                         </div>
                     )}
@@ -255,7 +255,7 @@ export function VotingRunView({
             {revealData?.vote_reasons && (
                 <div className="space-y-3">
                     <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 pl-1">
-                        Judges' Rationale Summary
+                        Judges&apos; Rationale Summary
                     </h3>
                     <VoteReasonCard voteReasons={revealData.vote_reasons} />
                 </div>
