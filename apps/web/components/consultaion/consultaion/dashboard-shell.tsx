@@ -26,6 +26,7 @@ const BASE_NAV_LINKS = [
   { labelKey: "nav.overview", href: "/dashboard", icon: BarChart3, tooltipKey: "nav.tooltip.overview" },
   { labelKey: "nav.runs", href: "/runs", icon: FileText, tooltipKey: "nav.tooltip.runs" },
   { labelKey: "nav.analytics", href: "/analytics", icon: BarChart3, tooltipKey: "nav.tooltip.analytics" },
+  { labelKey: "nav.participation", href: "/participation", icon: Award, tooltipKey: "nav.tooltip.participation" },
   { labelKey: "nav.settings", href: "/settings", icon: Settings, tooltipKey: "nav.tooltip.settings" },
 ]
 

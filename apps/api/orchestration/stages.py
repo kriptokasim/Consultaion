@@ -69,6 +69,11 @@ class DraftStage(BaseStage):
             raise RuntimeError("All candidate generators failed")
 
         await self.state_manager.save_messages(1, candidates, role="candidate")
+        try:
+            from .analysis import extract_debate_turn_analysis
+            await extract_debate_turn_analysis(context.debate_id, 1, candidates)
+        except Exception as e:
+            logger.warning(f"Failed debate turn analysis: {e}")
         await self.state_manager.end_round(round_id)
         
         await self._publish(context.channel_id, {"type": "message", "round": 1, "candidates": candidates})
@@ -93,6 +98,11 @@ class CritiqueStage(BaseStage):
         context.usage_tracker.extend(critique_usage)
         
         await self.state_manager.save_messages(2, revised, role="revised")
+        try:
+            from .analysis import extract_debate_turn_analysis
+            await extract_debate_turn_analysis(context.debate_id, 2, revised)
+        except Exception as e:
+            logger.warning(f"Failed debate turn analysis: {e}")
         await self.state_manager.end_round(round_id)
         
         await self._publish(context.channel_id, {"type": "message", "round": 2, "revised": revised})

@@ -57,11 +57,15 @@ export interface ApiRequestOptions<TBody = unknown> {
   headers?: Record<string, string>;
 }
 
-import { ApiListResponse, DebateDetail, DebateSummary, LeaderboardEntry } from './api/types';
+import { ApiListResponse, DebateDetail, DebateSummary, LeaderboardEntry, UserParticipationResponse } from './api/types';
 
 // Helper function to make authenticated GET requests
 async function fetchWithAuth<TResponse = unknown>(path: string): Promise<TResponse> {
   return apiRequest<TResponse>({ path, method: "GET" });
+}
+
+export async function getUserParticipation(): Promise<UserParticipationResponse> {
+  return fetchWithAuth<UserParticipationResponse>("/users/me/participation");
 }
 
 export async function getDebate(id: string): Promise<DebateDetail> {

@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Activity, Download, Gavel, RefreshCcw, Terminal, Users } from "lucide-react";
 import type { TimelineEvent } from "@/lib/timeline/types";
 import type { SSEStatus } from "@/lib/sse";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/client";
+import { ModeratorConsole, ArgumentTree } from "./InteractiveDeliberation";
 
 export type ArenaSeat = {
   id: string;
@@ -84,6 +86,7 @@ export default function DebateArena({
   connectionStatus = "idle",
   reportUrl,
 }: DebateArenaProps) {
+  const [activeTab, setActiveTab] = useState<"transcript" | "tree">("transcript");
   const { t } = useI18n();
   const statusLabel: Record<SSEStatus, string> = {
     idle: t("arena.status.idle"),
@@ -200,11 +203,16 @@ export default function DebateArena({
               </div>
             </div>
           </div>
+          {debate && (
+            <div className="mt-4">
+              <ModeratorConsole debateId={debate.id} />
+            </div>
+          )}
         </aside>
 
-        {/* Main Area: Transcript */}
-        <section className="rounded-2xl border border-accent-secondary/20 bg-card p-4 shadow-sm lg:col-span-9">
-          <div className="flex items-center justify-between">
+        {/* Main Area: Transcript / Argument Tree */}
+        <section className="rounded-2xl border border-accent-secondary/20 bg-card p-6 shadow-sm lg:col-span-9">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-accent-secondary">
                 {debate?.mode === "conversation" ? "Conversation Flow" : t("arena.hansard")}
@@ -215,46 +223,78 @@ export default function DebateArena({
             </div>
             <span className="text-xs text-muted-foreground">{transcriptEvents.length} {t("arena.entriesLabel")}</span>
           </div>
-          <div className="mt-4 space-y-3 max-h-[600px] overflow-y-auto pr-1">
-            {transcriptEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Awaiting debate events…</p>
-            ) : (
-              transcriptEvents.map((event, idx) => {
-                const payload = event.payload || {};
-                const isScore = event.type === 'score';
-                const isNotice = event.type === 'notice';
-                // Fallbacks: prefer content, then text, then message
-                const text = payload.text || payload.content || payload.message || "—";
-                const actor = payload.seat_name || payload.actor || payload.seat_id || event.seat || "Member";
-                const judge = payload.judge || "Judge";
-                const score = payload.score;
-                const rationale = payload.rationale;
 
-                return (
-                  <article key={event.id || `${event.type}-${idx}`} className="rounded-2xl border border-border bg-accent-secondary/5 px-4 py-3 shadow-inner">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">
-                        {isScore ? judge : actor}
-                      </span>
-                      <span>{formatTime(event.ts)}</span>
-                    </div>
-                    {isScore ? (
-                      <p className="mt-2 text-sm text-foreground/80">
-                        Score {typeof score === 'number' ? score.toFixed(2) : score} for {payload.persona || 'agent'}
-                      </p>
-                    ) : isNotice ? (
-                      <p className="mt-2 text-xs text-accent-secondary">{text}</p>
-                    ) : (
-                      <p className="mt-2 text-sm text-foreground/80">{text}</p>
-                    )}
-                    {isScore && rationale ? (
-                      <p className="mt-2 text-xs text-muted-foreground">{rationale}</p>
-                    ) : null}
-                  </article>
-                )
-              })
-            )}
+          <div className="flex border-b border-border mb-4">
+            <button
+              onClick={() => setActiveTab("transcript")}
+              className={cn(
+                "py-2.5 px-4 text-xs font-bold border-b-2 transition-all uppercase tracking-wider",
+                activeTab === "transcript"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Hansard Transcript
+            </button>
+            <button
+              onClick={() => setActiveTab("tree")}
+              className={cn(
+                "py-2.5 px-4 text-xs font-bold border-b-2 transition-all uppercase tracking-wider",
+                activeTab === "tree"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Argument Graph & Drift
+            </button>
           </div>
+
+          {activeTab === "transcript" ? (
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+              {transcriptEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Awaiting debate events…</p>
+              ) : (
+                transcriptEvents.map((event, idx) => {
+                  const payload = event.payload || {};
+                  const isScore = event.type === 'score';
+                  const isNotice = event.type === 'notice';
+                  // Fallbacks: prefer content, then text, then message
+                  const text = payload.text || payload.content || payload.message || "—";
+                  const actor = payload.seat_name || payload.actor || payload.seat_id || event.seat || "Member";
+                  const judge = payload.judge || "Judge";
+                  const score = payload.score;
+                  const rationale = payload.rationale;
+
+                  return (
+                    <article key={event.id || `${event.type}-${idx}`} className="rounded-2xl border border-border bg-accent-secondary/5 px-4 py-3 shadow-inner">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">
+                          {isScore ? judge : actor}
+                        </span>
+                        <span>{formatTime(event.ts)}</span>
+                      </div>
+                      {isScore ? (
+                        <p className="mt-2 text-sm text-foreground/80">
+                          Score {typeof score === 'number' ? score.toFixed(2) : score} for {payload.persona || 'agent'}
+                        </p>
+                      ) : isNotice ? (
+                        <p className="mt-2 text-xs text-accent-secondary">{text}</p>
+                      ) : (
+                        <p className="mt-2 text-sm text-foreground/80">{text}</p>
+                      )}
+                      {isScore && rationale ? (
+                        <p className="mt-2 text-xs text-muted-foreground">{rationale}</p>
+                      ) : null}
+                    </article>
+                  )
+                })
+              )}
+            </div>
+          ) : (
+            <div className="max-h-[600px] overflow-y-auto pr-1">
+              <ArgumentTree debateId={debate.id} />
+            </div>
+          )}
         </section>
       </div>
     </section>

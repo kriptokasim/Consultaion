@@ -138,3 +138,187 @@ export function useEventSource<T = unknown>(
     retryCount,
   };
 }
+
+export type SessionStreamEvent = {
+  id: string;
+  sequence: number;
+  event: string;
+  session_id: string;
+  timestamp: string;
+  payload: any;
+};
+
+export type UseSessionStreamOptions = {
+  enabled?: boolean;
+  withCredentials?: boolean;
+  retryDelays?: number[];
+  onEvent?: (event: SessionStreamEvent) => void;
+  onError?: (event: Event) => void;
+};
+
+export function useSessionStream(
+  url: string | null,
+  options: UseSessionStreamOptions = {},
+) {
+  const {
+    enabled = true,
+    withCredentials = false,
+    retryDelays = DEFAULT_RETRY,
+    onEvent,
+    onError,
+  } = options;
+
+  const [status, setStatus] = useState<SSEStatus>(!url || !enabled ? "idle" : "connecting");
+  const [events, setEvents] = useState<SessionStreamEvent[]>([]);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attemptsRef = useRef(0);
+  const lastReceivedSequenceRef = useRef<number | null>(null);
+  
+  const onEventRef = useRef(onEvent);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  const close = useCallback(() => {
+    clearRetryTimer();
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setStatus("closed");
+  }, [clearRetryTimer]);
+
+  // Reset sequence/events when URL changes
+  useEffect(() => {
+    lastReceivedSequenceRef.current = null;
+    setEvents([]);
+    setRetryCount(0);
+    attemptsRef.current = 0;
+  }, [url]);
+
+  useEffect(() => {
+    if (!url || !enabled) {
+      close();
+      setStatus("idle");
+      return () => undefined;
+    }
+
+    let cancelled = false;
+
+    const connect = () => {
+      if (cancelled) return;
+      const attempt = attemptsRef.current;
+      setStatus(attempt > 0 ? "reconnecting" : "connecting");
+
+      // Format URL to include last_sequence parameter
+      let finalUrl = url;
+      if (lastReceivedSequenceRef.current !== null) {
+        try {
+          const urlObj = new URL(url);
+          urlObj.searchParams.set("last_sequence", lastReceivedSequenceRef.current.toString());
+          finalUrl = urlObj.toString();
+        } catch {
+          const separator = url.includes("?") ? "&" : "?";
+          finalUrl = `${url}${separator}last_sequence=${lastReceivedSequenceRef.current}`;
+        }
+      }
+
+      const source = new EventSource(finalUrl, { withCredentials });
+      eventSourceRef.current = source;
+
+      source.onopen = () => {
+        if (cancelled) {
+          source.close();
+          return;
+        }
+        attemptsRef.current = 0;
+        setRetryCount(0);
+        setStatus("connected");
+        setLastError(null);
+      };
+
+      source.onmessage = (event) => {
+        if (cancelled) return;
+        try {
+          const envelope = JSON.parse(event.data) as SessionStreamEvent;
+          const seq = envelope.sequence;
+
+          // Deduplication / gap verification
+          if (seq !== undefined && lastReceivedSequenceRef.current !== null && seq <= lastReceivedSequenceRef.current) {
+            console.log(`[SSE] Discarding duplicate event sequence: ${seq}`);
+            return;
+          }
+
+          if (seq !== undefined) {
+            lastReceivedSequenceRef.current = seq;
+          }
+
+          setEvents((prev) => {
+            // Check list for duplicates as secondary guard
+            if (seq !== undefined && prev.some((e) => e.sequence === seq)) {
+              return prev;
+            }
+            return [...prev, envelope];
+          });
+
+          onEventRef.current?.(envelope);
+        } catch (error) {
+          console.error("[SSE] Failed to parse event envelope:", error);
+          setLastError(error instanceof Error ? error.message : "Failed to parse event");
+        }
+      };
+
+      source.onerror = (errorEvent) => {
+        if (cancelled) return;
+        setLastError("stream_error");
+        onErrorRef.current?.(errorEvent);
+
+        source.close();
+        if (eventSourceRef.current === source) {
+          eventSourceRef.current = null;
+        }
+
+        attemptsRef.current += 1;
+        setRetryCount(attemptsRef.current);
+        const delay = retryDelays[Math.min(attemptsRef.current - 1, retryDelays.length - 1)];
+
+        clearRetryTimer();
+        retryTimerRef.current = setTimeout(() => {
+          connect();
+        }, delay);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      close();
+    };
+  }, [url, enabled, retryDelays, withCredentials, close, clearRetryTimer]);
+
+  return {
+    status,
+    events,
+    error: lastError,
+    close,
+    retryCount,
+  };
+}

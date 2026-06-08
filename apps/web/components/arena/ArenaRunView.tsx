@@ -8,6 +8,8 @@ import { ModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
 import type { ModelResponse } from "./ModelCard";
 import { SynthesisCard, SynthesisLoading } from "./SynthesisCard";
 import { PublicRunCTATop, PublicRunCTAFooter } from "./CTABanner";
+import { DivergenceMeter } from "./DivergenceMeter";
+import { SynthesisReveal } from "./SynthesisReveal";
 
 /* ─── Main component ─── */
 interface ArenaRunViewProps {
@@ -184,11 +186,22 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
                 </div>
             </div>
 
+            {/* Claims Divergence Analysis */}
+            <DivergenceMeter 
+                debateId={debate.id} 
+                isCompleted={debate.status === "completed" || debate.status === "completed_budget"} 
+            />
+
             {/* Synthesis / Final Verdict */}
             {synthesis && (() => {
                 const isSynthesisFailed = synthesis.startsWith("⚠️ Synthesis unavailable") || debate.final_meta?.synthesis_success === false;
                 return (
-                    <SynthesisCard synthesis={synthesis} modelResponses={modelResponses} isSynthesisFailed={isSynthesisFailed} />
+                    <SynthesisReveal 
+                        synthesis={synthesis} 
+                        modelResponses={modelResponses} 
+                        isSynthesisFailed={isSynthesisFailed} 
+                        debateId={debate.id}
+                    />
                 );
             })()}
 
@@ -203,5 +216,3 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
         </div>
     );
 }
-
-

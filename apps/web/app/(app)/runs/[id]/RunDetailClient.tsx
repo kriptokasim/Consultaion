@@ -9,6 +9,7 @@ import ParliamentRunView from "@/components/parliament/ParliamentRunView";
 import CompareRunView from "@/components/compare/CompareRunView";
 import ConversationRunView from "@/components/conversation/ConversationRunView";
 import ArenaRunView from "@/components/arena/ArenaRunView";
+import VotingRunView from "@/components/voting/VotingRunView";
 import { Button } from "@/components/ui/button";
 import { useDebate } from "@/lib/api/hooks/useDebate";
 import { timelineReducer, initialTimelineState } from "@/lib/timeline/reducer";
@@ -250,6 +251,21 @@ export default function RunDetailClient() {
         </div>
       );
     }
+    if (debate?.mode === "voting") {
+      return (
+        <div className="container max-w-6xl py-6">
+          <VotingRunView
+            debate={debate}
+            events={resultsEvents}
+            isCompleted={true}
+            resultsMembers={resultsMembers}
+            judgeVotes={judgeVotes}
+            scores={scores}
+            vote={vote}
+          />
+        </div>
+      );
+    }
     return (
       <div className="container max-w-6xl py-6">
         <ParliamentRunView
@@ -301,6 +317,19 @@ export default function RunDetailClient() {
     return (
       <div className="container max-w-5xl h-[calc(100vh-4rem)] py-6">
         <ConversationRunView debate={debate as any} events={liveEvents as any} />
+      </div>
+    );
+  }
+
+  if (debate?.mode === "voting") {
+    return (
+      <div className="container max-w-6xl py-6">
+        <VotingRunView
+          debate={debate as any}
+          events={liveEvents as any}
+          isCompleted={false}
+          connectionStatus={sseStatus}
+        />
       </div>
     );
   }

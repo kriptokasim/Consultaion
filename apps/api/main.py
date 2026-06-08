@@ -71,6 +71,12 @@ from routes.teams import (
     list_teams,
     teams_router,
 )
+from routes.participation import router as participation_router
+from routes.arena import router as arena_router
+from routes.voting import router as voting_router
+from routes.redteam import router as redteam_router
+from routes.oracle import router as oracle_router
+from routes.challenge import router as challenge_router
 from schemas import DebateCreate
 from sse_backend import get_sse_backend
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -344,6 +350,13 @@ app.include_router(models_router)
 app.include_router(debates_router)
 app.include_router(teams_router)
 app.include_router(admin_router)
+app.include_router(participation_router)
+app.include_router(arena_router)
+app.include_router(voting_router)
+app.include_router(redteam_router)
+app.include_router(oracle_router)
+app.include_router(challenge_router)
+
 
 # Patchset 53.0: Debug routes (only registered in safe environments)
 if settings.IS_LOCAL_ENV or settings.AUTH_DEBUG:
@@ -388,6 +401,12 @@ v1_router.include_router(api_keys_router)
 v1_router.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
 v1_router.include_router(features_router)
 v1_router.include_router(votes_router)
+v1_router.include_router(arena_router)
+v1_router.include_router(participation_router)
+v1_router.include_router(voting_router)
+v1_router.include_router(redteam_router)
+v1_router.include_router(oracle_router)
+v1_router.include_router(challenge_router)
 
 app.include_router(v1_router)
 

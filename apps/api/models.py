@@ -398,3 +398,109 @@ Index("ix_admin_event_created_at", AdminEvent.created_at)
 # Patchset 66.0: DebateCheckpoint indexes
 Index("ix_debate_checkpoint_last_checkpoint", DebateCheckpoint.last_checkpoint_at)
 Index("ix_debate_checkpoint_status_checkpoint", DebateCheckpoint.status, DebateCheckpoint.last_checkpoint_at)
+
+
+class DivergenceReport(SQLModel, table=True):
+    __tablename__ = "divergence_report"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True, unique=True)
+    divergence_score: float = Field(default=0.0)
+    consensus_claims: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    contested_claims: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class DebateTurn(SQLModel, table=True):
+    __tablename__ = "debate_turn"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    round_index: int = Field(index=True)
+    agent_id: str = Field(index=True)
+    claims_nodes: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    position_drift: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    moderation_steering: Optional[str] = Field(default=None, sa_column=Column(Text))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class UserPrediction(SQLModel, table=True):
+    __tablename__ = "user_prediction"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    predicted_winner: str = Field(nullable=False)
+    confidence_score: float = Field(default=0.0)
+    is_locked: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    resolved_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    is_correct: Optional[bool] = Field(default=None, nullable=True)
+
+
+class VoteRecord(SQLModel, table=True):
+    __tablename__ = "vote_record"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    vote_json: dict[str, Any] = Field(sa_column=Column(JSON, nullable=False))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class RedTeamSession(SQLModel, table=True):
+    __tablename__ = "red_team_session"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: Optional[str] = Field(foreign_key="debate.id", default=None, nullable=True, index=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    proposal_text: str = Field(sa_column=Column(Text, nullable=False))
+    lenses: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    critique_matrix: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class OracleSession(SQLModel, table=True):
+    __tablename__ = "oracle_session"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    prompt: str = Field(sa_column=Column(Text, nullable=False))
+    status: str = Field(default="running", index=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class OracleBranch(SQLModel, table=True):
+    __tablename__ = "oracle_branch"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    session_id: str = Field(foreign_key="oracle_session.id", nullable=False, index=True)
+    parent_branch_id: Optional[str] = Field(default=None, nullable=True, index=True)
+    assumption_text: str = Field(sa_column=Column(Text, nullable=False))
+    reasoning_nodes: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class ChallengeSession(SQLModel, table=True):
+    __tablename__ = "challenge_session"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    status: str = Field(default="active", index=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class ChallengeRound(SQLModel, table=True):
+    __tablename__ = "challenge_round"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    session_id: str = Field(foreign_key="challenge_session.id", nullable=False, index=True)
+    round_index: int = Field(index=True)
+    user_pushback: str = Field(sa_column=Column(Text, nullable=False))
+    model_response: str = Field(sa_column=Column(Text, nullable=False))
+    action_taken: str = Field(nullable=False)  # defend, revise, concede
+    revised_synthesis: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class UserInteraction(SQLModel, table=True):
+    __tablename__ = "user_interaction"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    user_id: str = Field(foreign_key="user.id", index=True, nullable=False)
+    debate_id: Optional[str] = Field(foreign_key="debate.id", default=None, index=True, nullable=True)
+    interaction_type: str = Field(nullable=False, index=True)
+    details: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+

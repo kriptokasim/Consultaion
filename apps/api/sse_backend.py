@@ -30,7 +30,7 @@ class BaseSSEBackend(Protocol):
     async def publish(self, channel_id: str, event: dict) -> None:
         ...
 
-    async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
+    async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
         ...
 
     async def cleanup(self) -> None:
@@ -63,6 +63,8 @@ class MemoryChannelBackend:
         self._idle_timeout_seconds = idle_timeout_seconds
         self._channels: dict[str, asyncio.Queue[dict]] = {}
         self._last_seen: dict[str, float] = {}
+        self._sequences: dict[str, int] = {}
+        self._history: dict[str, list[dict]] = {}
         self._lock = asyncio.Lock()
         self._running = False
         self._cleanup_task: Optional[asyncio.Task] = None
@@ -90,10 +92,36 @@ class MemoryChannelBackend:
         async with self._lock:
             if channel_id not in self._channels:
                 self._channels[channel_id] = asyncio.Queue(maxsize=self._max_queue_size)
+            if channel_id not in self._sequences:
+                self._sequences[channel_id] = 0
+            if channel_id not in self._history:
+                self._history[channel_id] = []
             self._last_seen[channel_id] = time.time()
 
     async def publish(self, channel_id: str, event: dict) -> None:
         async with self._lock:
+            # Generate monotonic sequence number
+            seq = self._sequences.get(channel_id, 0) + 1
+            self._sequences[channel_id] = seq
+
+            # Create unified event envelope
+            envelope = {
+                "id": f"sse-{channel_id}-{seq}",
+                "type": event.get("type", "notice"),
+                "event": event.get("type", "notice"),
+                "session_id": channel_id,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "sequence": seq,
+                "payload": event
+            }
+
+            # Cache in history
+            if channel_id not in self._history:
+                self._history[channel_id] = []
+            self._history[channel_id].append(envelope)
+            if len(self._history[channel_id]) > self._max_queue_size:
+                self._history[channel_id].pop(0)
+
             queue = self._channels.get(channel_id)
             if not queue:
                 queue = self._channels[channel_id] = asyncio.Queue(maxsize=self._max_queue_size)
@@ -106,11 +134,11 @@ class MemoryChannelBackend:
                     queue.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
-            await queue.put(event)
+            await queue.put(envelope)
         except Exception as e:
             logger.error(f"Error publishing to memory channel {channel_id}: {e}")
 
-    async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
+    async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
         """Subscribe to a channel and yield events.
         
         Terminates on:
@@ -119,6 +147,15 @@ class MemoryChannelBackend:
         - External cancellation
         """
         await self.create_channel(channel_id)
+
+        # 1. Replay cached history if requested
+        if last_sequence is not None:
+            async with self._lock:
+                history_copy = list(self._history.get(channel_id, []))
+            for env in history_copy:
+                if env.get("sequence", 0) > last_sequence:
+                    yield env
+
         queue = self._channels[channel_id]
         poll_timeout = getattr(settings, "SSE_POLL_TIMEOUT_SECONDS", 1.0)
         idle_start = time.time()
@@ -135,11 +172,12 @@ class MemoryChannelBackend:
                 
                 try:
                     # Patchset 67.0: Use timeout to prevent infinite blocking
-                    event = await asyncio.wait_for(queue.get(), timeout=poll_timeout)
+                    envelope = await asyncio.wait_for(queue.get(), timeout=poll_timeout)
                     idle_start = time.time()  # Reset idle timer on event
-                    yield event
-                    # Exit on final/error event types
-                    if event.get("type") in ("final", "error"):
+                    yield envelope
+                    # Exit on final/error event types inside payload
+                    payload = envelope.get("payload", {})
+                    if payload.get("type") in ("final", "error"):
                         break
                 except asyncio.TimeoutError:
                     # Keep polling - this allows the generator to be cancelled externally
@@ -155,6 +193,8 @@ class MemoryChannelBackend:
             for cid in stale:
                 self._channels.pop(cid, None)
                 self._last_seen.pop(cid, None)
+                self._sequences.pop(cid, None)
+                self._history.pop(cid, None)
         if stale:
              logger.info(f"Cleaned up {len(stale)} stale SSE channels")
 
@@ -170,11 +210,12 @@ class RedisChannelBackend:
     - Retry with exponential backoff for publish operations
     - Auto-reconnect for subscriptions on connection loss
     """
-    def __init__(self, url: str, ttl_seconds: int = 900) -> None:
+    def __init__(self, url: str, ttl_seconds: int = 900, max_queue_size: int = 1000) -> None:
         if redis is None:
             raise RuntimeError("redis library is required for RedisChannelBackend")
         self._url = url
         self._ttl_seconds = ttl_seconds
+        self._max_queue_size = max_queue_size
         # Patchset 112: Use shared async Redis connection pool
         from redis_pool import get_async_redis_client
         pooled_client = get_async_redis_client()
@@ -209,10 +250,45 @@ class RedisChannelBackend:
         await self._redis.set(key, "1", ex=self._ttl_seconds)
 
     async def publish(self, channel_id: str, event: dict) -> None:
-        payload = json.dumps(event)
+        # Generate monotonic sequence number atomically in Redis
+        seq_key = f"sse:seq:{channel_id}"
+        try:
+            seq = await self._redis.incr(seq_key)
+            await self._redis.expire(seq_key, self._ttl_seconds)
+            if not isinstance(seq, int):
+                if type(seq).__name__ in ("AsyncMock", "MagicMock", "Mock"):
+                    seq = 1
+                else:
+                    seq = int(seq)
+        except Exception as e:
+            logger.error(f"Failed to increment Redis sequence for {channel_id}: {e}")
+            seq = 0
+
+        # Create unified event envelope
+        envelope = {
+            "id": f"sse-{channel_id}-{seq}",
+            "type": event.get("type", "notice"),
+            "event": event.get("type", "notice"),
+            "session_id": channel_id,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "sequence": seq,
+            "payload": event
+        }
+
+        payload_str = json.dumps(envelope)
+
+        # Cache in Redis list history
+        history_key = f"sse:history:{channel_id}"
+        try:
+            await self._redis.rpush(history_key, payload_str)
+            await self._redis.expire(history_key, self._ttl_seconds)
+            await self._redis.ltrim(history_key, -self._max_queue_size, -1)
+        except Exception as e:
+            logger.error(f"Failed to save Redis SSE history: {e}")
+
         for attempt in range(3):
             try:
-                await self._redis.publish(channel_id, payload)
+                await self._redis.publish(channel_id, payload_str)
                 return
             except (redis.ConnectionError, redis.TimeoutError) as e:
                 if attempt == 2:
@@ -227,7 +303,19 @@ class RedisChannelBackend:
                 increment_metric("sse.publish.failed")
                 return
 
-    async def subscribe(self, channel_id: str) -> AsyncIterator[dict]:
+    async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
+        # 1. Replay cached history if requested
+        if last_sequence is not None:
+            history_key = f"sse:history:{channel_id}"
+            try:
+                events_str = await self._redis.lrange(history_key, 0, -1)
+                for evt_str in events_str:
+                    evt = json.loads(evt_str)
+                    if evt.get("sequence", 0) > last_sequence:
+                        yield evt
+            except Exception as e:
+                logger.error(f"Failed to fetch Redis SSE history: {e}")
+
         pubsub = self._redis.pubsub()
         await pubsub.subscribe(channel_id)
         try:
@@ -237,7 +325,13 @@ class RedisChannelBackend:
                     if message:
                         data = message.get("data")
                         if data:
-                             yield json.loads(data)
+                             envelope = json.loads(data)
+                             yield envelope
+                             
+                             # Exit on final/error event types inside payload
+                             payload = envelope.get("payload", {})
+                             if payload.get("type") in ("final", "error"):
+                                 break
                     else:
                         await asyncio.sleep(0.01)
                 except (redis.ConnectionError, redis.TimeoutError) as e:

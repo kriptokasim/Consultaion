@@ -27,7 +27,7 @@ class TestSSEMemoryLimits:
             if len(events) >= 3:
                 break
         
-        indices = [e.get("index") for e in events]
+        indices = [e.get("payload", {}).get("index") for e in events]
         assert indices == [2, 3, 4], f"Expected [2, 3, 4], got {indices}"
     
     async def test_queue_does_not_grow_unbounded(self):

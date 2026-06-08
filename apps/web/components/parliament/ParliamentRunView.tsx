@@ -1,6 +1,5 @@
-"use client";
-
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import SynthesisChallenge from "@/components/debate/SynthesisChallenge";
 import { formatModelLabel } from "@/lib/ui/formatters";
 import { sanitizeMarkdown } from "@/lib/sanitize";
 import VotingSection from "./VotingSection";
@@ -88,6 +87,11 @@ export default function ParliamentRunView({
 
   const championText = finalEvent?.text;
   const championActor = finalEvent?.actor || "Synthesizer";
+
+  const [activeSynthesis, setActiveSynthesis] = useState(championText);
+  useEffect(() => {
+    setActiveSynthesis(championText);
+  }, [championText]);
 
   const createdAt =
     debate?.created_at && typeof debate.created_at === "string"
@@ -260,9 +264,11 @@ export default function ParliamentRunView({
                   score={winnerScore}
                   hasTie={hasTie}
                   actor={championActor}
-                  text={championText}
+                  text={activeSynthesis}
                   reasons={championReasons}
                   status={debate?.status}
+                  debateId={id}
+                  onSynthesisRevised={setActiveSynthesis}
                 />
 
                 <a
@@ -512,6 +518,8 @@ function ChampionSummary({
   text,
   reasons,
   status,
+  debateId,
+  onSynthesisRevised,
 }: {
   persona?: string;
   score?: number;
@@ -520,6 +528,8 @@ function ChampionSummary({
   text?: string;
   reasons: string[];
   status?: string;
+  debateId?: string;
+  onSynthesisRevised?: (newText: string) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -577,6 +587,14 @@ function ChampionSummary({
 
       {/* TODO: Add ChampionFeedback component here for app debate pages */}
       {/* <ChampionFeedback source="app" debateId={id} /> */}
+
+      {debateId && text && onSynthesisRevised && (
+        <SynthesisChallenge
+          debateId={debateId}
+          initialSynthesis={text}
+          onSynthesisRevised={onSynthesisRevised}
+        />
+      )}
     </div>
   );
 }

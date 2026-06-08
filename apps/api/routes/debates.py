@@ -922,11 +922,45 @@ async def get_stream_token(
     return {"token": token, "expires_in": 300}
 
 
+@router.get("/debates/{debate_id}/replay")
+async def replay_events(
+    debate_id: str,
+    from_sequence: Optional[int] = Query(default=None, description="Start sequence offset (non-inclusive)"),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
+):
+    """Retrieve cached real-time events from the memory/Redis event log."""
+    require_debate_access(session.get(Debate, debate_id), current_user, session)
+    channel_id = debate_channel_id(debate_id)
+    
+    events = []
+    if hasattr(sse_backend, "_history"):
+        async with sse_backend._lock:
+            history = list(sse_backend._history.get(channel_id, []))
+        for env in history:
+            if from_sequence is None or env.get("sequence", 0) > from_sequence:
+                events.append(env)
+    elif hasattr(sse_backend, "_redis"):
+        history_key = f"sse:history:{channel_id}"
+        try:
+            events_str = await sse_backend._redis.lrange(history_key, 0, -1)
+            for evt_str in events_str:
+                evt = json.loads(evt_str)
+                if from_sequence is None or evt.get("sequence", 0) > from_sequence:
+                    events.append(evt)
+        except Exception as e:
+            logger.error(f"Failed to fetch Redis SSE history for replay: {e}")
+            
+    return {"events": events}
+
+
 @router.get("/debates/{debate_id}/stream")
 async def stream_events(
     debate_id: str,
     request: Request,
     token: Optional[str] = Query(default=None, description="Stream-scoped JWT for EventSource auth fallback"),
+    last_sequence: Optional[int] = Query(default=None, description="Last sequence number received by client"),
     session: Session = Depends(get_session),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
@@ -945,10 +979,25 @@ async def stream_events(
     await sse_backend.create_channel(channel_id)
     track_metric("sse_stream_open")
 
+    # Determine last sequence from query param or Last-Event-ID header
+    last_seq_val = last_sequence
+    if last_seq_val is None and "last-event-id" in request.headers:
+        try:
+            last_seq_val = int(request.headers["last-event-id"])
+        except ValueError:
+            pass
+
     async def eventgen():
-        async for event in sse_backend.subscribe(channel_id):
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-            if event.get("type") == "final":
+        async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
+            seq = event.get("sequence")
+            id_prefix = f"id: {seq}\n" if seq is not None else ""
+            yield f"{id_prefix}data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            
+            # Check either top-level or payload type
+            evt_type = event.get("type")
+            payload = event.get("payload")
+            payload_type = payload.get("type") if isinstance(payload, dict) else None
+            if evt_type == "final" or payload_type == "final":
                 break
 
     # Explicit CORS headers — CORSMiddleware does not reliably inject on streaming responses
@@ -1045,6 +1094,100 @@ async def share_debate(
     )
     
     return {"id": debate.id, "is_public": body.is_public}
+
+
+class DebateModerateRequest(BaseModel):
+    round_index: int
+    moderation_steering: str
+
+
+@router.post("/debates/{debate_id}/moderate")
+async def moderate_debate(
+    debate_id: str,
+    body: DebateModerateRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    from models import DebateTurn
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
+    if not (current_user.role == "admin" or debate.user_id == current_user.id):
+        raise PermissionError(message="Insufficient permissions", code="permission.denied")
+
+    stmt = select(DebateTurn).where(
+        DebateTurn.debate_id == debate_id,
+        DebateTurn.round_index == body.round_index,
+        DebateTurn.agent_id == "moderator"
+    )
+    turn = session.exec(stmt).first()
+    if turn:
+        turn.moderation_steering = body.moderation_steering
+        session.add(turn)
+    else:
+        turn = DebateTurn(
+            debate_id=debate_id,
+            round_index=body.round_index,
+            agent_id="moderator",
+            moderation_steering=body.moderation_steering
+        )
+        session.add(turn)
+    session.commit()
+    session.refresh(turn)
+
+    return {
+        "debate_id": debate_id,
+        "round_index": body.round_index,
+        "moderation_steering": body.moderation_steering
+    }
+
+
+@router.get("/debates/{debate_id}/argument-tree")
+async def get_argument_tree(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    from models import DebateTurn
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
+    
+    stmt = select(DebateTurn).where(DebateTurn.debate_id == debate_id).order_by(DebateTurn.round_index.asc())
+    turns = session.exec(stmt).all()
+
+    raw_to_agent = {}
+    for t in turns:
+        if t.agent_id == "moderator":
+            continue
+        if t.claims_nodes:
+            for node in t.claims_nodes:
+                raw_id = node.get("id")
+                if raw_id:
+                    raw_to_agent[raw_id] = t.agent_id
+
+    nodes = []
+    for t in turns:
+        # Skip moderator rows for tree nodes, but we could list them if needed.
+        if t.agent_id == "moderator":
+            continue
+        if t.claims_nodes:
+            for node in t.claims_nodes:
+                target_raw = node.get("rebuts_target")
+                target_agent = raw_to_agent.get(target_raw) if target_raw else None
+                rebuts_target = f"{target_agent}_{target_raw}" if target_agent else None
+                
+                nodes.append({
+                    "id": f"{t.agent_id}_{node.get('id')}",
+                    "raw_id": node.get("id"),
+                    "agent_id": t.agent_id,
+                    "round_index": t.round_index,
+                    "type": node.get("type"),
+                    "claim": node.get("claim"),
+                    "rebuts_target": rebuts_target,
+                    "position_drift": t.position_drift
+                })
+    return {"nodes": nodes}
 
 
 # Alias for router inclusion and compatibility

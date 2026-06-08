@@ -7,3 +7,7 @@ export {
     type VoteReasonType,
     type ConfidenceLevel
 } from "./VoteReasonSheet";
+export { PredictionLock } from "./PredictionLock";
+export { WilsonScoreBar } from "./WilsonScoreBar";
+export { VoteReasonCard } from "./VoteReasonCard";
+export { PredictionAggregate } from "./PredictionAggregate";

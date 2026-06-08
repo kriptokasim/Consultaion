@@ -24,7 +24,7 @@ export interface DebateSummary {
     team_id?: string;
     model_id?: string;
     score?: number; // derived or from meta
-    mode?: 'arena' | 'conversation' | 'compare' | 'debate';
+    mode?: 'arena' | 'conversation' | 'compare' | 'debate' | 'voting' | 'redteam' | 'oracle' | 'challenge';
 }
 
 export interface DebateDetail extends DebateSummary {
@@ -195,4 +195,23 @@ export interface ApiListResponse<T> {
     limit: number;
     offset: number;
     has_more: boolean;
+}
+
+export interface UserParticipationResponse {
+  stats: {
+    total_interactions: number;
+    arena_votes: number;
+    debate_steers: number;
+    voting_predictions: number;
+    redteam_critiques: number;
+    oracle_branches: number;
+    challenge_pushbacks: number;
+  };
+  recent_activity: {
+    id: number;
+    debate_id: string;
+    type: string;
+    details: Record<string, any>;
+    created_at: string;
+  }[];
 }

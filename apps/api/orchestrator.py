@@ -576,6 +576,15 @@ async def run_debate(
 
             if result.status == "completed":
                 await _build_and_send_summary(debate_id, debate_user_id)
+                try:
+                    if settings.DEBATE_DISPATCH_MODE == "celery":
+                        from worker.arena_tasks import compute_divergence_task
+                        compute_divergence_task.delay(debate_id)
+                    else:
+                        from worker.arena_tasks import _execute_divergence_computation
+                        await _execute_divergence_computation(debate_id)
+                except Exception as exc:
+                    logger.warning("Failed to trigger divergence computation for debate %s: %s", debate_id, exc)
             return
 
         if debate_mode == "compare":

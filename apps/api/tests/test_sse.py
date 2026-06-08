@@ -120,3 +120,66 @@ async def test_stream_events_uses_backend():
         await backend.stop()
 
     assert b"final" in received
+
+
+@pytest.mark.anyio("asyncio")
+async def test_replay_endpoint():
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+    debate_id = "replay-test"
+    channel_id = f"debate:{debate_id}"
+    await backend.create_channel(channel_id)
+
+    # Publish 3 events
+    await backend.publish(channel_id, {"type": "event1"})
+    await backend.publish(channel_id, {"type": "event2"})
+    await backend.publish(channel_id, {"type": "event3"})
+
+    with Session(engine) as session:
+        from routes.debates import replay_events
+        from sqlmodel import select
+        user = session.exec(select(User).where(User.email == "test@example.com")).first()
+        if not user:
+            user = User(id="test-user", email="test@example.com", password_hash="...", role="user")
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+        debate = session.get(Debate, debate_id)
+        if not debate:
+            session.add(
+                Debate(
+                    id=debate_id,
+                    prompt="Replay prompt",
+                    status="queued",
+                    config=default_debate_config().model_dump(),
+                )
+            )
+            session.commit()
+
+        # 1. Fetch all events (from_sequence=None)
+        res = await replay_events(
+            debate_id,
+            from_sequence=None,
+            session=session,
+            current_user=user,
+            sse_backend=backend
+        )
+        assert len(res["events"]) == 3
+        assert res["events"][0]["sequence"] == 1
+        assert res["events"][1]["sequence"] == 2
+        assert res["events"][2]["sequence"] == 3
+
+        # 2. Fetch with from_sequence=1 (should get sequence 2 and 3)
+        res_partial = await replay_events(
+            debate_id,
+            from_sequence=1,
+            session=session,
+            current_user=user,
+            sse_backend=backend
+        )
+        assert len(res_partial["events"]) == 2
+        assert res_partial["events"][0]["sequence"] == 2
+        assert res_partial["events"][1]["sequence"] == 3
+
+    await backend.stop()
