@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-from sqlalchemy import JSON, Column, DateTime, Index, Text
+from sqlalchemy import JSON, Column, DateTime, Index, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -424,6 +424,9 @@ class DebateTurn(SQLModel, table=True):
 
 class UserPrediction(SQLModel, table=True):
     __tablename__ = "user_prediction"
+    __table_args__ = (
+        UniqueConstraint("debate_id", "user_id", name="uq_user_prediction_debate_user"),
+    )
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)

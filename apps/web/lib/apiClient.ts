@@ -24,13 +24,32 @@ export class ApiClientError extends Error {
   /**
    * Get rate limit details if available.
    */
-  getRateLimitDetails(): { detail?: string; reset_at?: string; reason?: string } | null {
+  getRateLimitDetails(): { detail?: string; reset_at?: string; retry_after?: number; reason?: string } | null {
     if (!this.isRateLimitError()) return null;
     return {
       detail: this.body?.detail,
       reset_at: this.body?.reset_at,
+      retry_after: this.body?.retry_after,
       reason: this.body?.reason || this.body?.code,
     };
+  }
+
+  /**
+   * Get a user-friendly error message.
+   */
+  toUserMessage(): string {
+    if (this.isRateLimitError()) {
+      const details = this.getRateLimitDetails();
+      const seconds = details?.retry_after || 30;
+      return `Rate limit reached \u2014 try again in ${seconds}s.`;
+    }
+    if (this.status === 503 || this.status === 502) {
+      return "This model provider is temporarily unavailable. We tried available alternatives where possible.";
+    }
+    if (this.status === 0 || !this.status) {
+      return "The request is taking longer than expected. Your run may still be processing.";
+    }
+    return this.message || "An unexpected error occurred.";
   }
 }
 

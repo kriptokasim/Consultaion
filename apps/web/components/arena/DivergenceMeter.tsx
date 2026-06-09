@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { CheckCircle2, AlertTriangle, ThumbsUp, Sparkles, Loader2, Check } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { CheckCircle2, AlertTriangle, ThumbsUp, Sparkles, Loader2, Check, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/apiClient";
-import { ModelLogo, getColors } from "./ModelCard";
+import { useToast } from "@/components/ui/toast";
+import { getColors } from "./ModelCard";
+import { getWithExpiry, setWithExpiry, TTL } from "@/lib/localStorageTTL";
 
 interface Claim {
   claim: string;
@@ -25,39 +27,93 @@ interface DivergenceMeterProps {
   isCompleted: boolean;
 }
 
+const POLL_INTERVALS = [2000, 3000, 4500, 6750, 10000, 15000, 15000, 15000, 15000, 15000];
+const MAX_POLLS = POLL_INTERVALS.length;
+
 export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps) {
   const [report, setReport] = useState<DivergenceReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [votedClaim, setVotedClaim] = useState<string | null>(null);
   const [votingFor, setVotingFor] = useState<string | null>(null);
+  const [displayScore, setDisplayScore] = useState(50);
+  const [pollCount, setPollCount] = useState(0);
+  const [isPolling, setIsPolling] = useState(false);
+  const { pushToast } = useToast();
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prefersReducedMotion = useRef(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      prefersReducedMotion.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+  }, []);
+
+  // Animate score from 50% to actual score on mount
+  useEffect(() => {
+    if (report?.divergence_score !== undefined) {
+      const target = report.divergence_score * 100;
+      const duration = prefersReducedMotion.current ? 0 : 1000;
+      if (duration === 0) {
+        setDisplayScore(target);
+        return;
+      }
+      const startTime = Date.now();
+      const startValue = 50;
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Spring-like easing (ease-out cubic)
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setDisplayScore(startValue + (target - startValue) * eased);
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+      requestAnimationFrame(animate);
+    }
+  }, [report?.divergence_score]);
+
+  const fetchReport = async () => {
+    try {
+      const data = await apiRequest<DivergenceReport>({
+        path: `/arena/${debateId}/divergence`,
+        method: "GET",
+      });
+      setReport(data);
+      if (!data.ready && pollCount < MAX_POLLS) {
+        setIsPolling(true);
+        const nextInterval = POLL_INTERVALS[pollCount] || 15000;
+        pollTimerRef.current = setTimeout(() => {
+          setPollCount((c) => c + 1);
+        }, nextInterval);
+      } else {
+        setIsPolling(false);
+      }
+      return data;
+    } catch (err: any) {
+      console.error("Failed to load divergence report:", err);
+      setError("Unable to compute claims divergence at this time.");
+      setIsPolling(false);
+      return null;
+    }
+  };
 
   useEffect(() => {
     if (!isCompleted) return;
+    setLoading(true);
+    fetchReport().finally(() => setLoading(false));
 
-    async function fetchReport() {
-      setLoading(true);
-      try {
-        const data = await apiRequest<DivergenceReport>({
-          path: `/arena/${debateId}/divergence`,
-          method: "GET",
-        });
-        setReport(data);
-      } catch (err: any) {
-        console.error("Failed to load divergence report:", err);
-        setError("Unable to compute claims divergence at this time.");
-      } finally {
-        setLoading(false);
-      }
-    }
+    return () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, [debateId, isCompleted, pollCount]);
 
-    fetchReport();
-    // Load voted state from localStorage for UX stickiness
-    const stored = localStorage.getItem(`voted_claim_${debateId}`);
-    if (stored) {
-      setVotedClaim(stored);
-    }
-  }, [debateId, isCompleted]);
+  // Load voted state from localStorage for UX stickiness
+  useEffect(() => {
+    const stored = getWithExpiry<string>(`voted_claim_${debateId}`);
+    if (stored) setVotedClaim(stored);
+  }, [debateId]);
 
   const handleVote = async (claimText: string, modelName: string, isConsensus: boolean) => {
     if (votedClaim || votingFor) return;
@@ -73,14 +129,18 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
         },
       });
       setVotedClaim(claimText);
-      localStorage.setItem(`voted_claim_${debateId}`, claimText);
+      setWithExpiry(`voted_claim_${debateId}`, claimText, TTL.VOTE_STATE);
     } catch (err: any) {
       console.error("Failed to submit claim vote:", err);
       if (err?.body?.detail?.includes("already voted")) {
         setVotedClaim(claimText);
-        localStorage.setItem(`voted_claim_${debateId}`, claimText);
+        setWithExpiry(`voted_claim_${debateId}`, claimText, TTL.VOTE_STATE);
       } else {
-        alert(err?.body?.detail || "An error occurred while casting your vote.");
+        pushToast({
+          title: "Couldn\u2019t cast vote",
+          description: err?.body?.detail || "An error occurred while casting your vote. Please try again.",
+          variant: "error",
+        });
       }
     } finally {
       setVotingFor(null);
@@ -101,13 +161,36 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
     );
   }
 
-  if (loading) {
+  if (loading && !report) {
     return (
       <div className="rounded-2xl border border-border bg-card/50 p-8 flex flex-col items-center justify-center text-center gap-4">
         <Loader2 className="h-8 w-8 text-primary animate-spin" />
         <p className="text-sm font-medium text-muted-foreground animate-pulse">
-          Analyzing claims & computing divergence...
+          Analyzing model disagreement&hellip;
         </p>
+        <p className="text-xs text-muted-foreground/70">
+          Extracting consensus and contested claims.
+        </p>
+      </div>
+    );
+  }
+
+  // Polling state: not ready yet
+  if (report && !report.ready) {
+    return (
+      <div className="rounded-2xl border border-border bg-card/50 p-8 flex flex-col items-center justify-center text-center gap-4">
+        <Clock className="h-8 w-8 text-amber-500 animate-pulse" />
+        <p className="text-sm font-medium text-muted-foreground">
+          Analyzing model disagreement&hellip;
+        </p>
+        <p className="text-xs text-muted-foreground/70">
+          Extracting consensus and contested claims.
+        </p>
+        {pollCount >= 5 && (
+          <p className="text-xs text-muted-foreground/50 italic">
+            Taking longer than expected. Analysis is still processing.
+          </p>
+        )}
       </div>
     );
   }
@@ -164,10 +247,13 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
         <div className="relative h-4 w-full rounded-full bg-muted overflow-hidden border border-border shadow-inner">
           {/* Gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 opacity-80" />
-          {/* Slider line indicating position */}
+          {/* Slider line indicating position — animated */}
           <div 
-            className="absolute top-0 bottom-0 w-2.5 bg-foreground border border-background shadow-lg transition-all duration-1000 ease-out"
-            style={{ left: `calc(${scorePercent}% - 5px)` }}
+            className="absolute top-0 bottom-0 w-2.5 bg-foreground border border-background shadow-lg"
+            style={{
+              left: `calc(${displayScore}% - 5px)`,
+              transition: prefersReducedMotion.current ? "none" : "left 1s cubic-bezier(0.33, 1, 0.68, 1)",
+            }}
           />
         </div>
 
@@ -236,18 +322,23 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
                       </button>
                     </div>
 
+                    {/* Model identity pills */}
                     <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40">
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wide mr-1">
                         Supported by:
                       </span>
-                      {item.models?.map((model) => (
-                        <span 
-                          key={model}
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold bg-muted text-muted-foreground rounded-full px-2 py-0.5 border border-border"
-                        >
-                          {model}
-                        </span>
-                      ))}
+                      {item.models?.map((model) => {
+                        const colors = getColors(model);
+                        return (
+                          <span 
+                            key={model}
+                            className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 border ${colors.border} ${colors.bg} ${colors.text}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${colors.accent}`} />
+                            {model}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -313,13 +404,20 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
                       </button>
                     </div>
 
+                    {/* Model identity pill */}
                     <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40">
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wide mr-1">
                         Proposed by:
                       </span>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-muted text-muted-foreground rounded-full px-2 py-0.5 border border-border">
-                        {item.model}
-                      </span>
+                      {(() => {
+                        const colors = getColors(item.model);
+                        return (
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 border ${colors.border} ${colors.bg} ${colors.text}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${colors.accent}`} />
+                            {item.model}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 );

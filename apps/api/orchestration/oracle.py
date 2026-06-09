@@ -13,8 +13,8 @@ async def generate_reasoning_chain(
     fork_assumption: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    Generates a step-by-step reasoning chain of thought.
-    If preceding_nodes and fork_assumption are provided, it forks the reasoning
+    Generates a user-facing reasoning summary with structured analysis steps.
+    If preceding_nodes and fork_assumption are provided, it forks the analysis
     by appending the fork assumption and continuing the logic.
     """
     if USE_MOCK:
@@ -25,14 +25,14 @@ async def generate_reasoning_chain(
             fork_node_id = f"node_{str(uuid4())[:8]}"
             base_nodes.append({
                 "id": fork_node_id,
-                "title": "Fork Assumption",
-                "type": "claim",
+                "title": "What-If Branch",
+                "type": "assumption",
                 "content": f"Fork: {fork_assumption}"
             })
             base_nodes.append({
                 "id": f"node_{str(uuid4())[:8]}",
-                "title": "Evaluate assumption impact",
-                "type": "uncertainty",
+                "title": "Evaluate Assumption Impact",
+                "type": "analysis",
                 "content": "Analyzing how this new parameter changes the logical constraints of the system."
             })
             base_nodes.append({
@@ -48,24 +48,24 @@ async def generate_reasoning_chain(
                 {
                     "id": f"node_{str(uuid4())[:8]}",
                     "title": "Premise Analysis",
-                    "type": "fact",
+                    "type": "observation",
                     "content": f"The query parameter is evaluated: '{prompt}'."
                 },
                 {
                     "id": f"node_{str(uuid4())[:8]}",
-                    "title": "Vulnerability Check",
+                    "title": "Risk Assessment",
                     "type": "uncertainty",
                     "content": "A potential single point of failure exists in the unauthenticated database schema."
                 },
                 {
                     "id": f"node_{str(uuid4())[:8]}",
                     "title": "Remediation Strategy",
-                    "type": "claim",
+                    "type": "analysis",
                     "content": "Implementing a stateless JWT authentication layer will mitigate unauthorized queries."
                 },
                 {
                     "id": f"node_{str(uuid4())[:8]}",
-                    "title": "System Recommendation",
+                    "title": "Recommendation",
                     "type": "conclusion",
                     "content": "Use a secure proxy wrapper and enforce HTTPS to prevent sniffing."
                 }
@@ -76,29 +76,35 @@ async def generate_reasoning_chain(
         # Fork logic
         preceding_str = json.dumps(preceding_nodes, indent=2)
         system_msg = (
-            "You are an AI Oracle reasoning engine that outputs structured step-by-step logical chains of thought. "
-            "Each step is a node with keys: 'id', 'title', 'content', and 'type' ('fact' | 'claim' | 'uncertainty' | 'conclusion'). "
+            "You are an AI analyst that produces a concise, user-facing reasoning summary. "
+            "Do not reveal hidden chain-of-thought. "
+            "Each step is a node with keys: 'id', 'title', 'content', and 'type' ('observation' | 'assumption' | 'analysis' | 'uncertainty' | 'conclusion'). "
+            "Return structured analysis steps that summarize observations, assumptions, uncertainty, and conclusions. "
+            "Each step must be suitable for display to the user. "
             "Output strictly a valid JSON array of node objects representing the new continuation steps."
         )
         user_msg = (
-            f"Preceding reasoning nodes:\n{preceding_str}\n\n"
-            f"The user has introduced a new counter-assumption or fork condition:\n"
+            f"Preceding analysis nodes:\n{preceding_str}\n\n"
+            f"The user has introduced a new counter-assumption or what-if branch:\n"
             f"'{fork_assumption}'\n\n"
-            f"Identify the logical consequences of this fork. Generate 2 to 4 remaining reasoning nodes "
+            f"Identify the logical consequences of this fork. Generate 2 to 4 remaining analysis nodes "
             f"starting with a node evaluating this counter-assumption, and concluding with a new 'conclusion' node. "
             f"Provide unique 'id' values for the new nodes. Output raw JSON only."
         )
     else:
         # Base logic
         system_msg = (
-            "You are an AI Oracle reasoning engine that outputs structured step-by-step logical chains of thought. "
-            "Each step is a node with keys: 'id', 'title', 'content', and 'type' ('fact' | 'claim' | 'uncertainty' | 'conclusion'). "
+            "You are an AI analyst that produces a concise, user-facing reasoning summary. "
+            "Do not reveal hidden chain-of-thought. "
+            "Each step is a node with keys: 'id', 'title', 'content', and 'type' ('observation' | 'assumption' | 'analysis' | 'uncertainty' | 'conclusion'). "
+            "Return structured analysis steps that summarize observations, assumptions, uncertainty, and conclusions. "
+            "Each step must be suitable for display to the user. "
             "Output strictly a valid JSON array of node objects (4-5 steps total)."
         )
         user_msg = (
             f"Query: '{prompt}'\n\n"
-            f"Provide a step-by-step logical chain of thought to solve/analyze the query. "
-            f"Classify the nodes appropriately ('fact', 'claim', 'uncertainty', 'conclusion'). Output raw JSON only."
+            f"Provide a structured reasoning summary to analyze the query. "
+            f"Classify the nodes appropriately ('observation', 'assumption', 'analysis', 'uncertainty', 'conclusion'). Output raw JSON only."
         )
 
     messages = [
@@ -135,8 +141,8 @@ async def generate_reasoning_chain(
                 node["title"] = "Reasoning step"
             if "content" not in node:
                 node["content"] = ""
-            if node.get("type") not in ["fact", "claim", "uncertainty", "conclusion"]:
-                node["type"] = "claim"
+            if node.get("type") not in ["observation", "assumption", "analysis", "uncertainty", "conclusion"]:
+                node["type"] = "analysis"
 
         if preceding_nodes and fork_assumption:
             # Reconstruct the combined list
@@ -144,8 +150,8 @@ async def generate_reasoning_chain(
             combined = list(preceding_nodes)
             combined.append({
                 "id": fork_node_id,
-                "title": "Fork Assumption",
-                "type": "claim",
+                "title": "What-If Branch",
+                "type": "assumption",
                 "content": fork_assumption
             })
             combined.extend(new_nodes)

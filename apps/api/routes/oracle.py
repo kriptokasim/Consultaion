@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from auth import get_current_user
 from deps import get_session
-from models import User, OracleSession, OracleBranch
+from models import User, OracleSession, OracleBranch, UserInteraction
 from orchestration.oracle import generate_reasoning_chain
 from exceptions import NotFoundError, PermissionError
 
@@ -117,7 +117,7 @@ async def start_oracle_session(
     session: Session = Depends(get_session)
 ):
     """
-    Initiates a step-by-step Visible Chain-of-Thought reasoning session.
+    Initiates a user-facing reasoning summary session.
     """
     oracle_sess = OracleSession(
         user_id=current_user.id,
@@ -132,7 +132,7 @@ async def start_oracle_session(
     root_branch = OracleBranch(
         session_id=oracle_sess.id,
         parent_branch_id=None,
-        assumption_text="Base reasoning chain",
+        assumption_text="Base reasoning summary",
         reasoning_nodes=None
     )
     session.add(root_branch)
@@ -205,7 +205,7 @@ async def fork_oracle_branch(
     session: Session = Depends(get_session)
 ):
     """
-    Forks the reasoning chain from a specific node in a parent branch using a new counter-assumption.
+    Forks the analysis from a specific node in a parent branch using a new counter-assumption.
     """
     oracle_sess = session.get(OracleSession, session_id)
     if not oracle_sess:
@@ -233,6 +233,20 @@ async def fork_oracle_branch(
     session.add(child_branch)
     session.commit()
     session.refresh(child_branch)
+
+    # Log interaction for participation tracking
+    interaction = UserInteraction(
+        user_id=current_user.id,
+        interaction_type="oracle_branch",
+        details={
+            "entity_id": child_branch.id,
+            "label": "fork",
+            "summary": payload.assumption_text[:200],
+            "status": "created"
+        }
+    )
+    session.add(interaction)
+    session.commit()
 
     # Queue fork reasoning generation task
     background_tasks.add_task(

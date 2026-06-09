@@ -39,13 +39,13 @@ def test_get_oracle_session_endpoint(authenticated_client, db_session: Session):
         id=str(uuid4()),
         session_id=sess.id,
         parent_branch_id=None,
-        assumption_text="Base reasoning chain",
+        assumption_text="Base reasoning summary",
         reasoning_nodes={
             "nodes": [
                 {
                     "id": "node_1",
                     "title": "First Step",
-                    "type": "fact",
+                    "type": "observation",
                     "content": "Analyze compliance."
                 }
             ]
@@ -79,7 +79,7 @@ async def test_oracle_background_reasoning_tasks(authenticated_client, db_sessio
         id=str(uuid4()),
         session_id=sess.id,
         parent_branch_id=None,
-        assumption_text="Base reasoning chain",
+        assumption_text="Base reasoning summary",
         reasoning_nodes=None
     )
     db_session.add(root_branch)
@@ -123,5 +123,5 @@ async def test_oracle_background_reasoning_tasks(authenticated_client, db_sessio
     # First node should match parent node
     assert nodes[0]["id"] == updated_branch.reasoning_nodes["nodes"][0]["id"]
     # Fork assumption node should be in there
-    fork_nodes = [n for n in nodes if n.get("title") == "Fork Assumption"]
+    fork_nodes = [n for n in nodes if n.get("title") == "What-If Branch"]
     assert len(fork_nodes) > 0

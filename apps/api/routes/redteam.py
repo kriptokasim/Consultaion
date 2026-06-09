@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from auth import get_current_user
 from deps import get_session
-from models import User, RedTeamSession
+from models import User, RedTeamSession, UserInteraction
 from orchestration.redteam import run_red_team_analysis
 from exceptions import NotFoundError, PermissionError
 
@@ -57,6 +57,20 @@ async def start_red_team_session(
     session.add(rt_session)
     session.commit()
     session.refresh(rt_session)
+
+    # Log interaction for participation tracking
+    interaction = UserInteraction(
+        user_id=current_user.id,
+        interaction_type="redteam_critique",
+        details={
+            "entity_id": rt_session.id,
+            "label": "redteam_session",
+            "summary": payload.proposal_text[:200],
+            "status": "created"
+        }
+    )
+    session.add(interaction)
+    session.commit()
 
     # Queue the analysis task
     background_tasks.add_task(

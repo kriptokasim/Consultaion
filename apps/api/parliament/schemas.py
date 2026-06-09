@@ -21,7 +21,7 @@ class SeatMessage(BaseModel):
     content: str = Field(..., description="Natural language message produced by this seat.")
     reasoning: Optional[str] = Field(
         None,
-        description="Optional chain-of-thought or explanation; used internally, not exposed raw.",
+        description="Optional reasoning summary or explanation; used internally, not exposed raw.",
     )
     stance: Optional[str] = Field(
         None,

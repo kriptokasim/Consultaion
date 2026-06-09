@@ -373,9 +373,9 @@ export default function OracleWorkspace() {
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <div className="text-center space-y-2">
-        <h2 className="text-3xl font-extrabold text-foreground tracking-tight">Oracle Chain-of-Thought</h2>
+        <h2 className="text-3xl font-extrabold text-foreground tracking-tight">Oracle Reasoning Summary</h2>
         <p className="text-muted-foreground text-sm max-w-lg mx-auto">
-          Explore a Visible Chain-of-Thought logical timeline for complex prompt inquiries. Interrupt and fork paths at any reasoning step.
+          Explore a structured analysis outline for complex prompt inquiries. Interrupt and fork paths at any reasoning step.
         </p>
       </div>
 

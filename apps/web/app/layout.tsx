@@ -20,11 +20,20 @@ export const metadata: Metadata = {
     siteName: 'Consultaion',
     title: 'Consultaion — Ask Once, Get Answers from Every Top AI',
     description: 'Submit one question and get simultaneous answers from GPT-4o, Claude, Gemini, and DeepSeek. Compare AI perspectives side-by-side and get a synthesized final verdict.',
+    images: [
+      {
+        url: '/api/og?title=Consultaion&models=4',
+        width: 1200,
+        height: 630,
+        alt: 'Consultaion — Multi-model AI Decision Workspace',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Consultaion — Ask Once, Get Answers from Every Top AI',
     description: 'Compare GPT-4o, Claude, Gemini, and DeepSeek answers side-by-side.',
+    images: ['/api/og?title=Consultaion&models=4'],
   },
   robots: {
     index: true,

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   Swords,
@@ -21,6 +21,8 @@ interface ModeOption {
   icon: LucideIcon;
   gradient: string;
   borderHover: string;
+  badge?: string;
+  badgeColor?: string;
 }
 
 const modes: ModeOption[] = [
@@ -39,6 +41,8 @@ const modes: ModeOption[] = [
     icon: Users,
     gradient: "from-blue-500/10 to-cyan-500/10 hover:from-blue-500/20 hover:to-cyan-500/20 text-blue-400",
     borderHover: "hover:border-blue-500/50",
+    badge: "Beta",
+    badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   },
   {
     id: "voting",
@@ -47,6 +51,8 @@ const modes: ModeOption[] = [
     icon: Vote,
     gradient: "from-amber-500/10 to-orange-500/10 hover:from-amber-500/20 hover:to-orange-500/20 text-amber-400",
     borderHover: "hover:border-amber-500/50",
+    badge: "Beta",
+    badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/20",
   },
   {
     id: "redteam",
@@ -55,14 +61,18 @@ const modes: ModeOption[] = [
     icon: Skull,
     gradient: "from-red-500/10 to-purple-500/10 hover:from-red-500/20 hover:to-purple-500/20 text-red-400",
     borderHover: "hover:border-red-500/50",
+    badge: "Preview",
+    badgeColor: "bg-red-500/10 text-red-400 border-red-500/20",
   },
   {
     id: "oracle",
     label: "Oracle Mode",
-    description: "Step-by-step reasoning pipelines & interactive branching",
+    description: "Reasoning summary pipelines & interactive branching",
     icon: Eye,
     gradient: "from-violet-500/10 to-indigo-500/10 hover:from-violet-500/20 hover:to-indigo-500/20 text-violet-400",
     borderHover: "hover:border-violet-500/50",
+    badge: "Experimental",
+    badgeColor: "bg-violet-500/10 text-violet-400 border-violet-500/20",
   },
   {
     id: "challenge",
@@ -71,6 +81,8 @@ const modes: ModeOption[] = [
     icon: BrainCircuit,
     gradient: "from-emerald-500/10 to-teal-500/10 hover:from-emerald-500/20 hover:to-teal-500/20 text-emerald-400",
     borderHover: "hover:border-emerald-500/50",
+    badge: "Beta",
+    badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   },
 ];
 
@@ -85,9 +97,24 @@ export default function ModeSelector({
   onChange,
   className,
 }: ModeSelectorProps) {
+  const [mounted, setMounted] = useState(false);
+  const prefersReducedMotion = typeof window !== "undefined"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+
+  useEffect(() => {
+    if (!prefersReducedMotion) {
+      setMounted(true);
+    }
+  }, [prefersReducedMotion]);
+
   return (
-    <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4", className)}>
-      {modes.map((mode) => {
+    <div className={cn(
+      "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4",
+      "md:overflow-visible overflow-x-auto snap-x snap-mandatory pb-2 md:pb-0",
+      className
+    )}>
+      {modes.map((mode, index) => {
         const Icon = mode.icon;
         const isActive = selectedMode === mode.id;
 
@@ -95,9 +122,13 @@ export default function ModeSelector({
           <button
             key={mode.id}
             onClick={() => onChange(mode.id)}
+            style={{
+              animationDelay: mounted ? `${index * 60}ms` : undefined,
+            }}
             className={cn(
-              "group relative flex flex-col items-start p-5 rounded-2xl border text-left transition-all duration-300",
+              "group relative flex flex-col items-start p-5 rounded-2xl border text-left transition-all duration-300 min-w-[280px] md:min-w-0 snap-start",
               "bg-slate-900/40 backdrop-blur-md",
+              mounted && "animate-in fade-in slide-in-from-bottom-2 fill-mode-both",
               isActive
                 ? "border-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/50"
                 : "border-slate-800 hover:bg-slate-900/60",
@@ -123,9 +154,19 @@ export default function ModeSelector({
               >
                 <Icon className="h-5 w-5" />
               </div>
-              <h3 className="font-bold text-slate-100 group-hover:text-white text-base">
-                {mode.label}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-100 group-hover:text-white text-base">
+                  {mode.label}
+                </h3>
+                {mode.badge && (
+                  <span className={cn(
+                    "text-[10px] font-semibold rounded-full px-2 py-0.5 border",
+                    mode.badgeColor
+                  )}>
+                    {mode.badge}
+                  </span>
+                )}
+              </div>
             </div>
 
             <p className="text-sm text-slate-400 group-hover:text-slate-300 leading-relaxed">

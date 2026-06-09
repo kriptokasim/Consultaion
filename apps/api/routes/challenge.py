@@ -7,13 +7,72 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from auth import get_current_user
 from deps import get_session
-from models import User, Debate, ChallengeSession, ChallengeRound, DebateTurn
+from models import User, Debate, Message, ChallengeSession, ChallengeRound, DebateTurn, UserInteraction
 from orchestration.challenge import evaluate_synthesis_challenge
 from exceptions import NotFoundError, PermissionError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/challenge", tags=["challenge"])
+
+# Maximum characters for transcript to avoid excessive tokens
+MAX_TRANSCRIPT_CHARS = 8000
+
+
+def build_debate_transcript(session: Session, debate: Debate) -> str:
+    """
+    Build a debate transcript from Message rows, with fallback to Debate.final_content.
+    Bounded to MAX_TRANSCRIPT_CHARS to avoid excessive token usage.
+    """
+    messages = session.exec(
+        select(Message)
+        .where(Message.debate_id == debate.id)
+        .order_by(Message.round_index.asc(), Message.id.asc())
+    ).all()
+
+    if messages:
+        parts = []
+        for msg in messages:
+            speaker = msg.persona or msg.role or "Agent"
+            content = (msg.content or "").strip()
+            if content:
+                parts.append(f"{speaker}: {content}")
+        transcript = "\n\n".join(parts)
+        if len(transcript) > MAX_TRANSCRIPT_CHARS:
+            transcript = transcript[:MAX_TRANSCRIPT_CHARS] + "\n\n[...truncated]"
+        return transcript
+
+    # Fallback 1: Use final_content if available
+    if debate.final_content:
+        content = debate.final_content.strip()
+        if len(content) > MAX_TRANSCRIPT_CHARS:
+            content = content[:MAX_TRANSCRIPT_CHARS] + "\n\n[...truncated]"
+        return content
+
+    # Fallback 2: Use DebateTurn claims_nodes as structured context
+    turns = session.exec(
+        select(DebateTurn)
+        .where(DebateTurn.debate_id == debate.id)
+        .order_by(DebateTurn.created_at.asc())
+    ).all()
+
+    if turns:
+        parts = []
+        for t in turns:
+            if t.claims_nodes and isinstance(t.claims_nodes, dict):
+                claims = t.claims_nodes.get("claims", [])
+                for claim in claims:
+                    if isinstance(claim, dict):
+                        text = claim.get("content") or claim.get("text") or str(claim)
+                        parts.append(f"Agent (round {t.round_index}): {text}")
+        if parts:
+            transcript = "\n\n".join(parts)
+            if len(transcript) > MAX_TRANSCRIPT_CHARS:
+                transcript = transcript[:MAX_TRANSCRIPT_CHARS] + "\n\n[...truncated]"
+            return transcript
+
+    # Fallback 3: Use the debate prompt as minimal context
+    return f"Debate prompt: {debate.prompt}"
 
 class ChallengeCreate(BaseModel):
     debate_id: str = Field(..., description="The ID of the completed debate to challenge")
@@ -139,19 +198,8 @@ async def submit_challenge_round(
     else:
         current_synthesis = existing_rounds[-1].revised_synthesis or ""
 
-    # Form transcript from debate turns
-    turns = session.exec(
-        select(DebateTurn)
-        .where(DebateTurn.debate_id == debate.id)
-        .order_by(DebateTurn.created_at.asc())
-    ).all()
-
-    transcript_parts = []
-    for t in turns:
-        speaker = t.speaker or "Agent"
-        content = t.content or ""
-        transcript_parts.append(f"{speaker}: {content}")
-    debate_transcript = "\n\n".join(transcript_parts)
+    # Build transcript from real data sources
+    debate_transcript = build_debate_transcript(session, debate)
 
     # Evaluate challenge
     result = await evaluate_synthesis_challenge(
@@ -173,6 +221,21 @@ async def submit_challenge_round(
     session.add(new_round)
     session.commit()
     session.refresh(new_round)
+
+    # Log interaction for participation tracking
+    interaction = UserInteraction(
+        user_id=current_user.id,
+        debate_id=challenge_sess.debate_id,
+        interaction_type="challenge_pushback",
+        details={
+            "entity_id": new_round.id,
+            "label": f"round_{next_round_index}",
+            "summary": payload.pushback_text[:200],
+            "status": result["decision"]
+        }
+    )
+    session.add(interaction)
+    session.commit()
 
     return {
         "id": new_round.id,
