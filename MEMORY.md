@@ -17,6 +17,14 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
 - **Full report:** ~/Desktop/consultaion-vc-readiness.md
 - **Action items:** P0 = LICENSE, ToS, test coverage, clean .db files
 
+## Post-Patchset Readiness (2026-06-09)
+- **Overall Score: ~8/10** — guard wired, search working, tests green
+- Guard wiring: all 7 LLM routes protected
+- Search: multi-field (id, prompt, mode, status) end-to-end
+- Tests: 34 backend + 43 frontend, all passing
+- Terms/Privacy: real content, P1 for lawyer review
+- Remaining: API client consolidation, orchestrator refactor, E2E tests
+
 ## Key Files to Know
 - `apps/api/main.py` — FastAPI app entry (419 lines)
 - `apps/api/orchestrator.py` — debate execution (814 lines, god file)
@@ -35,6 +43,13 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
 - Frontend has zero unit tests
 - No API versioning (/api/v1/)
 - `core/settings.py` and `config.py` coexist (potential confusion)
+
+## Known Issues (as of 2026-06-09)
+- LLM guard NOT wired into `POST /debates` and `POST /debates/{id}/start` (these already have granular rate limiting)
+- API client consolidation needed (3 overlapping modules: apiClient.ts, api.ts, auth.ts)
+- No E2E tests (Playwright)
+- `orchestrator.py` (814 lines) — monolithic, needs refactoring
+- Terms/Privacy are product-specific but not legal-grade (P1: lawyer review before paid launch)
 
 ## User Context
 - Solo founder building Consultaion
