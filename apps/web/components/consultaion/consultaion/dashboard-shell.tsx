@@ -3,12 +3,12 @@
 import type React from "react"
 
 import { Link } from 'next-view-transitions'
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { FileText, PlayCircle, Settings, Search, Moon, Sun, Shield, Scale, BarChart3, Trophy, BookOpen, Award, Menu, X, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { logout } from "@/lib/auth"
 import { ToastProvider } from "@/components/ui/toast"
 import Brand from "@/components/parliament/Brand"
@@ -42,6 +42,46 @@ type DashboardShellProps = {
   children: React.ReactNode
   initialProfile?: CurrentUserProfile | null
 }
+
+function GlobalSearchInput() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { t } = useI18n()
+  const [query, setQuery] = useState("")
+
+  useEffect(() => {
+    const q = searchParams?.get("q") || ""
+    setQuery(q)
+  }, [searchParams])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = query.trim()
+    if (trimmed) {
+      router.push(`/runs?q=${encodeURIComponent(trimmed)}`)
+    } else {
+      router.push("/runs")
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="relative w-full">
+      <label className="sr-only" htmlFor="global-search">
+        {t("dashboardShell.search.aria")}
+      </label>
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
+      <Input
+        id="global-search"
+        type="search"
+        placeholder={t("dashboardShell.search.placeholder")}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="search-elevated w-full rounded-xl border-slate-200 bg-white pl-10 text-sm text-slate-800 placeholder:text-slate-500 shadow-inner shadow-slate-900/5 focus-visible:ring-primary focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-400"
+      />
+    </form>
+  )
+}
+
 
 export default function DashboardShell({ children, initialProfile }: DashboardShellProps) {
   const pathname = usePathname()
@@ -275,17 +315,20 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
                 </span>
               </Link>
               <div className="relative hidden min-w-[180px] flex-1 sm:block lg:max-w-xl">
-                <label className="sr-only" htmlFor="global-search">
-                  {t("dashboardShell.search.aria")}
-                </label>
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
-                <Input
-                  id="global-search"
-                  type="search"
-                  placeholder={t("dashboardShell.search.placeholder")}
-                  className="search-elevated w-full rounded-xl border-slate-200 bg-white pl-10 text-sm text-slate-800 placeholder:text-slate-500 shadow-inner shadow-slate-900/5 focus-visible:ring-primary focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-card dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-400"
-                  suppressHydrationWarning
-                />
+                <Suspense fallback={
+                  <div className="relative w-full">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
+                    <Input
+                      id="global-search-fallback"
+                      type="search"
+                      placeholder={t("dashboardShell.search.placeholder")}
+                      disabled
+                      className="search-elevated w-full rounded-xl border-slate-200 bg-white pl-10 text-sm text-slate-800 placeholder:text-slate-500 shadow-inner shadow-slate-900/5 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-400 opacity-50"
+                    />
+                  </div>
+                }>
+                  <GlobalSearchInput />
+                </Suspense>
               </div>
             </div>
             <div className="flex items-center gap-2">

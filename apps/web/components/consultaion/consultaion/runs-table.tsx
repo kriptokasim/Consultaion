@@ -74,6 +74,14 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
   const [searchLoading, setSearchLoading] = useState(false)
 
   useEffect(() => {
+    setSearch(initialQuery)
+  }, [initialQuery])
+
+  useEffect(() => {
+    setStatusFilter(initialStatus)
+  }, [initialStatus])
+
+  useEffect(() => {
     if (debouncedSearch || statusFilter) return
     setRows(items)
   }, [items, debouncedSearch, statusFilter])
