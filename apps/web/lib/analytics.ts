@@ -1,8 +1,18 @@
-import posthog from 'posthog-js'
-
 let _initialized = false
+let _posthog: typeof import('posthog-js')['default'] | null = null
 
-export function initPosthog() {
+async function getPosthog() {
+  if (_posthog) return _posthog
+  try {
+    const mod = await import('posthog-js')
+    _posthog = mod.default
+    return _posthog
+  } catch {
+    return null
+  }
+}
+
+export async function initPosthog() {
     if (_initialized) return
 
     const apiKey = process.env.NEXT_PUBLIC_POSTHOG_API_KEY
@@ -14,6 +24,9 @@ export function initPosthog() {
         return
     }
 
+    const posthog = await getPosthog()
+    if (!posthog) return
+
     posthog.init(apiKey, {
         api_host: host,
         autocapture: true,
@@ -22,9 +35,10 @@ export function initPosthog() {
     _initialized = true
 }
 
-export function track(eventName: string, properties?: Record<string, any>) {
+export async function track(eventName: string, properties?: Record<string, any>) {
     if (!_initialized) return
-    posthog.capture(eventName, properties)
+    const posthog = await getPosthog()
+    posthog?.capture(eventName, properties)
 }
 
 /**
@@ -32,7 +46,7 @@ export function track(eventName: string, properties?: Record<string, any>) {
  * Logs to console in development, uses PostHog in production when available.
  * Never throws - analytics must not break UX.
  */
-export function trackEvent(name: string, payload?: Record<string, any>): void {
+export async function trackEvent(name: string, payload?: Record<string, any>): Promise<void> {
     // Development: Console logging
     if (process.env.NODE_ENV === 'development') {
         console.info('[analytics]', name, payload || {})
@@ -45,30 +59,29 @@ export function trackEvent(name: string, payload?: Record<string, any>): void {
         }
 
         if (_initialized) {
-            posthog.capture(name, payload)
-        } else if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-            // Fallback: send to /api/events if PostHog not available
-            const data = JSON.stringify({
-                event: name,
-                timestamp: new Date().toISOString(),
-                ...payload
-            })
-            // navigator.sendBeacon('/api/events', data)
+            const posthog = await getPosthog()
+            posthog?.capture(name, payload)
         }
     } catch (e) {
         // Ignore analytics errors
     }
 }
 
-export function setAnalyticsOptOut(optOut: boolean) {
+export async function setAnalyticsOptOut(optOut: boolean) {
     if (typeof window === 'undefined') return
 
     if (optOut) {
         localStorage.setItem('analytics_opt_out', 'true')
-        if (_initialized) posthog.opt_out_capturing()
+        if (_initialized) {
+            const posthog = await getPosthog()
+            posthog?.opt_out_capturing()
+        }
     } else {
         localStorage.removeItem('analytics_opt_out')
-        if (_initialized) posthog.opt_in_capturing()
+        if (_initialized) {
+            const posthog = await getPosthog()
+            posthog?.opt_in_capturing()
+        }
     }
 }
 

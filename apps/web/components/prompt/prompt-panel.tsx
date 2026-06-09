@@ -96,19 +96,6 @@ export function PromptPanel({
                                 <Scale className="h-3.5 w-3.5 text-indigo-500" />
                                 Debate <span className="text-[9px] font-bold text-indigo-500/80 bg-indigo-50 px-1 py-0.5 rounded uppercase tracking-wider scale-90 origin-left">Beta</span>
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => onModeChange('conversation')}
-                                className={cn(
-                                    "flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all",
-                                    mode === 'conversation'
-                                        ? "bg-white shadow-sm text-slate-950 font-bold ring-1 ring-indigo-100"
-                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                                )}
-                            >
-                                <MessageCircle className="h-3.5 w-3.5 text-purple-500" />
-                                Conversation <span className="text-[9px] font-bold text-purple-500/80 bg-purple-50 px-1 py-0.5 rounded uppercase tracking-wider scale-90 origin-left">Beta</span>
-                            </button>
                         </div>
                     ) : <div />}
 

@@ -275,7 +275,10 @@ export function useSessionStream(
             if (seq !== undefined && prev.some((e) => e.sequence === seq)) {
               return prev;
             }
-            return [...prev, envelope];
+            const next = [...prev, envelope];
+            // Cap event list to prevent memory growth in long sessions
+            const MAX_STREAM_EVENTS = 500;
+            return next.length > MAX_STREAM_EVENTS ? next.slice(next.length - MAX_STREAM_EVENTS) : next;
           });
 
           onEventRef.current?.(envelope);

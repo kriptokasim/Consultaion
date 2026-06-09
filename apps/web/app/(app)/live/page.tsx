@@ -440,6 +440,14 @@ function ArenaPageContent() {
 
         <OnboardingHint id="live_chamber" text={t("onboarding.live.chamberHint")} className="mb-4" />
 
+        {!running && sessionStatus === 'idle' && (
+          <OnboardingHint
+            id="first_run_guide"
+            text="How it works: 1) Ask a decision question. 2) Compare how different AI models respond. 3) Read the structured decision report with verdict, findings, and next actions."
+            className="mb-4"
+          />
+        )}
+
         <PromptPanel
           value={prompt}
           onChange={setPrompt}

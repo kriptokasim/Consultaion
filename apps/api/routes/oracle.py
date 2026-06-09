@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, BackgroundTasks
-from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+
 from auth import get_current_user
 from deps import get_session
-from models import User, OracleSession, OracleBranch, UserInteraction
-from orchestration.oracle import generate_reasoning_chain
 from exceptions import NotFoundError, PermissionError
+from fastapi import APIRouter, BackgroundTasks, Depends
+from models import OracleBranch, OracleSession, User, UserInteraction
+from orchestration.oracle import generate_reasoning_chain
+from pydantic import BaseModel, Field
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,26 @@ async def run_base_reasoning_task(session_id: str, branch_id: str, prompt: str):
             await db_session.commit()
     except Exception as exc:
         logger.error(f"Failed background oracle reasoning: {exc}")
+        try:
+            from database_async import async_session_scope
+            from sqlmodel import select as async_select
+            async with async_session_scope() as db_session:
+                stmt_sess = async_select(OracleSession).where(OracleSession.id == session_id)
+                res_sess = await db_session.execute(stmt_sess)
+                sess = res_sess.scalars().first()
+                if sess:
+                    sess.status = "failed"
+                    db_session.add(sess)
+                    await db_session.commit()
+                stmt_branch = async_select(OracleBranch).where(OracleBranch.id == branch_id)
+                res_branch = await db_session.execute(stmt_branch)
+                br = res_branch.scalars().first()
+                if br:
+                    br.reasoning_nodes = {"error": "Analysis failed. Please retry."}
+                    db_session.add(br)
+                    await db_session.commit()
+        except Exception:
+            logger.error("Failed to persist oracle failure state for session %s", session_id)
 
 
 async def run_fork_reasoning_task(
@@ -107,6 +127,26 @@ async def run_fork_reasoning_task(
             await db_session.commit()
     except Exception as exc:
         logger.error(f"Failed background oracle fork: {exc}")
+        try:
+            from database_async import async_session_scope
+            from sqlmodel import select as async_select
+            async with async_session_scope() as db_session:
+                stmt_sess = async_select(OracleSession).where(OracleSession.id == session_id)
+                res_sess = await db_session.execute(stmt_sess)
+                sess = res_sess.scalars().first()
+                if sess:
+                    sess.status = "failed"
+                    db_session.add(sess)
+                    await db_session.commit()
+                stmt_branch = async_select(OracleBranch).where(OracleBranch.id == new_branch_id)
+                res_branch = await db_session.execute(stmt_branch)
+                br = res_branch.scalars().first()
+                if br:
+                    br.reasoning_nodes = {"error": "Fork analysis failed. Please retry."}
+                    db_session.add(br)
+                    await db_session.commit()
+        except Exception:
+            logger.error("Failed to persist oracle fork failure state for session %s", session_id)
 
 
 @router.post("")

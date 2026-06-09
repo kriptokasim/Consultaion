@@ -93,7 +93,7 @@ export default function HomeContent() {
                 </span>
               </h1>
               <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">The decision layer for multi-model AI.</p>
-              <p className="max-w-2xl text-lg text-slate-600 dark:text-slate-300">Consultaion runs your question across multiple leading AI models, highlights where they agree or disagree, and synthesizes the strongest answer into a shareable decision artifact.</p>
+              <p className="max-w-2xl text-lg text-slate-600 dark:text-slate-300">Consultaion runs your question across multiple leading AI models, highlights where they agree or disagree, and synthesizes the strongest answer into a structured decision report.</p>
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap gap-3">
                   <Button variant="default" size="lg" className="px-8" onClick={handleStartDebate} disabled={loading}>
@@ -186,6 +186,29 @@ export default function HomeContent() {
                 {t("landing.features.traces.cta")} →
               </Link>
             </div>
+          </div>
+        </section>
+
+        {/* Why not just ask section */}
+        <section className="space-y-8">
+          <div className="text-center">
+            <h2 className="text-3xl font-semibold text-slate-900 dark:text-white">Why not just ask two models yourself?</h2>
+            <p className="mt-4 text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">You could paste your question into ChatGPT and Claude separately. But you would miss what matters most: where they disagree, why they disagree, and what the strongest answer looks like when you combine their perspectives.</p>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[
+              { title: "Structured comparison", desc: "Run your question across multiple models in parallel with consistent evaluation criteria." },
+              { title: "Disagreement surfaced", desc: "See exactly where models diverge — the signal that matters most for high-stakes decisions." },
+              { title: "Decision report", desc: "Get a synthesized verdict with confidence, key findings, risks, and next actions — not raw chat text." },
+              { title: "Audit trail", desc: "Every run is saved and shareable. Your team can review the reasoning behind any decision." },
+              { title: "Consistent scoring", desc: "Models are evaluated on the same rubric every time, removing prompt-engineering variance." },
+              { title: "Report-grade output", desc: "Export structured reports suitable for board decks, strategy docs, and team alignment." },
+            ].map((item, i) => (
+              <div key={i} className="rounded-2xl border border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/50 p-6 shadow-sm">
+                <h3 className="font-semibold text-slate-900 dark:text-white">{item.title}</h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">            {item.desc}</p>
+              </div>
+            ))}
           </div>
         </section>
 

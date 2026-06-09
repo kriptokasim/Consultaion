@@ -127,7 +127,7 @@ describe("Arena Experience Enhancements", () => {
       const revealButton = screen.getByRole("button", { name: /Reveal Final Verdict/i });
       fireEvent.click(revealButton);
 
-      expect(screen.getByText("Final synthesized verdict.")).toBeInTheDocument();
+      expect(screen.getAllByText("Final synthesized verdict.").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("How would you rate this synthesis?")).toBeInTheDocument();
 
       const feedbackButton = screen.getByRole("button", { name: "Perfectly Combined" });

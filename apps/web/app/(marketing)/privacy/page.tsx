@@ -74,7 +74,7 @@ export default async function PrivacyPage() {
                     </section>
 
                     <div className="pt-4 border-t border-amber-200/50 text-sm text-amber-900/60 dark:border-slate-800 dark:text-slate-400/60">
-                        <p>Last Updated: December 2024</p>
+                        <p>Last Updated: June 2026</p>
                         <p>This document is for informational purposes and does not constitute legal advice.</p>
                     </div>
                 </div>

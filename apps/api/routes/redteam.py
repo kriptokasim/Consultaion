@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, BackgroundTasks
-from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+from typing import List
+
 from auth import get_current_user
 from deps import get_session
-from models import User, RedTeamSession, UserInteraction
-from orchestration.redteam import run_red_team_analysis
 from exceptions import NotFoundError, PermissionError
+from fastapi import APIRouter, BackgroundTasks, Depends
+from models import RedTeamSession, User, UserInteraction
+from orchestration.redteam import run_red_team_analysis
+from pydantic import BaseModel, Field
+from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,19 @@ async def run_analysis_task(session_id: str, proposal_text: str, lenses: List[st
                 await db_session.commit()
     except Exception as exc:
         logger.error(f"Failed background red team task: {exc}")
+        try:
+            from database_async import async_session_scope
+            from sqlmodel import select as async_select
+            async with async_session_scope() as db_session:
+                stmt = async_select(RedTeamSession).where(RedTeamSession.id == session_id)
+                res = await db_session.execute(stmt)
+                rt = res.scalars().first()
+                if rt:
+                    rt.critique_matrix = {"error": "Analysis failed. Please retry.", "issues": []}
+                    db_session.add(rt)
+                    await db_session.commit()
+        except Exception:
+            logger.error("Failed to persist red team failure state for session %s", session_id)
 
 
 @router.post("")

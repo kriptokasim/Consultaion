@@ -25,48 +25,53 @@ interface ModeOption {
   badgeColor?: string;
 }
 
-const modes: ModeOption[] = [
+const ENABLE_EXPERIMENTAL = process.env.NEXT_PUBLIC_ENABLE_EXPERIMENTAL_MODES === "true";
+
+const coreModes: ModeOption[] = [
   {
     id: "arena",
-    label: "Arena Mode",
-    description: "Disagreement-first parallel responses & claim matching",
+    label: "Arena",
+    description: "Run your question across multiple AI models. Compare perspectives, surface disagreement, get a synthesized decision report.",
     icon: Swords,
     gradient: "from-rose-500/10 to-pink-500/10 hover:from-rose-500/20 hover:to-pink-500/20 text-rose-400",
     borderHover: "hover:border-rose-500/50",
   },
   {
     id: "debate",
-    label: "Debate Mode",
-    description: "Multi-agent argument trees & position drift tracking",
+    label: "Structured Debate",
+    description: "Multi-agent argument trees with position tracking and moderated deliberation.",
     icon: Users,
     gradient: "from-blue-500/10 to-cyan-500/10 hover:from-blue-500/20 hover:to-cyan-500/20 text-blue-400",
     borderHover: "hover:border-blue-500/50",
-    badge: "Beta",
+    badge: "Advanced",
     badgeColor: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   },
+];
+
+const experimentalModes: ModeOption[] = ENABLE_EXPERIMENTAL ? [
   {
     id: "voting",
-    label: "Voting Mode",
+    label: "Voting",
     description: "Participatory prediction locks & ELO leaderboard metrics",
     icon: Vote,
     gradient: "from-amber-500/10 to-orange-500/10 hover:from-amber-500/20 hover:to-orange-500/20 text-amber-400",
     borderHover: "hover:border-amber-500/50",
-    badge: "Beta",
+    badge: "Experimental",
     badgeColor: "bg-amber-500/10 text-amber-400 border-amber-500/20",
   },
   {
     id: "redteam",
-    label: "Red Team Mode",
+    label: "Red Team",
     description: "Model vulnerability auditing & multi-lens stress testing",
     icon: Skull,
     gradient: "from-red-500/10 to-purple-500/10 hover:from-red-500/20 hover:to-purple-500/20 text-red-400",
     borderHover: "hover:border-red-500/50",
-    badge: "Preview",
+    badge: "Experimental",
     badgeColor: "bg-red-500/10 text-red-400 border-red-500/20",
   },
   {
     id: "oracle",
-    label: "Oracle Mode",
+    label: "Oracle",
     description: "Reasoning summary pipelines & interactive branching",
     icon: Eye,
     gradient: "from-violet-500/10 to-indigo-500/10 hover:from-violet-500/20 hover:to-indigo-500/20 text-violet-400",
@@ -76,15 +81,17 @@ const modes: ModeOption[] = [
   },
   {
     id: "challenge",
-    label: "Challenge Mode",
+    label: "Challenge",
     description: "Synthesis pushback, rebuttals & interactive revisions",
     icon: BrainCircuit,
     gradient: "from-emerald-500/10 to-teal-500/10 hover:from-emerald-500/20 hover:to-teal-500/20 text-emerald-400",
     borderHover: "hover:border-emerald-500/50",
-    badge: "Beta",
+    badge: "Experimental",
     badgeColor: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   },
-];
+] : [];
+
+const modes: ModeOption[] = [...coreModes, ...experimentalModes];
 
 interface ModeSelectorProps {
   selectedMode: ModeType;
@@ -122,6 +129,8 @@ export default function ModeSelector({
           <button
             key={mode.id}
             onClick={() => onChange(mode.id)}
+            aria-pressed={isActive}
+            aria-label={`Select ${mode.label} mode`}
             style={{
               animationDelay: mounted ? `${index * 60}ms` : undefined,
             }}

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { SkeletonLoader } from "@/components/ui/skeleton"
 import { apiRequest } from "@/lib/apiClient"
 import { useI18n } from "@/lib/i18n/client"
+import { CheckCircle2 } from "lucide-react"
 
 export default function RegisterClient() {
   const router = useRouter()
@@ -21,6 +22,7 @@ export default function RegisterClient() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [hydrating, setHydrating] = useState(true)
+  const [registered, setRegistered] = useState(false)
   const { t } = useI18n()
 
   useEffect(() => {
@@ -44,12 +46,35 @@ export default function RegisterClient() {
         path: "/auth/register",
         body: { email, password },
       })
-      router.push("/login")
+      setRegistered(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign up")
     } finally {
       setLoading(false)
     }
+  }
+
+  if (registered) {
+    return (
+      <AuthShell
+        title={t("auth.register.title")}
+        subtitle={t("auth.register.subtitle")}
+      >
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-green-200 bg-green-50/80 p-8 text-center shadow-lg dark:border-green-900/50 dark:bg-green-900/20">
+          <CheckCircle2 className="h-12 w-12 text-green-600 dark:text-green-400" />
+          <div className="space-y-2">
+            <p className="text-lg font-semibold text-slate-900 dark:text-white">Account created successfully</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">You can now sign in with your email and password.</p>
+          </div>
+          <Button
+            onClick={() => router.push("/login")}
+            className="mt-2"
+          >
+            Sign in
+          </Button>
+        </div>
+      </AuthShell>
+    )
   }
 
   return (

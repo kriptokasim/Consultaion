@@ -3,16 +3,17 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
+from auth import get_current_user, get_optional_user
+from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException
+from models import Debate, Score, User, UserInteraction, UserPrediction
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from auth import get_current_user, get_optional_user
-from deps import get_session
-from models import User, Debate, UserPrediction, Score, UserInteraction
+from routes.common import can_access_debate
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ async def cast_prediction(
     Predictions are disabled once the debate finishes or fails.
     """
     debate = session.get(Debate, debate_id)
-    if not debate:
+    if not debate or not can_access_debate(debate, current_user, session):
         raise HTTPException(status_code=404, detail="Debate not found.")
 
     if debate.status in ("completed", "completed_budget", "failed"):
@@ -131,6 +132,10 @@ async def reveal_prediction_and_reasons(
     """
     debate = session.get(Debate, debate_id)
     if not debate:
+        raise HTTPException(status_code=404, detail="Debate not found.")
+
+    # Enforce access control for private debates
+    if not can_access_debate(debate, current_user, session):
         raise HTTPException(status_code=404, detail="Debate not found.")
 
     # 1. Fetch current user's prediction

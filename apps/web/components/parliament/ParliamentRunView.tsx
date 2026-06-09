@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import SynthesisChallenge from "@/components/debate/SynthesisChallenge";
+import { DecisionReportView } from "@/components/report/DecisionReportView";
 import { formatModelLabel } from "@/lib/ui/formatters";
 import { sanitizeMarkdown } from "@/lib/sanitize";
 import VotingSection from "./VotingSection";
@@ -595,6 +596,11 @@ function ChampionSummary({
           onSynthesisRevised={onSynthesisRevised}
         />
       )}
+
+      {/* Structured Decision Report for Debate */}
+      {text && (
+        <DebateDecisionReport synthesis={text} />
+      )}
     </div>
   );
 }
@@ -667,4 +673,84 @@ function MiniSeat({ label, color }: { label: string; color: string }) {
       title={label}
     />
   );
+}
+
+function DebateDecisionReport({ synthesis, members }: { synthesis: string; members?: Array<{ name?: string; role?: string }> }) {
+  const report = useMemo(() => {
+    if (!synthesis) return null;
+    return buildDebateReport(synthesis, members);
+  }, [synthesis, members]);
+
+  if (!report) return null;
+
+  return (
+    <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-6">
+      <DecisionReportView report={report} rawSynthesis={synthesis} />
+    </div>
+  );
+}
+
+function buildDebateReport(synthesis: string, members?: Array<{ name?: string; role?: string }>) {
+  const lines = synthesis.split("\n");
+  const sections: Record<string, string[]> = {};
+  let currentKey = "intro";
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^#{1,3}\s+(.*)/);
+    if (headerMatch) {
+      if (currentLines.length) sections[currentKey] = currentLines;
+      currentKey = headerMatch[1].trim().toLowerCase();
+      currentLines = [];
+    } else {
+      currentLines.push(line);
+    }
+  }
+  if (currentLines.length) sections[currentKey] = currentLines;
+
+  let decisionType = "mixed";
+  const lower = synthesis.toLowerCase();
+  if (/\b(proceed|recommended|strong support)\b/.test(lower)) decisionType = "proceed";
+  else if (/\b(revise|modify|adjust)\b/.test(lower)) decisionType = "revise";
+  else if (/\b(defer|delay|wait)\b/.test(lower)) decisionType = "defer";
+  else if (/\b(reject|against|not recommended)\b/.test(lower)) decisionType = "reject";
+
+  const confMatch = synthesis.match(/(\d{1,3})\s*%/);
+  const confidence = confMatch ? Math.min(1, parseInt(confMatch[1]) / 100) : 0.65;
+
+  const summaryKeys = ["summary", "conclusion", "verdict", "decision"];
+  let executiveSummary = "";
+  for (const key of summaryKeys) {
+    if (sections[key]) {
+      executiveSummary = sections[key].join("\n").slice(0, 500);
+      break;
+    }
+  }
+  if (!executiveSummary) {
+    const paragraphs = synthesis.split("\n\n").filter(p => p.trim() && !p.trim().startsWith("#"));
+    executiveSummary = paragraphs[0]?.slice(0, 500) || synthesis.slice(0, 500);
+  }
+
+  const modelPositions = (members || []).filter(m => m.name).map(m => ({
+    model: m.name || "Unknown",
+    stance: m.role === "judge" ? "neutral" : "supportive",
+    strongest_point: "See debate transcript for details",
+    concern: "See debate transcript for details",
+  }));
+
+  return {
+    title: "Debate Verdict",
+    executive_summary: executiveSummary,
+    verdict: {
+      recommendation: executiveSummary.slice(0, 300),
+      confidence,
+      decision_type: decisionType,
+      rationale: executiveSummary.slice(0, 500),
+    },
+    key_findings: [],
+    model_positions: modelPositions,
+    risks_and_assumptions: [],
+    next_actions: [],
+    caveats: [],
+  };
 }
