@@ -1,19 +1,44 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
+import { ToastProvider } from "@/components/ui/toast";
 import { DivergenceMeter } from "./DivergenceMeter";
 import { SynthesisReveal } from "./SynthesisReveal";
 
-// Mock apiRequest
 const mockApiRequest = vi.fn();
 vi.mock("@/lib/apiClient", () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
 }));
 
+function ensureMatchMedia() {
+  const w = window as any;
+  if (!w.matchMedia || !w.matchMedia.__mocked) {
+    const fn = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    (fn as any).__mocked = true;
+    w.matchMedia = fn;
+  }
+}
+
+ensureMatchMedia();
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
+
 describe("Arena Experience Enhancements", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     localStorage.clear();
+    ensureMatchMedia();
   });
 
   describe("DivergenceMeter Component", () => {
@@ -35,13 +60,13 @@ describe("Arena Experience Enhancements", () => {
     };
 
     it("does not render divergence meter if debate is not completed", () => {
-      render(<DivergenceMeter debateId="test-debate" isCompleted={false} />);
+      renderWithProviders(<DivergenceMeter debateId="test-debate" isCompleted={false} />);
       expect(screen.getByText("Divergence Analysis Pending")).toBeInTheDocument();
     });
 
     it("fetches and renders divergence report if debate is completed", async () => {
       mockApiRequest.mockResolvedValueOnce(mockReport);
-      render(<DivergenceMeter debateId="test-debate" isCompleted={true} />);
+      renderWithProviders(<DivergenceMeter debateId="test-debate" isCompleted={true} />);
 
       await waitFor(() => {
         expect(screen.getByText("Claims Divergence Meter")).toBeInTheDocument();
@@ -56,14 +81,14 @@ describe("Arena Experience Enhancements", () => {
       mockApiRequest.mockResolvedValueOnce(mockReport);
       mockApiRequest.mockResolvedValueOnce({ success: true });
 
-      render(<DivergenceMeter debateId="test-debate" isCompleted={true} />);
+      renderWithProviders(<DivergenceMeter debateId="test-debate" isCompleted={true} />);
 
       await waitFor(() => {
         expect(screen.getByText("Consensus Point A")).toBeInTheDocument();
       });
 
       const voteButtons = screen.getAllByRole("button", { name: /Agree/i });
-      expect(voteButtons.length).toBe(2); // One for Consensus, one for Contested
+      expect(voteButtons.length).toBe(2);
 
       fireEvent.click(voteButtons[0]);
 
@@ -100,7 +125,7 @@ describe("Arena Experience Enhancements", () => {
     ];
 
     it("renders cover card before synthesis is revealed", () => {
-      render(
+      renderWithProviders(
         <SynthesisReveal
           synthesis="Final synthesized verdict."
           modelResponses={mockResponses}
@@ -115,7 +140,7 @@ describe("Arena Experience Enhancements", () => {
     });
 
     it("reveals final verdict and displays feedback buttons upon reveal", async () => {
-      render(
+      renderWithProviders(
         <SynthesisReveal
           synthesis="Final synthesized verdict."
           modelResponses={mockResponses}

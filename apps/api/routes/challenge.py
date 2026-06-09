@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+
 from auth import get_current_user
 from deps import get_session
-from models import User, Debate, Message, ChallengeSession, ChallengeRound, DebateTurn, UserInteraction
-from orchestration.challenge import evaluate_synthesis_challenge
 from exceptions import NotFoundError, PermissionError
+from fastapi import APIRouter, Depends, Request
+from guards.llm_action_guard import require_llm_action_allowed
+from models import (
+    ChallengeRound,
+    ChallengeSession,
+    Debate,
+    DebateTurn,
+    Message,
+    User,
+    UserInteraction,
+)
+from orchestration.challenge import evaluate_synthesis_challenge
+from pydantic import BaseModel, Field
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +176,8 @@ async def submit_challenge_round(
     session_id: str,
     payload: ChallengeRoundSubmit,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    request: Request = None,
 ):
     """
     Submits a user pushback/challenge, runs coordinator evaluation, and saves the round response.
@@ -182,6 +192,14 @@ async def submit_challenge_round(
     debate = session.get(Debate, challenge_sess.debate_id)
     if not debate:
         raise NotFoundError(message="Linked debate not found", code="debate.not_found")
+
+    require_llm_action_allowed(
+        user=current_user,
+        action="challenge_round",
+        session=session,
+        debate_id=challenge_sess.debate_id,
+        ip_address=request.client.host if request.client else "0.0.0.0",
+    )
 
     # Get rounds
     existing_rounds = session.exec(

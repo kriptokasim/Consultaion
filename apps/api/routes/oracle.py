@@ -5,7 +5,8 @@ import logging
 from auth import get_current_user
 from deps import get_session
 from exceptions import NotFoundError, PermissionError
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from guards.llm_action_guard import require_llm_action_allowed
 from models import OracleBranch, OracleSession, User, UserInteraction
 from orchestration.oracle import generate_reasoning_chain
 from pydantic import BaseModel, Field
@@ -154,11 +155,19 @@ async def start_oracle_session(
     payload: OracleCreate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    request: Request = None,
 ):
     """
     Initiates a user-facing reasoning summary session.
     """
+    require_llm_action_allowed(
+        user=current_user,
+        action="oracle_session",
+        session=session,
+        ip_address=request.client.host if request.client else "0.0.0.0",
+    )
+
     oracle_sess = OracleSession(
         user_id=current_user.id,
         prompt=payload.prompt,
@@ -242,7 +251,8 @@ async def fork_oracle_branch(
     payload: OracleFork,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    request: Request = None,
 ):
     """
     Forks the analysis from a specific node in a parent branch using a new counter-assumption.
@@ -253,6 +263,13 @@ async def fork_oracle_branch(
 
     if not (current_user.role == "admin" or oracle_sess.user_id == current_user.id):
         raise PermissionError(message="Insufficient permissions", code="permission.denied")
+
+    require_llm_action_allowed(
+        user=current_user,
+        action="oracle_fork",
+        session=session,
+        ip_address=request.client.host if request.client else "0.0.0.0",
+    )
 
     # Verify parent branch exists
     parent = session.get(OracleBranch, payload.parent_branch_id)

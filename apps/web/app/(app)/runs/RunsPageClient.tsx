@@ -61,7 +61,14 @@ export default function RunsPageClient({ initialQuery, initialStatus }: RunsPage
     }
 
     const items = rateLimitNotice ? [] : debatesData?.items ?? [];
-    const searchItems = items.map((item) => ({ id: item.id, prompt: item.prompt ?? "" }));
+    const searchItems = items.map((item) => ({
+      id: item.id,
+      prompt: item.prompt ?? "",
+      mode: item.mode ?? null,
+      status: item.status ?? null,
+      title: null,
+      createdAt: item.created_at ?? null,
+    }));
 
     return (
         <main id="main" className="h-full space-y-8 py-6">

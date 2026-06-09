@@ -1,15 +1,14 @@
-from datetime import datetime, timezone
-from typing import Optional, Any, Dict, List
-import uuid
+from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from auth import get_current_user
+from deps import get_session
+from fastapi import APIRouter, Depends, HTTPException, Request
+from guards.llm_action_guard import require_llm_action_allowed
+from models import Debate, DivergenceReport, User, UserInteraction, VoteRecord
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
-
-from auth import get_current_user, get_optional_user
-from deps import get_session
-from models import User, Debate, DivergenceReport, VoteRecord, UserInteraction
 from worker.arena_tasks import _execute_divergence_computation
+
 from routes.common import can_access_debate
 
 router = APIRouter(prefix="/arena", tags=["arena"])
@@ -24,8 +23,9 @@ class UserVotePayload(BaseModel):
 @router.get("/{debate_id}/divergence")
 async def get_divergence_report(
     debate_id: str,
-    current_user: Optional[User] = Depends(get_optional_user),
-    session: Session = Depends(get_session)
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    request: Request = None,
 ) -> Dict[str, Any]:
     """Retrieve claims divergence report. Computes it on the fly if missing on a completed run."""
     debate = session.get(Debate, debate_id)
@@ -51,6 +51,15 @@ async def get_divergence_report(
                 "ready": False
             }
         
+        # Require auth + guard before triggering expensive LLM computation
+        require_llm_action_allowed(
+            user=current_user,
+            action="divergence_recompute",
+            session=session,
+            debate_id=debate_id,
+            ip_address=request.client.host if request.client else "0.0.0.0",
+        )
+
         # Calculate on the fly if completed but report didn't process
         try:
             await _execute_divergence_computation(debate_id)

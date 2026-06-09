@@ -51,8 +51,8 @@ class TestVotingAccessControl:
         # Should succeed (200) or return business logic error (400), not 404
         assert response.status_code != 404
 
-    def test_reveal_private_debate_returns_404(self, client, db_session):
-        """Anonymous cannot reveal private debate prediction data."""
+    def test_reveal_private_debate_requires_auth(self, client, db_session):
+        """Anonymous cannot access reveal endpoint (requires auth)."""
         from models import Debate
 
         debate = Debate(
@@ -67,6 +67,24 @@ class TestVotingAccessControl:
         db_session.commit()
 
         response = client.get("/voting/private-debate-2/reveal")
+        assert response.status_code == 401
+
+    def test_reveal_private_debate_returns_404_for_non_owner(self, authenticated_client, db_session):
+        """Non-owner cannot reveal private debate prediction data."""
+        from models import Debate
+
+        debate = Debate(
+            id="private-debate-3",
+            user_id="other-user-id",
+            prompt="Test prompt",
+            mode="arena",
+            status="completed",
+            config={"is_public": False},
+        )
+        db_session.add(debate)
+        db_session.commit()
+
+        response = authenticated_client.get("/voting/private-debate-3/reveal")
         assert response.status_code == 404
 
     def test_predict_nonexistent_debate_returns_404(self, authenticated_client):

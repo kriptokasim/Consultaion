@@ -5,9 +5,10 @@ import math
 from datetime import datetime, timezone
 from typing import Optional
 
-from auth import get_current_user, get_optional_user
+from auth import get_current_user
 from deps import get_session
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from guards.llm_action_guard import require_llm_action_allowed
 from models import Debate, Score, User, UserInteraction, UserPrediction
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -51,7 +52,8 @@ async def cast_prediction(
     debate_id: str,
     payload: PredictionSubmit,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    request: Request = None,
 ):
     """
     Submit or update a debate outcome prediction.
@@ -61,6 +63,15 @@ async def cast_prediction(
     debate = session.get(Debate, debate_id)
     if not debate or not can_access_debate(debate, current_user, session):
         raise HTTPException(status_code=404, detail="Debate not found.")
+
+    require_llm_action_allowed(
+        user=current_user,
+        action="voting_prediction",
+        session=session,
+        debate_id=debate_id,
+        estimated_cost_units=1,
+        ip_address=request.client.host if request.client else "0.0.0.0",
+    )
 
     if debate.status in ("completed", "completed_budget", "failed"):
         raise HTTPException(status_code=400, detail="Cannot predict outcomes of completed or failed debates.")
@@ -123,8 +134,9 @@ async def cast_prediction(
 @router.get("/{debate_id}/reveal")
 async def reveal_prediction_and_reasons(
     debate_id: str,
-    current_user: Optional[User] = Depends(get_optional_user),
-    session: Session = Depends(get_session)
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    request: Request = None,
 ):
     """
     Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.
@@ -171,6 +183,13 @@ async def reveal_prediction_and_reasons(
 
         # Trigger vote reasons LLM extraction if not pre-computed
         if not debate.final_meta or "vote_reasons" not in debate.final_meta:
+            require_llm_action_allowed(
+                user=current_user,
+                action="voting_prediction",
+                session=session,
+                debate_id=debate_id,
+                ip_address=request.client.host if request.client else "0.0.0.0",
+            )
             from worker.voting_tasks import _execute_vote_reasons_extraction
             try:
                 # Execute synchronously on-the-fly

@@ -88,7 +88,13 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
       if (scope === "mine" && run.user_id !== profile.id && run.user_id) return false
       if (scope === "team" && !run.team_id) return false
       if (statusFilter && run.status !== statusFilter) return false
-      if (lowerQuery && !`${run.id} ${run.prompt}`.toLowerCase().includes(lowerQuery)) return false
+      if (lowerQuery) {
+        const searchableText = [run.id, run.prompt, run.mode, run.status]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+        if (!searchableText.includes(lowerQuery)) return false
+      }
       return true
     })
   }, [rows, scope, profile.id, debouncedSearch, statusFilter])
@@ -157,7 +163,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
         q: debouncedSearch || undefined,
         status: statusFilter || undefined,
       },
-      { auth: false },
+      { auth: true },
     )
       .then((response) => {
         if (!active) return

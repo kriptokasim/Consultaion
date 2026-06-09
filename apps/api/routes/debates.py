@@ -548,7 +548,15 @@ async def list_debates(
     if isinstance(q, str):
         query_text = q.strip()
         if query_text:
-            filters.append(sa.func.lower(Debate.prompt).contains(query_text.lower()))
+            search_term = f"%{query_text.lower()}%"
+            filters.append(
+                sa.or_(
+                    sa.func.lower(Debate.prompt).contains(query_text.lower()),
+                    sa.func.lower(Debate.id).contains(query_text.lower()),
+                    sa.func.lower(Debate.mode).contains(query_text.lower()),
+                    sa.func.lower(Debate.status).contains(query_text.lower()),
+                )
+            )
 
     # Patchset 59.5: Eager load user and team to avoid N+1 queries during serialization
     from sqlalchemy.orm import selectinload

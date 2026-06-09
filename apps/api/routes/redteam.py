@@ -6,7 +6,8 @@ from typing import List
 from auth import get_current_user
 from deps import get_session
 from exceptions import NotFoundError, PermissionError
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from guards.llm_action_guard import require_llm_action_allowed
 from models import RedTeamSession, User, UserInteraction
 from orchestration.redteam import run_red_team_analysis
 from pydantic import BaseModel, Field
@@ -56,12 +57,20 @@ async def start_red_team_session(
     payload: RedTeamCreate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    request: Request = None,
 ):
     """
     Starts an adversarial critique Red Team session for the given proposal text.
     Runs the risk evaluation asynchronously in the background.
     """
+    require_llm_action_allowed(
+        user=current_user,
+        action="redteam_session",
+        session=session,
+        ip_address=request.client.host if request.client else "0.0.0.0",
+    )
+
     rt_session = RedTeamSession(
         user_id=current_user.id,
         proposal_text=payload.proposal_text,
