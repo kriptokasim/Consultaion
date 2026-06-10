@@ -26,6 +26,8 @@ interface DecisionReport {
   model_positions?: Array<{
     model?: string
     stance?: string
+    distinct_contribution?: string
+    blind_spot?: string
     strongest_point?: string
     concern?: string
   }>
@@ -48,17 +50,30 @@ interface DecisionReport {
     score?: number
   }>
   quality_meta?: {
-    completeness_score?: number
-    faithfulness_score?: number
+    completeness_score?: number | null
+    faithfulness_score?: number | null
     has_hallucinations?: boolean
     needs_revision?: boolean
     critic_feedback?: string
     verification_status?: string
+    verification_error?: boolean
+    verification_source?: string
+    specificity_score?: number | null
+    genericity_risk?: string
   }
+  context_needed?: string[]
   divergence_breakdown?: {
     divergence_score?: number
     consensus_claims?: Array<{ claim: string; models: string[] }>
+    unique_insights?: Array<{ claim: string; model: string }>
     contested_claims?: Array<{ claim: string; model: string }>
+    active_contradictions?: Array<{
+      claim_a: string
+      model_a: string
+      claim_b: string
+      model_b: string
+      reason: string
+    }>
     contradictions_count?: number
     contradiction_details?: Array<{
       claim_a: string
@@ -205,7 +220,7 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
               <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
                 <ShieldAlert className="h-5 w-5 text-rose-500" />
               </div>
-            ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.needs_revision ? (
+            ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.verification_error || report.quality_meta.needs_revision ? (
               <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
                 <ShieldAlert className="h-5 w-5 text-amber-500" />
               </div>
@@ -218,34 +233,72 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                 Synthesis Quality Gate: {report.quality_meta.verification_status === "failed" || report.quality_meta.has_hallucinations ? (
                   <span className="text-rose-600 dark:text-rose-400">Verification Failed</span>
-                ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.needs_revision ? (
+                ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.verification_error || report.quality_meta.needs_revision ? (
                   <span className="text-amber-600 dark:text-amber-400">Unverified</span>
                 ) : (
                   <span className="text-emerald-600 dark:text-emerald-400">Verified & Faithful</span>
                 )}
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
-                {report.quality_meta.critic_feedback || "The final report was cross-verified against all model answers and found to be faithful and complete."}
+                {report.quality_meta.verification_error
+                  ? (report.quality_meta.critic_feedback || "Verifier service temporarily unavailable.")
+                  : (report.quality_meta.critic_feedback || "The final report was cross-verified against all model answers and found to be faithful and complete.")}
               </p>
+              {report.quality_meta.genericity_risk === "high" && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                  ⚠ This report may be too generic. Add project-specific context for better results.
+                </p>
+              )}
             </div>
           </div>
           
           <div className="flex items-center gap-6 self-start md:self-auto pt-4 md:pt-0 border-t md:border-t-0 border-slate-200 dark:border-slate-700">
-            <div className="text-center">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Completeness</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.quality_meta.completeness_score || 1.0) * 100)}%</span>
-            </div>
-            <div className="text-center border-l border-slate-200 dark:border-slate-700 pl-6">
-              <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Faithfulness</span>
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.quality_meta.faithfulness_score || 1.0) * 100)}%</span>
-            </div>
+            {report.quality_meta.completeness_score != null && !report.quality_meta.verification_error && (
+              <div className="text-center">
+                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Completeness</span>
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.quality_meta.completeness_score) * 100)}%</span>
+              </div>
+            )}
+            {report.quality_meta.faithfulness_score != null && !report.quality_meta.verification_error && (
+              <div className={`text-center ${report.quality_meta.completeness_score != null ? 'border-l border-slate-200 dark:border-slate-700 pl-6' : ''}`}>
+                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Faithfulness</span>
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.quality_meta.faithfulness_score) * 100)}%</span>
+              </div>
+            )}
+            {report.quality_meta.verification_error && (
+              <div className="text-center">
+                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Scores</span>
+                <span className="text-sm font-medium text-amber-600 dark:text-amber-400 mt-0.5 block">Unavailable</span>
+              </div>
+            )}
             {report.divergence_breakdown?.divergence_score !== undefined && (
-              <div className="text-center border-l border-slate-200 dark:border-slate-700 pl-6">
+              <div className={`text-center border-l border-slate-200 dark:border-slate-700 pl-6`}>
                 <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Divergence</span>
                 <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.divergence_breakdown.divergence_score || 0) * 100)}%</span>
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Context Needed */}
+      {report.context_needed && report.context_needed.length > 0 && (
+        <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-3">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Context Needed to Make This Report Specific
+          </h3>
+          <p className="text-xs text-amber-700 dark:text-amber-400/80 mb-3 leading-relaxed">
+            The following information would help generate a more tailored, actionable report:
+          </p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {report.context_needed.map((item, i) => (
+              <li key={i} className="text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <span className="text-amber-400 mt-0.5">•</span>
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -305,15 +358,15 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
               )}
             </div>
 
-            {/* Contested / Unique Claims */}
+            {/* Unique / Single-Model Insights */}
             <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-xl p-5">
               <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-3">
                 <GitBranch className="h-4 w-4 text-slate-400" />
-                Contested & Unique Stances ({report.divergence_breakdown.contested_claims?.length || 0})
+                Unique / Single-Model Insights ({(report.divergence_breakdown.unique_insights || report.divergence_breakdown.contested_claims)?.length || 0})
               </h4>
-              {report.divergence_breakdown.contested_claims && report.divergence_breakdown.contested_claims.length > 0 ? (
+              {((report.divergence_breakdown.unique_insights || report.divergence_breakdown.contested_claims)?.length || 0) > 0 ? (
                 <div className="space-y-3">
-                  {report.divergence_breakdown.contested_claims.map((c, idx) => (
+                  {(report.divergence_breakdown.unique_insights || report.divergence_breakdown.contested_claims || []).map((c, idx) => (
                     <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-lg p-3 shadow-xs">
                       <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">&quot;{c.claim}&quot;</p>
                       <div className="mt-2">
@@ -325,20 +378,20 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400 italic">No unique/contested claims identified.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 italic">No unique insights identified.</p>
               )}
             </div>
           </div>
 
-          {/* Active Disagreements */}
-          {report.divergence_breakdown.contradiction_details && report.divergence_breakdown.contradiction_details.length > 0 && (
+          {/* Active Contradictions — only shown when there are actual contradictions */}
+          {((report.divergence_breakdown.active_contradictions || report.divergence_breakdown.contradiction_details) ?? []).length > 0 && (
             <div className="mt-6 bg-amber-50/20 dark:bg-amber-950/10 border border-amber-200/30 dark:border-amber-900/30 rounded-xl p-5">
               <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-4">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Active Contradictions ({report.divergence_breakdown.contradiction_details.length})
+                Active Contradictions ({(report.divergence_breakdown.active_contradictions || report.divergence_breakdown.contradiction_details || []).length})
               </h4>
               <div className="space-y-4">
-                {report.divergence_breakdown.contradiction_details.map((c, idx) => (
+                {(report.divergence_breakdown.active_contradictions || report.divergence_breakdown.contradiction_details || []).map((c, idx) => (
                   <div key={idx} className="bg-white dark:bg-slate-900 border border-amber-200/30 dark:border-amber-900/20 rounded-lg p-4 shadow-xs">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>

@@ -139,8 +139,8 @@ async def test_run_semantic_claims_analysis():
          patch("reporting.synthesizer.classify_contradiction", new_callable=AsyncMock) as mock_contra:
          
         mock_extract.side_effect = [
-            ["Kafka scales logs"],
-            ["Redis streams store messages in memory"]
+            ["Kafka enables horizontal scaling through partitioned distributed log storage"],
+            ["Redis streams provide efficient in-memory message queuing with persistence"]
         ]
         mock_embeddings.return_value = [None, None]
         mock_similarity.return_value = 0.50  # unrelated claims
@@ -247,7 +247,7 @@ async def test_embedding_failure_sets_fallback_mode():
          patch("reporting.synthesizer.settings") as mock_settings:
          
         mock_settings.USE_MOCK = False
-        mock_extract.side_effect = [["Claim 1"], ["Claim 2"]]
+        mock_extract.side_effect = [["Enterprise security compliance requirements need careful evaluation"], ["Scalable infrastructure design requires distributed architecture patterns"]]
         # Raising exception mimics embedding failure
         mock_embeddings.side_effect = Exception("Embedding service down")
         mock_similarity.return_value = 0.50
@@ -271,7 +271,19 @@ async def test_contradiction_pair_cap():
          patch("reporting.synthesizer.settings") as mock_settings:
          
         mock_settings.USE_MOCK = False
-        mock_extract.side_effect = [[f"Claim {i}"] for i in range(10)]
+        unique_claims = [
+            "Kafka distributed partitioning enables horizontal scaling beyond single node limits",
+            "Redis memory caching provides microsecond latency for real-time application serving",
+            "PostgreSQL relational model ensures transactional consistency across complex domains",
+            "MongoDB document store simplifies schema evolution for agile development workflows",
+            "Elasticsearch inverted index delivers sub-second full-text search across terabytes",
+            "RabbitMQ message broker decouples services enabling independent deployment strategies",
+            "Cassandra wide-column design handles massive write throughput across global datacenters",
+            "GraphQL schema-first approach reduces client-server round trips for frontend performance",
+            "Kubernetes orchestration automates container scaling based on resource utilization metrics",
+            "Terraform infrastructure-as-code enables reproducible environment provisioning across clouds",
+        ]
+        mock_extract.side_effect = [[c] for c in unique_claims]
         mock_embeddings.return_value = [None] * 10
         # Return similarity in candidate contradiction range [0.60, 0.78)
         mock_similarity.return_value = 0.70
@@ -369,4 +381,124 @@ async def test_provider_structured_output_adapter_path():
             assert mock_route.call_count == 1
             gateway_req = mock_route.call_args[0][0]
             assert gateway_req.response_format == response_format
+
+
+@pytest.mark.asyncio
+async def test_critic_failure_sets_unverified():
+    """When the critic/verifier call itself fails, verification_status must be 'unverified'
+    and verification_error must be True, not fake 'verified' with 0.9 scores."""
+    prompt = "How to prepare SaaS for VC?"
+    responses = [{"persona": "M1", "content": "Focus on PMF and traction."}]
+
+    mock_evals = [{"model": "M1", "logic_score": 0.9, "completeness_score": 0.9,
+                   "conciseness_score": 0.9, "overall_score": 0.9, "rationale": "Good."}]
+    mock_report_json = {
+        "title": "VC Readiness Report",
+        "executive_summary": "Summary",
+        "verdict": {"recommendation": "Focus on PMF.", "confidence": 0.85,
+                    "decision_type": "proceed", "rationale": "Reasoning"},
+        "key_findings": [], "options_considered": [], "model_positions": [],
+        "risks_and_assumptions": [], "recommendation_table": [], "next_actions": [],
+        "caveats": [], "dissenting_views": [], "unique_insights": [], "context_needed": []
+    }
+
+    # Critic raises exception -> should propagate as unverified
+    with patch("reporting.synthesizer.evaluate_models_blind", new_callable=AsyncMock) as mock_eval, \
+         patch("reporting.synthesizer.run_semantic_claims_analysis", new_callable=AsyncMock) as mock_claims, \
+         patch("reporting.synthesizer.call_llm_for_role", new_callable=AsyncMock) as mock_call, \
+         patch("reporting.synthesizer.settings") as mock_settings:
+
+        mock_settings.USE_MOCK = False
+        mock_settings.ENABLE_SYNTHESIS_REVISE = False
+
+        mock_eval.return_value = mock_evals
+        mock_claims.return_value = {
+            "consensus_claims": [], "contested_claims": [], "unique_insights": [],
+            "active_contradictions": [],
+            "contradictions_count": 0, "contradiction_details": [], "divergence_score": 0.0,
+            "semantic_analysis_mode": "embedding", "embedding_success": True,
+            "contradiction_pairs_classified": 0,
+        }
+        mock_call.return_value = (json.dumps(mock_report_json), AsyncMock())
+
+        # The actual critic call goes through verify_synthesis_report which is imported inside
+        # the function, so we patch the module-level import
+        with patch("reporting.synthesis_critic.call_llm_for_role", new_callable=AsyncMock) as mock_critic_call:
+            mock_critic_call.side_effect = Exception("LLM call failed: connection timeout")
+            with patch("reporting.synthesis_critic.settings") as mock_critic_settings:
+                mock_critic_settings.USE_MOCK = False
+
+                report = await generate_decision_report(prompt, responses, "test-critic-fail")
+
+                assert report.quality_meta is not None
+                assert report.quality_meta.verification_status == "unverified"
+                assert report.quality_meta.verification_error is True
+                assert report.quality_meta.verification_source == "unavailable"
+                assert report.quality_meta.completeness_score is None
+                assert report.quality_meta.faithfulness_score is None
+                # Should NOT show fake 0.9 scores
+                assert report.quality_meta.critic_feedback == "Verifier service temporarily unavailable."
+
+
+@pytest.mark.asyncio
+async def test_unique_insights_in_divergence_breakdown():
+    """Divergence breakdown should contain unique_insights key, not just contested_claims."""
+    prompt = "Test prompt"
+    responses = [
+        {"persona": "M1", "content": "Claim from M1"},
+        {"persona": "M2", "content": "Different claim from M2"}
+    ]
+
+    with patch("reporting.synthesizer._extract_claims_from_response", new_callable=AsyncMock) as mock_extract, \
+         patch("reporting.synthesizer.get_claim_embeddings", new_callable=AsyncMock) as mock_embeddings, \
+         patch("reporting.synthesizer.compute_semantic_similarity", new_callable=AsyncMock) as mock_similarity, \
+         patch("reporting.synthesizer.settings") as mock_settings:
+
+        mock_settings.USE_MOCK = False
+        mock_extract.side_effect = [
+            ["M1 suggests focusing on enterprise security compliance requirements"],
+            ["M2 recommends building scalable infrastructure for growth"]
+        ]
+        mock_embeddings.return_value = [None, None]
+        mock_similarity.return_value = 0.30  # unrelated claims
+
+        analysis = await run_semantic_claims_analysis(prompt, responses, "test-unique-insights")
+
+        # Must have the new unique_insights key
+        assert "unique_insights" in analysis
+        # unique_insights should equal contested_claims (legacy alias)
+        assert analysis["unique_insights"] == analysis["contested_claims"]
+        # active_contradictions key should exist
+        assert "active_contradictions" in analysis
+
+
+@pytest.mark.asyncio
+async def test_generic_report_sets_high_genericity_risk():
+    """When the critic returns genericity_risk='high', verification_status should be 'unverified'."""
+    from reporting.synthesis_critic import verify_synthesis_report
+
+    prompt = "How to prepare SaaS for VC?"
+    responses = [{"persona": "M1", "content": "Generic SaaS advice here."}]
+    draft_report = '{"title": "Generic Draft"}'
+
+    mock_critic_response = {
+        "completeness_score": 0.90,
+        "faithfulness_score": 0.90,
+        "has_hallucinations": False,
+        "needs_revision": False,
+        "specificity_score": 0.2,
+        "genericity_risk": "high",
+        "critic_feedback": "This report reads like a generic SaaS checklist."
+    }
+
+    with patch("reporting.synthesis_critic.settings") as mock_settings:
+        mock_settings.USE_MOCK = False
+        with patch("reporting.synthesis_critic.call_llm_for_role", new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = (json.dumps(mock_critic_response), AsyncMock())
+
+            res = await verify_synthesis_report(prompt, responses, draft_report)
+            assert res["genericity_risk"] == "high"
+            assert res["specificity_score"] == 0.2
+            assert "too generic" in res["critic_feedback"]
+
 

@@ -103,13 +103,16 @@ export function SynthesisReveal({
   if (revealed) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <SynthesisCard
-          synthesis={synthesis}
-          modelResponses={modelResponses}
-          isSynthesisFailed={isSynthesisFailed}
-        />
+        {/* Show raw SynthesisCard only when no structured report is available */}
+        {(!report || isSynthesisFailed) && (
+          <SynthesisCard
+            synthesis={synthesis}
+            modelResponses={modelResponses}
+            isSynthesisFailed={isSynthesisFailed}
+          />
+        )}
 
-        {/* Structured Decision Report */}
+        {/* Structured Decision Report — replaces the raw SynthesisCard */}
         {report && !isSynthesisFailed && (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
             <DecisionReportView report={report} rawSynthesis={synthesis} />

@@ -32,9 +32,12 @@ class OptionConsidered(BaseModel):
 
 class ModelPosition(BaseModel):
     model: str = Field(..., description="The name/display name of the model")
-    stance: str = Field(..., description="One of: supportive | concerned | neutral | opposing")
-    strongest_point: str = Field(..., description="The strongest argument or point made by this model")
-    concern: str = Field(..., description="The main concern, caveat, or risk raised by this model")
+    stance: str = Field(default="neutral", description="One of: supportive | concerned | neutral | opposing")
+    distinct_contribution: str = Field(default="", description="The unique, distinct contribution or insight this model provided")
+    blind_spot: str = Field(default="", description="Specific limitation or blind spot in this model's analysis")
+    # Legacy aliases for backward compatibility
+    strongest_point: str = Field(default="", description="Legacy alias for distinct_contribution")
+    concern: str = Field(default="", description="Legacy alias for blind_spot")
 
 
 class RiskAssumption(BaseModel):
@@ -58,12 +61,16 @@ class NextAction(BaseModel):
 
 
 class QualityMeta(BaseModel):
-    completeness_score: float = Field(default=1.0, ge=0.0, le=1.0, description="Completeness rating")
-    faithfulness_score: float = Field(default=1.0, ge=0.0, le=1.0, description="Faithfulness to source answers")
+    completeness_score: Optional[float] = Field(default=1.0, description="Completeness rating (0.0-1.0), None if unavailable")
+    faithfulness_score: Optional[float] = Field(default=1.0, description="Faithfulness to source answers (0.0-1.0), None if unavailable")
     has_hallucinations: bool = Field(default=False, description="Whether the report contains hallucinated content")
     needs_revision: bool = Field(default=False, description="Whether the critic flags this for revision")
     critic_feedback: Optional[str] = Field(None, description="Detailed feedback from the verifier pass")
     verification_status: str = Field(default="verified", description="One of: verified | unverified | failed")
+    verification_error: bool = Field(default=False, description="True if the verifier/critic call itself failed")
+    verification_source: str = Field(default="critic", description="One of: critic | fallback | mock | unavailable")
+    specificity_score: Optional[float] = Field(default=None, description="Specificity rating (0.0-1.0), None if not evaluated")
+    genericity_risk: str = Field(default="medium", description="One of: low | medium | high")
 
 
 class DecisionReport(BaseModel):
@@ -79,6 +86,7 @@ class DecisionReport(BaseModel):
     caveats: List[str] = Field(default_factory=list, description="Any critical limitations or caveats")
     dissenting_views: List[str] = Field(default_factory=list, description="Points of strong model disagreement / dissenting arguments")
     unique_insights: List[str] = Field(default_factory=list, description="Distinct viewpoints or novel arguments found in individual models")
+    context_needed: List[str] = Field(default_factory=list, description="Missing context items needed to make the report more specific")
     model_contributions: List[Dict[str, Any]] = Field(default_factory=list, description="Rubric scoring analysis per model")
     divergence_breakdown: Dict[str, Any] = Field(default_factory=dict, description="Categorization of consensus vs contested claims")
     quality_meta: Optional[QualityMeta] = Field(None, description="Quality verification gate details")

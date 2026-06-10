@@ -31,6 +31,19 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
 - **Bypassed Testing Cache & JSON SQLite Serializer Issues**: Corrected endpoint test behavior for caching in test environments and SQLite's text-JSON representation checking.
 - **Tests Coverage**: 356 pytest backend tests + 61 vitest frontend tests passing. Next.js production build completes successfully.
 
+## Report Specificity and Hardening (2026-06-10)
+- **Overall Score: ~9.5/10** — generated decision reports hardened, semantic claim filter implemented, specificity rubric integrated, redundant verdict UI removed, and tests fully verified.
+- **Backend Enhancements**:
+  - Verification Status Hardening: Changed critic failures to set `unverified` and `verification_error = True` instead of faking 0.9 scores.
+  - Claim Quality Filter: Added `claim_quality.py` to clean and filter markdown artifacts, boilerplate headers, and fragments shorter than 6 meaningful words.
+  - Rubrics & Context-Awareness: Enforced specificity rubric (`specificity_score`, `genericity_risk`) and `context_needed` extraction to alert users when specific company stats are missing.
+  - Model Position & Risk Polish: Shifted model position schemas from `strongest_point`/`concern` to `distinct_contribution`/`blind_spot` and enforced diagnostic-level risks.
+- **Frontend & UI Enhancements**:
+  - Updated `DecisionReportView` and `ModelPositionsTable` to match the new schema fields and display a warning card for missing context items.
+  - Removed duplicate verdict blocks by hiding the raw markdown SynthesisCard whenever the structured report successfully renders.
+- **Testing**: Added new tests to `test_synthesis_engine.py`, `test_report_builder.py`, `test_claim_quality.py`, and `DecisionReportView.test.tsx`. All tests are passing.
+
+
 ## Key Files to Know
 - `apps/api/main.py` — FastAPI app entry (419 lines)
 - `apps/api/orchestrator.py` — debate execution (814 lines, god file)

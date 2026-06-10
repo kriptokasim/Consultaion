@@ -120,3 +120,20 @@ class TestBuildReportFromSynthesis:
     def test_prompt_used_as_title(self):
         report = build_report_from_synthesis("My specific question about AI", "Some synthesis text.")
         assert report.title == "My specific question about AI"
+
+
+class TestContextNeededField:
+    """Verify the context_needed field is available on the synthesis DecisionReport schema."""
+
+    def test_context_needed_field_exists_on_decision_report(self):
+        from reporting.synthesis_schema import DecisionReport as SynthesisDecisionReport
+        report = SynthesisDecisionReport()
+        assert hasattr(report, "context_needed")
+        assert report.context_needed == []
+
+    def test_context_needed_accepts_values(self):
+        from reporting.synthesis_schema import DecisionReport as SynthesisDecisionReport
+        report = SynthesisDecisionReport(context_needed=["ARR", "ICP", "retention rate"])
+        assert len(report.context_needed) == 3
+        assert "ARR" in report.context_needed
+

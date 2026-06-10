@@ -133,4 +133,89 @@ describe("DecisionReportView", () => {
     render(<DecisionReportView report={failedReport} />);
     expect(screen.getByText("Verification Failed")).toBeInTheDocument();
   });
+
+  it("renders unverified when verification_error is true (critic failure)", () => {
+    const criticFailReport = {
+      ...mockReport,
+      quality_meta: {
+        verification_status: "unverified",
+        verification_error: true,
+        verification_source: "unavailable",
+        completeness_score: null,
+        faithfulness_score: null,
+        critic_feedback: "Verifier service temporarily unavailable.",
+      },
+    };
+    render(<DecisionReportView report={criticFailReport} />);
+    expect(screen.getByText("Unverified")).toBeInTheDocument();
+    expect(screen.getByText("Verifier service temporarily unavailable.")).toBeInTheDocument();
+    // Should show "Unavailable" for scores, not fake percentages
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+  });
+
+  it("does not show verified when verification_error is true", () => {
+    const errorReport = {
+      ...mockReport,
+      quality_meta: {
+        verification_status: "unverified",
+        verification_error: true,
+        verification_source: "unavailable",
+        completeness_score: null,
+        faithfulness_score: null,
+      },
+    };
+    render(<DecisionReportView report={errorReport} />);
+    expect(screen.queryByText("Verified & Faithful")).not.toBeInTheDocument();
+  });
+
+  it("renders unique insights label instead of contested & unique stances", () => {
+    const reportWithDivergence = {
+      ...mockReport,
+      divergence_breakdown: {
+        divergence_score: 0.3,
+        consensus_claims: [{ claim: "Kafka scales well", models: ["M1", "M2"] }],
+        unique_insights: [{ claim: "Redis is better for low latency", model: "M2" }],
+        contested_claims: [{ claim: "Redis is better for low latency", model: "M2" }],
+        contradiction_details: [],
+      },
+    };
+    render(<DecisionReportView report={reportWithDivergence} />);
+    expect(screen.getByText(/Unique \/ Single-Model Insights/)).toBeInTheDocument();
+    expect(screen.queryByText(/Contested & Unique Stances/)).not.toBeInTheDocument();
+  });
+
+  it("hides active contradictions when empty", () => {
+    const reportNoContradictions = {
+      ...mockReport,
+      divergence_breakdown: {
+        divergence_score: 0.1,
+        consensus_claims: [],
+        unique_insights: [{ claim: "Some unique claim", model: "M1" }],
+        contradiction_details: [],
+        active_contradictions: [],
+      },
+    };
+    render(<DecisionReportView report={reportNoContradictions} />);
+    expect(screen.queryByText(/Active Contradictions/)).not.toBeInTheDocument();
+  });
+
+  it("shows context needed section when present", () => {
+    const reportWithContext = {
+      ...mockReport,
+      context_needed: ["Current MRR/ARR", "Number of active users", "ICP definition"],
+    };
+    render(<DecisionReportView report={reportWithContext} />);
+    expect(screen.getByText("Context Needed to Make This Report Specific")).toBeInTheDocument();
+    expect(screen.getByText("Current MRR/ARR")).toBeInTheDocument();
+    expect(screen.getByText("ICP definition")).toBeInTheDocument();
+  });
+
+  it("does not render context needed section when empty", () => {
+    const reportNoContext = {
+      ...mockReport,
+      context_needed: [],
+    };
+    render(<DecisionReportView report={reportNoContext} />);
+    expect(screen.queryByText("Context Needed to Make This Report Specific")).not.toBeInTheDocument();
+  });
 });

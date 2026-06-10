@@ -21,6 +21,7 @@ from reporting.synthesis_schema import DecisionReport, QualityMeta, Verdict
 from reporting.claim_similarity import get_claim_embeddings, compute_semantic_similarity
 from reporting.claim_contradiction import classify_contradiction
 from reporting.model_evaluator import evaluate_models_blind
+from reporting.claim_quality import filter_claims
 from worker.arena_tasks import _extract_claims_from_response
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,9 @@ async def run_semantic_claims_analysis(
     all_claims = []
     for resp, claims in zip(responses, extracted_lists, strict=False):
         model_name = resp.get("persona", resp.get("model", "Model"))
-        for c in claims:
+        # Phase 2: Apply claim quality filter before analysis
+        cleaned_claims = filter_claims(claims)
+        for c in cleaned_claims:
             all_claims.append({"claim": c, "model": model_name})
 
     # Fetch embeddings in batch for performance
@@ -116,6 +119,7 @@ async def run_semantic_claims_analysis(
             })
         else:
             processed.add(i)
+            # Phase 3: These are unique/single-model insights, not contested
             contested_list.append({
                 "claim": item1["claim"],
                 "model": item1["model"]
@@ -191,7 +195,9 @@ async def run_semantic_claims_analysis(
 
     return {
         "consensus_claims": consensus_list,
-        "contested_claims": contested_list,
+        "unique_insights": contested_list,
+        "contested_claims": contested_list,  # legacy alias
+        "active_contradictions": contradiction_details,
         "contradictions_count": contradictions_count,
         "contradiction_details": contradiction_details,
         "divergence_score": float(round(divergence_score, 2)),
@@ -243,6 +249,13 @@ async def generate_decision_report(
         "and logical analysis into a premium, professional Decision Report JSON object.\n"
         "Analyze consensus points, resolve disagreements, highlight critical risks/assumptions, "
         "and compile actionable next steps.\n\n"
+        "CRITICAL SPECIFICITY RULES:\n"
+        "- Do NOT generate a generic checklist. Tailor the report to the user's exact question, product, company stage, and available context.\n"
+        "- If specific project context (ARR, users, ICP, retention, CAC/LTV, team, runway, etc.) is available in the prompt, USE IT.\n"
+        "- If context is missing, label recommendations as generic and include a 'context_needed' list of items needed to make the report specific.\n"
+        "- Avoid clichéd SaaS fundraising advice unless directly relevant.\n"
+        "- Each risk must include a specific diagnostic or action, not just a category name.\n"
+        "- Avoid generic-only risks like 'Market demand' or 'Team strength' unless paired with concrete diagnostics.\n\n"
         "You MUST output strictly in JSON format. Do not add markdown code fences, headers, or conversational text. "
         "Your response must be parseable by json.loads().\n"
         "Schema format:\n"
@@ -262,10 +275,12 @@ async def generate_decision_report(
         "    {\"option\": \"Option name\", \"pros\": [\"pro1\"], \"cons\": [\"con1\"], \"score\": <optional float>}\n"
         "  ],\n"
         "  \"model_positions\": [\n"
-        "    {\"model\": \"Model Name\", \"stance\": \"supportive | concerned | neutral | opposing\", \"strongest_point\": \"...\", \"concern\": \"...\"}\n"
+        "    {\"model\": \"Model Name\", \"stance\": \"supportive | concerned | neutral | opposing\", "
+        "\"distinct_contribution\": \"The unique, specific contribution this model provided\", "
+        "\"blind_spot\": \"Specific limitation in this model's analysis. If none, write: No major limitation identified.\"}\n"
         "  ],\n"
         "  \"risks_and_assumptions\": [\n"
-        "    {\"item\": \"Risk/assumption desc\", \"type\": \"risk | assumption\", \"severity\": \"critical | high | medium | low\", \"mitigation\": \"Mitigation...\"}\n"
+        "    {\"item\": \"Specific risk/assumption with concrete diagnostics\", \"type\": \"risk | assumption\", \"severity\": \"critical | high | medium | low\", \"mitigation\": \"Mitigation...\"}\n"
         "  ],\n"
         "  \"recommendation_table\": [\n"
         "    {\"criterion\": \"Criterion\", \"winner_or_answer\": \"Winner/Option\", \"evidence\": \"Evidence...\", \"confidence\": <float 0.0 to 1.0>}\n"
@@ -275,7 +290,8 @@ async def generate_decision_report(
         "  ],\n"
         "  \"caveats\": [\"Caveat 1\", \"Caveat 2\"],\n"
         "  \"dissenting_views\": [\"Dissenting view 1\"],\n"
-        "  \"unique_insights\": [\"Unique insight 1\"]\n"
+        "  \"unique_insights\": [\"Unique insight 1\"],\n"
+        "  \"context_needed\": [\"List of specific missing context items needed to make this report more specific, e.g. ARR, number of users, ICP, retention rate\"]\n"
         "}"
     )
 
@@ -287,10 +303,13 @@ async def generate_decision_report(
         f"**Individual Model Answers:**\n\n{candidate_block}\n\n"
         f"**Evaluator Scores:**\n{scores_block}\n\n"
         f"**Consensus Claims:**\n{consensus_block or 'None'}\n\n"
-        f"**Contested Claims:**\n{contested_block or 'None'}\n\n"
-        f"**Contradictions / Disagreements:**\n{contradiction_block or 'None'}\n\n"
+        f"**Unique / Single-Model Insights:**\n{contested_block or 'None'}\n\n"
+        f"**Active Contradictions / Disagreements:**\n{contradiction_block or 'None'}\n\n"
         f"Divergence Score: {semantic_analysis['divergence_score']}\n\n"
-        "Synthesize the final structured JSON decision report."
+        "Synthesize the final structured JSON decision report. "
+        "Remember: each model_positions entry must use 'distinct_contribution' and 'blind_spot' fields (not 'strongest_point'/'concern'). "
+        "Each blind_spot must be specific to this answer, not generic like 'may not apply to all SaaS startups.' "
+        "If no meaningful blind spot exists, write 'No major limitation identified.'"
     )
 
     messages = [
@@ -441,27 +460,41 @@ async def generate_decision_report(
             logger.warning("Revision pass failed: %s. Keeping original draft.", revise_exc)
 
     # Determine verification status
-    if critic_res.get("has_hallucinations"):
+    verification_error = bool(critic_res.get("verification_error", False))
+    verification_source = critic_res.get("verification_source", "critic")
+    genericity_risk = critic_res.get("genericity_risk", "medium")
+
+    if verification_error:
+        verification_status = "unverified"
+    elif critic_res.get("has_hallucinations"):
         verification_status = "failed"
-    elif critic_res.get("needs_revision") or critic_res.get("faithfulness_score", 1.0) < 0.70 or critic_res.get("completeness_score", 1.0) < 0.70:
+    elif genericity_risk == "high":
+        verification_status = "unverified"
+    elif critic_res.get("needs_revision") or (critic_res.get("faithfulness_score") is not None and critic_res.get("faithfulness_score", 1.0) < 0.70) or (critic_res.get("completeness_score") is not None and critic_res.get("completeness_score", 1.0) < 0.70):
         verification_status = "unverified"
     else:
         verification_status = "verified"
 
     # Attach metadata to report object
     draft_report.quality_meta = QualityMeta(
-        completeness_score=critic_res.get("completeness_score", 0.9),
-        faithfulness_score=critic_res.get("faithfulness_score", 0.9),
+        completeness_score=critic_res.get("completeness_score"),
+        faithfulness_score=critic_res.get("faithfulness_score"),
         has_hallucinations=critic_res.get("has_hallucinations", False),
         needs_revision=critic_res.get("needs_revision", False),
         critic_feedback=critic_res.get("critic_feedback"),
         verification_status=verification_status,
+        verification_error=verification_error,
+        verification_source=verification_source,
+        specificity_score=critic_res.get("specificity_score"),
+        genericity_risk=genericity_risk,
     )
     draft_report.model_contributions = model_evals
     draft_report.divergence_breakdown = {
         "divergence_score": semantic_analysis["divergence_score"],
         "consensus_claims": semantic_analysis["consensus_claims"],
-        "contested_claims": semantic_analysis["contested_claims"],
+        "unique_insights": semantic_analysis.get("unique_insights", semantic_analysis.get("contested_claims", [])),
+        "contested_claims": semantic_analysis.get("contested_claims", []),  # legacy
+        "active_contradictions": semantic_analysis.get("active_contradictions", semantic_analysis.get("contradiction_details", [])),
         "contradictions_count": semantic_analysis["contradictions_count"],
         "contradiction_details": semantic_analysis["contradiction_details"],
         "semantic_analysis_mode": semantic_analysis.get("semantic_analysis_mode", "embedding"),
