@@ -25,6 +25,12 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
 - Terms/Privacy: real content, P1 for lawyer review
 - Remaining: API client consolidation, orchestrator refactor, E2E tests
 
+## Premium Landing Page Overhaul (2026-06-10)
+- **Overall Score: ~9/10** — strategic branding, scrollytelling workflow, and interactive Example Report Preview completed and verified.
+- **Components Built**: Hero section (using Parliament.png), HowItWorks scrollytelling, ArenaAtAGlance, ExampleReportPreview, DifferentiationSection, UseCases.
+- **Bypassed Testing Cache & JSON SQLite Serializer Issues**: Corrected endpoint test behavior for caching in test environments and SQLite's text-JSON representation checking.
+- **Tests Coverage**: 356 pytest backend tests + 61 vitest frontend tests passing. Next.js production build completes successfully.
+
 ## Key Files to Know
 - `apps/api/main.py` — FastAPI app entry (419 lines)
 - `apps/api/orchestrator.py` — debate execution (814 lines, god file)

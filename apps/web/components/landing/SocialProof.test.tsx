@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import { SocialProof } from "./SocialProof";
+import { UseCases } from "./UseCases";
 
 // Mock the i18n hook
 vi.mock("@/lib/i18n/client", () => ({
@@ -25,14 +25,14 @@ vi.mock("@/lib/i18n/client", () => ({
   }),
 }));
 
-describe("SocialProof (Use Cases)", () => {
+describe("UseCases", () => {
   it("renders the use cases heading", () => {
-    render(<SocialProof />);
+    render(<UseCases />);
     expect(screen.getByText("Built for high-stakes decisions")).toBeInTheDocument();
   });
 
   it("renders all four use case cards", () => {
-    render(<SocialProof />);
+    render(<UseCases />);
     expect(screen.getByText("Strategy Decision Review")).toBeInTheDocument();
     expect(screen.getByText("Product Requirement Stress Test")).toBeInTheDocument();
     expect(screen.getByText("Technical Architecture Comparison")).toBeInTheDocument();
@@ -40,12 +40,12 @@ describe("SocialProof (Use Cases)", () => {
   });
 
   it("renders use case descriptions", () => {
-    render(<SocialProof />);
+    render(<UseCases />);
     expect(screen.getByText("Compare how different AI models evaluate a strategic pivot.")).toBeInTheDocument();
   });
 
   it("does not render any fake testimonials", () => {
-    render(<SocialProof />);
+    render(<UseCases />);
     expect(screen.queryByText("Sarah K.")).not.toBeInTheDocument();
     expect(screen.queryByText("James M.")).not.toBeInTheDocument();
     expect(screen.queryByText("Alex R.")).not.toBeInTheDocument();

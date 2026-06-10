@@ -2,8 +2,8 @@ import HomeContent from "@/components/landing/HomeContent";
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Consultaion — Ask Once, Get Answers from Every Top AI',
-  description: 'Submit one question and get simultaneous answers from GPT-4o, Claude, Gemini, and DeepSeek. Compare AI perspectives side-by-side and get a synthesized final verdict.',
+  title: 'Consultaion — One Question, Multiple AI Perspectives, One Decision Report',
+  description: 'Submit one question and get structured comparison across multiple AI models. Consultaion surfaces where models agree or disagree and delivers a clear decision report with verdict, risks, and next actions.',
 };
 
 

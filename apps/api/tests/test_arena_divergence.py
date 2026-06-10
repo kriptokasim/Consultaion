@@ -84,10 +84,11 @@ async def test_compute_divergence_success(db_session, monkeypatch):
 def test_get_divergence_report_endpoint(authenticated_client, db_session):
     """Test getting divergence report successfully and fallback on-the-fly calculation."""
     debate_id = "test-divergence-debate-2"
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     debate = Debate(
         id=debate_id,
-        user_id="user-123",
+        user_id=user.id,
         prompt="Another question?",
         status="completed",
         mode="arena",
@@ -118,10 +119,11 @@ def test_get_divergence_report_endpoint(authenticated_client, db_session):
 def test_get_divergence_report_on_the_fly(authenticated_client, db_session, monkeypatch):
     """Test GET route triggers on-the-fly calculation if completed but report is missing."""
     debate_id = "test-divergence-debate-3"
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     debate = Debate(
         id=debate_id,
-        user_id="user-123",
+        user_id=user.id,
         prompt="Is Rust faster than Python?",
         status="completed",
         mode="arena",
@@ -166,10 +168,11 @@ def test_get_divergence_report_on_the_fly(authenticated_client, db_session, monk
 def test_cast_arena_vote_success(authenticated_client, db_session):
     """Test casting user vote on a claim."""
     debate_id = "test-divergence-debate-4"
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     debate = Debate(
         id=debate_id,
-        user_id="user-123",
+        user_id=user.id,
         prompt="Yes or No?",
         status="completed",
         mode="arena",

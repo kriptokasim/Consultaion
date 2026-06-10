@@ -72,6 +72,7 @@ from routes.teams import (
     teams_router,
 )
 from routes.participation import router as participation_router
+from routes.public_stats import router as public_stats_router
 from routes.arena import router as arena_router
 from routes.voting import router as voting_router
 from routes.redteam import router as redteam_router
@@ -356,6 +357,7 @@ app.include_router(voting_router)
 app.include_router(redteam_router)
 app.include_router(oracle_router)
 app.include_router(challenge_router)
+app.include_router(public_stats_router)
 
 
 # Patchset 53.0: Debug routes (only registered in safe environments)
