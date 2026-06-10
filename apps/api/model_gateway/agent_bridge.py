@@ -18,6 +18,9 @@ async def call_model_via_gateway(
     temperature: float = 0.3,
     max_tokens: int = 600,
     db_session: Optional[Session] = None,
+    response_format: Optional[Dict[str, Any]] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, Any]:
     """
     Unified entry point from Agent execution paths to the central Model Gateway.
@@ -70,6 +73,9 @@ async def call_model_via_gateway(
         user_id=user_id,
         user_plan=resolved_user_plan,
         debate_id=debate_id,
+        response_format=response_format,
+        tools=tools,
+        tool_choice=tool_choice,
     )
 
     # 3. Route call through Gateway Orchestrator

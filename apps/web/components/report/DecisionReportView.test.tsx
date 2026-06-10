@@ -94,4 +94,43 @@ describe("DecisionReportView", () => {
     render(<DecisionReportView report={mockReport} />);
     expect(screen.getByText("Export")).toBeInTheDocument();
   });
+
+  it("renders verified status when verification_status is verified or omitted", () => {
+    const verifiedReport = {
+      ...mockReport,
+      quality_meta: {
+        verification_status: "verified",
+        completeness_score: 0.9,
+        faithfulness_score: 0.9,
+      },
+    };
+    render(<DecisionReportView report={verifiedReport} />);
+    expect(screen.getByText("Verified & Faithful")).toBeInTheDocument();
+  });
+
+  it("renders unverified status when verification_status is unverified", () => {
+    const unverifiedReport = {
+      ...mockReport,
+      quality_meta: {
+        verification_status: "unverified",
+        completeness_score: 0.9,
+        faithfulness_score: 0.9,
+      },
+    };
+    render(<DecisionReportView report={unverifiedReport} />);
+    expect(screen.getByText("Unverified")).toBeInTheDocument();
+  });
+
+  it("renders verification failed status when verification_status is failed", () => {
+    const failedReport = {
+      ...mockReport,
+      quality_meta: {
+        verification_status: "failed",
+        completeness_score: 0.9,
+        faithfulness_score: 0.9,
+      },
+    };
+    render(<DecisionReportView report={failedReport} />);
+    expect(screen.getByText("Verification Failed")).toBeInTheDocument();
+  });
 });

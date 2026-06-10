@@ -109,6 +109,9 @@ async def route_llm_call(
                 model_pool=model_pool,
                 routing_policy=routing_policy,
                 user_id=request.user_id,
+                response_format=request.response_format,
+                tools=request.tools,
+                tool_choice=request.tool_choice,
             )
             result.user_plan = request.user_plan
             log_gateway_call_metrics(result, user_id=request.user_id)
@@ -180,6 +183,9 @@ async def route_llm_call(
                 model_pool=model_pool,
                 routing_policy=routing_policy,
                 user_id=request.user_id,
+                response_format=request.response_format,
+                tools=request.tools,
+                tool_choice=request.tool_choice,
             )
             if result.success:
                 successful_result = result
@@ -214,6 +220,9 @@ async def route_llm_call(
                     model_pool=model_pool,
                     routing_policy=routing_policy + "-fallback",
                     user_id=request.user_id,
+                    response_format=request.response_format,
+                    tools=request.tools,
+                    tool_choice=request.tool_choice,
                 )
                 if result.success:
                     successful_result = result

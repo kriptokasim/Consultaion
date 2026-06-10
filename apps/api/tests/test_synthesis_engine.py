@@ -232,3 +232,141 @@ async def test_generate_decision_report_and_repair():
         assert report.verdict.confidence == 0.90
         assert report.quality_meta.completeness_score == 0.95
         assert report.quality_meta.needs_revision is False
+
+
+@pytest.mark.asyncio
+async def test_embedding_failure_sets_fallback_mode():
+    prompt = "Test prompt"
+    responses = [
+        {"persona": "M1", "content": "Claim 1"},
+        {"persona": "M2", "content": "Claim 2"}
+    ]
+    with patch("reporting.synthesizer._extract_claims_from_response", new_callable=AsyncMock) as mock_extract, \
+         patch("reporting.synthesizer.get_claim_embeddings", new_callable=AsyncMock) as mock_embeddings, \
+         patch("reporting.synthesizer.compute_semantic_similarity", new_callable=AsyncMock) as mock_similarity, \
+         patch("reporting.synthesizer.settings") as mock_settings:
+         
+        mock_settings.USE_MOCK = False
+        mock_extract.side_effect = [["Claim 1"], ["Claim 2"]]
+        # Raising exception mimics embedding failure
+        mock_embeddings.side_effect = Exception("Embedding service down")
+        mock_similarity.return_value = 0.50
+        
+        analysis = await run_semantic_claims_analysis(prompt, responses, "test-debate-id")
+        
+        assert analysis["semantic_analysis_mode"] == "fallback_string"
+        assert analysis["embedding_success"] is False
+
+
+@pytest.mark.asyncio
+async def test_contradiction_pair_cap():
+    prompt = "Test prompt"
+    # Create 10 responses -> 10 claims -> 45 total candidate pairs
+    responses = [{"persona": f"Model-{i}", "content": f"Claim {i}"} for i in range(10)]
+    
+    with patch("reporting.synthesizer._extract_claims_from_response", new_callable=AsyncMock) as mock_extract, \
+         patch("reporting.synthesizer.get_claim_embeddings", new_callable=AsyncMock) as mock_embeddings, \
+         patch("reporting.synthesizer.compute_semantic_similarity", new_callable=AsyncMock) as mock_similarity, \
+         patch("reporting.synthesizer.classify_contradiction", new_callable=AsyncMock) as mock_contra, \
+         patch("reporting.synthesizer.settings") as mock_settings:
+         
+        mock_settings.USE_MOCK = False
+        mock_extract.side_effect = [[f"Claim {i}"] for i in range(10)]
+        mock_embeddings.return_value = [None] * 10
+        # Return similarity in candidate contradiction range [0.60, 0.78)
+        mock_similarity.return_value = 0.70
+        mock_contra.return_value = {"is_contradictory": True, "explanation": "conflict"}
+        
+        analysis = await run_semantic_claims_analysis(prompt, responses, "test-debate-cap")
+        
+        # Verify it capped at 25 pairs
+        assert analysis["contradiction_pairs_classified"] == 25
+        assert analysis["contradictions_count"] == 25
+
+
+@pytest.mark.asyncio
+async def test_critic_failure_metadata():
+    prompt = "Test prompt"
+    responses = [{"persona": "M1", "content": "Claim 1"}]
+    
+    mock_evals = [{"model": "M1", "logic_score": 0.9, "completeness_score": 0.9, "conciseness_score": 0.9, "overall_score": 0.9, "rationale": "Great."}]
+    mock_report_json = {
+        "title": "Adopting Kafka Decision Report",
+        "executive_summary": "Summary",
+        "verdict": {"recommendation": "Adopt Kafka.", "confidence": 0.90, "decision_type": "proceed", "rationale": "Reasoning"},
+        "key_findings": [], "options_considered": [], "model_positions": [], "risks_and_assumptions": [],
+        "recommendation_table": [], "next_actions": [], "caveats": [], "dissenting_views": [], "unique_insights": []
+    }
+    
+    # 1. Test case: critic returns has_hallucinations=True -> verification_status="failed"
+    mock_critic_failed = {
+        "completeness_score": 0.95,
+        "faithfulness_score": 0.50,
+        "has_hallucinations": True,
+        "needs_revision": False,
+        "critic_feedback": "Hallucination found!"
+    }
+    
+    with patch("reporting.synthesizer.evaluate_models_blind", new_callable=AsyncMock) as mock_eval, \
+         patch("reporting.synthesizer.run_semantic_claims_analysis", new_callable=AsyncMock) as mock_claims, \
+         patch("reporting.synthesis_critic.verify_synthesis_report", new_callable=AsyncMock) as mock_critic, \
+         patch("reporting.synthesizer.call_llm_for_role", new_callable=AsyncMock) as mock_call, \
+         patch("reporting.synthesizer.settings") as mock_settings:
+         
+        mock_settings.USE_MOCK = False
+        mock_settings.ENABLE_SYNTHESIS_REVISE = False
+        
+        mock_eval.return_value = mock_evals
+        mock_claims.return_value = {
+            "consensus_claims": [], "contested_claims": [],
+            "contradictions_count": 0, "contradiction_details": [], "divergence_score": 0.0
+        }
+        mock_critic.return_value = mock_critic_failed
+        mock_call.return_value = (json.dumps(mock_report_json), AsyncMock())
+        
+        report = await generate_decision_report(prompt, responses, "test-debate-failed")
+        assert report.quality_meta.verification_status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_provider_structured_output_adapter_path():
+    # Verify that passing response_format works without crashing and passes variables down
+    from agents import call_llm_for_role
+    import traceback
+    
+    messages = [{"role": "user", "content": "Hello"}]
+    response_format = {"type": "json_object"}
+    
+    # Mock route_llm_call and USE_MOCK
+    with patch("agents.USE_MOCK", False):
+        with patch("model_gateway.route_llm_call", new_callable=AsyncMock) as mock_route:
+            from model_gateway.types import GatewayModelCallResult
+            mock_route.return_value = GatewayModelCallResult(
+                content="{}",
+                model_used="gpt-4o",
+                provider="openai",
+                model_pool="premium",
+                routing_policy="direct",
+                success=True,
+                prompt_tokens=10,
+                completion_tokens=20,
+                total_tokens=30,
+                cost_usd=0.0001
+            )
+            
+            try:
+                content, usage = await call_llm_for_role(
+                    messages,
+                    role="test",
+                    model_override="gpt4o-mini",
+                    response_format=response_format
+                )
+            except Exception as e:
+                print("CAUGHT EXCEPTION IN TEST:")
+                traceback.print_exc()
+                raise e
+            
+            assert mock_route.call_count == 1
+            gateway_req = mock_route.call_args[0][0]
+            assert gateway_req.response_format == response_format
+

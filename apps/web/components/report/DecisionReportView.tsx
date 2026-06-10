@@ -53,6 +53,7 @@ interface DecisionReport {
     has_hallucinations?: boolean
     needs_revision?: boolean
     critic_feedback?: string
+    verification_status?: string
   }
   divergence_breakdown?: {
     divergence_score?: number
@@ -200,19 +201,25 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
       {report.quality_meta && (
         <div className="bg-slate-50 dark:bg-slate-800/45 border border-slate-200/60 dark:border-slate-800 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
           <div className="flex items-start md:items-center gap-4">
-            {report.quality_meta.has_hallucinations ? (
+            {report.quality_meta.verification_status === "failed" || report.quality_meta.has_hallucinations ? (
               <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
                 <ShieldAlert className="h-5 w-5 text-rose-500" />
               </div>
+            ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.needs_revision ? (
+              <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
+                <ShieldAlert className="h-5 w-5 text-amber-500" />
+              </div>
             ) : (
               <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100/30">
-                <ShieldCheck className="h-5 w-5 text-emerald-505 text-emerald-500" />
+                <ShieldCheck className="h-5 w-5 text-emerald-500" />
               </div>
             )}
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                Synthesis Quality Gate: {report.quality_meta.needs_revision ? (
-                  <span className="text-amber-600 dark:text-amber-400">Needs Review</span>
+                Synthesis Quality Gate: {report.quality_meta.verification_status === "failed" || report.quality_meta.has_hallucinations ? (
+                  <span className="text-rose-600 dark:text-rose-400">Verification Failed</span>
+                ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.needs_revision ? (
+                  <span className="text-amber-600 dark:text-amber-400">Unverified</span>
                 ) : (
                   <span className="text-emerald-600 dark:text-emerald-400">Verified & Faithful</span>
                 )}
@@ -282,7 +289,7 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
                 <div className="space-y-3">
                   {report.divergence_breakdown.consensus_claims.map((c, idx) => (
                     <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-lg p-3 shadow-xs">
-                      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">"{c.claim}"</p>
+                      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">&quot;{c.claim}&quot;</p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {c.models?.map((m) => (
                           <span key={m} className="inline-flex items-center rounded-md bg-emerald-50 dark:bg-emerald-950/35 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-200/10">
@@ -308,7 +315,7 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
                 <div className="space-y-3">
                   {report.divergence_breakdown.contested_claims.map((c, idx) => (
                     <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-lg p-3 shadow-xs">
-                      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">"{c.claim}"</p>
+                      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">&quot;{c.claim}&quot;</p>
                       <div className="mt-2">
                         <span className="inline-flex items-center rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200/10">
                           {c.model}
@@ -336,11 +343,11 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">{c.model_a} claim:</span>
-                        <p className="text-sm text-slate-800 dark:text-slate-200 italic font-medium">"{c.claim_a}"</p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200 italic font-medium">&quot;{c.claim_a}&quot;</p>
                       </div>
                       <div className="border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-4">
                         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">{c.model_b} claim:</span>
-                        <p className="text-sm text-slate-800 dark:text-slate-200 italic font-medium">"{c.claim_b}"</p>
+                        <p className="text-sm text-slate-800 dark:text-slate-200 italic font-medium">&quot;{c.claim_b}&quot;</p>
                       </div>
                     </div>
                     <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">

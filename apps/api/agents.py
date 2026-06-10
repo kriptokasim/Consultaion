@@ -264,6 +264,9 @@ async def _raw_llm_call(
     model_id: str | None = None,
     debate_id: str | None = None,
     extra_tags: Dict[str, Any] | None = None,
+    response_format: Optional[Dict[str, Any]] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, UsageCall]:
     from parliament.model_registry import get_default_model, get_model
     from model_gateway.types import GatewayRequest
@@ -309,7 +312,6 @@ async def _raw_llm_call(
     gateway_policy = "auto"
     if debate_id or ctx_user_id:
         try:
-            import asyncio
             from models import Debate
             from billing.service import get_active_plan
 
@@ -353,6 +355,9 @@ async def _raw_llm_call(
                 temperature=temperature,
                 max_tokens=max_tokens,
                 db_session=session,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
             )
             
         latency_ms = (time.monotonic() - start_ts) * 1000
@@ -457,6 +462,9 @@ async def call_llm_with_retry(
     model_id: str | None = None,
     debate_id: str | None = None,
     extra_tags: Dict[str, Any] | None = None,
+    response_format: Optional[Dict[str, Any]] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, UsageCall]:
     max_attempts = settings.LLM_RETRY_MAX_ATTEMPTS if settings.LLM_RETRY_ENABLED else 1
     delay = settings.LLM_RETRY_INITIAL_DELAY_SECONDS or 0.0
@@ -473,6 +481,9 @@ async def call_llm_with_retry(
                 model_id=model_id,
                 debate_id=debate_id,
                 extra_tags=extra_tags,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
             )
         except ProviderCircuitOpenError as exc:
             last_exc = exc
@@ -526,6 +537,9 @@ async def _call_llm(
     model_id: str | None = None,
     debate_id: str | None = None,
     extra_tags: Dict[str, Any] | None = None,
+    response_format: Optional[Dict[str, Any]] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, UsageCall]:
     from parliament.model_registry import get_default_model, get_model
 
@@ -555,6 +569,9 @@ async def _call_llm(
             model_id=model_id,
             debate_id=debate_id,
             extra_tags=extra_tags,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
         )
     except TransientLLMError as exc:
         logger.error("LLM call failed for role %s: %s", role, exc)
@@ -581,6 +598,9 @@ async def call_llm_for_role(
     model_id: str | None = None,
     debate_id: str | None = None,
     extra_tags: Dict[str, Any] | None = None,
+    response_format: Optional[Dict[str, Any]] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, UsageCall]:
     """
     Public helper for parliament orchestration to invoke a specific provider/model override.
@@ -594,6 +614,9 @@ async def call_llm_for_role(
         model_id=model_id,
         debate_id=debate_id,
         extra_tags=extra_tags,
+        response_format=response_format,
+        tools=tools,
+        tool_choice=tool_choice,
     )
 
 

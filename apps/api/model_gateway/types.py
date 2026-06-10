@@ -13,6 +13,9 @@ class GatewayRequest(BaseModel):
     user_id: Optional[str] = None
     user_plan: Optional[str] = "free"
     debate_id: Optional[str] = None
+    response_format: Optional[Dict[str, Any]] = None
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Dict[str, Any]] = None
 
 class GatewayDecision(BaseModel):
     model_config = ConfigDict(protected_namespaces=())

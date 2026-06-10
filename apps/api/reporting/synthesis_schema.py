@@ -63,6 +63,7 @@ class QualityMeta(BaseModel):
     has_hallucinations: bool = Field(default=False, description="Whether the report contains hallucinated content")
     needs_revision: bool = Field(default=False, description="Whether the critic flags this for revision")
     critic_feedback: Optional[str] = Field(None, description="Detailed feedback from the verifier pass")
+    verification_status: str = Field(default="verified", description="One of: verified | unverified | failed")
 
 
 class DecisionReport(BaseModel):
@@ -81,3 +82,4 @@ class DecisionReport(BaseModel):
     model_contributions: List[Dict[str, Any]] = Field(default_factory=list, description="Rubric scoring analysis per model")
     divergence_breakdown: Dict[str, Any] = Field(default_factory=dict, description="Categorization of consensus vs contested claims")
     quality_meta: Optional[QualityMeta] = Field(None, description="Quality verification gate details")
+    telemetry: Dict[str, Any] = Field(default_factory=dict, description="Metadata and execution telemetry")

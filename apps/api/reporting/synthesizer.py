@@ -34,7 +34,14 @@ async def run_semantic_claims_analysis(
 ) -> Dict[str, Any]:
     """Extract claims semantically, group them into consensus/contested, and compute divergence breakdown."""
     if not responses:
-        return {"consensus_claims": [], "contested_claims": [], "divergence_score": 0.0}
+        return {
+            "consensus_claims": [],
+            "contested_claims": [],
+            "divergence_score": 0.0,
+            "semantic_analysis_mode": "fallback_string",
+            "embedding_success": False,
+            "contradiction_pairs_classified": 0,
+        }
 
     # Extract claims in parallel
     claims_tasks = []
@@ -54,15 +61,29 @@ async def run_semantic_claims_analysis(
 
     # Fetch embeddings in batch for performance
     claim_texts = [item["claim"] for item in all_claims]
-    embeddings = await get_claim_embeddings(claim_texts, debate_id)
+    embedding_success = True
+    try:
+        embeddings = await get_claim_embeddings(claim_texts, debate_id)
+    except Exception as e:
+        logger.warning(f"Failed to fetch claim embeddings: {e}. Falling back to string similarity.")
+        embeddings = []
+        embedding_success = False
     
+    # Determine semantic analysis mode
+    if settings.USE_MOCK:
+        semantic_analysis_mode = "mock"
+        embedding_success = False
+    elif not embeddings or all(not e for e in embeddings):
+        semantic_analysis_mode = "fallback_string"
+        embedding_success = False
+    else:
+        semantic_analysis_mode = "embedding"
+
     processed = set()
     consensus_list = []
     contested_list = []
-    contradictions_count = 0
-    contradiction_details = []
 
-    # Pairwise comparison
+    # Consensus grouping
     for i, item1 in enumerate(all_claims):
         if i in processed:
             continue
@@ -84,18 +105,6 @@ async def run_semantic_claims_analysis(
                 if sim >= 0.78:  # same_claim threshold
                     matching_indices.append(j)
                     matching_models.append(item2["model"])
-                elif sim >= 0.60:  # related_claim threshold
-                    # Classify contradiction
-                    contra_res = await classify_contradiction(item1["claim"], item2["claim"], debate_id, usage)
-                    if contra_res.get("is_contradictory"):
-                        contradictions_count += 1
-                        contradiction_details.append({
-                            "claim_a": item1["claim"],
-                            "model_a": item1["model"],
-                            "claim_b": item2["claim"],
-                            "model_b": item2["model"],
-                            "reason": contra_res.get("explanation", ""),
-                        })
 
         if matching_indices:
             processed.add(i)
@@ -110,6 +119,56 @@ async def run_semantic_claims_analysis(
             contested_list.append({
                 "claim": item1["claim"],
                 "model": item1["model"]
+            })
+
+    # Collect contradiction candidate pairs (similarity in [0.60, 0.78))
+    candidate_pairs = []
+    for i, item1 in enumerate(all_claims):
+        embed1 = embeddings[i] if i < len(embeddings) else None
+        for j, item2 in enumerate(all_claims):
+            if i >= j:
+                continue
+            if item1["model"] == item2["model"]:
+                # A model cannot contradict itself
+                continue
+            embed2 = embeddings[j] if j < len(embeddings) else None
+            sim = await compute_semantic_similarity(
+                item1["claim"],
+                item2["claim"],
+                embed1,
+                embed2,
+            )
+            if 0.60 <= sim < 0.78:
+                candidate_pairs.append({
+                    "similarity": sim,
+                    "item_a": item1,
+                    "item_b": item2
+                })
+
+    # Sort candidates by similarity descending & cap to avoid O(n^2) LLM calls
+    candidate_pairs.sort(key=lambda x: x["similarity"], reverse=True)
+    limited_pairs = candidate_pairs[:25]  # Cap at 25 pairs maximum
+
+    # Classify contradictions for limited pairs in parallel
+    contradiction_tasks = []
+    for pair in limited_pairs:
+        claim_a = pair["item_a"]["claim"]
+        claim_b = pair["item_b"]["claim"]
+        contradiction_tasks.append(classify_contradiction(claim_a, claim_b, debate_id, usage))
+
+    contra_results = await asyncio.gather(*contradiction_tasks)
+
+    contradictions_count = 0
+    contradiction_details = []
+    for pair, res in zip(limited_pairs, contra_results, strict=False):
+        if res.get("is_contradictory"):
+            contradictions_count += 1
+            contradiction_details.append({
+                "claim_a": pair["item_a"]["claim"],
+                "model_a": pair["item_a"]["model"],
+                "claim_b": pair["item_b"]["claim"],
+                "model_b": pair["item_b"]["model"],
+                "reason": res.get("explanation", ""),
             })
 
     # Redesigned Divergence Score formula factoring in agreement, contradictions, and topic variance
@@ -136,6 +195,9 @@ async def run_semantic_claims_analysis(
         "contradictions_count": contradictions_count,
         "contradiction_details": contradiction_details,
         "divergence_score": float(round(divergence_score, 2)),
+        "semantic_analysis_mode": semantic_analysis_mode,
+        "embedding_success": embedding_success,
+        "contradiction_pairs_classified": len(limited_pairs),
     }
 
 
@@ -236,8 +298,59 @@ async def generate_decision_report(
         {"role": "user", "content": user_content},
     ]
 
+    # Configure provider-native structured output
+    response_format = None
+    tools = None
+    tool_choice = None
+    target_model_lower = (model_override or "").lower()
+    provider = "unknown"
+
+    if model_override:
+        from model_gateway.model_map import MODEL_MAP
+        if model_override in MODEL_MAP:
+            provider = MODEL_MAP[model_override]["provider"]
+        elif "gpt" in target_model_lower:
+            provider = "openai"
+        elif "claude" in target_model_lower:
+            provider = "anthropic"
+        elif "gemini" in target_model_lower:
+            provider = "gemini"
+    else:
+        from parliament.model_registry import get_default_model
+        try:
+            model_cfg = get_default_model()
+            provider = getattr(model_cfg.provider, "value", str(model_cfg.provider)) if hasattr(model_cfg, "provider") else "unknown"
+        except Exception:
+            pass
+
+    schema = DecisionReport.model_json_schema()
+    if not settings.USE_MOCK:
+        if provider == "openai":
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "DecisionReport",
+                    "strict": True,
+                    "schema": schema
+                }
+            }
+        elif provider == "anthropic":
+            tools = [{
+                "type": "function",
+                "function": {
+                    "name": "submit_decision_report",
+                    "description": "Submit the completed structured decision report",
+                    "parameters": schema
+                }
+            }]
+            tool_choice = {
+                "type": "function",
+                "function": {"name": "submit_decision_report"}
+            }
+
     draft_report = None
     raw_content = ""
+    report_validation_repaired = False
 
     # Call LLM for initial draft
     try:
@@ -248,6 +361,9 @@ async def generate_decision_report(
             max_tokens=1500,
             model_id=model_override,
             debate_id=debate_id,
+            response_format=response_format,
+            tools=tools,
+            tool_choice=tool_choice,
         )
         if usage is not None and hasattr(usage, "add_call"):
             usage.add_call(call_usage)
@@ -258,6 +374,8 @@ async def generate_decision_report(
         draft_report = DecisionReport.model_validate_json(json_str)
     except Exception as exc:
         logger.warning("Failed initial structured synthesis JSON validation: %s. Initiating repair prompt.", exc)
+        report_validation_repaired = True
+        
         # Self-healing repair loop step 1: Repair Prompt
         repair_messages = [
             {"role": "system", "content": "You are a JSON repair tool. Correct the provided text to output strictly valid JSON matching the schema of a Decision Report. Do not include markdown fences or explanation."},
@@ -290,8 +408,11 @@ async def generate_decision_report(
     
     # Step 4: Revise loop (if enabled, limit to 1 loop)
     enable_revise = getattr(settings, "ENABLE_SYNTHESIS_REVISE", True)
+    critic_revision_triggered = False
+    
     if enable_revise and critic_res.get("needs_revision") and not settings.USE_MOCK:
         logger.info("Critic flagged revision loop for debate %s. Feedback: %s", debate_id, critic_res.get("critic_feedback"))
+        critic_revision_triggered = True
         
         revise_messages = [
             {"role": "system", "content": system_prompt + "\n\nCRITICAL: Revise the draft JSON according to the verifier feedback. Fix any hallucinations, add missing critical evidence/dissenting views, and correct inaccuracies. Output strictly valid JSON."},
@@ -319,6 +440,14 @@ async def generate_decision_report(
         except Exception as revise_exc:
             logger.warning("Revision pass failed: %s. Keeping original draft.", revise_exc)
 
+    # Determine verification status
+    if critic_res.get("has_hallucinations"):
+        verification_status = "failed"
+    elif critic_res.get("needs_revision") or critic_res.get("faithfulness_score", 1.0) < 0.70 or critic_res.get("completeness_score", 1.0) < 0.70:
+        verification_status = "unverified"
+    else:
+        verification_status = "verified"
+
     # Attach metadata to report object
     draft_report.quality_meta = QualityMeta(
         completeness_score=critic_res.get("completeness_score", 0.9),
@@ -326,6 +455,7 @@ async def generate_decision_report(
         has_hallucinations=critic_res.get("has_hallucinations", False),
         needs_revision=critic_res.get("needs_revision", False),
         critic_feedback=critic_res.get("critic_feedback"),
+        verification_status=verification_status,
     )
     draft_report.model_contributions = model_evals
     draft_report.divergence_breakdown = {
@@ -334,6 +464,19 @@ async def generate_decision_report(
         "contested_claims": semantic_analysis["contested_claims"],
         "contradictions_count": semantic_analysis["contradictions_count"],
         "contradiction_details": semantic_analysis["contradiction_details"],
+        "semantic_analysis_mode": semantic_analysis.get("semantic_analysis_mode", "embedding"),
+    }
+    
+    # Populate Telemetry
+    draft_report.telemetry = {
+        "embedding_success": semantic_analysis.get("embedding_success", False),
+        "contradiction_pairs_classified": semantic_analysis.get("contradiction_pairs_classified", 0),
+        "critic_revision_triggered": critic_revision_triggered,
+        "report_validation_repaired": report_validation_repaired,
+        "report_quality_scores": {
+            "completeness": critic_res.get("completeness_score", 1.0),
+            "faithfulness": critic_res.get("faithfulness_score", 1.0),
+        }
     }
     
     return draft_report

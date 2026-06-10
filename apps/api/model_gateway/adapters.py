@@ -1,7 +1,7 @@
 import time
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from litellm import acompletion
 from model_gateway.types import GatewayModelCallResult, GatewayError
 
@@ -17,7 +17,10 @@ class BaseAdapter:
         gateway_policy: str,
         model_pool: str,
         routing_policy: str,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Dict[str, Any]] = None,
     ) -> GatewayModelCallResult:
         raise NotImplementedError()
 
@@ -31,7 +34,10 @@ class DirectProviderAdapter(BaseAdapter):
         gateway_policy: str,
         model_pool: str,
         routing_policy: str,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Dict[str, Any]] = None,
     ) -> GatewayModelCallResult:
         # Map model_id to direct provider representation
         target_model = model_id
@@ -61,15 +67,28 @@ class DirectProviderAdapter(BaseAdapter):
                     provider_name = "gemini"
 
         start_ts = time.monotonic()
+        kwargs = {}
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+        if tools is not None:
+            kwargs["tools"] = tools
+        if tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice
+
         response = await acompletion(
             model=target_model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            **kwargs
         )
         latency_ms = (time.monotonic() - start_ts) * 1000
         
-        content = response.choices[0].message["content"]
+        tool_calls = getattr(response.choices[0].message, "tool_calls", None)
+        if tool_calls and len(tool_calls) > 0:
+            content = tool_calls[0].function.arguments
+        else:
+            content = response.choices[0].message.get("content") or ""
         usage = getattr(response, "usage", {}) or {}
         prompt_tokens = usage.get("prompt_tokens") or 0
         completion_tokens = usage.get("completion_tokens") or 0
@@ -101,7 +120,10 @@ class OpenRouterAdapter(BaseAdapter):
         gateway_policy: str,
         model_pool: str,
         routing_policy: str,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Dict[str, Any]] = None,
     ) -> GatewayModelCallResult:
         OPENROUTER_MODEL_MAPPING = {
             "gpt4o-mini": "openrouter/openai/gpt-4o-mini",
@@ -128,15 +150,28 @@ class OpenRouterAdapter(BaseAdapter):
         target_model = OPENROUTER_MODEL_MAPPING.get(model_id, f"openrouter/{model_id}")
         
         start_ts = time.monotonic()
+        kwargs = {}
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+        if tools is not None:
+            kwargs["tools"] = tools
+        if tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice
+
         response = await acompletion(
             model=target_model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            **kwargs
         )
         latency_ms = (time.monotonic() - start_ts) * 1000
         
-        content = response.choices[0].message["content"]
+        tool_calls = getattr(response.choices[0].message, "tool_calls", None)
+        if tool_calls and len(tool_calls) > 0:
+            content = tool_calls[0].function.arguments
+        else:
+            content = response.choices[0].message.get("content") or ""
         usage = getattr(response, "usage", {}) or {}
         prompt_tokens = usage.get("prompt_tokens") or 0
         completion_tokens = usage.get("completion_tokens") or 0
@@ -168,7 +203,10 @@ class MockAdapter(BaseAdapter):
         gateway_policy: str,
         model_pool: str,
         routing_policy: str,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Dict[str, Any]] = None,
     ) -> GatewayModelCallResult:
         # Fast local mock completion
         await asyncio.sleep(0.05)

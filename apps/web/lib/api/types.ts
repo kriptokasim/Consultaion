@@ -39,6 +39,7 @@ export interface DebateDetail extends DebateSummary {
         error_type: string;
     }>;
     error_reason?: string;
+    synthesis_report?: any;
     // Add other fields as needed from the API response
 }
 
