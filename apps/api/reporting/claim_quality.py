@@ -31,6 +31,22 @@ _INTRO_BLOCKLIST = [
     "consider the following",
     "this document outlines",
     "this guide covers",
+    "here's a comprehensive",
+    "here’s a comprehensive",
+    "here's a concise",
+    "here’s a concise",
+    "here's a draft",
+    "here’s a draft",
+    "here's a framework",
+    "here’s a framework",
+    "designed to accelerate",
+    "this report synthesizes",
+    "this policy framework",
+]
+
+_INTRO_REGEXES = [
+    re.compile(r"^here[’']s\s+(a\s+)?(comprehensive|concise|structured|step-by-step|draft|framework)", re.I),
+    re.compile(r"^this\s+(report|document|policy)\s+(synthesizes|outlines|provides)", re.I),
 ]
 
 # Markdown artifact patterns to strip
@@ -130,6 +146,11 @@ def is_valid_semantic_claim(claim: str) -> bool:
     # Check against intro blocklist
     for phrase in _INTRO_BLOCKLIST:
         if lower.startswith(phrase):
+            return False
+
+    # Check against intro regex patterns
+    for regex in _INTRO_REGEXES:
+        if regex.match(cleaned):
             return False
 
     # Check for fragments that are too short

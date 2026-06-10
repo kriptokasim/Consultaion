@@ -23,6 +23,7 @@ from reporting.claim_contradiction import classify_contradiction
 from reporting.model_evaluator import evaluate_models_blind
 from reporting.claim_quality import filter_claims
 from worker.arena_tasks import _extract_claims_from_response
+from reporting.report_integrity import validate_report_integrity, looks_like_incomplete_json
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +392,10 @@ async def generate_decision_report(
         json_str = match.group(0) if match else raw_content
         
         draft_report = DecisionReport.model_validate_json(json_str)
+        # Check initial report integrity
+        ok, problems = validate_report_integrity(draft_report)
+        if not ok:
+            raise ValueError(f"Structured report integrity failed: {problems}")
     except Exception as exc:
         logger.warning("Failed initial structured synthesis JSON validation: %s. Initiating repair prompt.", exc)
         report_validation_repaired = True
@@ -398,7 +403,7 @@ async def generate_decision_report(
         # Self-healing repair loop step 1: Repair Prompt
         repair_messages = [
             {"role": "system", "content": "You are a JSON repair tool. Correct the provided text to output strictly valid JSON matching the schema of a Decision Report. Do not include markdown fences or explanation."},
-            {"role": "user", "content": f"Schema: {DecisionReport.model_json_schema()}\n\nError: {exc}\n\nInvalid Content:\n{raw_content or json_str}\n\nReturn repaired JSON:"}
+            {"role": "user", "content": f"Schema: {DecisionReport.model_json_schema()}\n\nError: {exc}\n\nInvalid Content:\n{raw_content or (json_str if 'json_str' in locals() else '')}\n\nReturn repaired JSON:"}
         ]
         try:
             repaired_raw, call_usage = await call_llm_for_role(
@@ -413,9 +418,19 @@ async def generate_decision_report(
             match = re.search(r"\{.*\}", repaired_raw, flags=re.S)
             repaired_json = match.group(0) if match else repaired_raw
             draft_report = DecisionReport.model_validate_json(repaired_json)
+            # Check repaired report integrity
+            ok, problems = validate_report_integrity(draft_report)
+            if not ok:
+                raise ValueError(f"Repaired report integrity failed: {problems}")
             raw_content = repaired_json
         except Exception as repair_exc:
-            logger.error("JSON repair failed: %s. Falling back to heuristic parsing.", repair_exc)
+            logger.error("JSON repair failed: %s.", repair_exc)
+            # If repair fails and raw content looks like incomplete JSON, raise error to fail-closed
+            raw_to_check = raw_content or (repaired_json if 'repaired_json' in locals() else '') or (json_str if 'json_str' in locals() else '')
+            if looks_like_incomplete_json(raw_to_check):
+                raise ValueError("Structured report generation failed; refusing unsafe raw JSON fallback.") from repair_exc
+            
+            logger.info("Falling back to heuristic parsing.")
             # Fallback to client/heuristic parser
             from reporting.report_builder import build_report_from_synthesis
             draft_report = build_report_from_synthesis(prompt, raw_content or candidate_block)
@@ -452,6 +467,10 @@ async def generate_decision_report(
             match = re.search(r"\{.*\}", revised_raw, flags=re.S)
             revised_json = match.group(0) if match else revised_raw
             draft_report = DecisionReport.model_validate_json(revised_json)
+            # Check revised report integrity
+            ok, problems = validate_report_integrity(draft_report)
+            if not ok:
+                raise ValueError(f"Revised report integrity failed: {problems}")
             raw_content = revised_json
             
             # Run critic on the revised report to update the score
@@ -487,6 +506,7 @@ async def generate_decision_report(
         verification_source=verification_source,
         specificity_score=critic_res.get("specificity_score"),
         genericity_risk=genericity_risk,
+        renderable=True,
     )
     draft_report.model_contributions = model_evals
     draft_report.divergence_breakdown = {
@@ -511,5 +531,23 @@ async def generate_decision_report(
             "faithfulness": critic_res.get("faithfulness_score", 1.0),
         }
     }
+
+    # Final report integrity check pass before returning
+    ok, problems = validate_report_integrity(draft_report)
+    if not ok:
+        logger.warning("Final report integrity validation failed: %s. Setting renderable = False.", problems)
+        draft_report.quality_meta = QualityMeta(
+            completeness_score=None,
+            faithfulness_score=None,
+            has_hallucinations=False,
+            needs_revision=False,
+            critic_feedback=f"Structured report integrity check failed: {', '.join(problems)}",
+            verification_status="unverified",
+            verification_error=True,
+            verification_source="critic",
+            specificity_score=None,
+            genericity_risk="high",
+            renderable=False,
+        )
     
     return draft_report

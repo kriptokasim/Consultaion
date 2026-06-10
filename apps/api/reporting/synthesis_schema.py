@@ -71,6 +71,7 @@ class QualityMeta(BaseModel):
     verification_source: str = Field(default="critic", description="One of: critic | fallback | mock | unavailable")
     specificity_score: Optional[float] = Field(default=None, description="Specificity rating (0.0-1.0), None if not evaluated")
     genericity_risk: str = Field(default="medium", description="One of: low | medium | high")
+    renderable: Optional[bool] = Field(default=None, description="Whether the report is safe to render on the frontend")
 
 
 class DecisionReport(BaseModel):

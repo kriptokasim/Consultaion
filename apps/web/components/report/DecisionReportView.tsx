@@ -8,6 +8,8 @@ import { ModelPositionsTable } from "./ModelPositionsTable"
 import { RiskMatrix } from "./RiskMatrix"
 import { NextActionsList } from "./NextActionsList"
 import { Download, ShieldCheck, CheckCircle2, AlertTriangle, ShieldAlert, GitBranch } from "lucide-react"
+import { isRenderableDecisionReport, fieldLooksCorrupt } from "../../lib/reportIntegrity"
+import { ReportGenerationFailedCard } from "./ReportGenerationFailedCard"
 
 interface DecisionReport {
   title?: string
@@ -172,11 +174,31 @@ function exportToMarkdown(report: DecisionReport): string {
 }
 
 export function DecisionReportView({ report: rawReport, rawSynthesis, className }: DecisionReportViewProps) {
+  const isCorrupted = useMemo(() => {
+    if (rawReport && !isRenderableDecisionReport(rawReport)) {
+      return true
+    }
+    if (!rawReport && rawSynthesis && fieldLooksCorrupt(rawSynthesis)) {
+      return true
+    }
+    return false
+  }, [rawReport, rawSynthesis])
+
   const report = useMemo(() => {
+    if (isCorrupted) return null
     if (rawReport && rawReport.verdict) return rawReport
     if (rawSynthesis) return buildFallbackReport(rawSynthesis)
     return null
-  }, [rawReport, rawSynthesis])
+  }, [rawReport, rawSynthesis, isCorrupted])
+
+  if (isCorrupted) {
+    const errorDetails = rawReport?.quality_meta?.critic_feedback || "Structured JSON integrity check failed on raw output."
+    return (
+      <div className={className}>
+        <ReportGenerationFailedCard reason={errorDetails} />
+      </div>
+    )
+  }
 
   if (!report) return null
 

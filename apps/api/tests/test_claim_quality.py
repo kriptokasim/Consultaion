@@ -77,6 +77,10 @@ class TestIsValidSemanticClaim:
     def test_rejects_must_include_slides(self):
         assert is_valid_semantic_claim("Must-Include Slides for your pitch deck presentation") is False
 
+    def test_rejects_comprehensive_intro_phrases(self):
+        assert is_valid_semantic_claim("Here's a comprehensive yet concise draft of the policy framework.") is False
+        assert is_valid_semantic_claim("This report synthesizes the key insights.") is False
+
 
 class TestFilterClaims:
     def test_filters_intro_phrases(self):

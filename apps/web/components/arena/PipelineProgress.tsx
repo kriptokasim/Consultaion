@@ -33,6 +33,9 @@ interface PipelineProgressProps {
   currentStage: PipelineStage;
   elapsedSeconds?: number;
   className?: string;
+  responsesReceived?: number;
+  modelsExpected?: number;
+  scoresReceived?: number;
 }
 
 function getStageIndex(stage: PipelineStage): number {
@@ -49,8 +52,33 @@ function StageIcon({ state }: { state: "done" | "active" | "pending" }) {
   return <Circle className="h-4 w-4 text-stone-300 dark:text-stone-600" />;
 }
 
-export function PipelineProgress({ currentStage, elapsedSeconds = 0, className }: PipelineProgressProps) {
+export function PipelineProgress({
+  currentStage,
+  elapsedSeconds = 0,
+  className,
+  responsesReceived = 0,
+  modelsExpected = 4,
+  scoresReceived = 0,
+}: PipelineProgressProps) {
   const activeIdx = getStageIndex(currentStage);
+
+  const getStageLabel = (stage: StageInfo) => {
+    if (stage.key === "collecting_responses") {
+      if (responsesReceived === 0) {
+        return "Waiting for model responses";
+      }
+      if (responsesReceived < modelsExpected) {
+        return `Collecting model responses (${responsesReceived}/${modelsExpected} received)`;
+      }
+      return "All model responses collected";
+    }
+    if (stage.key === "scoring") {
+      if (scoresReceived > 0 && scoresReceived < modelsExpected) {
+        return `Evaluating responses (${scoresReceived}/${modelsExpected} scored)`;
+      }
+    }
+    return stage.label;
+  };
 
   return (
     <div className={cn("rounded-2xl border border-stone-200 bg-white/80 p-4 shadow-sm dark:border-stone-700 dark:bg-stone-900/60", className)}>
@@ -74,7 +102,7 @@ export function PipelineProgress({ currentStage, elapsedSeconds = 0, className }
               )}
             >
               <StageIcon state={state} />
-              <span>{stage.label}</span>
+              <span>{getStageLabel(stage)}</span>
             </div>
           );
         })}
@@ -98,22 +126,25 @@ export function PipelineProgress({ currentStage, elapsedSeconds = 0, className }
   );
 }
 
-export function derivePipelineStage(debate: any, eventTypes: Set<string>): PipelineStage {
+export function derivePipelineStage(debate: any, eventTypes: Set<string>, liveResponseCount?: number): PipelineStage {
   const status = debate?.status;
 
   if (status === "completed") return "complete";
-  if (status === "queued") return "queued";
   if (status === "failed") return "queued";
+  if (status === "queued") return "queued";
 
-  const hasArenaStarted = eventTypes.has("arena_started");
-  const hasArenaResponse = eventTypes.has("arena_response");
-  const hasScore = eventTypes.has("score");
-  const hasDivergence = !!debate?.final_meta?.divergence_score;
-  const hasSynthesis = eventTypes.has("arena_synthesis") || !!debate?.synthesis_report;
-  const hasQualityMeta = !!debate?.synthesis_report?.quality_meta;
-  const hasFinal = eventTypes.has("final");
+  // Check persisted properties on the debate model
+  const hasQualityMeta = !!debate?.final_meta?.synthesis_report?.quality_meta || !!debate?.synthesis_report?.quality_meta;
+  const hasSynthesis = !!debate?.final_meta?.synthesis_report || !!debate?.synthesis_report || eventTypes.has("arena_synthesis") || eventTypes.has("synthesis");
+  const hasDivergence = typeof debate?.final_meta?.divergence_score === "number" || typeof debate?.divergence_score === "number" || eventTypes.has("divergence_analysis");
+  const hasScore = !!debate?.final_meta?.scores || !!debate?.scores || eventTypes.has("score");
 
-  if (hasFinal || hasQualityMeta) return "complete";
+  // Model responses check
+  const responseCount = debate?.final_meta?.successful_count || debate?.messages?.filter((m: any) => m.role === "arena_response" || m.role === "message" || m.role === "candidate").length || liveResponseCount || 0;
+  const hasArenaResponse = responseCount > 0 || eventTypes.has("arena_response") || eventTypes.has("message");
+  const hasArenaStarted = eventTypes.has("arena_started") || hasArenaResponse;
+
+  if (hasQualityMeta) return "complete";
   if (hasSynthesis && hasQualityMeta) return "verifying";
   if (hasSynthesis) return "synthesizing";
   if (hasDivergence) return "divergence_analysis";

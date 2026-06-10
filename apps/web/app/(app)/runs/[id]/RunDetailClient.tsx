@@ -31,7 +31,7 @@ const POLL_INTERVAL_MS = 4000;
 export default function RunDetailClient() {
   const params = useParams();
   const id = params.id as string;
-  const { data: debate, isLoading, error: debateError } = useDebate(id);
+  const { data: debate, isLoading, error: debateError, refetch } = useDebate(id);
   const [state, dispatch] = useReducer(timelineReducer, initialTimelineState);
   const mounted = useRef(true);
 
@@ -49,7 +49,7 @@ export default function RunDetailClient() {
 
   // --- Elapsed time tracking ---
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const startTimeRef = useRef<number>(Date.now());
+  const startTimeRef = useRef<number | null>(null);
 
   // Fetch profile to know if user is authenticated for PLG CTAs
   const [profile, setProfile] = useState<any>(null);
@@ -132,6 +132,17 @@ export default function RunDetailClient() {
     return { scores: s, judgeVotes: jv, vote: v };
   }, [resultsEvents]);
 
+  // --- Initialize start time from debate.created_at ---
+  useEffect(() => {
+    if (debate?.created_at && !startTimeRef.current) {
+      const parsedStart = new Date(debate.created_at).getTime();
+      if (!isNaN(parsedStart)) {
+        startTimeRef.current = parsedStart;
+        setElapsedSeconds(Math.floor((Date.now() - parsedStart) / 1000));
+      }
+    }
+  }, [debate?.created_at]);
+
   // 1. Initial Hydration (REST) — uses authenticated fetch with cookies
   useEffect(() => {
     mounted.current = true;
@@ -169,17 +180,11 @@ export default function RunDetailClient() {
   const pollDebate = useCallback(async () => {
     if (!id || isCompleted || !mounted.current) return;
     try {
-      const res = await fetchWithAuth(`/debates/${id}`);
-      if (!res.ok) return;
-      const updated = await res.json();
-      if (updated && mounted.current) {
-        // Trigger a re-render by dispatching a status update
-        dispatch({ type: "SET_STATUS", status: updated.status || "unknown" });
-      }
+      await refetch();
     } catch {
       // Silently ignore poll errors
     }
-  }, [id, isCompleted]);
+  }, [id, isCompleted, refetch]);
 
   useEffect(() => {
     if (!id || isCompleted || (debate?.status && TERMINAL_STATUSES.has(debate.status))) {
@@ -203,8 +208,14 @@ export default function RunDetailClient() {
   useEffect(() => {
     if (isCompleted || debate?.status === "failed") return;
 
+    if (!startTimeRef.current) {
+      startTimeRef.current = Date.now();
+    }
+
     const interval = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      if (startTimeRef.current) {
+        setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }
     }, 1000);
 
     return () => clearInterval(interval);
@@ -251,10 +262,32 @@ export default function RunDetailClient() {
   }, [lastEvent, id]);
 
   // Derive pipeline stage for running debates
+  const liveResponseCount = useMemo(() => {
+    return state.events.filter((e) => e.type === "arena_response").length;
+  }, [state.events]);
+
   const pipelineStage = useMemo(() => {
     if (!debate) return "queued";
     const eventTypes = new Set(state.events.map((e) => e.type));
-    return derivePipelineStage(debate, eventTypes);
+    return derivePipelineStage(debate, eventTypes, liveResponseCount);
+  }, [debate, state.events, liveResponseCount]);
+
+  const modelsExpected = useMemo(() => {
+    return debate?.final_meta?.models?.length || (debate?.config as any)?.models?.length || 4;
+  }, [debate]);
+
+  const responsesReceived = useMemo(() => {
+    const messages = (debate as any)?.messages || [];
+    const responseMessages = messages.filter((m: any) => m.role === "arena_response" || m.role === "candidate" || m.role === "message");
+    if (responseMessages.length > 0) return responseMessages.length;
+    return liveResponseCount;
+  }, [debate, liveResponseCount]);
+
+  const scoresReceived = useMemo(() => {
+    if (debate?.final_meta?.scores) {
+      return Object.keys(debate.final_meta.scores).length;
+    }
+    return state.events.filter((e) => e.type === "score").length;
   }, [debate, state.events]);
 
   if (isLoading) {
@@ -386,7 +419,13 @@ export default function RunDetailClient() {
           </Button>
         </div>
 
-        <PipelineProgress currentStage={pipelineStage} elapsedSeconds={elapsedSeconds} />
+        <PipelineProgress
+          currentStage={pipelineStage}
+          elapsedSeconds={elapsedSeconds}
+          responsesReceived={responsesReceived}
+          modelsExpected={modelsExpected}
+          scoresReceived={scoresReceived}
+        />
 
         {pollingFallback && (
           <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">

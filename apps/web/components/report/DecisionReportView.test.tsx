@@ -218,4 +218,32 @@ describe("DecisionReportView", () => {
     render(<DecisionReportView report={reportNoContext} />);
     expect(screen.queryByText("Context Needed to Make This Report Specific")).not.toBeInTheDocument();
   });
+
+  it("renders ReportGenerationFailedCard when report contains raw JSON", () => {
+    const corruptReport = {
+      ...mockReport,
+      executive_summary: "```json\n{\n  \"verdict\": \"leak\"\n}\n```",
+    };
+    render(<DecisionReportView report={corruptReport} />);
+    expect(screen.getByText("Decision Report Validation Guard Triggered")).toBeInTheDocument();
+  });
+
+  it("renders ReportGenerationFailedCard when report has renderable false in quality_meta", () => {
+    const unrenderableReport = {
+      ...mockReport,
+      quality_meta: {
+        renderable: false,
+        critic_feedback: "Failed integrity check due to JSON leak",
+      },
+    };
+    render(<DecisionReportView report={unrenderableReport} />);
+    expect(screen.getByText("Decision Report Validation Guard Triggered")).toBeInTheDocument();
+    expect(screen.getByText("Failed integrity check due to JSON leak")).toBeInTheDocument();
+  });
+
+  it("renders ReportGenerationFailedCard when report is null but rawSynthesis contains a raw JSON block", () => {
+    const rawSynthesis = "```json\n{\n  \"verdict\": \"leak\"\n}\n```";
+    render(<DecisionReportView report={null} rawSynthesis={rawSynthesis} />);
+    expect(screen.getByText("Decision Report Validation Guard Triggered")).toBeInTheDocument();
+  });
 });
