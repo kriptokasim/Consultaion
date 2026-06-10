@@ -129,7 +129,7 @@ export function PipelineProgress({
 export function derivePipelineStage(debate: any, eventTypes: Set<string>, liveResponseCount?: number): PipelineStage {
   const status = debate?.status;
 
-  if (status === "completed") return "complete";
+  if (["completed", "success", "completed_budget"].includes(status)) return "complete";
   if (status === "failed") return "queued";
   if (status === "queued") return "queued";
 
@@ -144,12 +144,21 @@ export function derivePipelineStage(debate: any, eventTypes: Set<string>, liveRe
   const hasArenaResponse = responseCount > 0 || eventTypes.has("arena_response") || eventTypes.has("message");
   const hasArenaStarted = eventTypes.has("arena_started") || hasArenaResponse;
 
-  if (hasQualityMeta) return "complete";
   if (hasSynthesis && hasQualityMeta) return "verifying";
   if (hasSynthesis) return "synthesizing";
   if (hasDivergence) return "divergence_analysis";
   if (hasScore) return "scoring";
-  if (hasArenaResponse) return "collecting_responses";
+
+  const expectedModels =
+    debate?.final_meta?.models?.length ||
+    (debate?.config as any)?.models?.length ||
+    debate?.model_count ||
+    4;
+
+  if (hasArenaResponse) {
+    if (responseCount >= expectedModels) return "scoring";
+    return "collecting_responses";
+  }
   if (hasArenaStarted) return "models_contacted";
   return "queued";
 }

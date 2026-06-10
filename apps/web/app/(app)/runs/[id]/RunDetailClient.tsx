@@ -50,6 +50,7 @@ export default function RunDetailClient() {
   // --- Elapsed time tracking ---
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number | null>(null);
+  const hydratedTimelineForRef = useRef<string | null>(null);
 
   // Fetch profile to know if user is authenticated for PLG CTAs
   const [profile, setProfile] = useState<any>(null);
@@ -146,7 +147,9 @@ export default function RunDetailClient() {
   // 1. Initial Hydration (REST) — uses authenticated fetch with cookies
   useEffect(() => {
     mounted.current = true;
-    if (!id) return;
+    if (!id || !debate) return;
+    if (hydratedTimelineForRef.current === id) return;
+    hydratedTimelineForRef.current = id;
 
     async function hydrate() {
       try {
@@ -163,18 +166,34 @@ export default function RunDetailClient() {
           });
         }
       } catch (err) {
-        console.error("Hydration failed:", err);
+        console.error("Timeline hydration failed:", err);
+
+        try {
+          const fallback = await fetchWithAuth(`/debates/${id}/events`);
+          if (!fallback.ok) return;
+          const data = await fallback.json();
+          const fallbackEvents = (data.items || data || []).map(normalizeEvent);
+
+          if (mounted.current) {
+            dispatch({
+              type: "INIT",
+              events: fallbackEvents,
+              status: debate?.status || "unknown",
+              config: (debate?.config as any) || null,
+            });
+          }
+        } catch (fallbackErr) {
+          console.error("Events hydration fallback failed:", fallbackErr);
+        }
       }
     }
 
-    if (debate && state.isRecovering) {
-      hydrate();
-    }
+    hydrate();
 
     return () => {
       mounted.current = false;
     };
-  }, [id, debate, state.isRecovering]);
+  }, [id, debate?.id]);
 
   // 2. Polling fallback for running debates
   const pollDebate = useCallback(async () => {
@@ -263,25 +282,49 @@ export default function RunDetailClient() {
 
   // Derive pipeline stage for running debates
   const liveResponseCount = useMemo(() => {
-    return state.events.filter((e) => e.type === "arena_response").length;
+    return state.events.filter((e: any) => {
+      const eventType = e.type || e.payload?.type;
+      const payload = e.payload || e;
+
+      return (
+        ["arena_response", "message", "seat_message", "model_response"].includes(eventType) ||
+        typeof payload.text === "string" ||
+        typeof payload.content === "string"
+      );
+    }).length;
   }, [state.events]);
+
+  const responsesReceived = useMemo(() => {
+    const finalMeta = debate?.final_meta || {};
+    const metaCount =
+      finalMeta.live_response_count ??
+      finalMeta.response_count ??
+      finalMeta.successful_count ??
+      finalMeta.models_responded ??
+      finalMeta.responded_count;
+
+    if (typeof metaCount === "number" && metaCount > 0) return metaCount;
+
+    const messages = (debate as any)?.messages || [];
+    const responseMessages = messages.filter((m: any) =>
+      ["arena_response", "candidate", "message", "seat_message", "model_response"].includes(m.role || m.type)
+      || typeof m.text === "string"
+      || typeof m.content === "string"
+    );
+
+    if (responseMessages.length > 0) return responseMessages.length;
+    return liveResponseCount;
+  }, [debate, liveResponseCount]);
 
   const pipelineStage = useMemo(() => {
     if (!debate) return "queued";
     const eventTypes = new Set(state.events.map((e) => e.type));
-    return derivePipelineStage(debate, eventTypes, liveResponseCount);
-  }, [debate, state.events, liveResponseCount]);
+    return derivePipelineStage(debate, eventTypes, responsesReceived);
+  }, [debate, state.events, responsesReceived]);
 
   const modelsExpected = useMemo(() => {
     return debate?.final_meta?.models?.length || (debate?.config as any)?.models?.length || 4;
   }, [debate]);
-
-  const responsesReceived = useMemo(() => {
-    const messages = (debate as any)?.messages || [];
-    const responseMessages = messages.filter((m: any) => m.role === "arena_response" || m.role === "candidate" || m.role === "message");
-    if (responseMessages.length > 0) return responseMessages.length;
-    return liveResponseCount;
-  }, [debate, liveResponseCount]);
 
   const scoresReceived = useMemo(() => {
     if (debate?.final_meta?.scores) {
