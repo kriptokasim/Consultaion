@@ -8,6 +8,8 @@ import DebateView from "./DebateView";
 import ExportButton from "./ExportButton";
 import ExportCSVButton from "./ExportCSVButton";
 import HansardTranscript from "./HansardTranscript";
+import RoundGrid from "./RoundGrid";
+import { cn } from "@/lib/utils";
 import SummaryCard from "./SummaryCard";
 import ScoreboardCard from "./ScoreboardCard";
 import VotingChamber from "./VotingChamber";
@@ -64,6 +66,7 @@ export default function ParliamentRunView({
 }: ParliamentRunViewProps) {
   const [transcriptMode, setTranscriptMode] = useState<"highlights" | "full">("highlights");
   const [limitModal, setLimitModal] = useState<{ open: boolean; code?: string }>({ open: false });
+  const [activeTab, setActiveTab] = useState<"transcript" | "events">("transcript");
   const answerRefs = useRef<Record<string, HTMLDetailsElement | null>>({});
   const sortedScores = scores.slice().sort((a, b) => b.score - a.score);
 
@@ -296,79 +299,13 @@ export default function ParliamentRunView({
         </section>
       </SectionErrorBoundary>
 
-      {/* All model answers ("show more" style) */}
-      <SectionErrorBoundary title="Model Answers">
-        <SummaryCard title="Model answers" description="Each model’s own answer to the prompt, ordered by their final score.">
-          {modelAnswers.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500">
-              {(debate?.status === "running" || debate?.status === "queued")
-                ? "Debate is running in the background. Events will appear here shortly."
-                : "No agent messages were recorded for this run."}
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {modelAnswers.map((answer) => (
-                <details
-                  key={answer.persona}
-                  ref={(node) => {
-                    if (node) {
-                      answerRefs.current[answer.persona] = node;
-                    }
-                  }}
-                  className="group rounded-2xl border border-stone-200 bg-white/85 p-3 shadow-sm transition hover:shadow-md"
-                >
-                  <summary className="flex cursor-pointer flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <div>
-                        <span className="font-medium text-stone-900">{answer.persona}</span>
-                        {formatModelLabel(answer.provider) && (
-                          <p className="text-[0.68rem] text-stone-400">{formatModelLabel(answer.provider)}</p>
-                        )}
-                      </div>
-                      {typeof answer.score === "number" && (
-                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-mono text-amber-700">
-                          {answer.score.toFixed(2)}
-                        </span>
-                      )}
-                      {answer.rounds && answer.rounds.length > 0 && (
-                        <span className="inline-flex items-center rounded-full bg-stone-50 px-2 py-0.5 text-[0.7rem] text-stone-600">
-                          Rounds {Array.from(new Set(answer.rounds)).sort((a, b) => a - b).join(", ")}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="text-xs text-stone-600">
-                      {answer.snippet ? (
-                        <span>{answer.snippet}</span>
-                      ) : (
-                        <span className="italic text-stone-400">
-                          Contribution available in the full transcript.{" "}
-                          <a
-                            href="#transcript"
-                            onClick={(e) => e.stopPropagation()}
-                            className="not-italic text-amber-700 underline hover:text-amber-600"
-                          >
-                            View in transcript ↓
-                          </a>
-                        </span>
-                      )}
-                      <span className="ml-2 text-amber-700 group-open:hidden">Show full answer</span>
-                      <span className="ml-2 hidden text-amber-700 group-open:inline">Hide answer</span>
-                    </div>
-                  </summary>
-
-                  {answer.fullText && (
-                    <div className="mt-3 border-t border-stone-100 pt-3">
-                      <div 
-                        className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed text-stone-800"
-                        dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(answer.fullText) }}
-                      />
-                    </div>
-                  )}
-                </details>
-              ))}
-            </div>
-          )}
+      {/* Round-by-Round Deliberation Grid */}
+      <SectionErrorBoundary title="Round-by-Round Deliberation">
+        <SummaryCard 
+          title="Deliberation Table" 
+          description="Round-by-round arguments and rebuttals between AI delegates."
+        >
+          <RoundGrid events={events} />
         </SummaryCard>
       </SectionErrorBoundary>
 
@@ -401,41 +338,72 @@ export default function ParliamentRunView({
         </SummaryCard>
       </SectionErrorBoundary>
 
-      {/* Hansard + live timeline */}
-      <SectionErrorBoundary title="Hansard Transcript">
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)]">
-          <SummaryCard
-            title="Hansard transcript"
-            description="Line-by-line proceedings of the AI Parliament session."
-          >
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+      {/* Session Proceedings: Hansard and Raw Timeline tabs */}
+      <SectionErrorBoundary title="Session Proceedings">
+        <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-800 dark:bg-card">
+          <div className="flex border-b border-stone-100 pb-4 mb-6 justify-between items-center flex-wrap gap-4 dark:border-stone-800">
+            <div>
+              <h3 className="text-lg font-bold text-stone-900 dark:text-foreground">Session Proceedings</h3>
+              <p className="text-xs text-stone-500 dark:text-muted-foreground">Inspect official records and raw event logs.</p>
+            </div>
+            <div className="flex gap-2 bg-stone-100 dark:bg-stone-900 p-1 rounded-full border border-stone-200/60 dark:border-stone-800">
               <button
                 type="button"
-                onClick={() => setTranscriptMode("highlights")}
-                className={`rounded-full px-3 py-1 ${transcriptMode === "highlights" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
-                  }`}
+                onClick={() => setActiveTab("transcript")}
+                className={cn(
+                  "rounded-full px-4 py-1.5 text-xs font-semibold transition-all",
+                  activeTab === "transcript"
+                    ? "bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-foreground"
+                    : "text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-200"
+                )}
               >
-                Highlights
+                Hansard Record
               </button>
               <button
                 type="button"
-                onClick={() => setTranscriptMode("full")}
-                className={`rounded-full px-3 py-1 ${transcriptMode === "full" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
-                  }`}
+                onClick={() => setActiveTab("events")}
+                className={cn(
+                  "rounded-full px-4 py-1.5 text-xs font-semibold transition-all",
+                  activeTab === "events"
+                    ? "bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-foreground"
+                    : "text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-200"
+                )}
               >
-                Full transcript
+                Raw Event Feed
               </button>
             </div>
-            <HansardTranscript events={transcriptEvents} members={members} />
-          </SummaryCard>
+          </div>
 
-          <SummaryCard
-            title="Live timeline"
-            description="Raw events emitted during the run."
-          >
+          {activeTab === "transcript" ? (
+            <div className="space-y-4">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+                <button
+                  type="button"
+                  onClick={() => setTranscriptMode("highlights")}
+                  className={cn(
+                    "rounded-full px-3 py-1 transition",
+                    transcriptMode === "highlights" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
+                  )}
+                >
+                  Highlights
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTranscriptMode("full")}
+                  className={cn(
+                    "rounded-full px-3 py-1 transition",
+                    transcriptMode === "full" ? "bg-amber-200 text-amber-900 shadow-sm" : ""
+                  )}
+                >
+                  Full transcript
+                </button>
+              </div>
+              <HansardTranscript events={transcriptEvents} members={members} />
+            </div>
+          ) : (
             <DebateView events={events} embedded />
-          </SummaryCard>
-        </section>
+          )}
+        </div>
       </SectionErrorBoundary>
       <BillingLimitModal
         open={limitModal.open}
