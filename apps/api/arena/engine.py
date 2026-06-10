@@ -246,6 +246,17 @@ async def run_arena(
         await session.commit()
 
     # Build final meta
+    failed_models = [r for r in model_responses if not r.success]
+    model_warnings = [
+        {
+            "model_id": r.model_id,
+            "display_name": r.display_name,
+            "provider": r.provider,
+            "error": r.error or "Unknown error",
+        }
+        for r in failed_models
+    ]
+
     final_meta = {
         "mode": "arena",
         "models": [
@@ -264,6 +275,7 @@ async def run_arena(
         "total_count": len(model_responses),
         "synthesis_success": synthesis_success,
         "synthesis_report": synthesis_report,
+        "model_warnings": model_warnings,
         "usage": usage.snapshot(),
     }
 

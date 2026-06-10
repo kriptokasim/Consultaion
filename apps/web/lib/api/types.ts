@@ -40,6 +40,12 @@ export interface DebateDetail extends DebateSummary {
     }>;
     error_reason?: string;
     synthesis_report?: any;
+    model_warnings?: Array<{
+        model_id: string;
+        display_name: string;
+        provider: string;
+        error: string;
+    }>;
     // Add other fields as needed from the API response
 }
 

@@ -3,6 +3,8 @@ import { getDebate } from '../../apiClient';
 import { useRef } from 'react';
 import { ApiClientError } from '../../apiClient';
 
+const COMPLETED_STATUSES = new Set(["completed", "success", "completed_budget", "failed"]);
+
 export function useDebate(id: string) {
     const provisioningStart = useRef<number | null>(null);
 
@@ -31,6 +33,12 @@ export function useDebate(id: string) {
             return failureCount < 3;
         },
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 2000),
+        refetchInterval: (query) => {
+            const status = query.state.data?.status;
+            if (!status || COMPLETED_STATUSES.has(status)) return false;
+            return 4000;
+        },
+        refetchIntervalInBackground: false,
     });
 
     const isProvisioning = queryInfo.error instanceof ApiClientError && queryInfo.error.status === 404 && !!provisioningStart.current;

@@ -8,6 +8,7 @@ import ParliamentHome from "@/components/parliament/ParliamentHome";
 import SessionHUD from "@/components/parliament/SessionHUD";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import type { Member, ScoreItem } from "@/components/parliament/types";
+import type { ArenaRunUiState } from "@/components/parliament/StatusPill";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ApiError, getRateLimitInfo, startDebate, startDebateRun, getDebate } from "@/lib/api";
 import { useEventSource } from "@/lib/sse";
@@ -57,7 +58,7 @@ function ArenaPageContent() {
     elapsedSecondsRef.current = elapsedSeconds
   }, [elapsedSeconds])
 
-  const [sessionStatus, setSessionStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle')
+  const [sessionStatus, setSessionStatus] = useState<ArenaRunUiState>('idle')
   const [latestScores, setLatestScores] = useState<ScoreItem[]>([])
   const [rateLimitNotice, setRateLimitNotice] = useState<{ detail: string; resetAt?: string } | null>(null)
   const [authStatus, setAuthStatus] = useState<'unknown' | 'authed' | 'guest'>('unknown')
@@ -129,7 +130,7 @@ function ArenaPageContent() {
   const manualStartAttemptedRef = useRef(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const elapsedTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const stopStreamRef = useRef<((status?: 'idle' | 'completed' | 'error') => void) | null>(null)
+  const stopStreamRef = useRef<((status?: ArenaRunUiState) => void) | null>(null)
 
   const manualStartMode = !ENABLE_CONVERSATION_MODE
   const shouldStream = running && !!currentDebateId
@@ -139,7 +140,7 @@ function ArenaPageContent() {
     (msg: any) => {
       if (msg.type === 'error') {
         console.error('Stream error:', msg)
-        stopStreamRef.current?.('error')
+        stopStreamRef.current?.('terminal_error')
         return
       }
       setEvents((prev) => [...prev, msg])
@@ -172,7 +173,7 @@ function ArenaPageContent() {
           debate_id: currentDebateIdRef.current,
           duration_ms: elapsedSecondsRef.current * 1000,
         })
-        stopStreamRef.current?.('completed')
+        stopStreamRef.current?.('complete')
       }
     },
     [setEvents, setActivePersona, setVote, setLatestScores],
@@ -190,11 +191,11 @@ function ArenaPageContent() {
         })
         .catch((error) => {
           console.error('Manual start failed', error)
-          setSessionStatus('error')
+          setSessionStatus('terminal_error')
         })
       return
     }
-    setSessionStatus('error')
+    setSessionStatus('recoverable_error')
   }, [manualStartMode])
 
   const { status: streamStatus, close: closeStream } = useEventSource<any>(shouldStream ? streamUrl : null, {
@@ -225,7 +226,7 @@ function ArenaPageContent() {
     }
   }, [])
 
-  const stopStream = useCallback((nextStatus: 'idle' | 'completed' | 'error' = 'idle') => {
+  const stopStream = useCallback((nextStatus: ArenaRunUiState = 'idle') => {
     closeStream()
     clearTimers()
     setRunning(false)
@@ -308,6 +309,7 @@ function ArenaPageContent() {
     reset()
     setRateLimitNotice(null)
     setErrorState(null)
+    setSessionStatus('creating')
     setRunning(true)
     runningRef.current = true
     manualStartAttemptedRef.current = false
@@ -315,14 +317,15 @@ function ArenaPageContent() {
       const { id } = await startDebate({ prompt, panel_config: panelConfig, mode, gateway_policy: gatewayPolicy })
       currentDebateIdRef.current = id
       setCurrentDebateId(id)
-      setSessionStatus('running')
-      timerRef.current = setInterval(() => setSpeakerTime((t) => t + 1), 1000)
-      startElapsed()
+      setSessionStatus('created')
       track('debate_started', {
         prompt_length: prompt.length,
         seat_count: panelConfig.seats.length,
         mode,
       })
+      // Redirect to run detail page
+      setSessionStatus('redirecting')
+      router.push(`/runs/${id}`)
     } catch (error) {
       if (error instanceof ApiError) {
         const info = getRateLimitInfo(error)
@@ -348,7 +351,7 @@ function ArenaPageContent() {
           retryable: true
         });
       }
-      stopStream('error')
+      stopStream('terminal_error')
     }
   }
 
@@ -422,6 +425,7 @@ function ArenaPageContent() {
         elapsedSeconds={elapsedSeconds}
         activePersona={activePersona}
         onCopy={handleCopyId}
+        runUrl={currentDebateId ? `/runs/${currentDebateId}` : null}
       />
 
       {/* New centered prompt workspace */}
@@ -452,7 +456,7 @@ function ArenaPageContent() {
           value={prompt}
           onChange={setPrompt}
           onSubmit={onStart}
-          status={running ? 'running' : sessionStatus === 'error' ? 'error' : 'idle'}
+          status={running ? 'running' : sessionStatus === 'terminal_error' ? 'error' : 'idle'}
           disabled={running || authStatus === 'guest'}
           isSubmitLoading={running}
           submitLabel={t("live.start")}
@@ -523,11 +527,11 @@ function ArenaPageContent() {
         gatewayPolicy={gatewayPolicy}
         onGatewayPolicyChange={setGatewayPolicy}
       />
-      {currentDebateId ? (
+      {currentDebateId && events.length > 0 && (
         <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/70">
           <DebateReplay debateId={currentDebateId} />
         </section>
-      ) : null}
+      )}
     </main>
   )
 }
