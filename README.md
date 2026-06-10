@@ -1,15 +1,15 @@
 # Consultaion
 
-Consultaion is an enterprise-grade B2B SaaS platform designed to deliver unbiased, high-stakes LLM evaluations and side-by-side model arena battles. By leveraging a multi-agent debate and voting engine, it synthesizes optimal, defensible answers, tracks provider performance over time, and enforces robust usage-limiting, tenant isolation, and audit logging workflows for the enterprise.
+Consultaion is an enterprise-oriented B2B SaaS platform for multi-model AI decision reports. It runs Arena and Debate workflows across multiple LLM providers, detects consensus and disagreement, and produces structured decision reports with verification metadata, usage controls, team-scoped access, and audit logging foundations.
 
 > **Brand note:** The spelling “Consultaion” is intentional – it’s the product name for this multi-agent AI parliament, not a typo. Keep it consistent across docs, UI, and deploys.
 
 ## B2B SaaS & Enterprise Capabilities
 - **Side-by-Side Model Arenas**: Run real-time, multi-LLM tournaments with custom criteria to determine the best model configurations for specific business domains.
 - **Unbiased Multi-Agent Consensus**: Prevent model bias via critique-and-revision debate rounds judged by independent agent panels using Elo rating comparisons.
-- **Tenant Isolation & Multi-Tenancy**: Granular access control mapping team ownership and sharing limits, guaranteeing absolute isolation of run and arena data.
+- **Team-scoped Access Controls & Multi-Tenancy**: Granular access control mapping team ownership and sharing limits, providing solid logical separation of run and arena data.
 - **Enterprise Rate Limiting & Quotas**: Advanced composite request fingerprinting to prevent service abuse, coupled with configurable monthly token and run limits per user/team.
-- **Auditable Observability**: Complete, tamper-proof logs tracking auth events, sharing controls, billing activities, and model health metrics.
+- **Auditable Observability**: Complete audit logs tracking auth events, sharing controls, billing activities, and model health metrics.
 
 ## Quick Start
 1. `cp .env.example .env` and set `DATABASE_URL`/LLM keys.
@@ -19,11 +19,31 @@ Consultaion is an enterprise-grade B2B SaaS platform designed to deliver unbiase
 5. `cd infra && docker compose up --build` (starts FastAPI, Next.js, Postgres).
 6. Optional for local smoketests: set `FAST_DEBATE=1` to bypass the full LLM loop and return mock events instantly.
 
-📚 Need endpoint details or diagrams? See `docs/API.md` and `docs/ARCHITECTURE.md`.
+📚 Need endpoint details or diagrams? See [API.md](docs/API.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **[Error Codes](apps/api/ERROR_CODES.md)**: Standardized error codes for API consumers.
 - **[Observability](docs/OBSERVABILITY.md)**: Logging, telemetry, and operational monitoring.
 
-Progress against the audit plan lives in `IMPROVEMENT_PLAN.md` / `IMPROVEMENTS_SUMMARY.md`.
+## Diligence and Trust
+
+Consultaion is in pre-seed / early product stage. The repository includes a diligence pack describing current trust foundations and planned enterprise hardening.
+
+- [SECURITY_OVERVIEW.md](docs/diligence/SECURITY_OVERVIEW.md)
+- [DATA_RETENTION.md](docs/diligence/DATA_RETENTION.md)
+- [SOC2_READINESS.md](docs/diligence/SOC2_READINESS.md)
+- [GOVERNANCE.md](docs/diligence/GOVERNANCE.md)
+- [POSTGRES_TESTING_PLAN.md](docs/diligence/POSTGRES_TESTING_PLAN.md)
+- [MULTI_TENANCY_HARDENING.md](docs/diligence/MULTI_TENANCY_HARDENING.md)
+- [CI_OVERVIEW.md](docs/diligence/CI_OVERVIEW.md)
+
+These documents describe readiness work and roadmap items; they are not compliance certifications.
+
+## Repository Source of Truth
+
+GitHub is the source of truth for Consultaion development, CI, pull requests, and release tracking. Any GitLab mirrors are read-only distribution mirrors unless explicitly documented otherwise.
+
+## License
+
+Proprietary. All rights reserved. See [LICENSE](LICENSE) for full text.
 
 > **Python runtime:** The FastAPI backend and its pytest suite currently target **Python 3.11.x**. Running under newer interpreters (3.12/3.13) causes ASGI/TestClient hangs on POST requests, so stick to 3.11 for local dev, CI, and Docker builds until upstream fixes land.
 

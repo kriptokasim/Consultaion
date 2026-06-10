@@ -55,3 +55,13 @@ IDENTITY.md
 SOUL.md
 TOOLS.md
 USER.md
+
+# Build, test, and run-time artifacts
+out/
+test-results/
+playwright-report/
+*.trace.zip
+memory/
+MEMORY.md
+*.tmp.md
+*.bak

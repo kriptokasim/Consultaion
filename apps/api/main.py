@@ -288,6 +288,7 @@ if ENABLE_SEC_HEADERS and not TEST_FAST_APP:
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("X-XSS-Protection", "0")
+        response.headers.setdefault("Content-Security-Policy-Report-Only", "default-src 'self'; frame-ancestors 'none';")
         return response
 
 

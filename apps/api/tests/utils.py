@@ -80,15 +80,19 @@ def reset_provider_health(provider: Optional[str] = None, model: Optional[str] =
 
 def make_test_database_url(test_id: Optional[str] = None) -> str:
     """
-    Generate a unique SQLite database URL for testing.
+    Generate a unique SQLite database URL for testing, or use DATABASE_URL if configured for PostgreSQL.
     
     Args:
         test_id: Optional identifier for the test database. If not provided,
                  a random UUID will be used.
     
     Returns:
-        A SQLite database URL string
+        A database URL string
     """
+    env_url = os.environ.get("DATABASE_URL")
+    if env_url and env_url.startswith("postgresql"):
+        return env_url
+
     if test_id is None:
         test_id = uuid4().hex[:12]
     

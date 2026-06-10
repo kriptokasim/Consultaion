@@ -21,6 +21,18 @@ jobs:
       - name: Scan for hardcoded URLs
         run: npm run lint:urls
 
+  i18n-parity:
+    name: i18n Parity Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run i18n parity check
+        run: npm run lint:i18n
+
   url-scan-full:
     name: Full Hardcoded Domain Scan
     runs-on: ubuntu-latest
@@ -120,6 +132,128 @@ jobs:
           DATABASE_URL: "sqlite:///./ci_test.db"
         run: |
           pytest -q
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage
+          path: apps/api/coverage.xml
+
+  backend-postgres-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: consultaion_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Verify Single Alembic Migration Head
+        run: |
+          HEADS_COUNT=$(alembic heads | wc -l)
+          echo "Divergent heads count: $HEADS_COUNT"
+          if [ "$HEADS_COUNT" -ne 1 ]; then
+            echo "ERROR: Multiple or zero Alembic migration heads detected! Please merge migrations."
+            alembic heads
+            exit 1
+          fi
+
+      - name: Run Alembic Migrations
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_test"
+        run: |
+          alembic upgrade head
+
+      - name: Run integration tests on Postgres
+        env:
+          ENV: test
+          USE_MOCK: "1"
+          REQUIRE_REAL_LLM: "0"
+          STRIPE_WEBHOOK_VERIFY: "0"
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
+          DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_test"
+        run: |
+          pytest -q tests/test_arena_compare_integration.py tests/test_debates_api.py tests/test_models.py
+
+  openapi-drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+
+      - name: Check OpenAPI Drift
+        run: |
+          ./scripts/check_openapi_drift.sh
+
+  python-3.12-compatibility-nonblocking:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run focused tests under Python 3.12 (Non-blocking)
+        env:
+          ENV: test
+          USE_MOCK: "1"
+          REQUIRE_REAL_LLM: "0"
+          STRIPE_WEBHOOK_VERIFY: "0"
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
+          DATABASE_URL: "sqlite:///./ci_test.db"
+        run: |
+          pytest -q tests/test_api_status.py tests/test_logging.py tests/test_claim_quality.py
 
   frontend-build:
     runs-on: ubuntu-latest

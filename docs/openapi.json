@@ -1518,6 +1518,65 @@
         }
       }
     },
+    "/debates/{debate_id}/replay": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Replay Events",
+        "description": "Retrieve cached real-time events from the memory/Redis event log.",
+        "operationId": "replay_events_debates__debate_id__replay_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          },
+          {
+            "name": "from_sequence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start sequence offset (non-inclusive)",
+              "title": "From Sequence"
+            },
+            "description": "Start sequence offset (non-inclusive)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/debates/{debate_id}/stream": {
       "get": {
         "tags": [
@@ -1552,6 +1611,24 @@
               "title": "Token"
             },
             "description": "Stream-scoped JWT for EventSource auth fallback"
+          },
+          {
+            "name": "last_sequence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last sequence number received by client",
+              "title": "Last Sequence"
+            },
+            "description": "Last sequence number received by client"
           }
         ],
         "responses": {
@@ -1604,6 +1681,96 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debates/{debate_id}/moderate": {
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Moderate Debate",
+        "operationId": "moderate_debate_debates__debate_id__moderate_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateModerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debates/{debate_id}/argument-tree": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Get Argument Tree",
+        "operationId": "get_argument_tree_debates__debate_id__argument_tree_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2670,6 +2837,586 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me/participation": {
+      "get": {
+        "tags": [
+          "participation"
+        ],
+        "summary": "Get User Participation",
+        "description": "Retrieve participation statistics and recent interactions for the authenticated user.",
+        "operationId": "get_user_participation_users_me_participation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get User Participation Users Me Participation Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arena/{debate_id}/divergence": {
+      "get": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "Get Divergence Report",
+        "description": "Retrieve claims divergence report. Computes it on the fly if missing on a completed run.",
+        "operationId": "get_divergence_report_arena__debate_id__divergence_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Divergence Report Arena  Debate Id  Divergence Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arena/{debate_id}/user-vote": {
+      "post": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "Cast Arena Vote",
+        "description": "Cast a user agreement vote on a consensus or contested claim.",
+        "operationId": "cast_arena_vote_arena__debate_id__user_vote_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserVotePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Cast Arena Vote Arena  Debate Id  User Vote Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/voting/{debate_id}/predict": {
+      "post": {
+        "tags": [
+          "voting"
+        ],
+        "summary": "Cast Prediction",
+        "description": "Submit or update a debate outcome prediction.\nOnce locked, the prediction cannot be modified.\nPredictions are disabled once the debate finishes or fails.",
+        "operationId": "cast_prediction_voting__debate_id__predict_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionSubmit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/voting/{debate_id}/reveal": {
+      "get": {
+        "tags": [
+          "voting"
+        ],
+        "summary": "Reveal Prediction And Reasons",
+        "description": "Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.\nResolves predictions on-the-fly if the debate is completed.",
+        "operationId": "reveal_prediction_and_reasons_voting__debate_id__reveal_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/redteam": {
+      "post": {
+        "tags": [
+          "redteam"
+        ],
+        "summary": "Start Red Team Session",
+        "description": "Starts an adversarial critique Red Team session for the given proposal text.\nRuns the risk evaluation asynchronously in the background.",
+        "operationId": "start_red_team_session_redteam_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedTeamCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/redteam/{session_id}": {
+      "get": {
+        "tags": [
+          "redteam"
+        ],
+        "summary": "Get Red Team Session",
+        "description": "Retrieves a Red Team session, its current status, and any completed critiques.",
+        "operationId": "get_red_team_session_redteam__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oracle": {
+      "post": {
+        "tags": [
+          "oracle"
+        ],
+        "summary": "Start Oracle Session",
+        "description": "Initiates a user-facing reasoning summary session.",
+        "operationId": "start_oracle_session_oracle_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OracleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oracle/{session_id}": {
+      "get": {
+        "tags": [
+          "oracle"
+        ],
+        "summary": "Get Oracle Session",
+        "description": "Retrieves the Oracle session status and all associated reasoning branches.",
+        "operationId": "get_oracle_session_oracle__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oracle/{session_id}/fork": {
+      "post": {
+        "tags": [
+          "oracle"
+        ],
+        "summary": "Fork Oracle Branch",
+        "description": "Forks the analysis from a specific node in a parent branch using a new counter-assumption.",
+        "operationId": "fork_oracle_branch_oracle__session_id__fork_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OracleFork"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/challenge": {
+      "post": {
+        "tags": [
+          "challenge"
+        ],
+        "summary": "Start Challenge Session",
+        "description": "Starts a new Synthesis Challenge session linked to a specific debate run.",
+        "operationId": "start_challenge_session_challenge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/challenge/{session_id}": {
+      "get": {
+        "tags": [
+          "challenge"
+        ],
+        "summary": "Get Challenge Session",
+        "description": "Retrieves the details, original debate context, and history of challenge rounds.",
+        "operationId": "get_challenge_session_challenge__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/challenge/{session_id}/round": {
+      "post": {
+        "tags": [
+          "challenge"
+        ],
+        "summary": "Submit Challenge Round",
+        "description": "Submits a user pushback/challenge, runs coordinator evaluation, and saves the round response.",
+        "operationId": "submit_challenge_round_challenge__session_id__round_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeRoundSubmit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/public/stats": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "Get Public Stats",
+        "description": "Return aggregate, public-safe platform statistics.\nNo private data (emails, prompts, run IDs) is exposed.\nCached for 60 seconds to avoid excessive DB load.",
+        "operationId": "get_public_stats_public_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicStats"
+                }
               }
             }
           }
@@ -4828,6 +5575,65 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}/replay": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Replay Events",
+        "description": "Retrieve cached real-time events from the memory/Redis event log.",
+        "operationId": "replay_events_api_v1_debates__debate_id__replay_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          },
+          {
+            "name": "from_sequence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start sequence offset (non-inclusive)",
+              "title": "From Sequence"
+            },
+            "description": "Start sequence offset (non-inclusive)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/stream": {
       "get": {
         "tags": [
@@ -4862,6 +5668,24 @@
               "title": "Token"
             },
             "description": "Stream-scoped JWT for EventSource auth fallback"
+          },
+          {
+            "name": "last_sequence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last sequence number received by client",
+              "title": "Last Sequence"
+            },
+            "description": "Last sequence number received by client"
           }
         ],
         "responses": {
@@ -4914,6 +5738,96 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/moderate": {
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Moderate Debate",
+        "operationId": "moderate_debate_api_v1_debates__debate_id__moderate_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateModerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/argument-tree": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Get Argument Tree",
+        "operationId": "get_argument_tree_api_v1_debates__debate_id__argument_tree_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6624,6 +7538,564 @@
           }
         }
       }
+    },
+    "/api/v1/arena/{debate_id}/divergence": {
+      "get": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "Get Divergence Report",
+        "description": "Retrieve claims divergence report. Computes it on the fly if missing on a completed run.",
+        "operationId": "get_divergence_report_api_v1_arena__debate_id__divergence_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Divergence Report Api V1 Arena  Debate Id  Divergence Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/arena/{debate_id}/user-vote": {
+      "post": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "Cast Arena Vote",
+        "description": "Cast a user agreement vote on a consensus or contested claim.",
+        "operationId": "cast_arena_vote_api_v1_arena__debate_id__user_vote_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserVotePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Cast Arena Vote Api V1 Arena  Debate Id  User Vote Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me/participation": {
+      "get": {
+        "tags": [
+          "participation"
+        ],
+        "summary": "Get User Participation",
+        "description": "Retrieve participation statistics and recent interactions for the authenticated user.",
+        "operationId": "get_user_participation_api_v1_users_me_participation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get User Participation Api V1 Users Me Participation Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voting/{debate_id}/predict": {
+      "post": {
+        "tags": [
+          "voting"
+        ],
+        "summary": "Cast Prediction",
+        "description": "Submit or update a debate outcome prediction.\nOnce locked, the prediction cannot be modified.\nPredictions are disabled once the debate finishes or fails.",
+        "operationId": "cast_prediction_api_v1_voting__debate_id__predict_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionSubmit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/voting/{debate_id}/reveal": {
+      "get": {
+        "tags": [
+          "voting"
+        ],
+        "summary": "Reveal Prediction And Reasons",
+        "description": "Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.\nResolves predictions on-the-fly if the debate is completed.",
+        "operationId": "reveal_prediction_and_reasons_api_v1_voting__debate_id__reveal_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/redteam": {
+      "post": {
+        "tags": [
+          "redteam"
+        ],
+        "summary": "Start Red Team Session",
+        "description": "Starts an adversarial critique Red Team session for the given proposal text.\nRuns the risk evaluation asynchronously in the background.",
+        "operationId": "start_red_team_session_api_v1_redteam_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedTeamCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/redteam/{session_id}": {
+      "get": {
+        "tags": [
+          "redteam"
+        ],
+        "summary": "Get Red Team Session",
+        "description": "Retrieves a Red Team session, its current status, and any completed critiques.",
+        "operationId": "get_red_team_session_api_v1_redteam__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/oracle": {
+      "post": {
+        "tags": [
+          "oracle"
+        ],
+        "summary": "Start Oracle Session",
+        "description": "Initiates a user-facing reasoning summary session.",
+        "operationId": "start_oracle_session_api_v1_oracle_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OracleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/oracle/{session_id}": {
+      "get": {
+        "tags": [
+          "oracle"
+        ],
+        "summary": "Get Oracle Session",
+        "description": "Retrieves the Oracle session status and all associated reasoning branches.",
+        "operationId": "get_oracle_session_api_v1_oracle__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/oracle/{session_id}/fork": {
+      "post": {
+        "tags": [
+          "oracle"
+        ],
+        "summary": "Fork Oracle Branch",
+        "description": "Forks the analysis from a specific node in a parent branch using a new counter-assumption.",
+        "operationId": "fork_oracle_branch_api_v1_oracle__session_id__fork_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OracleFork"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/challenge": {
+      "post": {
+        "tags": [
+          "challenge"
+        ],
+        "summary": "Start Challenge Session",
+        "description": "Starts a new Synthesis Challenge session linked to a specific debate run.",
+        "operationId": "start_challenge_session_api_v1_challenge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/challenge/{session_id}": {
+      "get": {
+        "tags": [
+          "challenge"
+        ],
+        "summary": "Get Challenge Session",
+        "description": "Retrieves the details, original debate context, and history of challenge rounds.",
+        "operationId": "get_challenge_session_api_v1_challenge__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/challenge/{session_id}/round": {
+      "post": {
+        "tags": [
+          "challenge"
+        ],
+        "summary": "Submit Challenge Round",
+        "description": "Submits a user pushback/challenge, runs coordinator evaluation, and saves the round response.",
+        "operationId": "submit_challenge_round_api_v1_challenge__session_id__round_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChallengeRoundSubmit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6883,6 +8355,35 @@
         },
         "type": "object",
         "title": "BudgetConfig"
+      },
+      "ChallengeCreate": {
+        "properties": {
+          "debate_id": {
+            "type": "string",
+            "title": "Debate Id",
+            "description": "The ID of the completed debate to challenge"
+          }
+        },
+        "type": "object",
+        "required": [
+          "debate_id"
+        ],
+        "title": "ChallengeCreate"
+      },
+      "ChallengeRoundSubmit": {
+        "properties": {
+          "pushback_text": {
+            "type": "string",
+            "minLength": 5,
+            "title": "Pushback Text",
+            "description": "The critique or pushback on the synthesis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pushback_text"
+        ],
+        "title": "ChallengeRoundSubmit"
       },
       "ChangePlanRequest": {
         "properties": {
@@ -7317,6 +8818,24 @@
           "has_more"
         ],
         "title": "DebateListResponse"
+      },
+      "DebateModerateRequest": {
+        "properties": {
+          "round_index": {
+            "type": "integer",
+            "title": "Round Index"
+          },
+          "moderation_steering": {
+            "type": "string",
+            "title": "Moderation Steering"
+          }
+        },
+        "type": "object",
+        "required": [
+          "round_index",
+          "moderation_steering"
+        ],
+        "title": "DebateModerateRequest"
       },
       "DebateShare": {
         "properties": {
@@ -7801,6 +9320,48 @@
         ],
         "title": "ModelStatsSummary"
       },
+      "OracleCreate": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 5,
+            "title": "Prompt",
+            "description": "The query to analyze"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "title": "OracleCreate"
+      },
+      "OracleFork": {
+        "properties": {
+          "parent_branch_id": {
+            "type": "string",
+            "title": "Parent Branch Id",
+            "description": "The ID of the parent branch to fork from"
+          },
+          "fork_node_id": {
+            "type": "string",
+            "title": "Fork Node Id",
+            "description": "The node ID in the parent branch after which to fork"
+          },
+          "assumption_text": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Assumption Text",
+            "description": "The custom counter-assumption or text to inject at the fork point"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_branch_id",
+          "fork_node_id",
+          "assumption_text"
+        ],
+        "title": "OracleFork"
+      },
       "PanelConfig": {
         "properties": {
           "engine_version": {
@@ -7906,6 +9467,41 @@
         ],
         "title": "PanelSeat"
       },
+      "PredictionSubmit": {
+        "properties": {
+          "predicted_winner": {
+            "type": "string",
+            "title": "Predicted Winner",
+            "description": "The persona/model name predicted to win"
+          },
+          "confidence_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence Score",
+            "description": "Self-reported confidence score between 0.0 and 1.0",
+            "default": 0.5
+          },
+          "is_locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Locked",
+            "description": "Whether to lock this prediction from further modifications",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "predicted_winner"
+        ],
+        "title": "PredictionSubmit"
+      },
       "PrivacySettingsRequest": {
         "properties": {
           "analytics_opt_out": {
@@ -7918,6 +9514,38 @@
           "analytics_opt_out"
         ],
         "title": "PrivacySettingsRequest"
+      },
+      "PublicStats": {
+        "properties": {
+          "completed_runs": {
+            "type": "integer",
+            "title": "Completed Runs",
+            "default": 0
+          },
+          "reports_generated": {
+            "type": "integer",
+            "title": "Reports Generated",
+            "default": 0
+          },
+          "active_models": {
+            "type": "integer",
+            "title": "Active Models",
+            "default": 0
+          },
+          "avg_divergence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Divergence Score"
+          }
+        },
+        "type": "object",
+        "title": "PublicStats"
       },
       "RateLimitSnapshot": {
         "properties": {
@@ -7960,6 +9588,29 @@
           "recent_429s"
         ],
         "title": "RateLimitSnapshot"
+      },
+      "RedTeamCreate": {
+        "properties": {
+          "proposal_text": {
+            "type": "string",
+            "minLength": 10,
+            "title": "Proposal Text",
+            "description": "The proposal text to review"
+          },
+          "lenses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lenses",
+            "description": "The risk lenses to evaluate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposal_text"
+        ],
+        "title": "RedTeamCreate"
       },
       "TeamCreate": {
         "properties": {
@@ -8208,6 +9859,32 @@
         },
         "type": "object",
         "title": "UserProfileUpdate"
+      },
+      "UserVotePayload": {
+        "properties": {
+          "claim_text": {
+            "type": "string",
+            "title": "Claim Text",
+            "description": "The claim content the user voted on"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name",
+            "description": "The name of the model that produced the claim"
+          },
+          "is_consensus": {
+            "type": "boolean",
+            "title": "Is Consensus",
+            "description": "Whether the claim was categorized as consensus or contested"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claim_text",
+          "model_name",
+          "is_consensus"
+        ],
+        "title": "UserVotePayload"
       },
       "ValidationError": {
         "properties": {
