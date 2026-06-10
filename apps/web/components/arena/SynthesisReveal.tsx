@@ -12,6 +12,7 @@ interface SynthesisRevealProps {
   modelResponses: ModelResponse[];
   isSynthesisFailed: boolean;
   debateId: string;
+  synthesisReport?: any;
 }
 
 export function SynthesisReveal({
@@ -19,18 +20,20 @@ export function SynthesisReveal({
   modelResponses,
   isSynthesisFailed,
   debateId,
+  synthesisReport,
 }: SynthesisRevealProps) {
   const [revealed, setRevealed] = useState(false);
   const [prediction, setPrediction] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
-  // Build structured report from synthesis text
+  // Build structured report from synthesis text or use the direct synthesisReport
   const report = useMemo(() => {
+    if (synthesisReport && (synthesisReport.verdict || synthesisReport.executive_summary)) return synthesisReport;
     if (!synthesis || isSynthesisFailed) return null;
     // Parse the synthesis into a structured report using heuristic extraction
     return buildReportFromSynthesis(synthesis, modelResponses);
-  }, [synthesis, modelResponses, isSynthesisFailed]);
+  }, [synthesis, modelResponses, isSynthesisFailed, synthesisReport]);
 
   useEffect(() => {
     // Check if user previously revealed this synthesis

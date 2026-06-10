@@ -178,13 +178,38 @@ class SynthesisStage(BaseStage):
             
         selected_scores = [s for s in scores if s["persona"] in {c["persona"] for c in selected_candidates}]
         
-        final_answer, synthesis_usage = await synthesize(
-            context.prompt, 
-            selected_candidates, 
-            selected_scores, 
-            model_id=context.model_id, 
-            debate_id=context.debate_id
-        )
+        from agents import UsageAccumulator, synthesize
+        from reporting.synthesizer import generate_decision_report
+        
+        responses_list = [
+            {
+                "persona": c["persona"],
+                "content": c["text"]
+            }
+            for c in selected_candidates
+        ]
+        
+        synthesis_usage = UsageAccumulator()
+        try:
+            report = await generate_decision_report(
+                prompt=context.prompt,
+                responses=responses_list,
+                debate_id=context.debate_id,
+                model_override=context.model_id,
+                usage=synthesis_usage,
+            )
+            final_answer = report.executive_summary or report.title
+            state.final_meta["synthesis_report"] = report.model_dump()
+        except Exception as e:
+            logger.error(f"Structured synthesis in debate failed: {e}. Falling back to legacy synthesize.")
+            final_answer, synthesis_usage = await synthesize(
+                context.prompt, 
+                selected_candidates, 
+                selected_scores, 
+                model_id=context.model_id, 
+                debate_id=context.debate_id
+            )
+            
         context.usage_tracker.extend(synthesis_usage)
         
         state.final_content = final_answer

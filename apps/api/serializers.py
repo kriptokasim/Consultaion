@@ -61,6 +61,7 @@ class PublicDebateDTO(BaseModel):
     total_count: Optional[int] = None
     synthesis_success: Optional[bool] = None
     models: Optional[List[Dict[str, Any]]] = None
+    synthesis_report: Optional[Dict[str, Any]] = None
 
 
 class PrivateDebateDTO(BaseModel):
@@ -138,7 +139,7 @@ def _safe_final_meta(final_meta: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
     safe = {}
     # Only expose aggregate stats, not internal errors or debug info
-    for key in ("successful_count", "total_count", "synthesis_success", "models"):
+    for key in ("successful_count", "total_count", "synthesis_success", "models", "synthesis_report"):
         if key in final_meta:
             val = final_meta[key]
             if key == "models" and isinstance(val, list):
@@ -186,6 +187,7 @@ def serialize_debate_public(debate) -> dict:
         total_count=safe_meta.get("total_count"),
         synthesis_success=safe_meta.get("synthesis_success"),
         models=safe_meta.get("models"),
+        synthesis_report=safe_meta.get("synthesis_report"),
     ).model_dump()
 
 

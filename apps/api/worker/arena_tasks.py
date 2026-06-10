@@ -105,58 +105,61 @@ async def _execute_divergence_computation(debate_id: str) -> None:
                 session.add(report)
             return
 
-    # Extract claims in parallel
-    tasks = []
-    for resp in responses:
-        tasks.append(_extract_claims_from_response(prompt, resp["content"], resp["persona"], debate_id))
-    
-    extracted_lists = await asyncio.gather(*tasks)
-    
-    all_claims = []
-    for resp, claims in zip(responses, extracted_lists, strict=False):
-        model_name = resp["persona"]
-        for c in claims:
-            all_claims.append({"claim": c, "model": model_name})
-
-    processed = set()
-    consensus_list = []
-    contested_list = []
-
-    # Pairwise comparison
-    for i, item1 in enumerate(all_claims):
-        if i in processed:
-            continue
-        matching_indices = []
-        matching_models = [item1["model"]]
+    # Delegate to the upgraded semantic claim matching synthesizer analysis
+    from reporting.synthesizer import run_semantic_claims_analysis
+    try:
+        res = await run_semantic_claims_analysis(prompt, responses, debate_id)
+        divergence_score = res["divergence_score"]
+        consensus_list = res["consensus_claims"]
+        contested_list = res["contested_claims"]
+    except Exception as exc:
+        module_logger.error("Failed semantic divergence analysis: %s. Falling back to string overlap.", exc)
+        # Fallback to older inline logic using compute_string_similarity
+        tasks = []
+        for resp in responses:
+            tasks.append(_extract_claims_from_response(prompt, resp["content"], resp["persona"], debate_id))
+        extracted_lists = await asyncio.gather(*tasks)
         
-        for j, item2 in enumerate(all_claims):
-            if i != j and j not in processed:
-                sim = compute_string_similarity(item1["claim"], item2["claim"])
-                if sim >= 0.7:  # similarity threshold
-                    matching_indices.append(j)
-                    matching_models.append(item2["model"])
-
-        if matching_indices:
-            processed.add(i)
-            for idx in matching_indices:
-                processed.add(idx)
-            consensus_list.append({
-                "claim": item1["claim"],
-                "models": list(set(matching_models))
-            })
-        else:
-            processed.add(i)
-            contested_list.append({
-                "claim": item1["claim"],
-                "model": item1["model"]
-            })
-
-    # Compute divergence score between 0.0 and 1.0
-    total_distinct = len(consensus_list) + len(contested_list)
-    if total_distinct > 0:
-        divergence_score = len(contested_list) / total_distinct
-    else:
-        divergence_score = 0.0
+        all_claims = []
+        for resp, claims in zip(responses, extracted_lists, strict=False):
+            model_name = resp["persona"]
+            for c in claims:
+                all_claims.append({"claim": c, "model": model_name})
+        
+        processed = set()
+        consensus_list = []
+        contested_list = []
+        
+        for i, item1 in enumerate(all_claims):
+            if i in processed:
+                continue
+            matching_indices = []
+            matching_models = [item1["model"]]
+            
+            for j, item2 in enumerate(all_claims):
+                if i != j and j not in processed:
+                    sim = compute_string_similarity(item1["claim"], item2["claim"])
+                    if sim >= 0.70:
+                        matching_indices.append(j)
+                        matching_models.append(item2["model"])
+            
+            if matching_indices:
+                processed.add(i)
+                for idx in matching_indices:
+                    processed.add(idx)
+                consensus_list.append({
+                    "claim": item1["claim"],
+                    "models": list(set(matching_models))
+                })
+            else:
+                processed.add(i)
+                contested_list.append({
+                    "claim": item1["claim"],
+                    "model": item1["model"]
+                })
+        
+        total_distinct = len(consensus_list) + len(contested_list)
+        divergence_score = len(contested_list) / total_distinct if total_distinct > 0 else 0.0
 
     with session_scope() as session:
         report = session.exec(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)).first()
@@ -167,7 +170,7 @@ async def _execute_divergence_computation(debate_id: str) -> None:
         report.contested_claims = {"claims": contested_list}
         session.add(report)
         session.commit()
-        module_logger.info("Saved DivergenceReport for debate %s. Score: %.2f", debate_id, divergence_score)
+        module_logger.info("Saved semantic DivergenceReport for debate %s. Score: %.2f", debate_id, divergence_score)
 
 
 @celery_app.task(name="arena.compute_divergence", bind=True, max_retries=3)

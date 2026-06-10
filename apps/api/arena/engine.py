@@ -221,7 +221,7 @@ async def run_arena(
         )
 
     # Synthesize final verdict
-    synthesis_content = await _synthesize_verdict(
+    synthesis_content, synthesis_report = await _synthesize_verdict(
         debate_id=debate_id,
         prompt=prompt,
         model_responses=successful,
@@ -263,6 +263,7 @@ async def run_arena(
         "successful_count": len(successful),
         "total_count": len(model_responses),
         "synthesis_success": synthesis_success,
+        "synthesis_report": synthesis_report,
         "usage": usage.snapshot(),
     }
 
@@ -283,42 +284,33 @@ async def _synthesize_verdict(
     usage: UsageAccumulator,
     model_id: str | None = None,
     locale: str | None = None,
-) -> str:
-    """Produce the final synthesized verdict from all model responses."""
-    # Build the candidate block for synthesis
-    candidate_block = "\n\n---\n\n".join(
-        f"### {r.display_name} ({r.provider.capitalize()})\n{r.content}"
-        for r in model_responses
-    )
+) -> tuple[str, dict | None]:
+    """Produce the final synthesized verdict and structured decision report from all model responses."""
+    from reporting.synthesizer import generate_decision_report
 
-    system_prompt = ARENA_SYNTHESIS_PROMPT.format(model_count=len(model_responses))
-    if locale and locale != "en":
-        system_prompt += f"\nIMPORTANT: Produce the final synthesis in the '{locale}' language.\n"
-
-    messages = [
-        {"role": "system", "content": system_prompt},
+    responses_list = [
         {
-            "role": "user",
-            "content": f"**Original Question:**\n{prompt}\n\n**Model Responses:**\n\n{candidate_block}\n\nProduce the final synthesized verdict.",
-        },
+            "persona": r.display_name,
+            "content": r.content
+        }
+        for r in model_responses
     ]
 
     try:
-        content, call_usage = await call_llm_for_role(
-            messages,
-            role="Arena:Synthesizer",
-            temperature=0.4,
-            max_tokens=1500,
-            model_id=model_id,
+        report = await generate_decision_report(
+            prompt=prompt,
+            responses=responses_list,
             debate_id=debate_id,
-            extra_tags={"mode": "arena", "phase": "synthesis"},
+            locale=locale,
+            model_override=model_id,
+            usage=usage,
         )
-        usage.add_call(call_usage)
-        return content
+        return report.executive_summary or report.title, report.model_dump()
     except Exception as e:
         logger.error(f"Arena synthesis failed: {e}")
         # Fallback: return the best individual response
-        return (
+        fallback_content = (
             f"⚠️ Synthesis unavailable. Here is the top response:\n\n"
             f"**{model_responses[0].display_name}:**\n{model_responses[0].content}"
         )
+        return fallback_content, None

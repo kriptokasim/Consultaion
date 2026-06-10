@@ -201,6 +201,7 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
                         modelResponses={modelResponses} 
                         isSynthesisFailed={isSynthesisFailed} 
                         debateId={debate.id}
+                        synthesisReport={debate.synthesis_report || debate.final_meta?.synthesis_report}
                     />
                 );
             })()}
