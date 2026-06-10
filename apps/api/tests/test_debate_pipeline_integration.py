@@ -33,6 +33,7 @@ async def test_standard_debate_pipeline_integration(db_session, mock_llm_respons
          patch("orchestration.stages.criticize_and_revise") as mock_critique, \
          patch("orchestration.stages.judge_scores") as mock_judge, \
          patch("orchestration.stages.synthesize") as mock_synthesize, \
+         patch("orchestration.stages.generate_decision_report") as mock_generate_report, \
          patch("orchestration.engine.get_sse_backend") as mock_get_backend, \
          patch("orchestration.stages.get_sse_backend") as mock_get_backend_stages:
         
@@ -62,6 +63,13 @@ async def test_standard_debate_pipeline_integration(db_session, mock_llm_respons
             mock_llm_responses["synthesis"]["text"],
             MagicMock(total_tokens=300)
         )
+        
+        # Synthesis Decision Report
+        mock_report = MagicMock()
+        mock_report.executive_summary = mock_llm_responses["synthesis"]["text"]
+        mock_report.title = "Decision Report"
+        mock_report.model_dump.return_value = {"mock": "report"}
+        mock_generate_report.return_value = mock_report
         
         # Context
         config = {

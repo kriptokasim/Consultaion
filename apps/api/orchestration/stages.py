@@ -8,6 +8,7 @@ from agents import (
     produce_candidate,
     synthesize,
 )
+from reporting.synthesizer import generate_decision_report
 from sse_backend import get_sse_backend
 
 from .interfaces import DebateContext, DebateStage, DebateState
@@ -179,7 +180,6 @@ class SynthesisStage(BaseStage):
         selected_scores = [s for s in scores if s["persona"] in {c["persona"] for c in selected_candidates}]
         
         from agents import UsageAccumulator, synthesize
-        from reporting.synthesizer import generate_decision_report
         
         responses_list = [
             {

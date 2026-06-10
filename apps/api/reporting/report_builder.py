@@ -14,7 +14,7 @@ import logging
 import re
 from typing import Any, Optional
 
-from reporting.schemas import (
+from reporting.synthesis_schema import (
     DecisionReport,
     KeyFinding,
     ModelPosition,

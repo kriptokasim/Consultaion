@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 
 from config import settings
 from models import Debate, Message
@@ -51,8 +51,14 @@ async def test_arena_run_integration(db_session, monkeypatch):
             return "Synthesized arena verdict.", MockUsage(150)
         return f"Mock answer from SOTA model for role {role}.", MockUsage(100)
 
+    mock_report = MagicMock()
+    mock_report.executive_summary = "Synthesized arena verdict."
+    mock_report.title = "Decision Report"
+    mock_report.model_dump.return_value = {"mock": "report"}
+
     # Patch LLM caller, email sender, and SSE backend
     with patch("arena.engine.call_llm_for_role", side_effect=mock_call), \
+         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
          patch("orchestrator._build_and_send_summary", new_callable=AsyncMock), \
          patch("orchestrator.get_sse_backend") as mock_get_backend:
         

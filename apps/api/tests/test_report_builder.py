@@ -7,7 +7,7 @@ from reporting.report_builder import (
     _try_parse_json_report,
     build_report_from_synthesis,
 )
-from reporting.schemas import DecisionReport, KeyFinding, Verdict
+from reporting.synthesis_schema import DecisionReport, KeyFinding, Verdict
 
 
 class TestDecisionReportSchema:
