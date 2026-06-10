@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from models import (  # noqa: F401
     APIKey,
     AuditLog,
+    ChallengeRound,
+    ChallengeSession,
     Debate,
     DebateRound,
     Message,
@@ -20,6 +22,8 @@ from models import (  # noqa: F401
     UsageCounter,
     UsageQuota,
     User,
+    UserInteraction,
+    UserPrediction,
     Vote,
 )
 from promotions.models import Promotion  # noqa: F401
