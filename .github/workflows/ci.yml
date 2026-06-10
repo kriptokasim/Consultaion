@@ -134,7 +134,7 @@ jobs:
           pytest -q
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-coverage
           path: apps/api/coverage.xml
@@ -334,7 +334,7 @@ jobs:
           DATABASE_URL: "sqlite:///./e2e_test.db"
           JWT_SECRET: "test_secret_for_ci_pipeline_12345"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
