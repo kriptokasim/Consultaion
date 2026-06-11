@@ -66,7 +66,7 @@ export default function HomeContent() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-amber-50/30 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
+    <main className="relative min-h-screen overflow-x-clip bg-gradient-to-br from-slate-50 via-slate-100 to-amber-50/30 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
       {/* Background orbs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div className="absolute top-10 left-8 h-64 w-64 rounded-full bg-amber-100 blur-3xl opacity-30 dark:bg-amber-500/10" />

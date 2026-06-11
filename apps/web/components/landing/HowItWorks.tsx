@@ -204,7 +204,7 @@ export function HowItWorks() {
       const cards = stepRefs.current.filter(Boolean) as HTMLElement[];
       if (!cards.length) return;
 
-      const viewportAnchor = window.innerHeight * 0.45;
+      const viewportAnchor = window.innerHeight * 0.5;
 
       let bestIndex = 0;
       let bestDistance = Number.POSITIVE_INFINITY;
@@ -269,7 +269,7 @@ export function HowItWorks() {
 
   return (
     <section
-      className="relative py-16 md:py-24"
+      className="relative overflow-visible py-16 md:py-24"
       aria-labelledby="how-it-works-heading"
     >
       <Reveal>
@@ -288,18 +288,16 @@ export function HowItWorks() {
 
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         {/* Desktop: two-column with sticky visual */}
-        <div className="hidden lg:grid lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+        <div className="hidden lg:grid lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:gap-14">
           {/* Left: sticky visual — Phase 4 stabilization */}
-          <aside className="relative">
-            <div className="sticky top-28 z-10">
-              <div className="rounded-3xl border border-slate-200/70 bg-white/70 p-4 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/70">
-                <ActiveVisual active={true} />
-              </div>
+          <aside className="sticky top-28 z-10 self-start">
+            <div className="max-h-[calc(100vh-8rem)] rounded-3xl border border-slate-200/70 bg-white/70 p-4 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/70">
+              <ActiveVisual active={true} />
             </div>
           </aside>
 
           {/* Right: interactive step cards */}
-          <div ref={stepsContainerRef} className="space-y-10 pb-32">
+          <div ref={stepsContainerRef} className="space-y-10 pb-[40vh]">
             {/* Progress rail */}
             <div className="mb-6 flex items-center gap-2" aria-hidden="true">
               {steps.map((_, index) => (
