@@ -502,3 +502,22 @@ async def test_generic_report_sets_high_genericity_risk():
             assert "too generic" in res["critic_feedback"]
 
 
+def test_sanitize_synthesis_error():
+    from arena.engine import sanitize_synthesis_error
+    
+    # 1. API key token pattern
+    err_api_key = "Failed request to OpenAI due to sk-proj-1234567890abcdef12345678"
+    sanitized = sanitize_synthesis_error(err_api_key)
+    assert "[REDACTED_API_KEY]" in sanitized or "validation or parsing error" in sanitized
+    
+    # 2. Litellm / OpenAI internal words
+    err_internal = "litellm.exceptions.BadRequestError: OpenAI Exception"
+    assert "validation or parsing error" in sanitize_synthesis_error(err_internal)
+    
+    # 3. Stack trace/Traceback
+    err_traceback = "Traceback (most recent call last):\n  File \"synthesizer.py\", line 123"
+    assert "validation or parsing error" in sanitize_synthesis_error(err_traceback)
+    
+    # 4. Safe user error
+    err_safe = "Model limit exceeded"
+    assert sanitize_synthesis_error(err_safe) == "Model limit exceeded"

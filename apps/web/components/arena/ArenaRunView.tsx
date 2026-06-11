@@ -203,7 +203,9 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
 
             {/* Synthesis / Final Verdict */}
             {synthesis && (() => {
-                const isSynthesisFailed = synthesis.startsWith("⚠️ Synthesis unavailable") || debate.final_meta?.synthesis_success === false;
+                const isSynthesisFailed = debate.final_meta?.synthesis_status === "failed" || 
+                                         debate.final_meta?.synthesis_success === false || 
+                                         (debate.final_meta?.synthesis_status === undefined && synthesis.startsWith("⚠️ Synthesis unavailable"));
                 return (
                     <SynthesisReveal 
                         synthesis={synthesis} 
@@ -211,6 +213,12 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
                         isSynthesisFailed={isSynthesisFailed} 
                         debateId={debate.id}
                         synthesisReport={debate.synthesis_report || debate.final_meta?.synthesis_report}
+                        synthesisStatus={debate.final_meta?.synthesis_status}
+                        synthesisError={debate.final_meta?.synthesis_error}
+                        fallbackModel={debate.final_meta?.fallback_model}
+                        fallbackReason={debate.final_meta?.fallback_reason}
+                        fallbackResponse={debate.final_meta?.fallback_response}
+                        divergenceBreakdown={debate.final_meta?.divergence_breakdown}
                     />
                 );
             })()}

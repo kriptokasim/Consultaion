@@ -162,5 +162,53 @@ describe("Arena Experience Enhancements", () => {
         expect(screen.getByText(/Thank you for your feedback!/i)).toBeInTheDocument();
       });
     });
+
+    it("renders fallback response panel and failure card when synthesisStatus is failed or fallback", async () => {
+      const fallbackResponse = {
+        model: "GPT-4o",
+        content: "This is the fallback response content.",
+      };
+      const divergenceBreakdown = {
+        divergence_score: 0.4,
+        consensus_claims: [{ claim: "Consensus A", models: ["GPT-4o"] }],
+        unique_insights: [{ claim: "Unique B", model: "Gemini Pro" }],
+      };
+
+      renderWithProviders(
+        <SynthesisReveal
+          synthesis="Final synthesized verdict."
+          modelResponses={mockResponses}
+          isSynthesisFailed={true}
+          debateId="test-debate-fail"
+          synthesisStatus="fallback"
+          synthesisError="Structured JSON output failed"
+          fallbackModel="GPT-4o"
+          fallbackReason="Top model fallback"
+          fallbackResponse={fallbackResponse}
+          divergenceBreakdown={divergenceBreakdown}
+        />
+      );
+
+      // Reveal synthesis
+      const revealButton = screen.getByRole("button", { name: /Reveal Final Verdict/i });
+      fireEvent.click(revealButton);
+
+      // Verify that Decision Report Title or export button are NOT rendered (Guardrail 6)
+      expect(screen.queryByText("Verified & Faithful")).not.toBeInTheDocument();
+      expect(screen.queryByText("Export")).not.toBeInTheDocument();
+
+      // Verify that failure card renders with sanitized error
+      expect(screen.getByText("Decision Report Validation Guard Triggered")).toBeInTheDocument();
+      expect(screen.getByText("Structured JSON output failed")).toBeInTheDocument();
+
+      // Verify fallback panel renders
+      expect(screen.getByText("Top Model Response: GPT-4o")).toBeInTheDocument();
+      expect(screen.getByText("This is the fallback response content.")).toBeInTheDocument();
+
+      // Verify semantic claims section renders even with null synthesis report
+      expect(screen.getByText("Semantic Alignment & Divergence")).toBeInTheDocument();
+      expect(screen.getByText(/"Consensus A"/i)).toBeInTheDocument();
+      expect(screen.getByText(/"Unique B"/i)).toBeInTheDocument();
+    });
   });
 });

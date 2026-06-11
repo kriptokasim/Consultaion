@@ -208,6 +208,14 @@ async def run_semantic_claims_analysis(
     }
 
 
+class StructuredSynthesisError(Exception):
+    """Raised when structured report generation fails but semantic analysis is available."""
+    def __init__(self, message: str, semantic_analysis: Dict[str, Any] | None = None, original_exc: Exception | None = None):
+        super().__init__(message)
+        self.semantic_analysis = semantic_analysis
+        self.original_exc = original_exc
+
+
 async def generate_decision_report(
     prompt: str,
     responses: List[Dict[str, Any]],
@@ -225,329 +233,330 @@ async def generate_decision_report(
     logger.info("Running semantic claim analysis for debate %s", debate_id)
     semantic_analysis = await run_semantic_claims_analysis(prompt, responses, debate_id, usage)
     
-    # Format candidate answers block
-    candidate_block = "\n\n---\n\n".join(
-        f"### {r.get('persona', r.get('model', 'Model'))}\n{r.get('text', r.get('content', ''))}"
-        for r in responses
-    )
-    
-    # Format scores block
-    scores_block = "\n".join(
-        f"- {s['model']}: Logic={s['logic_score']}, Completeness={s['completeness_score']}, Conciseness={s['conciseness_score']}, Overall={s['overall_score']}. Rationale: {s['rationale']}"
-        for s in model_evals
-    )
-    
-    # Format consensus/contested block
-    consensus_block = "\n".join(f"- \"{c['claim']}\" (Agreed by: {', '.join(c['models'])})" for c in semantic_analysis["consensus_claims"])
-    contested_block = "\n".join(f"- \"{c['claim']}\" (Raised by: {c['model']})" for c in semantic_analysis["contested_claims"])
-    contradiction_block = "\n".join(
-        f"- \"{c['claim_a']}\" ({c['model_a']}) conflicts with \"{c['claim_b']}\" ({c['model_b']}). Reason: {c['reason']}"
-        for c in semantic_analysis["contradiction_details"]
-    )
-
-    system_prompt = (
-        "You are the Lead Decision Strategist. Synthesize the candidate model responses "
-        "and logical analysis into a premium, professional Decision Report JSON object.\n"
-        "Analyze consensus points, resolve disagreements, highlight critical risks/assumptions, "
-        "and compile actionable next steps.\n\n"
-        "CRITICAL SPECIFICITY RULES:\n"
-        "- Do NOT generate a generic checklist. Tailor the report to the user's exact question, product, company stage, and available context.\n"
-        "- If specific project context (ARR, users, ICP, retention, CAC/LTV, team, runway, etc.) is available in the prompt, USE IT.\n"
-        "- If context is missing, label recommendations as generic and include a 'context_needed' list of items needed to make the report specific.\n"
-        "- Avoid clichéd SaaS fundraising advice unless directly relevant.\n"
-        "- Each risk must include a specific diagnostic or action, not just a category name.\n"
-        "- Avoid generic-only risks like 'Market demand' or 'Team strength' unless paired with concrete diagnostics.\n\n"
-        "You MUST output strictly in JSON format. Do not add markdown code fences, headers, or conversational text. "
-        "Your response must be parseable by json.loads().\n"
-        "Schema format:\n"
-        "{\n"
-        "  \"title\": \"Clear descriptive title\",\n"
-        "  \"executive_summary\": \"High-level strategic summary...\",\n"
-        "  \"verdict\": {\n"
-        "    \"recommendation\": \"Actionable recommendation...\",\n"
-        "    \"confidence\": <float 0.0 to 1.0>,\n"
-        "    \"decision_type\": \"proceed | revise | defer | reject | mixed\",\n"
-        "    \"rationale\": \"Reasoning for this verdict...\"\n"
-        "  },\n"
-        "  \"key_findings\": [\n"
-        "    {\"title\": \"Finding title\", \"summary\": \"Details...\", \"importance\": \"critical | high | medium | low\"}\n"
-        "  ],\n"
-        "  \"options_considered\": [\n"
-        "    {\"option\": \"Option name\", \"pros\": [\"pro1\"], \"cons\": [\"con1\"], \"score\": <optional float>}\n"
-        "  ],\n"
-        "  \"model_positions\": [\n"
-        "    {\"model\": \"Model Name\", \"stance\": \"supportive | concerned | neutral | opposing\", "
-        "\"distinct_contribution\": \"The unique, specific contribution this model provided\", "
-        "\"blind_spot\": \"Specific limitation in this model's analysis. If none, write: No major limitation identified.\"}\n"
-        "  ],\n"
-        "  \"risks_and_assumptions\": [\n"
-        "    {\"item\": \"Specific risk/assumption with concrete diagnostics\", \"type\": \"risk | assumption\", \"severity\": \"critical | high | medium | low\", \"mitigation\": \"Mitigation...\"}\n"
-        "  ],\n"
-        "  \"recommendation_table\": [\n"
-        "    {\"criterion\": \"Criterion\", \"winner_or_answer\": \"Winner/Option\", \"evidence\": \"Evidence...\", \"confidence\": <float 0.0 to 1.0>}\n"
-        "  ],\n"
-        "  \"next_actions\": [\n"
-        "    {\"action\": \"Action desc\", \"owner\": \"Owner\", \"priority\": \"now | next | later\"}\n"
-        "  ],\n"
-        "  \"caveats\": [\"Caveat 1\", \"Caveat 2\"],\n"
-        "  \"dissenting_views\": [\"Dissenting view 1\"],\n"
-        "  \"unique_insights\": [\"Unique insight 1\"],\n"
-        "  \"context_needed\": [\"List of specific missing context items needed to make this report more specific, e.g. ARR, number of users, ICP, retention rate\"]\n"
-        "}"
-    )
-
-    if locale and locale != "en":
-        system_prompt += f"\nIMPORTANT: Respond and write all text values in the '{locale}' language.\n"
-
-    user_content = (
-        f"**Original User Prompt:**\n{prompt}\n\n"
-        f"**Individual Model Answers:**\n\n{candidate_block}\n\n"
-        f"**Evaluator Scores:**\n{scores_block}\n\n"
-        f"**Consensus Claims:**\n{consensus_block or 'None'}\n\n"
-        f"**Unique / Single-Model Insights:**\n{contested_block or 'None'}\n\n"
-        f"**Active Contradictions / Disagreements:**\n{contradiction_block or 'None'}\n\n"
-        f"Divergence Score: {semantic_analysis['divergence_score']}\n\n"
-        "Synthesize the final structured JSON decision report. "
-        "Remember: each model_positions entry must use 'distinct_contribution' and 'blind_spot' fields (not 'strongest_point'/'concern'). "
-        "Each blind_spot must be specific to this answer, not generic like 'may not apply to all SaaS startups.' "
-        "If no meaningful blind spot exists, write 'No major limitation identified.'"
-    )
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-    ]
-
-    # Configure provider-native structured output
-    response_format = None
-    tools = None
-    tool_choice = None
-    target_model_lower = (model_override or "").lower()
-    provider = "unknown"
-
-    if model_override:
-        from model_gateway.model_map import MODEL_MAP
-        if model_override in MODEL_MAP:
-            provider = MODEL_MAP[model_override]["provider"]
-        elif "gpt" in target_model_lower:
-            provider = "openai"
-        elif "claude" in target_model_lower:
-            provider = "anthropic"
-        elif "gemini" in target_model_lower:
-            provider = "gemini"
-    else:
-        from parliament.model_registry import get_default_model
-        try:
-            model_cfg = get_default_model()
-            provider = getattr(model_cfg.provider, "value", str(model_cfg.provider)) if hasattr(model_cfg, "provider") else "unknown"
-        except Exception:
-            pass
-
-    schema = DecisionReport.model_json_schema()
-    if not settings.USE_MOCK:
-        if provider == "openai":
-            response_format = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "DecisionReport",
-                    "strict": True,
-                    "schema": schema
-                }
-            }
-        elif provider == "anthropic":
-            tools = [{
-                "type": "function",
-                "function": {
-                    "name": "submit_decision_report",
-                    "description": "Submit the completed structured decision report",
-                    "parameters": schema
-                }
-            }]
-            tool_choice = {
-                "type": "function",
-                "function": {"name": "submit_decision_report"}
-            }
-
-    draft_report = None
-    raw_content = ""
-    report_validation_repaired = False
-
-    # Call LLM for initial draft
     try:
-        raw_content, call_usage = await call_llm_for_role(
-            messages,
-            role="Arena:Synthesizer",
-            temperature=0.3,
-            max_tokens=1500,
-            model_id=model_override,
-            debate_id=debate_id,
-            response_format=response_format,
-            tools=tools,
-            tool_choice=tool_choice,
+        # Format candidate answers block
+        candidate_block = "\n\n---\n\n".join(
+            f"### {r.get('persona', r.get('model', 'Model'))}\n{r.get('text', r.get('content', ''))}"
+            for r in responses
         )
-        if usage is not None and hasattr(usage, "add_call"):
-            usage.add_call(call_usage)
         
-        match = re.search(r"\{.*\}", raw_content, flags=re.S)
-        json_str = match.group(0) if match else raw_content
+        # Format scores block
+        scores_block = "\n".join(
+            f"- {s['model']}: Logic={s['logic_score']}, Completeness={s['completeness_score']}, Conciseness={s['conciseness_score']}, Overall={s['overall_score']}. Rationale: {s['rationale']}"
+            for s in model_evals
+        )
         
-        draft_report = DecisionReport.model_validate_json(json_str)
-        # Check initial report integrity
-        ok, problems = validate_report_integrity(draft_report)
-        if not ok:
-            raise ValueError(f"Structured report integrity failed: {problems}")
-    except Exception as exc:
-        logger.warning("Failed initial structured synthesis JSON validation: %s. Initiating repair prompt.", exc)
-        report_validation_repaired = True
-        
-        # Self-healing repair loop step 1: Repair Prompt
-        repair_messages = [
-            {"role": "system", "content": "You are a JSON repair tool. Correct the provided text to output strictly valid JSON matching the schema of a Decision Report. Do not include markdown fences or explanation."},
-            {"role": "user", "content": f"Schema: {DecisionReport.model_json_schema()}\n\nError: {exc}\n\nInvalid Content:\n{raw_content or (json_str if 'json_str' in locals() else '')}\n\nReturn repaired JSON:"}
-        ]
-        try:
-            repaired_raw, call_usage = await call_llm_for_role(
-                repair_messages,
-                role="Arena:JSONRepair",
-                temperature=0.1,
-                max_tokens=1500,
-                debate_id=debate_id,
-            )
-            if usage is not None and hasattr(usage, "add_call"):
-                usage.add_call(call_usage)
-            match = re.search(r"\{.*\}", repaired_raw, flags=re.S)
-            repaired_json = match.group(0) if match else repaired_raw
-            draft_report = DecisionReport.model_validate_json(repaired_json)
-            # Check repaired report integrity
-            ok, problems = validate_report_integrity(draft_report)
-            if not ok:
-                raise ValueError(f"Repaired report integrity failed: {problems}")
-            raw_content = repaired_json
-        except Exception as repair_exc:
-            logger.error("JSON repair failed: %s.", repair_exc)
-            # If repair fails and raw content looks like incomplete JSON, raise error to fail-closed
-            raw_to_check = raw_content or (repaired_json if 'repaired_json' in locals() else '') or (json_str if 'json_str' in locals() else '')
-            if looks_like_incomplete_json(raw_to_check):
-                raise ValueError("Structured report generation failed; refusing unsafe raw JSON fallback.") from repair_exc
-            
-            logger.info("Falling back to heuristic parsing.")
-            # Fallback to client/heuristic parser
-            from reporting.report_builder import build_report_from_synthesis
-            draft_report = build_report_from_synthesis(prompt, raw_content or candidate_block)
+        # Format consensus/contested block
+        consensus_block = "\n".join(f"- \"{c['claim']}\" (Agreed by: {', '.join(c['models'])})" for c in semantic_analysis["consensus_claims"])
+        contested_block = "\n".join(f"- \"{c['claim']}\" (Raised by: {c['model']})" for c in semantic_analysis["contested_claims"])
+        contradiction_block = "\n".join(
+            f"- \"{c['claim_a']}\" ({c['model_a']}) conflicts with \"{c['claim_b']}\" ({c['model_b']}). Reason: {c['reason']}"
+            for c in semantic_analysis["contradiction_details"]
+        )
 
-    # Step 3: Verify / Critic quality check pass
-    from reporting.synthesis_critic import verify_synthesis_report
-    logger.info("Running critic check for debate %s", debate_id)
-    critic_res = await verify_synthesis_report(prompt, responses, raw_content, debate_id, usage)
-    
-    # Step 4: Revise loop (if enabled, limit to 1 loop)
-    enable_revise = getattr(settings, "ENABLE_SYNTHESIS_REVISE", True)
-    critic_revision_triggered = False
-    
-    if enable_revise and critic_res.get("needs_revision") and not settings.USE_MOCK:
-        logger.info("Critic flagged revision loop for debate %s. Feedback: %s", debate_id, critic_res.get("critic_feedback"))
-        critic_revision_triggered = True
-        
-        revise_messages = [
-            {"role": "system", "content": system_prompt + "\n\nCRITICAL: Revise the draft JSON according to the verifier feedback. Fix any hallucinations, add missing critical evidence/dissenting views, and correct inaccuracies. Output strictly valid JSON."},
-            {"role": "user", "content": f"Draft Report:\n{raw_content}\n\nVerifier Feedback:\n{critic_res.get('critic_feedback')}\n\nReturn revised JSON decision report:"}
+        system_prompt = (
+            "You are the Lead Decision Strategist. Synthesize the candidate model responses "
+            "and logical analysis into a premium, professional Decision Report JSON object.\n"
+            "Analyze consensus points, resolve disagreements, highlight critical risks/assumptions, "
+            "and compile actionable next steps.\n\n"
+            "CRITICAL SPECIFICITY RULES:\n"
+            "- Do NOT generate a generic checklist. Tailor the report to the user's exact question, product, company stage, and available context.\n"
+            "- If specific project context (ARR, users, ICP, retention, CAC/LTV, team, runway, etc.) is available in the prompt, USE IT.\n"
+            "- If context is missing, label recommendations as generic and include a 'context_needed' list of items needed to make the report specific.\n"
+            "- Avoid clichéd SaaS fundraising advice unless directly relevant.\n"
+            "- Each risk must include a specific diagnostic or action, not just a category name.\n"
+            "- Avoid generic-only risks like 'Market demand' or 'Team strength' unless paired with concrete diagnostics.\n\n"
+            "You MUST output strictly in JSON format. Do not add markdown code fences, headers, or conversational text. "
+            "Your response must be parseable by json.loads().\n"
+            "Schema format:\n"
+            "{\n"
+            "  \"title\": \"Clear descriptive title\",\n"
+            "  \"executive_summary\": \"High-level strategic summary...\",\n"
+            "  \"verdict\": {\n"
+            "    \"recommendation\": \"Actionable recommendation...\",\n"
+            "    \"confidence\": <float 0.0 to 1.0>,\n"
+            "    \"decision_type\": \"proceed | revise | defer | reject | mixed\",\n"
+            "    \"rationale\": \"Reasoning for this verdict...\"\n"
+            "  },\n"
+            "  \"key_findings\": [\n"
+            "    {\"title\": \"Finding title\", \"summary\": \"Details...\", \"importance\": \"critical | high | medium | low\"}\n"
+            "  ],\n"
+            "  \"options_considered\": [\n"
+            "    {\"option\": \"Option name\", \"pros\": [\"pro1\"], \"cons\": [\"con1\"], \"score\": <optional float>}\n"
+            "  ],\n"
+            "  \"model_positions\": [\n"
+            "    {\"model\": \"Model Name\", \"stance\": \"supportive | concerned | neutral | opposing\", "
+            "\"distinct_contribution\": \"The unique, specific contribution this model provided\", "
+            "\"blind_spot\": \"Specific limitation in this model's analysis. If none, write: No major limitation identified.\"}\n"
+            "  ],\n"
+            "  \"risks_and_assumptions\": [\n"
+            "    {\"item\": \"Specific risk/assumption with concrete diagnostics\", \"type\": \"risk | assumption\", \"severity\": \"critical | high | medium | low\", \"mitigation\": \"Mitigation...\"}\n"
+            "  ],\n"
+            "  \"recommendation_table\": [\n"
+            "    {\"criterion\": \"Criterion\", \"winner_or_answer\": \"Winner/Option\", \"evidence\": \"Evidence...\", \"confidence\": <float 0.0 to 1.0>}\n"
+            "  ],\n"
+            "  \"next_actions\": [\n"
+            "    {\"action\": \"Action desc\", \"owner\": \"Owner\", \"priority\": \"now | next | later\"}\n"
+            "  ],\n"
+            "  \"caveats\": [\"Caveat 1\", \"Caveat 2\"],\n"
+            "  \"dissenting_views\": [\"Dissenting view 1\"],\n"
+            "  \"unique_insights\": [\"Unique insight 1\"],\n"
+            "  \"context_needed\": [\"List of specific missing context items needed to make this report more specific, e.g. ARR, number of users, ICP, retention rate\"]\n"
+            "}"
+        )
+
+        if locale and locale != "en":
+            system_prompt += f"\nIMPORTANT: Respond and write all text values in the '{locale}' language.\n"
+
+        user_content = (
+            f"**Original User Prompt:**\n{prompt}\n\n"
+            f"**Individual Model Answers:**\n\n{candidate_block}\n\n"
+            f"**Evaluator Scores:**\n{scores_block}\n\n"
+            f"**Consensus Claims:**\n{consensus_block or 'None'}\n\n"
+            f"**Unique / Single-Model Insights:**\n{contested_block or 'None'}\n\n"
+            f"**Active Contradictions / Disagreements:**\n{contradiction_block or 'None'}\n\n"
+            f"Divergence Score: {semantic_analysis['divergence_score']}\n\n"
+            "Synthesize the final structured JSON decision report. "
+            "Remember: each model_positions entry must use 'distinct_contribution' and 'blind_spot' fields (not 'strongest_point'/'concern'). "
+            "Each blind_spot must be specific to this answer, not generic like 'may not apply to all SaaS startups.' "
+            "If no meaningful blind spot exists, write 'No major limitation identified.'"
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
         ]
-        
+
+        # Configure provider-native structured output
+        response_format = None
+        tools = None
+        tool_choice = None
+        target_model_lower = (model_override or "").lower()
+        provider = "unknown"
+
+        if model_override:
+            from model_gateway.model_map import MODEL_MAP
+            if model_override in MODEL_MAP:
+                provider = MODEL_MAP[model_override]["provider"]
+            elif "gpt" in target_model_lower:
+                provider = "openai"
+            elif "claude" in target_model_lower:
+                provider = "anthropic"
+            elif "gemini" in target_model_lower:
+                provider = "gemini"
+        else:
+            from parliament.model_registry import get_default_model
+            try:
+                model_cfg = get_default_model()
+                provider = getattr(model_cfg.provider, "value", str(model_cfg.provider)) if hasattr(model_cfg, "provider") else "unknown"
+            except Exception:
+                pass
+
+        schema = DecisionReport.model_json_schema()
+        if not settings.USE_MOCK:
+            if provider == "openai":
+                response_format = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "DecisionReport",
+                        "strict": True,
+                        "schema": schema
+                    }
+                }
+            elif provider == "anthropic":
+                tools = [{
+                    "type": "function",
+                    "function": {
+                        "name": "submit_decision_report",
+                        "description": "Submit the completed structured decision report",
+                        "parameters": schema
+                    }
+                }]
+                tool_choice = {
+                    "type": "function",
+                    "function": {"name": "submit_decision_report"}
+                }
+
+        draft_report = None
+        raw_content = ""
+        report_validation_repaired = False
+
+        # Call LLM for initial draft
         try:
-            revised_raw, call_usage = await call_llm_for_role(
-                revise_messages,
+            raw_content, call_usage = await call_llm_for_role(
+                messages,
                 role="Arena:Synthesizer",
-                temperature=0.2,
+                temperature=0.3,
                 max_tokens=1500,
                 model_id=model_override,
                 debate_id=debate_id,
+                response_format=response_format,
+                tools=tools,
+                tool_choice=tool_choice,
             )
             if usage is not None and hasattr(usage, "add_call"):
                 usage.add_call(call_usage)
-            match = re.search(r"\{.*\}", revised_raw, flags=re.S)
-            revised_json = match.group(0) if match else revised_raw
-            draft_report = DecisionReport.model_validate_json(revised_json)
-            # Check revised report integrity
+            
+            match = re.search(r"\{.*\}", raw_content, flags=re.S)
+            json_str = match.group(0) if match else raw_content
+            
+            draft_report = DecisionReport.model_validate_json(json_str)
+            # Check initial report integrity
             ok, problems = validate_report_integrity(draft_report)
             if not ok:
-                raise ValueError(f"Revised report integrity failed: {problems}")
-            raw_content = revised_json
+                raise ValueError(f"Structured report integrity failed: {problems}")
+        except Exception as exc:
+            logger.warning("Failed initial structured synthesis JSON validation: %s. Initiating repair prompt.", exc)
+            report_validation_repaired = True
             
-            # Run critic on the revised report to update the score
-            critic_res = await verify_synthesis_report(prompt, responses, raw_content, debate_id, usage)
-        except Exception as revise_exc:
-            logger.warning("Revision pass failed: %s. Keeping original draft.", revise_exc)
+            # Self-healing repair loop step 1: Repair Prompt
+            repair_messages = [
+                {"role": "system", "content": "You are a JSON repair tool. Correct the provided text to output strictly valid JSON matching the schema of a Decision Report. Do not include markdown fences or explanation."},
+                {"role": "user", "content": f"Schema: {DecisionReport.model_json_schema()}\n\nError: {exc}\n\nInvalid Content:\n{raw_content or (json_str if 'json_str' in locals() else '')}\n\nReturn repaired JSON:"}
+            ]
+            try:
+                repaired_raw, call_usage = await call_llm_for_role(
+                    repair_messages,
+                    role="Arena:JSONRepair",
+                    temperature=0.1,
+                    max_tokens=1500,
+                    debate_id=debate_id,
+                )
+                if usage is not None and hasattr(usage, "add_call"):
+                    usage.add_call(call_usage)
+                match = re.search(r"\{.*\}", repaired_raw, flags=re.S)
+                repaired_json = match.group(0) if match else repaired_raw
+                draft_report = DecisionReport.model_validate_json(repaired_json)
+                # Check repaired report integrity
+                ok, problems = validate_report_integrity(draft_report)
+                if not ok:
+                    raise ValueError(f"Repaired report integrity failed: {problems}")
+                raw_content = repaired_json
+            except Exception as repair_exc:
+                logger.error("JSON repair failed: %s.", repair_exc)
+                # If repair fails and raw content looks like incomplete JSON, raise error to fail-closed
+                raw_to_check = raw_content or (repaired_json if 'repaired_json' in locals() else '') or (json_str if 'json_str' in locals() else '')
+                if looks_like_incomplete_json(raw_to_check):
+                    raise ValueError("Structured report generation failed; refusing unsafe raw JSON fallback.") from repair_exc
+                
+                logger.info("Falling back to heuristic parsing.")
+                # Fallback to client/heuristic parser
+                from reporting.report_builder import build_report_from_synthesis
+                draft_report = build_report_from_synthesis(prompt, raw_content or candidate_block)
 
-    # Determine verification status
-    verification_error = bool(critic_res.get("verification_error", False))
-    verification_source = critic_res.get("verification_source", "critic")
-    genericity_risk = critic_res.get("genericity_risk", "medium")
+        # Step 3: Verify / Critic quality check pass
+        from reporting.synthesis_critic import verify_synthesis_report
+        logger.info("Running critic check for debate %s", debate_id)
+        critic_res = await verify_synthesis_report(prompt, responses, raw_content, debate_id, usage)
+        
+        # Step 4: Revise loop (if enabled, limit to 1 loop)
+        enable_revise = getattr(settings, "ENABLE_SYNTHESIS_REVISE", True)
+        critic_revision_triggered = False
+        
+        if enable_revise and critic_res.get("needs_revision") and not settings.USE_MOCK:
+            logger.info("Critic flagged revision loop for debate %s. Feedback: %s", debate_id, critic_res.get("critic_feedback"))
+            critic_revision_triggered = True
+            
+            revise_messages = [
+                {"role": "system", "content": system_prompt + "\n\nCRITICAL: Revise the draft JSON according to the verifier feedback. Fix any hallucinations, add missing critical evidence/dissenting views, and correct inaccuracies. Output strictly valid JSON."},
+                {"role": "user", "content": f"Draft Report:\n{raw_content}\n\nVerifier Feedback:\n{critic_res.get('critic_feedback')}\n\nReturn revised JSON decision report:"}
+            ]
+            
+            try:
+                revised_raw, call_usage = await call_llm_for_role(
+                    revise_messages,
+                    role="Arena:Synthesizer",
+                    temperature=0.2,
+                    max_tokens=1500,
+                    model_id=model_override,
+                    debate_id=debate_id,
+                )
+                if usage is not None and hasattr(usage, "add_call"):
+                    usage.add_call(call_usage)
+                match = re.search(r"\{.*\}", revised_raw, flags=re.S)
+                revised_json = match.group(0) if match else revised_raw
+                draft_report = DecisionReport.model_validate_json(revised_json)
+                # Check revised report integrity
+                ok, problems = validate_report_integrity(draft_report)
+                if not ok:
+                    raise ValueError(f"Revised report integrity failed: {problems}")
+                raw_content = revised_json
+                
+                # Run critic on the revised report to update the score
+                critic_res = await verify_synthesis_report(prompt, responses, raw_content, debate_id, usage)
+            except Exception as revise_exc:
+                logger.warning("Revision pass failed: %s. Keeping original draft.", revise_exc)
 
-    if verification_error:
-        verification_status = "unverified"
-    elif critic_res.get("has_hallucinations"):
-        verification_status = "failed"
-    elif genericity_risk == "high":
-        verification_status = "unverified"
-    elif critic_res.get("needs_revision") or (critic_res.get("faithfulness_score") is not None and critic_res.get("faithfulness_score", 1.0) < 0.70) or (critic_res.get("completeness_score") is not None and critic_res.get("completeness_score", 1.0) < 0.70):
-        verification_status = "unverified"
-    else:
-        verification_status = "verified"
+        # Determine verification status
+        verification_error = bool(critic_res.get("verification_error", False))
+        verification_source = critic_res.get("verification_source", "critic")
+        genericity_risk = critic_res.get("genericity_risk", "medium")
 
-    # Attach metadata to report object
-    draft_report.quality_meta = QualityMeta(
-        completeness_score=critic_res.get("completeness_score"),
-        faithfulness_score=critic_res.get("faithfulness_score"),
-        has_hallucinations=critic_res.get("has_hallucinations", False),
-        needs_revision=critic_res.get("needs_revision", False),
-        critic_feedback=critic_res.get("critic_feedback"),
-        verification_status=verification_status,
-        verification_error=verification_error,
-        verification_source=verification_source,
-        specificity_score=critic_res.get("specificity_score"),
-        genericity_risk=genericity_risk,
-        renderable=True,
-    )
-    draft_report.model_contributions = model_evals
-    draft_report.divergence_breakdown = {
-        "divergence_score": semantic_analysis["divergence_score"],
-        "consensus_claims": semantic_analysis["consensus_claims"],
-        "unique_insights": semantic_analysis.get("unique_insights", semantic_analysis.get("contested_claims", [])),
-        "contested_claims": semantic_analysis.get("contested_claims", []),  # legacy
-        "active_contradictions": semantic_analysis.get("active_contradictions", semantic_analysis.get("contradiction_details", [])),
-        "contradictions_count": semantic_analysis["contradictions_count"],
-        "contradiction_details": semantic_analysis["contradiction_details"],
-        "semantic_analysis_mode": semantic_analysis.get("semantic_analysis_mode", "embedding"),
-    }
-    
-    # Populate Telemetry
-    draft_report.telemetry = {
-        "embedding_success": semantic_analysis.get("embedding_success", False),
-        "contradiction_pairs_classified": semantic_analysis.get("contradiction_pairs_classified", 0),
-        "critic_revision_triggered": critic_revision_triggered,
-        "report_validation_repaired": report_validation_repaired,
-        "report_quality_scores": {
-            "completeness": critic_res.get("completeness_score", 1.0),
-            "faithfulness": critic_res.get("faithfulness_score", 1.0),
-        }
-    }
+        if verification_error:
+            verification_status = "unverified"
+        elif critic_res.get("has_hallucinations"):
+            verification_status = "failed"
+        elif genericity_risk == "high":
+            verification_status = "unverified"
+        elif critic_res.get("needs_revision") or (critic_res.get("faithfulness_score") is not None and critic_res.get("faithfulness_score", 1.0) < 0.70) or (critic_res.get("completeness_score") is not None and critic_res.get("completeness_score", 1.0) < 0.70):
+            verification_status = "unverified"
+        else:
+            verification_status = "verified"
 
-    # Final report integrity check pass before returning
-    ok, problems = validate_report_integrity(draft_report)
-    if not ok:
-        logger.warning("Final report integrity validation failed: %s. Setting renderable = False.", problems)
+        # Attach metadata to report object
         draft_report.quality_meta = QualityMeta(
-            completeness_score=None,
-            faithfulness_score=None,
-            has_hallucinations=False,
-            needs_revision=False,
-            critic_feedback=f"Structured report integrity check failed: {', '.join(problems)}",
-            verification_status="unverified",
-            verification_error=True,
-            verification_source="critic",
-            specificity_score=None,
-            genericity_risk="high",
-            renderable=False,
+            completeness_score=critic_res.get("completeness_score"),
+            faithfulness_score=critic_res.get("faithfulness_score"),
+            has_hallucinations=critic_res.get("has_hallucinations", False),
+            needs_revision=critic_res.get("needs_revision", False),
+            critic_feedback=critic_res.get("critic_feedback"),
+            verification_status=verification_status,
+            verification_error=verification_error,
+            verification_source=verification_source,
+            specificity_score=critic_res.get("specificity_score"),
+            genericity_risk=genericity_risk,
+            renderable=True,
         )
-    
-    return draft_report
+        draft_report.model_contributions = model_evals
+        draft_report.divergence_breakdown = {
+            "divergence_score": semantic_analysis["divergence_score"],
+            "consensus_claims": semantic_analysis["consensus_claims"],
+            "unique_insights": semantic_analysis.get("unique_insights", semantic_analysis.get("contested_claims", [])),
+            "contested_claims": semantic_analysis.get("contested_claims", []),  # legacy
+            "active_contradictions": semantic_analysis.get("active_contradictions", semantic_analysis.get("contradiction_details", [])),
+            "contradictions_count": semantic_analysis["contradictions_count"],
+            "contradiction_details": semantic_analysis["contradiction_details"],
+            "semantic_analysis_mode": semantic_analysis.get("semantic_analysis_mode", "embedding"),
+        }
+        
+        # Populate Telemetry
+        draft_report.telemetry = {
+            "embedding_success": semantic_analysis.get("embedding_success", False),
+            "contradiction_pairs_classified": semantic_analysis.get("contradiction_pairs_classified", 0),
+            "critic_revision_triggered": critic_revision_triggered,
+            "report_validation_repaired": report_validation_repaired,
+            "report_quality_scores": {
+                "completeness": critic_res.get("completeness_score", 1.0),
+                "faithfulness": critic_res.get("faithfulness_score", 1.0),
+            }
+        }
+
+        # Final report integrity check pass before returning
+        ok, problems = validate_report_integrity(draft_report)
+        if not ok:
+            raise ValueError(f"Structured report integrity check failed: {', '.join(problems)}")
+        
+        return draft_report
+    except Exception as exc:
+        logger.exception(
+            "arena_synthesis_failed",
+            extra={
+                "debate_id": debate_id,
+                "stage": "structured_report_generation",
+                "reason": str(exc),
+                "has_semantic_analysis": bool(semantic_analysis),
+                "fallback_model": responses[0].get("persona", responses[0].get("model", "Model")) if responses else "unknown",
+            },
+        )
+        raise StructuredSynthesisError(str(exc), semantic_analysis=semantic_analysis, original_exc=exc)
+

@@ -10,6 +10,8 @@ import { NextActionsList } from "./NextActionsList"
 import { Download, ShieldCheck, CheckCircle2, AlertTriangle, ShieldAlert, GitBranch } from "lucide-react"
 import { isRenderableDecisionReport, fieldLooksCorrupt } from "../../lib/reportIntegrity"
 import { ReportGenerationFailedCard } from "./ReportGenerationFailedCard"
+import { SemanticAlignmentSection } from "./SemanticAlignmentSection"
+import { DecisionReportShell } from "./DecisionReportShell"
 
 interface DecisionReport {
   title?: string
@@ -91,6 +93,11 @@ interface DecisionReportViewProps {
   report: DecisionReport | null
   rawSynthesis?: string
   className?: string
+  synthesisStatus?: "succeeded" | "failed" | "fallback"
+  synthesisError?: string
+  fallbackModel?: string
+  fallbackReason?: string
+  fallbackResponse?: { model: string; content: string }
 }
 
 function buildFallbackReport(rawSynthesis: string): DecisionReport {
@@ -173,7 +180,11 @@ function exportToMarkdown(report: DecisionReport): string {
   return lines.join("\n")
 }
 
-export function DecisionReportView({ report: rawReport, rawSynthesis, className }: DecisionReportViewProps) {
+export function DecisionReportView({
+  report: rawReport,
+  rawSynthesis,
+  className,
+}: DecisionReportViewProps) {
   const isCorrupted = useMemo(() => {
     if (rawReport && !isRenderableDecisionReport(rawReport)) {
       return true
@@ -213,98 +224,20 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
     URL.revokeObjectURL(url)
   }
 
+  const activeReport = report
+
   return (
-    <div className={`space-y-8 ${className || ""}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{report.title || "Decision Report"}</h2>
-          {report.executive_summary && (
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed">
-              {report.executive_summary}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={handleExport}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-        >
-          <Download className="h-4 w-4" />
-          Export
-        </button>
-      </div>
-
-      {/* Quality Gate Status */}
-      {report.quality_meta && (
-        <div className="bg-slate-50 dark:bg-slate-800/45 border border-slate-200/60 dark:border-slate-800 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-start md:items-center gap-4">
-            {report.quality_meta.verification_status === "failed" || report.quality_meta.has_hallucinations ? (
-              <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
-                <ShieldAlert className="h-5 w-5 text-rose-500" />
-              </div>
-            ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.verification_error || report.quality_meta.needs_revision ? (
-              <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
-                <ShieldAlert className="h-5 w-5 text-amber-500" />
-              </div>
-            ) : (
-              <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100/30">
-                <ShieldCheck className="h-5 w-5 text-emerald-500" />
-              </div>
-            )}
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                Synthesis Quality Gate: {report.quality_meta.verification_status === "failed" || report.quality_meta.has_hallucinations ? (
-                  <span className="text-rose-600 dark:text-rose-400">Verification Failed</span>
-                ) : report.quality_meta.verification_status === "unverified" || report.quality_meta.verification_error || report.quality_meta.needs_revision ? (
-                  <span className="text-amber-600 dark:text-amber-400">Unverified</span>
-                ) : (
-                  <span className="text-emerald-600 dark:text-emerald-400">Verified & Faithful</span>
-                )}
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
-                {report.quality_meta.verification_error
-                  ? (report.quality_meta.critic_feedback || "Verifier service temporarily unavailable.")
-                  : (report.quality_meta.critic_feedback || "The final report was cross-verified against all model answers and found to be faithful and complete.")}
-              </p>
-              {report.quality_meta.genericity_risk === "high" && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">
-                  ⚠ This report may be too generic. Add project-specific context for better results.
-                </p>
-              )}
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-6 self-start md:self-auto pt-4 md:pt-0 border-t md:border-t-0 border-slate-200 dark:border-slate-700">
-            {report.quality_meta.completeness_score != null && !report.quality_meta.verification_error && (
-              <div className="text-center">
-                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Completeness</span>
-                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.quality_meta.completeness_score) * 100)}%</span>
-              </div>
-            )}
-            {report.quality_meta.faithfulness_score != null && !report.quality_meta.verification_error && (
-              <div className={`text-center ${report.quality_meta.completeness_score != null ? 'border-l border-slate-200 dark:border-slate-700 pl-6' : ''}`}>
-                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Faithfulness</span>
-                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.quality_meta.faithfulness_score) * 100)}%</span>
-              </div>
-            )}
-            {report.quality_meta.verification_error && (
-              <div className="text-center">
-                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Scores</span>
-                <span className="text-sm font-medium text-amber-600 dark:text-amber-400 mt-0.5 block">Unavailable</span>
-              </div>
-            )}
-            {report.divergence_breakdown?.divergence_score !== undefined && (
-              <div className={`text-center border-l border-slate-200 dark:border-slate-700 pl-6`}>
-                <span className="text-xs text-slate-500 dark:text-slate-400 block font-medium">Divergence</span>
-                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 block">{Math.round((report.divergence_breakdown.divergence_score || 0) * 100)}%</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
+    <DecisionReportShell
+      title={activeReport.title}
+      executiveSummary={activeReport.executive_summary}
+      qualityMeta={activeReport.quality_meta}
+      divergenceBreakdown={activeReport.divergence_breakdown || rawReport?.divergence_breakdown}
+      isCorrupted={isCorrupted}
+      onExport={handleExport}
+      className={className}
+    >
       {/* Context Needed */}
-      {report.context_needed && report.context_needed.length > 0 && (
+      {activeReport.context_needed && activeReport.context_needed.length > 0 && (
         <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-xl p-5">
           <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-3">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -314,7 +247,7 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
             The following information would help generate a more tailored, actionable report:
           </p>
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {report.context_needed.map((item, i) => (
+            {activeReport.context_needed.map((item, i) => (
               <li key={i} className="text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
                 <span className="text-amber-400 mt-0.5">•</span>
                 {item}
@@ -325,137 +258,55 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
       )}
 
       {/* Verdict */}
-      {report.verdict && (
+      {activeReport.verdict && (
         <ReportSection title="Verdict">
           <VerdictCard
-            recommendation={report.verdict.recommendation || ""}
-            confidence={report.verdict.confidence || 0.5}
-            decisionType={report.verdict.decision_type || "mixed"}
-            rationale={report.verdict.rationale || ""}
+            recommendation={activeReport.verdict.recommendation || ""}
+            confidence={activeReport.verdict.confidence || 0.5}
+            decisionType={activeReport.verdict.decision_type || "mixed"}
+            rationale={activeReport.verdict.rationale || ""}
           />
         </ReportSection>
       )}
 
       {/* Key Findings */}
-      {report.key_findings && report.key_findings.length > 0 && (
+      {activeReport.key_findings && activeReport.key_findings.length > 0 && (
         <ReportSection title="Key Findings">
-          <KeyFindingsGrid findings={report.key_findings as any} />
+          <KeyFindingsGrid findings={activeReport.key_findings as any} />
         </ReportSection>
       )}
 
       {/* Model Positions */}
-      {report.model_positions && report.model_positions.length > 0 && (
+      {activeReport.model_positions && activeReport.model_positions.length > 0 && (
         <ReportSection title="Model Positions">
-          <ModelPositionsTable positions={report.model_positions as any} />
+          <ModelPositionsTable positions={activeReport.model_positions as any} />
         </ReportSection>
       )}
 
       {/* Semantic Alignment & Divergence */}
-      {report.divergence_breakdown && (
-        <ReportSection title="Semantic Alignment & Divergence">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Consensus Claims */}
-            <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-xl p-5">
-              <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-2 mb-3">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                Consensus Claims ({report.divergence_breakdown.consensus_claims?.length || 0})
-              </h4>
-              {report.divergence_breakdown.consensus_claims && report.divergence_breakdown.consensus_claims.length > 0 ? (
-                <div className="space-y-3">
-                  {report.divergence_breakdown.consensus_claims.map((c, idx) => (
-                    <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-lg p-3 shadow-xs">
-                      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">&quot;{c.claim}&quot;</p>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {c.models?.map((m) => (
-                          <span key={m} className="inline-flex items-center rounded-md bg-emerald-50 dark:bg-emerald-950/35 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 border border-emerald-200/10">
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400 italic">No consensus claims identified.</p>
-              )}
-            </div>
-
-            {/* Unique / Single-Model Insights */}
-            <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-xl p-5">
-              <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-3">
-                <GitBranch className="h-4 w-4 text-slate-400" />
-                Unique / Single-Model Insights ({(report.divergence_breakdown.unique_insights || report.divergence_breakdown.contested_claims)?.length || 0})
-              </h4>
-              {((report.divergence_breakdown.unique_insights || report.divergence_breakdown.contested_claims)?.length || 0) > 0 ? (
-                <div className="space-y-3">
-                  {(report.divergence_breakdown.unique_insights || report.divergence_breakdown.contested_claims || []).map((c, idx) => (
-                    <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-lg p-3 shadow-xs">
-                      <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">&quot;{c.claim}&quot;</p>
-                      <div className="mt-2">
-                        <span className="inline-flex items-center rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200/10">
-                          {c.model}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400 italic">No unique insights identified.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Active Contradictions — only shown when there are actual contradictions */}
-          {((report.divergence_breakdown.active_contradictions || report.divergence_breakdown.contradiction_details) ?? []).length > 0 && (
-            <div className="mt-6 bg-amber-50/20 dark:bg-amber-950/10 border border-amber-200/30 dark:border-amber-900/30 rounded-xl p-5">
-              <h4 className="text-sm font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-4">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Active Contradictions ({(report.divergence_breakdown.active_contradictions || report.divergence_breakdown.contradiction_details || []).length})
-              </h4>
-              <div className="space-y-4">
-                {(report.divergence_breakdown.active_contradictions || report.divergence_breakdown.contradiction_details || []).map((c, idx) => (
-                  <div key={idx} className="bg-white dark:bg-slate-900 border border-amber-200/30 dark:border-amber-900/20 rounded-lg p-4 shadow-xs">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">{c.model_a} claim:</span>
-                        <p className="text-sm text-slate-800 dark:text-slate-200 italic font-medium">&quot;{c.claim_a}&quot;</p>
-                      </div>
-                      <div className="border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-4">
-                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">{c.model_b} claim:</span>
-                        <p className="text-sm text-slate-800 dark:text-slate-200 italic font-medium">&quot;{c.claim_b}&quot;</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1">Divergence explanation:</span>
-                      <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">{c.reason}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </ReportSection>
+      {activeReport.divergence_breakdown && (
+        <SemanticAlignmentSection divergenceBreakdown={activeReport.divergence_breakdown} />
       )}
 
       {/* Risks & Assumptions */}
-      {report.risks_and_assumptions && report.risks_and_assumptions.length > 0 && (
+      {activeReport.risks_and_assumptions && activeReport.risks_and_assumptions.length > 0 && (
         <ReportSection title="Risks & Assumptions">
-          <RiskMatrix risks={report.risks_and_assumptions as any} />
+          <RiskMatrix risks={activeReport.risks_and_assumptions as any} />
         </ReportSection>
       )}
 
       {/* Next Actions */}
-      {report.next_actions && report.next_actions.length > 0 && (
+      {activeReport.next_actions && activeReport.next_actions.length > 0 && (
         <ReportSection title="Next Actions">
-          <NextActionsList actions={report.next_actions as any} />
+          <NextActionsList actions={activeReport.next_actions as any} />
         </ReportSection>
       )}
 
       {/* Caveats */}
-      {report.caveats && report.caveats.length > 0 && (
+      {activeReport.caveats && activeReport.caveats.length > 0 && (
         <ReportSection title="Caveats">
           <ul className="space-y-1">
-            {report.caveats.map((caveat, i) => (
+            {activeReport.caveats.map((caveat, i) => (
               <li key={i} className="text-sm text-slate-600 dark:text-slate-400 flex items-start gap-2">
                 <span className="text-slate-400 dark:text-slate-500 mt-0.5">-</span>
                 {caveat}
@@ -464,6 +315,6 @@ export function DecisionReportView({ report: rawReport, rawSynthesis, className 
           </ul>
         </ReportSection>
       )}
-    </div>
+    </DecisionReportShell>
   )
 }

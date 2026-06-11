@@ -5,6 +5,9 @@ import { Eye, Trophy, Sparkles, Check, CheckCircle2, ChevronRight, MessageSquare
 import { apiRequest } from "@/lib/apiClient";
 import { SynthesisCard } from "./SynthesisCard";
 import { DecisionReportView } from "@/components/report/DecisionReportView";
+import { ReportGenerationFailedCard } from "@/components/report/ReportGenerationFailedCard";
+import { FallbackResponsePanel } from "@/components/report/FallbackResponsePanel";
+import { SemanticAlignmentSection } from "@/components/report/SemanticAlignmentSection";
 import type { ModelResponse } from "./ModelCard";
 
 interface SynthesisRevealProps {
@@ -13,6 +16,12 @@ interface SynthesisRevealProps {
   isSynthesisFailed: boolean;
   debateId: string;
   synthesisReport?: any;
+  synthesisStatus?: "succeeded" | "failed" | "fallback";
+  synthesisError?: string;
+  fallbackModel?: string;
+  fallbackReason?: string;
+  fallbackResponse?: { model: string; content: string };
+  divergenceBreakdown?: any;
 }
 
 export function SynthesisReveal({
@@ -21,6 +30,12 @@ export function SynthesisReveal({
   isSynthesisFailed,
   debateId,
   synthesisReport,
+  synthesisStatus = "succeeded",
+  synthesisError,
+  fallbackModel,
+  fallbackReason,
+  fallbackResponse,
+  divergenceBreakdown,
 }: SynthesisRevealProps) {
   const [revealed, setRevealed] = useState(false);
   const [prediction, setPrediction] = useState<string | null>(null);
@@ -29,11 +44,12 @@ export function SynthesisReveal({
 
   // Build structured report from synthesis text or use the direct synthesisReport
   const report = useMemo(() => {
+    if (synthesisStatus === "failed" || synthesisStatus === "fallback") return null;
     if (synthesisReport && (synthesisReport.verdict || synthesisReport.executive_summary)) return synthesisReport;
     if (!synthesis || isSynthesisFailed) return null;
     // Parse the synthesis into a structured report using heuristic extraction
     return buildReportFromSynthesis(synthesis, modelResponses);
-  }, [synthesis, modelResponses, isSynthesisFailed, synthesisReport]);
+  }, [synthesis, modelResponses, isSynthesisFailed, synthesisReport, synthesisStatus]);
 
   useEffect(() => {
     // Check if user previously revealed this synthesis
@@ -101,10 +117,13 @@ export function SynthesisReveal({
   };
 
   if (revealed) {
+    const showStructuredReport = report && !isSynthesisFailed && synthesisStatus !== "failed" && synthesisStatus !== "fallback";
+    const showFallbackReport = (synthesisStatus === "failed" || synthesisStatus === "fallback") && (fallbackResponse || divergenceBreakdown);
+
     return (
       <div className="space-y-6 animate-fade-in">
-        {/* Show raw SynthesisCard only when no structured report is available */}
-        {(!report || isSynthesisFailed) && (
+        {/* Show raw SynthesisCard only when no structured report and no fallback/divergence breakdown is available */}
+        {!showStructuredReport && !showFallbackReport && (
           <SynthesisCard
             synthesis={synthesis}
             modelResponses={modelResponses}
@@ -113,9 +132,33 @@ export function SynthesisReveal({
         )}
 
         {/* Structured Decision Report — replaces the raw SynthesisCard */}
-        {report && !isSynthesisFailed && (
+        {showStructuredReport && (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
-            <DecisionReportView report={report} rawSynthesis={synthesis} />
+            <DecisionReportView
+              report={report}
+              rawSynthesis={synthesis}
+            />
+          </div>
+        )}
+
+        {/* Fallback / Failure UI — replaces the raw SynthesisCard */}
+        {showFallbackReport && (
+          <div className="space-y-6">
+            <ReportGenerationFailedCard reason={synthesisError} />
+            {synthesisStatus === "fallback" && fallbackResponse && (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
+                <FallbackResponsePanel
+                  modelName={fallbackModel || fallbackResponse.model}
+                  reason={fallbackReason}
+                  content={fallbackResponse.content}
+                />
+              </div>
+            )}
+            {divergenceBreakdown && (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
+                <SemanticAlignmentSection divergenceBreakdown={divergenceBreakdown} />
+              </div>
+            )}
           </div>
         )}
 

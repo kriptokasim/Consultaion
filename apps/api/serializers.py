@@ -62,6 +62,13 @@ class PublicDebateDTO(BaseModel):
     synthesis_success: Optional[bool] = None
     models: Optional[List[Dict[str, Any]]] = None
     synthesis_report: Optional[Dict[str, Any]] = None
+    synthesis_status: Optional[str] = None
+    synthesis_error: Optional[str] = None
+    fallback_model: Optional[str] = None
+    fallback_reason: Optional[str] = None
+    fallback_response: Optional[Dict[str, Any]] = None
+    semantic_analysis: Optional[Dict[str, Any]] = None
+    divergence_breakdown: Optional[Dict[str, Any]] = None
 
 
 class PrivateDebateDTO(BaseModel):
@@ -139,7 +146,20 @@ def _safe_final_meta(final_meta: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
     safe = {}
     # Only expose aggregate stats, not internal errors or debug info
-    for key in ("successful_count", "total_count", "synthesis_success", "models", "synthesis_report"):
+    for key in (
+        "successful_count",
+        "total_count",
+        "synthesis_success",
+        "models",
+        "synthesis_report",
+        "synthesis_status",
+        "synthesis_error",
+        "fallback_model",
+        "fallback_reason",
+        "fallback_response",
+        "semantic_analysis",
+        "divergence_breakdown",
+    ):
         if key in final_meta:
             val = final_meta[key]
             if key == "models" and isinstance(val, list):
@@ -188,7 +208,15 @@ def serialize_debate_public(debate) -> dict:
         synthesis_success=safe_meta.get("synthesis_success"),
         models=safe_meta.get("models"),
         synthesis_report=safe_meta.get("synthesis_report"),
+        synthesis_status=safe_meta.get("synthesis_status"),
+        synthesis_error=safe_meta.get("synthesis_error"),
+        fallback_model=safe_meta.get("fallback_model"),
+        fallback_reason=safe_meta.get("fallback_reason"),
+        fallback_response=safe_meta.get("fallback_response"),
+        semantic_analysis=safe_meta.get("semantic_analysis"),
+        divergence_breakdown=safe_meta.get("divergence_breakdown"),
     ).model_dump()
+
 
 
 def serialize_debate_private(debate) -> dict:

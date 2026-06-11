@@ -247,3 +247,4 @@ describe("DecisionReportView", () => {
     expect(screen.getByText("Decision Report Validation Guard Triggered")).toBeInTheDocument();
   });
 });
+

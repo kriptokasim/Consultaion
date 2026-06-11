@@ -221,7 +221,7 @@ async def run_arena(
         )
 
     # Synthesize final verdict
-    synthesis_content, synthesis_report = await _synthesize_verdict(
+    synthesis_content, synthesis_report, meta_updates = await _synthesize_verdict(
         debate_id=debate_id,
         prompt=prompt,
         model_responses=successful,
@@ -229,7 +229,7 @@ async def run_arena(
         model_id=model_id,
         locale=locale,
     )
-    synthesis_success = not synthesis_content.startswith("⚠️ Synthesis unavailable")
+    synthesis_success = meta_updates.get("synthesis_status") == "succeeded"
 
     # Persist synthesis
     async with async_session_scope() as session:
@@ -277,6 +277,7 @@ async def run_arena(
         "synthesis_report": synthesis_report,
         "model_warnings": model_warnings,
         "usage": usage.snapshot(),
+        **meta_updates,
     }
 
     return ArenaResult(
@@ -288,6 +289,37 @@ async def run_arena(
     )
 
 
+import re
+
+def sanitize_synthesis_error(error_msg: str) -> str:
+    """Sanitize synthesis errors to avoid exposing sensitive details, stack traces, API keys, or provider internals."""
+    if not error_msg:
+        return "An unknown error occurred during synthesis."
+    
+    # Redact common key/token patterns
+    error_msg = re.sub(r"sk-[a-zA-Z0-9\-_]{12,}", "[REDACTED_API_KEY]", error_msg)
+    error_msg = re.sub(r"Bearer\s+[a-zA-Z0-9\-_.]+", "Bearer [REDACTED]", error_msg, flags=re.IGNORECASE)
+    
+    sensitive_words = [
+        "litellm", "openai", "anthropic", "gemini", "google", "cohere", "groq", 
+        "together", "ollama", "api_key", "api-key", "credential", "secret", "token",
+        "auth", "unauthorized", "forbidden", "rate_limit", "rate-limit", "quota", 
+        "billing", "invalid_request", "bad_request", "json.decoder", "json_parse", 
+        "parse_error", "traceback", "stack_trace", "line ", "file ", "exception", 
+        "connection", "timeout", "status_code", "400", "401", "403", "429", "500"
+    ]
+    
+    msg_lower = error_msg.lower()
+    for word in sensitive_words:
+        if word in msg_lower:
+            return "The structured synthesis service encountered a validation or parsing error. Raw model responses have been preserved."
+            
+    if len(error_msg) > 120 or "\n" in error_msg:
+        return "The structured synthesis service encountered a validation or parsing error. Raw model responses have been preserved."
+        
+    return error_msg
+
+
 async def _synthesize_verdict(
     *,
     debate_id: str,
@@ -296,9 +328,9 @@ async def _synthesize_verdict(
     usage: UsageAccumulator,
     model_id: str | None = None,
     locale: str | None = None,
-) -> tuple[str, dict | None]:
+) -> tuple[str, dict | None, dict]:
     """Produce the final synthesized verdict and structured decision report from all model responses."""
-    from reporting.synthesizer import generate_decision_report
+    from reporting.synthesizer import generate_decision_report, StructuredSynthesisError
 
     responses_list = [
         {
@@ -317,12 +349,55 @@ async def _synthesize_verdict(
             model_override=model_id,
             usage=usage,
         )
-        return report.executive_summary or report.title, report.model_dump()
-    except Exception as e:
-        logger.error(f"Arena synthesis failed: {e}")
-        # Fallback: return the best individual response
+        meta_updates = {
+            "synthesis_status": "succeeded",
+            "synthesis_error": None,
+            "fallback_model": None,
+            "fallback_reason": None,
+            "fallback_response": None,
+            "semantic_analysis": report.divergence_breakdown,
+            "divergence_breakdown": report.divergence_breakdown,
+        }
+        return report.executive_summary or report.title, report.model_dump(), meta_updates
+    except StructuredSynthesisError as e:
+        logger.error(f"Arena synthesis failed with StructuredSynthesisError: {e}")
+        fallback_model_name = f"{model_responses[0].display_name} ({model_responses[0].provider.capitalize() if model_responses[0].provider else ''})"
         fallback_content = (
             f"⚠️ Synthesis unavailable. Here is the top response:\n\n"
             f"**{model_responses[0].display_name}:**\n{model_responses[0].content}"
         )
-        return fallback_content, None
+        meta_updates = {
+            "synthesis_status": "failed",
+            "synthesis_error": sanitize_synthesis_error(str(e)),
+            "fallback_model": fallback_model_name,
+            "fallback_reason": "Top model response shown because structured synthesis failed",
+            "fallback_response": {
+                "model": fallback_model_name,
+                "content": model_responses[0].content,
+            },
+            "semantic_analysis": e.semantic_analysis,
+            "divergence_breakdown": e.semantic_analysis,
+        }
+        return fallback_content, None, meta_updates
+    except Exception as e:
+        logger.error(f"Arena synthesis failed with general exception: {e}")
+        fallback_model_name = f"{model_responses[0].display_name} ({model_responses[0].provider.capitalize() if model_responses[0].provider else ''})"
+        fallback_content = (
+            f"⚠️ Synthesis unavailable. Here is the top response:\n\n"
+            f"**{model_responses[0].display_name}:**\n{model_responses[0].content}"
+        )
+        meta_updates = {
+            "synthesis_status": "failed",
+            "synthesis_error": sanitize_synthesis_error(str(e)),
+            "fallback_model": fallback_model_name,
+            "fallback_reason": "Top model response shown because structured synthesis failed",
+            "fallback_response": {
+                "model": fallback_model_name,
+                "content": model_responses[0].content,
+            },
+            "semantic_analysis": None,
+            "divergence_breakdown": None,
+        }
+        return fallback_content, None, meta_updates
+
+
