@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/client";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { Reveal } from "./Reveal";
 import { cn } from "@/lib/utils";
 import {
@@ -13,9 +14,9 @@ import {
 
 const stepIcons = [MessageSquareText, GitCompareArrows, AlertTriangle, FileCheck2];
 
-const stepVisuals = [
-  // Step 1: prompt card
-  ({ active }: { active: boolean }) => (
+// Step 1: prompt card
+function PromptVisual({ active }: { active: boolean }) {
+  return (
     <div
       className={cn(
         "rounded-2xl border bg-white p-5 shadow-md transition-all duration-500 dark:border-slate-700 dark:bg-slate-800",
@@ -32,9 +33,12 @@ const stepVisuals = [
         stronger demand signals?&rdquo;
       </p>
     </div>
-  ),
-  // Step 2: model response cards
-  ({ active }: { active: boolean }) => (
+  );
+}
+
+// Step 2: model response cards
+function ModelResponsesVisual({ active }: { active: boolean }) {
+  return (
     <div className="space-y-2">
       {["GPT-4o", "Claude 3.5", "Gemini Pro"].map((model, i) => (
         <div
@@ -67,9 +71,12 @@ const stepVisuals = [
         </div>
       ))}
     </div>
-  ),
-  // Step 3: divergence meter
-  ({ active }: { active: boolean }) => (
+  );
+}
+
+// Step 3: divergence meter
+function DivergenceVisual({ active }: { active: boolean }) {
+  return (
     <div
       className={cn(
         "rounded-2xl border bg-white p-5 shadow-md transition-all duration-500 dark:border-slate-700 dark:bg-slate-800",
@@ -95,8 +102,7 @@ const stepVisuals = [
               <div
                 className={cn(
                   "h-full rounded-full transition-all duration-700",
-                  item.color,
-                  active ? `w-[${item.value}%]` : "w-0"
+                  item.color
                 )}
                 style={{ width: active ? `${item.value}%` : "0%" }}
               />
@@ -105,9 +111,12 @@ const stepVisuals = [
         ))}
       </div>
     </div>
-  ),
-  // Step 4: decision report card
-  ({ active }: { active: boolean }) => (
+  );
+}
+
+// Step 4: decision report card
+function DecisionReportVisual({ active }: { active: boolean }) {
+  return (
     <div
       className={cn(
         "rounded-2xl border bg-white p-5 shadow-md transition-all duration-500 dark:border-slate-700 dark:bg-slate-800",
@@ -133,38 +142,18 @@ const stepVisuals = [
         </div>
       </div>
     </div>
-  ),
-];
+  );
+}
+
+const stepVisuals = [PromptVisual, ModelResponsesVisual, DivergenceVisual, DecisionReportVisual];
 
 export function HowItWorks() {
   const { t } = useI18n();
   const [activeStep, setActiveStep] = useState(0);
-  const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const stepRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  useEffect(() => {
-    const prefersReduced =
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (prefersReduced) return;
-
-    const observers: IntersectionObserver[] = [];
-
-    stepRefs.current.forEach((el, index) => {
-      if (!el) return;
-      const observer = new IntersectionObserver(
-        ([entry]) => {
-          if (entry.isIntersecting) {
-            setActiveStep(index);
-          }
-        },
-        { threshold: 0.6 }
-      );
-      observer.observe(el);
-      observers.push(observer);
-    });
-
-    return () => observers.forEach((o) => o.disconnect());
-  }, []);
+  const stepsContainerRef = useRef<HTMLDivElement | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const steps = [
     {
@@ -185,10 +174,104 @@ export function HowItWorks() {
     },
   ];
 
+  // Phase 2: Click handler for step cards
+  const handleStepClick = useCallback(
+    (index: number) => {
+      setActiveStep(index);
+      const el = stepRefs.current[index];
+      if (!el) return;
+
+      el.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "center",
+      });
+    },
+    [prefersReducedMotion]
+  );
+
+  // Phase 4: Scroll-progress-based active step detection (desktop only)
+  useEffect(() => {
+    if (prefersReducedMotion) return;
+
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
+    let raf = 0;
+    let scrollBound = false;
+
+    const updateActiveStep = () => {
+      const container = stepsContainerRef.current;
+      if (!container) return;
+
+      const cards = stepRefs.current.filter(Boolean) as HTMLElement[];
+      if (!cards.length) return;
+
+      const viewportAnchor = window.innerHeight * 0.45;
+
+      let bestIndex = 0;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      cards.forEach((card, index) => {
+        const rect = card.getBoundingClientRect();
+        const cardCenter = rect.top + rect.height / 2;
+        const distance = Math.abs(cardCenter - viewportAnchor);
+
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = index;
+        }
+      });
+
+      setActiveStep((prev) => (prev === bestIndex ? prev : bestIndex));
+    };
+
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(updateActiveStep);
+    };
+
+    const bindScroll = () => {
+      if (scrollBound) return;
+      scrollBound = true;
+      updateActiveStep();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll);
+    };
+
+    const unbindScroll = () => {
+      if (!scrollBound) return;
+      scrollBound = false;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+
+    const handleBreakpointChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        bindScroll();
+      } else {
+        unbindScroll();
+      }
+    };
+
+    // Initial bind if already desktop
+    if (desktopQuery.matches) {
+      bindScroll();
+    }
+
+    desktopQuery.addEventListener("change", handleBreakpointChange);
+
+    return () => {
+      unbindScroll();
+      desktopQuery.removeEventListener("change", handleBreakpointChange);
+    };
+  }, [prefersReducedMotion]);
+
   const ActiveVisual = stepVisuals[activeStep];
 
   return (
-    <section className="py-16 md:py-24" aria-labelledby="how-it-works-heading">
+    <section
+      className="py-16 md:py-24"
+      aria-labelledby="how-it-works-heading"
+    >
       <Reveal>
         <div className="mb-12 text-center">
           <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
@@ -206,28 +289,47 @@ export function HowItWorks() {
       <div className="mx-auto max-w-5xl">
         {/* Desktop: two-column with sticky visual */}
         <div className="hidden lg:grid lg:grid-cols-[1fr_1.1fr] lg:gap-12">
-          {/* Left: sticky visual */}
+          {/* Left: sticky visual — Phase 6 stabilization */}
           <div className="relative">
-            <div className="sticky top-32">
-              <ActiveVisual active={true} />
+            <div className="sticky top-28 z-10 pointer-events-none">
+              <div className="rounded-3xl border border-slate-200/70 bg-white/70 p-4 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/70">
+                <ActiveVisual active={true} />
+              </div>
             </div>
           </div>
 
-          {/* Right: step cards */}
-          <div className="space-y-8">
+          {/* Right: interactive step cards — Phase 2 + 5 + 7 + 9 */}
+          <div ref={stepsContainerRef} className="relative z-10 space-y-10 pb-24">
+            {/* Phase 7: Progress rail */}
+            <div className="mb-6 flex items-center gap-2" aria-hidden="true">
+              {steps.map((_, index) => (
+                <div
+                  key={`progress-${index}`}
+                  className={cn(
+                    "h-1 flex-1 rounded-full transition-colors duration-300",
+                    index <= activeStep ? "bg-amber-500" : "bg-slate-200 dark:bg-slate-800"
+                  )}
+                />
+              ))}
+            </div>
+
             {steps.map((step, index) => {
               const Icon = stepIcons[index];
               return (
-                <div
-                  key={index}
+                <button
+                  key={step.title}
+                  type="button"
                   ref={(el) => {
                     stepRefs.current[index] = el;
                   }}
+                  onClick={() => handleStepClick(index)}
+                  aria-current={activeStep === index ? "step" : undefined}
                   className={cn(
-                    "rounded-2xl border p-6 transition-all duration-300",
+                    "w-full min-h-[220px] scroll-mt-32 rounded-2xl border p-6 text-left transition-all duration-300",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2",
                     activeStep === index
                       ? "border-amber-300 bg-amber-50/60 shadow-md dark:border-amber-600/40 dark:bg-amber-950/20"
-                      : "border-slate-200 bg-white/60 dark:border-slate-800 dark:bg-slate-900/40"
+                      : "border-slate-200 bg-white/60 hover:border-amber-200 hover:bg-white dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-slate-700"
                   )}
                 >
                   <div className="flex items-start gap-4">
@@ -253,18 +355,18 @@ export function HowItWorks() {
                       </p>
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
 
-        {/* Mobile: simple stacked cards */}
+        {/* Mobile: simple stacked cards — Phase 8 */}
         <div className="space-y-6 lg:hidden">
           {steps.map((step, index) => {
             const Icon = stepIcons[index];
             return (
-              <Reveal key={index} delay={index * 100}>
+              <Reveal key={`mobile-${step.title}`} delay={index * 100}>
                 <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
                   <div className="flex items-start gap-4">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
