@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/client";
-import { ArrowLeft, Copy, Check } from "lucide-react";
+import BackButton from "@/components/navigation/BackButton";
+import { Copy, Check } from "lucide-react";
 import { useState } from "react";
 
 export default function ApiClient() {
@@ -30,13 +31,9 @@ const data = await res.json();
 
     return (
         <div className="mx-auto max-w-3xl px-6 py-12">
-            <Link
-                href="/docs"
-                className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-amber-800 hover:text-amber-600"
-            >
-                <ArrowLeft className="h-4 w-4" />
-                {t("nav.goBack")}
-            </Link>
+            <div className="mb-8">
+                <BackButton href="/docs" label={t("nav.goBack")} />
+            </div>
 
             <h1 className="mb-4 text-4xl font-bold text-slate-900 dark:text-white">{t("docs.api.title")}</h1>
             <p className="mb-12 text-lg text-slate-600 dark:text-slate-400">{t("docs.api.description")}</p>

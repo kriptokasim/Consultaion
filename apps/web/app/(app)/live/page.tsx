@@ -70,6 +70,25 @@ function ArenaPageContent() {
   const [truncateReason, setTruncateReason] = useState<string | null>(null)
   const [errorState, setErrorState] = useState<{ title?: string; message: string; hint?: string; retryable?: boolean } | null>(null)
 
+  const promptSectionRef = useRef<HTMLDivElement | null>(null)
+
+  const focusPromptPanel = useCallback(() => {
+    promptSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    })
+
+    requestAnimationFrame(() => {
+      const textarea = promptSectionRef.current?.querySelector("textarea")
+      if (textarea instanceof HTMLTextAreaElement) {
+        textarea.focus()
+        textarea.select?.()
+      }
+    })
+
+    track("live_hero_scroll_to_prompt_clicked")
+  }, [])
+
   const searchParams = useSearchParams()
   const prefillPromptFrom = searchParams?.get('prefill_prompt_from')
   const prefillPromptText = searchParams?.get('prefill_prompt')
@@ -416,7 +435,7 @@ function ArenaPageContent() {
         speakerSeconds={speakerTime}
         stats={sessionStats}
         voteResults={latestScores}
-        onStart={onStart}
+        onStart={focusPromptPanel}
         running={running}
       />
       <SessionHUD
@@ -429,7 +448,7 @@ function ArenaPageContent() {
       />
 
       {/* New centered prompt workspace */}
-      <div className="space-y-4">
+      <div ref={promptSectionRef} className="space-y-4 scroll-mt-28">
         <DebateProgressBar active={running} />
 
         {errorState && (

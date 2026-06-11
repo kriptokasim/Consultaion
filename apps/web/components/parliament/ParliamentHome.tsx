@@ -30,6 +30,11 @@ export default function ParliamentHome({
     .slice()
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
+  const hasRunActivity =
+    running ||
+    (stats?.rounds ?? 0) > 0 ||
+    (stats?.speeches ?? 0) > 0 ||
+    (stats?.votes ?? 0) > 0;
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-accent-secondary/5 via-secondary to-card p-6 shadow-smooth-lg">
@@ -75,23 +80,31 @@ export default function ParliamentHome({
               </span>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <MetricCard
-              label="Rounds run"
-              value={stats?.rounds ?? 0}
-              icon={<Users className="h-4 w-4 text-accent-secondary" />}
-            />
-            <MetricCard
-              label="Responses logged"
-              value={stats?.speeches ?? 0}
-              icon={<Sparkles className="h-4 w-4 text-accent-secondary" />}
-            />
-            <MetricCard
-              label="Scores recorded"
-              value={stats?.votes ?? 0}
-              icon={<Trophy className="h-4 w-4 text-accent-secondary" />}
-            />
-          </div>
+          {hasRunActivity ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MetricCard
+                label="Rounds run"
+                value={stats?.rounds ?? 0}
+                icon={<Users className="h-4 w-4 text-accent-secondary" />}
+              />
+              <MetricCard
+                label="Responses logged"
+                value={stats?.speeches ?? 0}
+                icon={<Sparkles className="h-4 w-4 text-accent-secondary" />}
+              />
+              <MetricCard
+                label="Scores recorded"
+                value={stats?.votes ?? 0}
+                icon={<Trophy className="h-4 w-4 text-accent-secondary" />}
+              />
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <InfoCard label="1" title="Ask" body="Enter a decision question." />
+              <InfoCard label="2" title="Compare" body="Models respond independently." />
+              <InfoCard label="3" title="Decide" body="Open a structured decision report." />
+            </div>
+          )}
         </div>
         <div className="space-y-4 rounded-2xl border border-border bg-card/80 p-4 shadow-inner">
           <div className="rounded-xl border border-accent-secondary/20 bg-accent-secondary/5 p-4">
@@ -165,6 +178,28 @@ export default function ParliamentHome({
         </div>
       </div>
     </section>
+  );
+}
+
+function InfoCard({
+  label,
+  title,
+  body,
+}: {
+  label: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-smooth transition-transform duration-200 hover:-translate-y-[2px] hover:shadow-smooth-lg">
+      <div className="flex items-center gap-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-secondary/15 text-xs font-bold text-accent-secondary">
+          {label}
+        </span>
+        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{body}</p>
+    </div>
   );
 }
 

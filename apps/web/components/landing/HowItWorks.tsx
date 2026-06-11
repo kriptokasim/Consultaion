@@ -269,7 +269,7 @@ export function HowItWorks() {
 
   return (
     <section
-      className="py-16 md:py-24"
+      className="relative py-16 md:py-24"
       aria-labelledby="how-it-works-heading"
     >
       <Reveal>
@@ -286,21 +286,21 @@ export function HowItWorks() {
         </div>
       </Reveal>
 
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl px-4 md:px-6">
         {/* Desktop: two-column with sticky visual */}
-        <div className="hidden lg:grid lg:grid-cols-[1fr_1.1fr] lg:gap-12">
-          {/* Left: sticky visual — Phase 6 stabilization */}
-          <div className="relative">
-            <div className="sticky top-28 z-10 pointer-events-none">
+        <div className="hidden lg:grid lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
+          {/* Left: sticky visual — Phase 4 stabilization */}
+          <aside className="relative">
+            <div className="sticky top-28 z-10">
               <div className="rounded-3xl border border-slate-200/70 bg-white/70 p-4 shadow-xl backdrop-blur dark:border-slate-800 dark:bg-slate-900/70">
                 <ActiveVisual active={true} />
               </div>
             </div>
-          </div>
+          </aside>
 
-          {/* Right: interactive step cards — Phase 2 + 5 + 7 + 9 */}
-          <div ref={stepsContainerRef} className="relative z-10 space-y-10 pb-24">
-            {/* Phase 7: Progress rail */}
+          {/* Right: interactive step cards */}
+          <div ref={stepsContainerRef} className="space-y-10 pb-32">
+            {/* Progress rail */}
             <div className="mb-6 flex items-center gap-2" aria-hidden="true">
               {steps.map((_, index) => (
                 <div

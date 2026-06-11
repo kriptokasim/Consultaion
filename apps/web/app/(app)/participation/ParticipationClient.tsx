@@ -147,6 +147,44 @@ export default function ParticipationClient({ profile }: { profile: UserProfile 
     return new Date(ts).toLocaleDateString();
   };
 
+  if (stats.total_interactions === 0) {
+    return (
+      <div className="space-y-8 p-4">
+        {/* Header Banner */}
+        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 md:p-8 shadow-[0_20px_45px_rgba(120,113,108,0.12)] dark:border-border dark:from-stone-900 dark:via-card dark:to-stone-900">
+          <div className="relative z-10">
+            <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400">
+              {t("participation.hero.kicker")}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
+              <h1 className="heading-serif text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">
+                {t("participation.hero.title")}
+              </h1>
+            </div>
+            <p className="mt-3 text-sm max-w-3xl text-slate-600 dark:text-muted-foreground leading-relaxed">
+              {t("participation.hero.description")}
+            </p>
+          </div>
+          <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-amber-200/30 blur-3xl dark:bg-amber-500/10 pointer-events-none" />
+        </header>
+
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900/40">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Participation is not active yet. Prediction and forecaster scoring will appear here when the forecasting loop is enabled.
+          </p>
+          <div className="mt-6">
+            <Link
+              href="/live"
+              className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-amber-500 transition-colors"
+            >
+              Back to Arena
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 p-4">
       {/* Header Banner */}
