@@ -11,6 +11,7 @@ import ConversationRunView from "@/components/conversation/ConversationRunView";
 import ArenaRunView from "@/components/arena/ArenaRunView";
 import VotingRunView from "@/components/voting/VotingRunView";
 import { Button } from "@/components/ui/button";
+import { SkeletonCard } from "@/components/arena/ModelCard";
 import { useDebate } from "@/lib/api/hooks/useDebate";
 import { timelineReducer, initialTimelineState } from "@/lib/timeline/reducer";
 import { TimelineEvent } from "@/lib/timeline/types";
@@ -335,8 +336,41 @@ export default function RunDetailClient() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="container max-w-[1400px] py-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-6 w-32 bg-slate-200 dark:bg-slate-800 rounded-md" />
+            <div className="h-4 w-64 bg-slate-100 dark:bg-slate-900 rounded-md" />
+          </div>
+          <div className="h-9 w-24 bg-slate-200 dark:bg-slate-800 rounded-md" />
+        </div>
+
+        {/* Question Banner Skeleton */}
+        <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-card p-6 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3.5 w-24 bg-slate-200 dark:bg-slate-800 rounded-md" />
+              <div className="h-5 w-full bg-slate-100 dark:bg-slate-900 rounded-md" />
+              <div className="h-5 w-3/4 bg-slate-100 dark:bg-slate-900 rounded-md" />
+            </div>
+          </div>
+        </div>
+
+        {/* Pipeline Progress Skeleton */}
+        <div className="h-14 w-full bg-slate-105 dark:bg-slate-900/60 rounded-2xl animate-pulse" />
+
+        {/* Model Cards Grid Skeleton */}
+        <div className="space-y-3 animate-pulse">
+          <div className="h-4.5 w-36 bg-slate-200 dark:bg-slate-800 rounded-md" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <SkeletonCard index={0} />
+            <SkeletonCard index={1} />
+            <SkeletonCard index={2} />
+            <SkeletonCard index={3} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -436,9 +470,41 @@ export default function RunDetailClient() {
   // Still loading results for completed debate
   if (isCompleted && resultsLoading) {
     return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <span className="ml-3 text-sm text-muted-foreground">Loading debate results…</span>
+      <div className="container max-w-[1400px] py-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-6 w-32 bg-slate-200 dark:bg-slate-800 rounded-md" />
+            <div className="h-4 w-64 bg-slate-100 dark:bg-slate-900 rounded-md" />
+          </div>
+          <div className="h-9 w-24 bg-slate-200 dark:bg-slate-800 rounded-md" />
+        </div>
+
+        {/* Question Banner Skeleton */}
+        <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-card p-6 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3.5 w-24 bg-slate-200 dark:bg-slate-800 rounded-md" />
+              <div className="h-5 w-full bg-slate-100 dark:bg-slate-900 rounded-md" />
+              <div className="h-5 w-3/4 bg-slate-100 dark:bg-slate-900 rounded-md" />
+            </div>
+          </div>
+        </div>
+
+        {/* Pipeline Progress Skeleton */}
+        <div className="h-14 w-full bg-slate-105 dark:bg-slate-900/60 rounded-2xl animate-pulse" />
+
+        {/* Model Cards Grid Skeleton */}
+        <div className="space-y-3 animate-pulse">
+          <div className="h-4.5 w-36 bg-slate-200 dark:bg-slate-800 rounded-md" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <SkeletonCard index={0} />
+            <SkeletonCard index={1} />
+            <SkeletonCard index={2} />
+            <SkeletonCard index={3} />
+          </div>
+        </div>
       </div>
     );
   }

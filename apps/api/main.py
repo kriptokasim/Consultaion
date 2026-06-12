@@ -374,6 +374,12 @@ app.include_router(billing_router)
 app.include_router(promotions_router)
 app.include_router(api_keys_router)
 
+from routes.provider_keys import router as provider_keys_router
+app.include_router(provider_keys_router)
+
+from routes.audit_logs import router as audit_logs_router
+app.include_router(audit_logs_router)
+
 from routes.features import router as features_router
 from routes.gifs import router as gifs_router
 
@@ -401,6 +407,8 @@ v1_router.include_router(routing_admin_router)
 v1_router.include_router(billing_router)
 v1_router.include_router(promotions_router)
 v1_router.include_router(api_keys_router)
+v1_router.include_router(provider_keys_router)
+v1_router.include_router(audit_logs_router)
 v1_router.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
 v1_router.include_router(features_router)
 v1_router.include_router(votes_router)

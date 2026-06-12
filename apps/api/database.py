@@ -105,6 +105,43 @@ def init_db() -> None:
             except Exception as e:
                 db_logger.warning("Failed to alter api_keys table: %s", e)
 
+            # 5. Create user_provider_keys table if not exists (Postgres & SQLite safety)
+            try:
+                tables = inspector.get_table_names()
+                if "user_provider_keys" not in tables:
+                    if backend == "postgresql":
+                        conn.execute(text("""
+                            CREATE TABLE user_provider_keys (
+                                id VARCHAR PRIMARY KEY,
+                                user_id VARCHAR NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+                                provider VARCHAR NOT NULL,
+                                masked_key VARCHAR NOT NULL,
+                                encrypted_key VARCHAR NOT NULL,
+                                created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                                updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+                            )
+                        """))
+                        conn.execute(text("CREATE INDEX idx_upk_user_id ON user_provider_keys(user_id)"))
+                        conn.execute(text("CREATE INDEX idx_upk_provider ON user_provider_keys(provider)"))
+                    else:
+                        conn.execute(text("""
+                            CREATE TABLE user_provider_keys (
+                                id TEXT PRIMARY KEY,
+                                user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+                                provider TEXT NOT NULL,
+                                masked_key TEXT NOT NULL,
+                                encrypted_key TEXT NOT NULL,
+                                created_at TIMESTAMP NOT NULL,
+                                updated_at TIMESTAMP NOT NULL
+                            )
+                        """))
+                        conn.execute(text("CREATE INDEX idx_upk_user_id ON user_provider_keys(user_id)"))
+                        conn.execute(text("CREATE INDEX idx_upk_provider ON user_provider_keys(provider)"))
+                    conn.commit()
+            except Exception as e:
+                db_logger.warning("Failed to create user_provider_keys table: %s", e)
+
+
 
 
 def get_session():

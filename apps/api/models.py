@@ -507,3 +507,19 @@ class UserInteraction(SQLModel, table=True):
     details: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
+
+class UserProviderKey(SQLModel, table=True):
+    """
+    User-provided API keys for BYOK mode.
+    """
+    __tablename__ = "user_provider_keys"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    provider: str = Field(nullable=False, index=True)  # "openai", "anthropic", "gemini", "openrouter"
+    masked_key: str = Field(nullable=False)
+    encrypted_key: str = Field(nullable=False)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+

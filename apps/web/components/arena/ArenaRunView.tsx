@@ -77,6 +77,29 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
     const isLoading = modelResponses.length === 0 && !synthesis;
     const expectedModels = debate.final_meta?.models?.length || 4;
     const [activeTab, setActiveTab] = useState<number>(0);
+    const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        setTouchStartX(e.touches[0].clientX);
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        if (touchStartX === null) return;
+        const touchEndX = e.changedTouches[0].clientX;
+        const diffX = touchStartX - touchEndX;
+
+        // Threshold of 50px for swipe gesture
+        if (Math.abs(diffX) > 50) {
+            if (diffX > 0) {
+                // Swipe left -> next card
+                setActiveTab((prev) => (prev + 1) % expectedModels);
+            } else {
+                // Swipe right -> previous card
+                setActiveTab((prev) => (prev - 1 + expectedModels) % expectedModels);
+            }
+        }
+        setTouchStartX(null);
+    };
 
     return (
         <div className="flex flex-col gap-6 pb-8">
@@ -138,44 +161,59 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
                     Model Responses
                 </h2>
 
-                <div role="tablist" aria-label="Model responses" className="flex sm:hidden overflow-x-auto gap-2 pb-2 mb-4 custom-scrollbar">
-                    {Array.from({ length: expectedModels }).map((_, i) => {
-                        const resp = modelResponses[i];
-                        if (!resp) {
-                            return <div key={`skeleton-tab-${i}`} className="h-9 w-24 bg-muted animate-pulse rounded-xl shrink-0" />;
-                        }
-                        const colors = getColors(resp.provider);
-                        const isActive = activeTab === i;
-                        const tabId = `model-tab-${resp.model_id || i}`;
-                        const panelId = `model-panel-${resp.model_id || i}`;
-                        return (
-                            <button
-                                key={resp.model_id || i}
-                                role="tab"
-                                id={tabId}
-                                aria-selected={isActive}
-                                aria-controls={panelId}
-                                tabIndex={isActive ? 0 : -1}
-                                onClick={() => setActiveTab(i)}
-                                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
-                                    isActive
-                                        ? `${colors.accent} ${colors.text} ${colors.border} shadow-sm scale-105`
-                                        : "border-border bg-card text-muted-foreground hover:text-foreground"
-                                }`}
-                            >
-                                <ModelLogo
-                                    logoUrl={resp.logo_url}
-                                    displayName={resp.display_name}
-                                    size={14}
-                                />
-                                <span>{resp.display_name}</span>
-                            </button>
-                        );
-                    })}
+                <div className="relative flex sm:hidden items-center w-full mb-4">
+                    {/* Left gradient fade overlay */}
+                    <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background via-background/60 to-transparent pointer-events-none z-10" />
+
+                    <div role="tablist" aria-label="Model responses" className="flex w-full overflow-x-auto gap-2 pb-2 px-6 custom-scrollbar">
+                        {Array.from({ length: expectedModels }).map((_, i) => {
+                            const resp = modelResponses[i];
+                            if (!resp) {
+                                return <div key={`skeleton-tab-${i}`} className="h-9 w-24 bg-muted animate-pulse rounded-xl shrink-0" />;
+                            }
+                            const colors = getColors(resp.provider);
+                            const isActive = activeTab === i;
+                            const tabId = `model-tab-${resp.model_id || i}`;
+                            const panelId = `model-panel-${resp.model_id || i}`;
+                            return (
+                                <button
+                                    key={resp.model_id || i}
+                                    role="tab"
+                                    id={tabId}
+                                    aria-selected={isActive}
+                                    aria-controls={panelId}
+                                    tabIndex={isActive ? 0 : -1}
+                                    onClick={() => setActiveTab(i)}
+                                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
+                                        isActive
+                                            ? `${colors.accent} ${colors.text} ${colors.border} shadow-sm scale-105`
+                                            : "border-border bg-card text-muted-foreground hover:text-foreground"
+                                    }`}
+                                >
+                                    <ModelLogo
+                                        logoUrl={resp.logo_url}
+                                        displayName={resp.display_name}
+                                        size={14}
+                                    />
+                                    <span>{resp.display_name}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Right gradient fade overlay */}
+                    <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background via-background/60 to-transparent pointer-events-none z-10" />
                 </div>
 
-                {/* Mobile View: Render only active card */}
-                <div role="tabpanel" id={`model-panel-${modelResponses[activeTab]?.model_id || activeTab}`} aria-labelledby={`model-tab-${modelResponses[activeTab]?.model_id || activeTab}`} className="block sm:hidden">
+                {/* Mobile View: Render only active card with swipe gesture handlers */}
+                <div
+                    role="tabpanel"
+                    id={`model-panel-${modelResponses[activeTab]?.model_id || activeTab}`}
+                    aria-labelledby={`model-tab-${modelResponses[activeTab]?.model_id || activeTab}`}
+                    className="block sm:hidden outline-none"
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                >
                     {(() => {
                         const resp = modelResponses[activeTab];
                         if (!resp) return <SkeletonCard index={activeTab} />;

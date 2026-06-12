@@ -204,6 +204,12 @@ export function HowItWorks() {
       const cards = stepRefs.current.filter(Boolean) as HTMLElement[];
       if (!cards.length) return;
 
+      // If at the bottom of the page, activate the last step
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 60) {
+        setActiveStep(cards.length - 1);
+        return;
+      }
+
       const viewportAnchor = window.innerHeight * 0.5;
 
       let bestIndex = 0;
@@ -297,7 +303,7 @@ export function HowItWorks() {
           </aside>
 
           {/* Right: interactive step cards */}
-          <div ref={stepsContainerRef} className="space-y-10 pb-[40vh]">
+          <div ref={stepsContainerRef} className="space-y-10 pb-16 xl:pb-20">
             {/* Progress rail */}
             <div className="mb-6 flex items-center gap-2" aria-hidden="true">
               {steps.map((_, index) => (

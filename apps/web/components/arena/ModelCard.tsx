@@ -112,10 +112,10 @@ export function ModelLogo({ logoUrl, displayName, size = 28 }: { logoUrl?: strin
 }
 
 /* ─── Skeleton card while loading ─── */
-export function SkeletonCard({ index }: { index: number }) {
+export function SkeletonCard({ index, className = "" }: { index: number; className?: string }) {
     const delays = ["", "animation-delay-150", "animation-delay-300", "animation-delay-500"];
     return (
-        <div className={`flex flex-col rounded-2xl border border-border bg-card shadow-sm overflow-hidden opacity-60 ${delays[index] || ""}`}>
+        <div className={`flex flex-col rounded-2xl border border-border bg-card shadow-sm overflow-hidden opacity-60 min-h-[350px] sm:min-h-[400px] ${delays[index] || ""} ${className}`}>
             <div className="p-4 border-b border-border flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
                 <div className="flex-1 space-y-1.5">
@@ -180,7 +180,7 @@ export function ModelCard({ resp, className = "" }: { resp: ModelResponse; class
 
     return (
         <article
-            className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm hover:shadow-md ${colors.glow} transition-all duration-200 overflow-hidden ${className}`}
+            className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm hover:shadow-md ${colors.glow} transition-all duration-200 overflow-hidden min-h-[350px] sm:min-h-[400px] ${className}`}
             aria-label={`Response from ${resp.display_name}`}
         >
             {/* Card Header */}

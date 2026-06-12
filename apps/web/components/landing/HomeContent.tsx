@@ -66,7 +66,7 @@ export default function HomeContent() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-x-clip bg-gradient-to-br from-slate-50 via-slate-100 to-amber-50/30 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
+    <main className="relative min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-amber-50/30 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
       {/* Background orbs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div className="absolute top-10 left-8 h-64 w-64 rounded-full bg-amber-100 blur-3xl opacity-30 dark:bg-amber-500/10" />
@@ -103,6 +103,13 @@ export default function HomeContent() {
                   >
                     {t("landing.hero.primaryCta")}
                   </Button>
+
+                  <Link
+                    href="/demo"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50/50 px-6 py-2.5 text-sm font-semibold text-amber-950 shadow-sm transition hover:-translate-y-[1px] hover:bg-amber-100/80 hover:shadow-md dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                  >
+                    Try Interactive Demo
+                  </Link>
 
                   <button
                     onClick={scrollToReport}
