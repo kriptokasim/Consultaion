@@ -45,6 +45,7 @@ async def run_arena(
     debate_id: str,
     *,
     model_id: str | None = None,
+    continue_pipeline: bool = False,
 ) -> ArenaResult:
     """
     Orchestrate an Arena mode run:
@@ -52,6 +53,9 @@ async def run_arena(
     2. Stream each response as it arrives
     3. Synthesize a final verdict from all responses
     """
+    from sqlmodel import select
+    from config import settings
+
     # Load debate data
     async with async_session_scope() as session:
         debate = await session.get(Debate, debate_id)
@@ -69,144 +73,167 @@ async def run_arena(
 
     backend = get_sse_backend()
     usage = UsageAccumulator()
+
+    # Load existing responses if resuming/continuing
+    existing_messages = []
+    async with async_session_scope() as session:
+        stmt = select(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_response")
+        result = await session.execute(stmt)
+        existing_messages = result.scalars().all()
+
     model_responses: List[ArenaModelResponse] = []
-
-    # Notify start
-    await backend.publish(
-        f"debate:{debate_id}",
-        {
-            "type": "arena_started",
-            "debate_id": str(debate_id),
-            "models": [
-                {
-                    "model_id": m.id,
-                    "display_name": m.display_name,
-                    "provider": m.provider,
-                    "logo_url": m.logo_url,
-                    "persona_type": m.persona_type,
-                    "persona_tagline": m.persona_tagline,
-                }
-                for m in arena_models
-            ],
-        },
-    )
-
-    # Build locale instruction if set
-    locale_instruction = ""
-    if locale and locale != "en":
-        locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
-
-    async def _call_model(model_info):
-        """Call a single SOTA model and return its response."""
-        system_prompt = ARENA_MODEL_SYSTEM_PROMPT.format(
-            model_display_name=model_info.display_name,
-            provider_name=model_info.provider.capitalize(),
-        ) + locale_instruction
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
+    if existing_messages:
+        model_responses = [
+            ArenaModelResponse(
+                model_id=msg.meta.get("model_id") if msg.meta else "",
+                display_name=msg.persona,
+                provider=msg.meta.get("provider") if msg.meta else "",
+                content=msg.content,
+                success=msg.meta.get("success", True) if msg.meta else True,
+                logo_url=msg.meta.get("logo_url") if msg.meta else None,
+                persona_type=msg.meta.get("persona_type") if msg.meta else None,
+                persona_tagline=msg.meta.get("persona_tagline") if msg.meta else None,
+            )
+            for msg in existing_messages
         ]
-
-        try:
-            content, call_usage = await call_llm_for_role(
-                messages,
-                role=f"Arena:{model_info.display_name}",
-                temperature=0.7,
-                max_tokens=1200,
-                model_override=model_info.litellm_model,
-                debate_id=debate_id,
-                extra_tags={"mode": "arena", "arena_model": model_info.id},
-            )
-            return ArenaModelResponse(
-                model_id=model_info.id,
-                display_name=model_info.display_name,
-                provider=model_info.provider,
-                content=content,
-                success=True,
-                logo_url=model_info.logo_url,
-                persona_type=model_info.persona_type,
-                persona_tagline=model_info.persona_tagline,
-            ), call_usage
-        except Exception as e:
-            logger.error(f"Arena model {model_info.id} failed: {e}")
-            return ArenaModelResponse(
-                model_id=model_info.id,
-                display_name=model_info.display_name,
-                provider=model_info.provider,
-                content=f"⚠️ This model failed to respond: {e}",
-                success=False,
-                logo_url=model_info.logo_url,
-                persona_type=model_info.persona_type,
-                persona_tagline=model_info.persona_tagline,
-            ), None
-
-    # Fan-out: call all models in parallel
-    results = await asyncio.gather(
-        *[_call_model(m) for m in arena_models],
-        return_exceptions=True,
-    )
-
-    # Process results
-    for i, result in enumerate(results):
-        if isinstance(result, Exception):
-            logger.error(f"Arena model task exception: {result}")
-            model_info = arena_models[i]
-            response = ArenaModelResponse(
-                model_id=model_info.id,
-                display_name=model_info.display_name,
-                provider=model_info.provider,
-                content=f"⚠️ This model encountered an error.",
-                success=False,
-                logo_url=model_info.logo_url,
-            )
-            model_responses.append(response)
-            continue
-
-        response, call_usage = result
-        model_responses.append(response)
-
-        if call_usage:
-            usage.add_call(call_usage)
-
-        # Persist message
-        async with async_session_scope() as session:
-            session.add(
-                Message(
-                    debate_id=debate_id,
-                    round_index=1,
-                    role="arena_response",
-                    persona=response.display_name,
-                    content=response.content,
-                    meta={
-                        "model_id": response.model_id,
-                        "provider": response.provider,
-                        "mode": "arena",
-                        "logo_url": response.logo_url,
-                        "persona_type": response.persona_type,
-                        "persona_tagline": response.persona_tagline,
-                        "success": response.success,
-                    },
-                )
-            )
-            await session.commit()
-
-        # Stream response event
+        logger.info("Resuming arena %s: loaded %d existing responses", debate_id, len(model_responses))
+    else:
+        # Notify start
         await backend.publish(
             f"debate:{debate_id}",
             {
-                "type": "arena_response",
+                "type": "arena_started",
                 "debate_id": str(debate_id),
-                "model_id": response.model_id,
-                "display_name": response.display_name,
-                "provider": response.provider,
-                "content": response.content,
-                "logo_url": response.logo_url,
-                "persona_type": response.persona_type,
-                "persona_tagline": response.persona_tagline,
-                "success": response.success,
+                "models": [
+                    {
+                        "model_id": m.id,
+                        "display_name": m.display_name,
+                        "provider": m.provider,
+                        "logo_url": m.logo_url,
+                        "persona_type": m.persona_type,
+                        "persona_tagline": m.persona_tagline,
+                    }
+                    for m in arena_models
+                ],
             },
         )
+
+        # Build locale instruction if set
+        locale_instruction = ""
+        if locale and locale != "en":
+            locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
+
+        async def _call_model(model_info):
+            """Call a single SOTA model and return its response."""
+            system_prompt = ARENA_MODEL_SYSTEM_PROMPT.format(
+                model_display_name=model_info.display_name,
+                provider_name=model_info.provider.capitalize(),
+            ) + locale_instruction
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+
+            try:
+                content, call_usage = await call_llm_for_role(
+                    messages,
+                    role=f"Arena:{model_info.display_name}",
+                    temperature=0.7,
+                    max_tokens=1200,
+                    model_override=model_info.litellm_model,
+                    debate_id=debate_id,
+                    extra_tags={"mode": "arena", "arena_model": model_info.id},
+                )
+                return ArenaModelResponse(
+                    model_id=model_info.id,
+                    display_name=model_info.display_name,
+                    provider=model_info.provider,
+                    content=content,
+                    success=True,
+                    logo_url=model_info.logo_url,
+                    persona_type=model_info.persona_type,
+                    persona_tagline=model_info.persona_tagline,
+                ), call_usage
+            except Exception as e:
+                logger.error(f"Arena model {model_info.id} failed: {e}")
+                return ArenaModelResponse(
+                    model_id=model_info.id,
+                    display_name=model_info.display_name,
+                    provider=model_info.provider,
+                    content=f"⚠️ This model failed to respond: {e}",
+                    success=False,
+                    logo_url=model_info.logo_url,
+                    persona_type=model_info.persona_type,
+                    persona_tagline=model_info.persona_tagline,
+                ), None
+
+        # Fan-out: call all models in parallel
+        results = await asyncio.gather(
+            *[_call_model(m) for m in arena_models],
+            return_exceptions=True,
+        )
+
+        # Process results
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Arena model task exception: {result}")
+                model_info = arena_models[i]
+                response = ArenaModelResponse(
+                    model_id=model_info.id,
+                    display_name=model_info.display_name,
+                    provider=model_info.provider,
+                    content=f"⚠️ This model encountered an error.",
+                    success=False,
+                    logo_url=model_info.logo_url,
+                )
+                model_responses.append(response)
+                continue
+
+            response, call_usage = result
+            model_responses.append(response)
+
+            if call_usage:
+                usage.add_call(call_usage)
+
+            # Persist message
+            async with async_session_scope() as session:
+                session.add(
+                    Message(
+                        debate_id=debate_id,
+                        round_index=1,
+                        role="arena_response",
+                        persona=response.display_name,
+                        content=response.content,
+                        meta={
+                            "model_id": response.model_id,
+                            "provider": response.provider,
+                            "mode": "arena",
+                            "logo_url": response.logo_url,
+                            "persona_type": response.persona_type,
+                            "persona_tagline": response.persona_tagline,
+                            "success": response.success,
+                        },
+                    )
+                )
+                await session.commit()
+
+            # Stream response event
+            await backend.publish(
+                f"debate:{debate_id}",
+                {
+                    "type": "arena_response",
+                    "debate_id": str(debate_id),
+                    "model_id": response.model_id,
+                    "display_name": response.display_name,
+                    "provider": response.provider,
+                    "content": response.content,
+                    "logo_url": response.logo_url,
+                    "persona_type": response.persona_type,
+                    "persona_tagline": response.persona_tagline,
+                    "success": response.success,
+                },
+            )
 
     # Check if we have any successful responses
     successful = [r for r in model_responses if r.success]
@@ -217,6 +244,49 @@ async def run_arena(
             usage_tracker=usage,
             status="failed",
             error_reason="all_models_failed",
+            model_responses=model_responses,
+        )
+
+    # Staged execution pause check
+    if settings.STAGED_DECISION_PIPELINE and not continue_pipeline:
+        # Update debate status to perspectives_ready in DB
+        async with async_session_scope() as session:
+            db_debate = await session.get(Debate, debate_id)
+            if db_debate:
+                db_debate.status = "perspectives_ready"
+                session.add(db_debate)
+                await session.commit()
+
+        # Publish early pause event
+        await backend.publish(
+            f"debate:{debate_id}",
+            {
+                "type": "perspectives_ready",
+                "debate_id": str(debate_id),
+            },
+        )
+        return ArenaResult(
+            final_answer="Perspectives collected. Synthesis paused.",
+            final_meta={
+                "mode": "arena",
+                "models": [
+                    {
+                        "model_id": r.model_id,
+                        "display_name": r.display_name,
+                        "provider": r.provider,
+                        "success": r.success,
+                        "logo_url": r.logo_url,
+                        "persona_type": r.persona_type,
+                        "persona_tagline": r.persona_tagline,
+                    }
+                    for r in model_responses
+                ],
+                "successful_count": len(successful),
+                "total_count": len(model_responses),
+                "usage": usage.snapshot(),
+            },
+            usage_tracker=usage,
+            status="perspectives_ready",
             model_responses=model_responses,
         )
 

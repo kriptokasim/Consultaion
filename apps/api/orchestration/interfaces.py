@@ -21,6 +21,7 @@ class DebateContext:
     
     # Runtime flags
     is_mock: bool = False
+    is_resume: bool = False
 
 
 @dataclass

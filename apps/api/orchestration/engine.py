@@ -34,6 +34,25 @@ class DebateRunner:
             # Execute pipeline
             final_state = await self.pipeline.execute(context)
             
+            if final_state.status == "perspectives_ready":
+                await self.state_manager.set_status("perspectives_ready")
+                await backend.publish(
+                    context.channel_id,
+                    {
+                        "type": "perspectives_ready",
+                        "debate_id": context.debate_id,
+                    }
+                )
+                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+                log_event(
+                    "debate.perspectives_ready",
+                    debate_id=context.debate_id,
+                    user_id=context.config.get("user_id"),
+                    duration_seconds=duration,
+                    status=final_state.status,
+                )
+                return final_state
+
             # Finalize
             await self.state_manager.complete_debate(
                 final_content=final_state.final_content or "",

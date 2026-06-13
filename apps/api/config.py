@@ -104,6 +104,8 @@ class AppSettings(BaseSettings):
     # Patchset 76: Enhanced conversation UX with delayed voting
     ENABLE_CONVERSATION_V2: bool = Field(False, description="Enable enhanced conversation UX with delayed voting and structured vote reasons")
     
+    STAGED_DECISION_PIPELINE: bool = Field(False, description="Enable Unified Deliberation Workspace and staged execution")
+    
     # Patchset 50.3: Beta Access Control
     ENABLE_BETA_ACCESS: bool = Field(False, description="Enable beta access restrictions")
     BETA_WHITELIST: str = Field("", description="Comma-separated list of beta user emails")

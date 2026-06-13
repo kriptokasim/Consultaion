@@ -507,6 +507,13 @@ async def run_debate(
     heartbeat_task = None
     stop_heartbeat = asyncio.Event()
 
+    # Check if this is a resume execution before leasing
+    is_resume = False
+    async with async_session_scope() as session:
+        db_debate = await session.get(Debate, debate_id)
+        if db_debate:
+            is_resume = (db_debate.status == "perspectives_ready")
+
     try:
         # Attempt to acquire lease immediately
         if not await _try_acquire_lease(debate_id, runner_id):
@@ -552,7 +559,11 @@ async def run_debate(
         if debate_mode == "arena":
             from arena.engine import run_arena
 
-            result = await run_arena(debate_id, model_id=model_id)
+            result = await run_arena(debate_id, model_id=model_id, continue_pipeline=is_resume)
+
+            if result.status == "perspectives_ready":
+                logger.info("Arena run %s paused at perspectives_ready stage", debate_id, extra=log_extra)
+                return
 
             await state_manager.complete_debate(
                 final_content=result.final_answer,
@@ -700,12 +711,17 @@ async def run_debate(
             channel_id=channel_id,
             model_id=model_id,
             usage_tracker=usage_tracker, # Pass the tracker we initialized
+            is_resume=is_resume,
         )
         
         pipeline = StandardDebatePipeline(state_manager)
         runner = DebateRunner(pipeline, state_manager)
         
-        await runner.run(context)
+        final_state = await runner.run(context)
+        
+        if final_state and final_state.status == "perspectives_ready":
+            logger.info("Debate %s paused at perspectives_ready stage", debate_id, extra=log_extra)
+            return
         
         # Success path for Standard Pipeline
         logger.info(f"Debate completed successfully", extra=log_extra)

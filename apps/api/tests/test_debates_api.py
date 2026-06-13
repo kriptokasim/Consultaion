@@ -131,3 +131,31 @@ def test_create_debate_rate_limit(authenticated_client, monkeypatch):
     assert response.status_code == 429
     data = response.json()
     assert data['error']['code'] == 'rate_limit.exceeded'
+
+def test_continue_debate_run(authenticated_client, db_session: Session):
+    from unittest.mock import patch
+    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    
+    # 1. Test failure when status is not perspectives_ready
+    debate = Debate(id=str(uuid4()), prompt='Continue me', user_id=user.id, status='queued')
+    db_session.add(debate)
+    db_session.commit()
+    
+    response = authenticated_client.post(f'/debates/{debate.id}/continue')
+    assert response.status_code == 400
+    assert response.json()['error']['code'] == 'debate.not_paused'
+    
+    # 2. Test success when status is perspectives_ready
+    debate.status = 'perspectives_ready'
+    db_session.add(debate)
+    db_session.commit()
+    
+    with patch('routes.debates.dispatch_debate_run') as mock_dispatch:
+        response = authenticated_client.post(f'/debates/{debate.id}/continue')
+        assert response.status_code == 200
+        data = response.json()
+        assert data['status'] == 'scheduled'
+        assert mock_dispatch.called
+        
+    db_session.refresh(debate)
+    assert debate.status == 'scheduled'

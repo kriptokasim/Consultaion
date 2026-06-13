@@ -75,6 +75,27 @@ export default function RunDetailClient() {
       });
   }, [id]);
 
+  const [isContinuing, setIsContinuing] = useState(false);
+
+  const handleContinue = useCallback(async () => {
+    if (!id || isContinuing) return;
+    setIsContinuing(true);
+    try {
+      const res = await fetchWithAuth(`/debates/${id}/continue`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to continue debate execution");
+      }
+      await refetch();
+    } catch (err) {
+      console.error("Failed to continue:", err);
+      alert("Error resuming the decision pipeline. Please try again.");
+    } finally {
+      setIsContinuing(false);
+    }
+  }, [id, isContinuing, refetch]);
+
   // Fetch events + members for completed debates
   useEffect(() => {
     if (!isCompleted || !id || resultsFetched) return;
@@ -536,6 +557,36 @@ export default function RunDetailClient() {
           scoresReceived={scoresReceived}
         />
 
+        {debate.status === "perspectives_ready" && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6 dark:border-amber-900/50 dark:bg-amber-950/20 shadow-md space-y-4 animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  Perspectives Collected
+                </h3>
+                <p className="text-sm text-stone-600 dark:text-stone-300">
+                  Multiple viewpoints have been generated. Review the model responses below and trigger the consensus engine to score disagreements and produce the final decision report.
+                </p>
+              </div>
+              <Button
+                onClick={handleContinue}
+                disabled={isContinuing}
+                className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 font-semibold px-6 py-2.5 shadow-sm transition-all rounded-xl shrink-0"
+              >
+                {isContinuing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Continuing...
+                  </>
+                ) : (
+                  "Generate Decision Report"
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {pollingFallback && (
           <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -583,6 +634,36 @@ export default function RunDetailClient() {
         <div className="flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
           <Loader2 className="h-3 w-3 animate-spin" />
           <span>Connection interrupted — using polling fallback</span>
+        </div>
+      )}
+      {debate?.status === "perspectives_ready" && (
+        <div className="px-6 py-4 bg-amber-50/60 border-b border-amber-200 dark:bg-stone-900/40 dark:border-stone-850">
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                Perspectives Collected
+              </h3>
+              <p className="text-xs text-stone-600 dark:text-stone-400">
+                All individual agent responses are in. Click below to continue and generate the decision-ready report.
+              </p>
+            </div>
+            <Button
+              onClick={handleContinue}
+              disabled={isContinuing}
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 font-semibold rounded-lg shrink-0"
+            >
+              {isContinuing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Synthesizing...
+                </>
+              ) : (
+                "Synthesize Verdict"
+              )}
+            </Button>
+          </div>
         </div>
       )}
       <DebateArena

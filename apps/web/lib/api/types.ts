@@ -17,7 +17,7 @@ export interface PanelConfig {
 export interface DebateSummary {
     id: string;
     prompt: string;
-    status: 'queued' | 'scheduled' | 'running' | 'completed' | 'failed' | 'completed_budget';
+    status: 'queued' | 'scheduled' | 'running' | 'completed' | 'failed' | 'completed_budget' | 'perspectives_ready';
     created_at: string;
     updated_at: string;
     user_id?: string;

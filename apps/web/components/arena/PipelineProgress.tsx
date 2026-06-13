@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, Loader2, Circle } from "lucide-react";
+import { Check, Loader2, Circle, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type PipelineStage =
   | "queued"
   | "models_contacted"
   | "collecting_responses"
+  | "perspectives_ready"
   | "scoring"
   | "divergence_analysis"
   | "synthesizing"
@@ -22,6 +23,7 @@ const ALL_STAGES: StageInfo[] = [
   { key: "queued", label: "Run created" },
   { key: "models_contacted", label: "Models contacted" },
   { key: "collecting_responses", label: "Waiting for model responses" },
+  { key: "perspectives_ready", label: "Perspectives ready (Paused)" },
   { key: "scoring", label: "Scoring responses" },
   { key: "divergence_analysis", label: "Analyzing divergence" },
   { key: "synthesizing", label: "Synthesizing decision report" },
@@ -42,11 +44,14 @@ function getStageIndex(stage: PipelineStage): number {
   return ALL_STAGES.findIndex((s) => s.key === stage);
 }
 
-function StageIcon({ state }: { state: "done" | "active" | "pending" }) {
+function StageIcon({ state, stageKey }: { state: "done" | "active" | "pending"; stageKey: PipelineStage }) {
   if (state === "done") {
     return <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
   }
   if (state === "active") {
+    if (stageKey === "perspectives_ready") {
+      return <Pause className="h-4 w-4 text-amber-500 dark:text-amber-400 animate-pulse" />;
+    }
     return <Loader2 className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-spin" />;
   }
   return <Circle className="h-4 w-4 text-stone-300 dark:text-stone-600" />;
@@ -101,7 +106,7 @@ export function PipelineProgress({
                 state === "pending" && "text-stone-400 dark:text-stone-600",
               )}
             >
-              <StageIcon state={state} />
+              <StageIcon state={state} stageKey={stage.key} />
               <span>{getStageLabel(stage)}</span>
             </div>
           );
@@ -132,6 +137,7 @@ export function derivePipelineStage(debate: any, eventTypes: Set<string>, liveRe
   if (["completed", "success", "completed_budget"].includes(status)) return "complete";
   if (status === "failed") return "queued";
   if (status === "queued") return "queued";
+  if (status === "perspectives_ready") return "perspectives_ready";
 
   // Check persisted properties on the debate model
   const hasQualityMeta = !!debate?.final_meta?.synthesis_report?.quality_meta || !!debate?.synthesis_report?.quality_meta;

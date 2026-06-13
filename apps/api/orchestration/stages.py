@@ -31,6 +31,10 @@ class DraftStage(BaseStage):
     name = "draft"
 
     async def run(self, context: DebateContext, state: DebateState) -> DebateState:
+        if state.candidates:
+            logger.info("Debate %s: DraftStage already executed, skipping", context.debate_id)
+            return state
+
         round_id = await self.state_manager.start_round(1, "draft", "candidate drafting")
         
         agent_configs = context.config.get("agents", [])
@@ -88,6 +92,10 @@ class CritiqueStage(BaseStage):
     name = "critique"
 
     async def run(self, context: DebateContext, state: DebateState) -> DebateState:
+        if state.revised_candidates:
+            logger.info("Debate %s: CritiqueStage already executed, skipping", context.debate_id)
+            return state
+
         round_id = await self.state_manager.start_round(2, "critique", "cross-critique and revision")
         
         revised, critique_usage = await criticize_and_revise(

@@ -514,6 +514,44 @@ async def start_debate_run(
     return {"id": debate_id, "status": "scheduled"}
 
 
+@router.post("/debates/{debate_id}/continue")
+async def continue_debate_run(
+    debate_id: str,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
+):
+    debate = session.get(Debate, debate_id)
+    debate = require_debate_mutation_access(debate, current_user, session)
+    if debate.status != "perspectives_ready":
+        raise ValidationError(message="Debate is not paused or perspectives are not ready yet", code="debate.not_paused")
+
+    channel_id = debate_channel_id(debate_id)
+    await sse_backend.create_channel(channel_id)
+
+    debate.status = "scheduled"
+    session.add(debate)
+    session.commit()
+
+    background_tasks.add_task(
+        dispatch_debate_run,
+        debate_id,
+        debate.prompt,
+        channel_id,
+        debate.config or {},
+        debate.model_id,
+    )
+
+    from log_config import log_event
+    log_event(
+        "debate.continued",
+        debate_id=debate_id,
+        user_id=current_user.id if current_user else None,
+    )
+    return {"id": debate_id, "status": "scheduled"}
+
+
 from pydantic import BaseModel
 
 class DebateListResponse(BaseModel):
