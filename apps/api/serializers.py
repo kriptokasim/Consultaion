@@ -55,6 +55,7 @@ class PublicDebateDTO(BaseModel):
     is_public: bool = True
     model_id: Optional[str] = None
     routed_model: Optional[str] = None
+    continuation_status: Optional[str] = None
 
     # Safe subset of final_meta
     successful_count: Optional[int] = None
@@ -88,6 +89,7 @@ class PrivateDebateDTO(BaseModel):
     model_id: Optional[str] = None
     routed_model: Optional[str] = None
     routing_policy: Optional[str] = None
+    continuation_status: Optional[str] = None
 
     # Full metadata for owners
     config: Optional[Dict[str, Any]] = None
@@ -182,7 +184,7 @@ def _safe_final_meta(final_meta: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return safe
 
 
-def serialize_debate_public(debate) -> dict:
+def serialize_debate_public(debate, continuation_status: Optional[str] = None) -> dict:
     """
     Serialize a Debate ORM object into a public-safe dictionary.
 
@@ -203,6 +205,7 @@ def serialize_debate_public(debate) -> dict:
         is_public=True,
         model_id=debate.model_id,
         routed_model=debate.routed_model,
+        continuation_status=continuation_status or getattr(debate, "continuation_status", None),
         successful_count=safe_meta.get("successful_count"),
         total_count=safe_meta.get("total_count"),
         synthesis_success=safe_meta.get("synthesis_success"),
@@ -219,7 +222,7 @@ def serialize_debate_public(debate) -> dict:
 
 
 
-def serialize_debate_private(debate) -> dict:
+def serialize_debate_private(debate, continuation_status: Optional[str] = None) -> dict:
     """
     Serialize a Debate ORM object into a full private dictionary.
 
@@ -239,6 +242,7 @@ def serialize_debate_private(debate) -> dict:
         model_id=debate.model_id,
         routed_model=debate.routed_model,
         routing_policy=debate.routing_policy,
+        continuation_status=continuation_status or getattr(debate, "continuation_status", None),
         config=config,
         panel_config=debate.panel_config,
         routing_meta=debate.routing_meta,

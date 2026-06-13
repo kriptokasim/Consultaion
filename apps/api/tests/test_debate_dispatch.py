@@ -31,9 +31,9 @@ async def test_dispatch_celery_queues_task(monkeypatch):
             self.debate_id = None
             self.kwargs = {}
 
-        def apply_async(self, args=None, queue=None):
+        def apply_async(self, args=None, queue=None, **kwargs):
             self.debate_id = args[0] if args else None
-            self.kwargs = {"args": args, "queue": queue}
+            self.kwargs = {"args": args, "queue": queue, **kwargs}
 
     dummy = DummyTask()
     monkeypatch.setattr(debate_dispatch, "run_debate_task", dummy, raising=False)

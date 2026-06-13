@@ -46,6 +46,29 @@ def _get_runner_id() -> str:
     return f"{socket.gethostname()}-{os.getpid()}"
 
 
+async def _update_continuation_status(debate_id: str, status: str):
+    """Update the status of the latest continuation record for this debate."""
+    try:
+        from models import DebateContinuation
+        import sqlalchemy as sa
+        async with async_session_scope() as session:
+            stmt = (
+                sa.select(DebateContinuation)
+                .where(DebateContinuation.debate_id == debate_id)
+                .order_by(DebateContinuation.created_at.desc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            continuation = result.scalars().first()
+            if continuation:
+                continuation.status = status
+                continuation.updated_at = datetime.now(timezone.utc)
+                session.add(continuation)
+                await session.commit()
+    except Exception as e:
+        logger.warning(f"Failed to update continuation status for debate {debate_id} to {status}: {e}")
+
+
 async def _try_acquire_lease(debate_id: str, runner_id: str, lease_seconds: int = 60) -> bool:
     """Attempt to acquire a lock on the debate execution."""
     async with async_session_scope() as session:
@@ -555,6 +578,8 @@ async def run_debate(
 
         state_manager = DebateStateManager(debate_id, debate_user_id)
         await state_manager.set_status("running")
+        if is_resume:
+            await _update_continuation_status(debate_id, "running")
 
         if debate_mode == "arena":
             from arena.engine import run_arena
@@ -727,10 +752,14 @@ async def run_debate(
         logger.info(f"Debate completed successfully", extra=log_extra)
         increment_metric("debate.completed")
         await _build_and_send_summary(debate_id, debate_user_id)
+        if is_resume:
+            await _update_continuation_status(debate_id, "completed")
 
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
         logger.warning(f"Debate encountered transient/provider error: {exc}", extra=log_extra)
         increment_metric("debate.degraded")
+        if is_resume:
+            await _update_continuation_status(debate_id, "failed")
         await send_slack_alert(
             message="[Consultaion] Debate transient/provider failure",
             level="warning",
@@ -775,6 +804,8 @@ async def run_debate(
     except Exception as exc:
         logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
         increment_metric("debate.failed")
+        if is_resume:
+            await _update_continuation_status(debate_id, "failed")
         
         # Slack Alert
         await send_slack_alert(

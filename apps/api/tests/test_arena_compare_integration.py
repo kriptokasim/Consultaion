@@ -54,6 +54,7 @@ async def test_arena_run_integration(db_session, monkeypatch):
     mock_report = MagicMock()
     mock_report.executive_summary = "Synthesized arena verdict."
     mock_report.title = "Decision Report"
+    mock_report.divergence_breakdown = []
     mock_report.model_dump.return_value = {"mock": "report"}
 
     # Patch LLM caller, email sender, and SSE backend

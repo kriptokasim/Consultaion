@@ -192,3 +192,66 @@ async def test_continue_preflight_circuit_breaker(authenticated_client, db_sessi
         assert response.status_code == 400
         assert "Circuit breaker open" in response.json()["error"]["message"]
         mock_dispatch.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_retry_debate_run(authenticated_client, db_session):
+    from models import DebateStageCheckpoint, Score, Vote, Message
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    
+    # Create failed debate
+    debate = Debate(
+        id="test-retry-debate",
+        user_id=user.id,
+        prompt="Test prompt",
+        status="failed",
+    )
+    db_session.add(debate)
+    db_session.commit()
+
+    # Add checkpoints
+    cp_draft = DebateStageCheckpoint(debate_id=debate.id, stage_key="draft", status="completed", input_hash="h1")
+    cp_critique = DebateStageCheckpoint(debate_id=debate.id, stage_key="critique", status="completed", input_hash="h2")
+    cp_judge = DebateStageCheckpoint(debate_id=debate.id, stage_key="judge", status="failed", input_hash="h3")
+    
+    db_session.add(cp_draft)
+    db_session.add(cp_critique)
+    db_session.add(cp_judge)
+    
+    # Add dummy scores/votes
+    score = Score(debate_id=debate.id, persona="Debater", judge="Judge", score=8.5, rationale="rational")
+    vote = Vote(debate_id=debate.id, method="plurality", rankings={"order": ["Debater"]})
+    db_session.add(score)
+    db_session.add(vote)
+    
+    db_session.commit()
+
+    # Call /retry on "judge" stage
+    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+        response = authenticated_client.post(
+            f"/api/v1/debates/{debate.id}/retry",
+            json={"stage_key": "judge"}
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "scheduled"
+        assert response.json()["retried_stage"] == "judge"
+        mock_dispatch.assert_called_once()
+
+        # Check DB updates:
+        # Checkpoints for judge should be deleted
+        cps = db_session.exec(select(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id == debate.id)).all()
+        cp_keys = [c.stage_key for c in cps]
+        assert "draft" in cp_keys
+        assert "critique" in cp_keys
+        assert "judge" not in cp_keys
+
+        # Scores and votes should be deleted
+        scores = db_session.exec(select(Score).where(Score.debate_id == debate.id)).all()
+        assert len(scores) == 0
+        votes = db_session.exec(select(Vote).where(Vote.debate_id == debate.id)).all()
+        assert len(votes) == 0
+
+        # Debate status updated to scheduled
+        db_session.refresh(debate)
+        assert debate.status == "scheduled"
+

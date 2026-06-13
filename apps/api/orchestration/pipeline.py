@@ -157,6 +157,22 @@ class StandardDebatePipeline(DebatePipeline):
                             st.final_meta["synthesis_report"] = msg.meta["synthesis_report"]
                 return st
 
+            from sse_backend import get_sse_backend
+            backend = get_sse_backend()
+            round_map = {"draft": 1, "critique": 2, "judge": 3, "synthesis": 4}
+            round_index = round_map.get(stage.name, 1)
+
+            # Publish round_started
+            await backend.publish(
+                context.channel_id,
+                {
+                    "type": "round_started",
+                    "debate_id": context.debate_id,
+                    "round": round_index,
+                    "stage": stage.name,
+                }
+            )
+
             try:
                 state = await run_with_checkpoint(
                     context.debate_id,
@@ -168,6 +184,17 @@ class StandardDebatePipeline(DebatePipeline):
             except Exception as exc:
                 logger.error("Debate %s: stage %s failed: %s", context.debate_id, stage.name, exc)
                 raise
+
+            # Publish round_ended
+            await backend.publish(
+                context.channel_id,
+                {
+                    "type": "round_ended",
+                    "debate_id": context.debate_id,
+                    "round": round_index,
+                    "stage": stage.name,
+                }
+            )
             
             if settings.STAGED_DECISION_PIPELINE and not context.is_resume and stage.name == "critique":
                 logger.info("Debate %s: STAGED_DECISION_PIPELINE active. Pausing after critique stage.", context.debate_id)
