@@ -1,5 +1,5 @@
 from uuid import uuid4
-from models import Debate, User
+from models import Debate, Message, User
 from sqlmodel import Session, select
 
 def test_get_debate(authenticated_client, db_session: Session):
@@ -159,3 +159,79 @@ def test_continue_debate_run(authenticated_client, db_session: Session):
         
     db_session.refresh(debate)
     assert debate.status == 'scheduled'
+
+
+def test_retry_agent(authenticated_client, db_session: Session):
+    from unittest.mock import patch, AsyncMock
+    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    
+    panel_config = {
+        "seats": [
+            {
+                "name": "Expert Agent",
+                "model": "gpt-4o",
+                "provider": "openai",
+                "persona_tagline": "An AI expert helper"
+            }
+        ]
+    }
+    final_meta = {
+        "models": [
+            {
+                "display_name": "Expert Agent",
+                "model_id": "gpt-4o",
+                "provider": "openai",
+                "success": False
+            }
+        ],
+        "total_count": 1,
+        "successful_count": 0,
+        "model_warnings": [
+            {
+                "display_name": "Expert Agent",
+                "provider": "openai",
+                "error": "Failed previously"
+            }
+        ]
+    }
+    
+    debate = Debate(
+        id=str(uuid4()),
+        prompt='Test agent retry',
+        user_id=user.id,
+        status='failed',
+        panel_config=panel_config,
+        final_meta=final_meta
+    )
+    db_session.add(debate)
+    db_session.commit()
+    
+    with patch('agents.produce_candidate', new_callable=AsyncMock) as mock_produce:
+        mock_produce.return_value = (
+            {"text": "Retried agent response content", "tokens_used": 100},
+            {"prompt_tokens": 10, "completion_tokens": 10}
+        )
+        
+        response = authenticated_client.post(
+            f'/debates/{debate.id}/retry-agent',
+            json={'persona': 'Expert Agent'}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data['success'] is True
+        assert data['content'] == 'Retried agent response content'
+        
+    db_session.refresh(debate)
+    assert debate.final_meta["successful_count"] == 1
+    assert len(debate.final_meta["model_warnings"]) == 0
+    assert debate.final_meta["models"][0]["success"] is True
+
+    msg = db_session.exec(
+        select(Message).where(
+            Message.debate_id == debate.id,
+            Message.round_index == 1,
+            Message.persona == 'Expert Agent'
+        )
+    ).first()
+    assert msg is not None
+    assert msg.content == 'Retried agent response content'

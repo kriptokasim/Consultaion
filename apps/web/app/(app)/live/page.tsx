@@ -24,6 +24,8 @@ import { OnboardingHint } from "@/components/ui/onboarding-hint";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
 
+import RunDetailClient from "../runs/[id]/RunDetailClient";
+
 const seatsToMembers = (seats: PanelSeatConfig[]): Member[] =>
   seats.map((seat) => ({
     id: seat.seat_id,
@@ -397,6 +399,16 @@ function ArenaPageContent() {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(currentDebateId).catch(() => null)
     }
+  }
+
+  const runId = searchParams?.get('run')
+
+  if (runId) {
+    return (
+      <main id="main" className="p-4 lg:p-6">
+        <RunDetailClient runId={runId} />
+      </main>
+    )
   }
 
   return (

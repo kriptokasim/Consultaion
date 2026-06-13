@@ -10,15 +10,17 @@ import { SynthesisCard, SynthesisLoading } from "./SynthesisCard";
 import { PublicRunCTATop, PublicRunCTAFooter } from "./CTABanner";
 import { DivergenceMeter } from "./DivergenceMeter";
 import { SynthesisReveal } from "./SynthesisReveal";
+import { fetchWithAuth } from "@/lib/auth";
 
 /* ─── Main component ─── */
 interface ArenaRunViewProps {
     debate: DebateDetail;
     events: DebateEvent[];
     profile?: any;
+    onRefetch?: () => Promise<any> | void;
 }
 
-export default function ArenaRunView({ debate, events, profile }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, profile, onRefetch }: ArenaRunViewProps) {
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
         const responses: Array<ModelResponse> = [];
@@ -73,6 +75,25 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
 
         return { modelResponses: responses, synthesis: synthesisText };
     }, [events, debate]);
+
+    const handleRetryAgent = async (personaName: string) => {
+        const res = await fetchWithAuth(`/debates/${debate.id}/retry-agent`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ persona: personaName }),
+        });
+        if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.detail || errBody.message || "Failed to retry agent");
+        }
+        if (onRefetch) {
+            await onRefetch();
+        } else {
+            window.location.reload();
+        }
+    };
 
     const isLoading = modelResponses.length === 0 && !synthesis;
     const expectedModels = debate.final_meta?.models?.length || 4;
@@ -217,7 +238,13 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
                     {(() => {
                         const resp = modelResponses[activeTab];
                         if (!resp) return <SkeletonCard index={activeTab} />;
-                        return <ModelCard resp={resp} className="min-h-[350px]" />;
+                        return (
+                            <ModelCard 
+                                resp={resp} 
+                                className="min-h-[350px]" 
+                                onRetry={handleRetryAgent}
+                            />
+                        );
                     })()}
                 </div>
 
@@ -228,7 +255,13 @@ export default function ArenaRunView({ debate, events, profile }: ArenaRunViewPr
                         if (!resp) {
                             return <SkeletonCard key={`skeleton-card-${i}`} index={i} />;
                         }
-                        return <ModelCard key={resp.model_id || i} resp={resp} />;
+                        return (
+                            <ModelCard 
+                                key={resp.model_id || i} 
+                                resp={resp} 
+                                onRetry={handleRetryAgent}
+                            />
+                        );
                     })}
                 </div>
             </div>

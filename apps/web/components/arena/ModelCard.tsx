@@ -135,8 +135,34 @@ export function SkeletonCard({ index, className = "" }: { index: number; classNa
 }
 
 /* ─── Friendly error card body ─── */
-export function ErrorCardBody({ friendly, technical, displayName }: { friendly: string; technical: string | null; displayName: string }) {
+export function ErrorCardBody({
+    friendly,
+    technical,
+    displayName,
+    onRetry,
+}: {
+    friendly: string;
+    technical: string | null;
+    displayName: string;
+    onRetry?: () => Promise<void>;
+}) {
     const [showDetails, setShowDetails] = useState(false);
+    const [retrying, setRetrying] = useState(false);
+    const [retryError, setRetryError] = useState<string | null>(null);
+
+    const handleRetryClick = async () => {
+        if (!onRetry) return;
+        setRetrying(true);
+        setRetryError(null);
+        try {
+            await onRetry();
+        } catch (err: any) {
+            setRetryError(err.message || "Retry failed");
+        } finally {
+            setRetrying(false);
+        }
+    };
+
     return (
         <div className="p-5 flex-1 flex flex-col items-center justify-center text-center gap-3">
             <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-3">
@@ -165,15 +191,43 @@ export function ErrorCardBody({ friendly, technical, displayName }: { friendly: 
                     {technical.slice(0, 500)}{technical.length > 500 ? "…" : ""}
                 </pre>
             )}
-            <span className="mt-3 inline-flex items-center justify-center rounded-full bg-muted px-3 py-1.5 text-[11px] font-medium text-muted-foreground/80 border border-border">
-                Retry coming soon
-            </span>
+            {onRetry ? (
+                <div className="mt-3 flex flex-col items-center gap-1.5 w-full">
+                    <button
+                        onClick={handleRetryClick}
+                        disabled={retrying}
+                        className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-primary text-primary-foreground font-semibold text-xs shadow hover:bg-primary/95 transition-all disabled:opacity-50"
+                    >
+                        {retrying ? (
+                            <>
+                                <span className="h-3 w-3 mr-1.5 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin animate-spin" />
+                                Retrying...
+                            </>
+                        ) : (
+                            "Retry Agent"
+                        )}
+                    </button>
+                    {retryError && (
+                        <span className="text-[10px] text-red-500 font-medium">{retryError}</span>
+                    )}
+                </div>
+            ) : (
+                <span className="mt-3 inline-flex items-center justify-center rounded-full bg-muted px-3 py-1.5 text-[11px] font-medium text-muted-foreground/80 border border-border">
+                    Retry unavailable
+                </span>
+            )}
         </div>
     );
 }
 
 /* ─── Model response card ─── */
-export function ModelCard({ resp, className = "" }: { resp: ModelResponse; className?: string }) {
+interface ModelCardProps {
+    resp: ModelResponse;
+    className?: string;
+    onRetry?: (personaName: string) => Promise<void>;
+}
+
+export function ModelCard({ resp, className = "", onRetry }: ModelCardProps) {
     const colors = getColors(resp.provider);
     const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
     const isError = !resp.success && errorInfo;
@@ -216,6 +270,7 @@ export function ModelCard({ resp, className = "" }: { resp: ModelResponse; class
                     friendly={errorInfo.friendly}
                     technical={errorInfo.technical}
                     displayName={resp.display_name}
+                    onRetry={onRetry ? () => onRetry(resp.display_name) : undefined}
                 />
             ) : (
                 <div className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">

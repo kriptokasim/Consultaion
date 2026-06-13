@@ -29,9 +29,9 @@ const TERMINAL_STATUSES = new Set(["completed", "success", "completed_budget", "
 /** Polling interval for non-completed debates (fallback for SSE) */
 const POLL_INTERVAL_MS = 4000;
 
-export default function RunDetailClient() {
+export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   const params = useParams();
-  const id = params.id as string;
+  const id = runId || (params?.id as string);
   const { data: debate, isLoading, error: debateError, refetch } = useDebate(id);
   const [state, dispatch] = useReducer(timelineReducer, initialTimelineState);
   const mounted = useRef(true);
@@ -437,7 +437,7 @@ export default function RunDetailClient() {
     if (debate?.mode === "arena") {
       return (
         <div className="container max-w-[1400px] py-6">
-          <ArenaRunView debate={debate} events={resultsEvents} profile={profile} />
+          <ArenaRunView debate={debate} events={resultsEvents} profile={profile} onRefetch={refetch} />
         </div>
       );
     }
@@ -555,6 +555,7 @@ export default function RunDetailClient() {
           responsesReceived={responsesReceived}
           modelsExpected={modelsExpected}
           scoresReceived={scoresReceived}
+          variant="compact"
         />
 
         {debate.status === "perspectives_ready" && (
@@ -594,7 +595,7 @@ export default function RunDetailClient() {
           </div>
         )}
 
-        <ArenaRunView debate={debate as any} events={liveEvents as any} />
+        <ArenaRunView debate={debate as any} events={liveEvents as any} onRefetch={refetch} />
       </div>
     );
   }

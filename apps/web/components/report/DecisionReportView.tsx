@@ -12,6 +12,7 @@ import { isRenderableDecisionReport, fieldLooksCorrupt } from "../../lib/reportI
 import { ReportGenerationFailedCard } from "./ReportGenerationFailedCard"
 import { SemanticAlignmentSection } from "./SemanticAlignmentSection"
 import { DecisionReportShell } from "./DecisionReportShell"
+import { DecisionBrief } from "./DecisionBrief"
 
 interface DecisionReport {
   title?: string
@@ -236,6 +237,14 @@ export function DecisionReportView({
       onExport={handleExport}
       className={className}
     >
+      {/* Decision Stance, Stance Leaderboard, Contradiction Density */}
+      <DecisionBrief
+        verdict={activeReport.verdict || {}}
+        modelPositions={activeReport.model_positions || []}
+        divergenceBreakdown={activeReport.divergence_breakdown || rawReport?.divergence_breakdown}
+        scores={(activeReport.quality_meta as any)?.scores || []}
+      />
+
       {/* Context Needed */}
       {activeReport.context_needed && activeReport.context_needed.length > 0 && (
         <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-xl p-5">

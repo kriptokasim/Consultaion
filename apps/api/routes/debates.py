@@ -647,9 +647,9 @@ async def continue_debate_run(
     session.commit()
 
     if result.rowcount == 0:
-        raise HTTPException(
-            status_code=409,
-            detail="Conflict: Debate run is already in progress, completed, or cannot be continued."
+        raise ValidationError(
+            message="Conflict: Debate run is already in progress, completed, or cannot be continued.",
+            code="debate.not_paused"
         )
 
     # Refresh debate object
@@ -1379,6 +1379,156 @@ async def get_argument_tree(
                     "position_drift": t.position_drift
                 })
     return {"nodes": nodes}
+
+
+class RetryAgentRequest(BaseModel):
+    persona: str
+
+
+@router.post("/debates/{debate_id}/retry-agent")
+async def retry_agent(
+    debate_id: str,
+    body: RetryAgentRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
+):
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise NotFoundError(message="Debate not found", code="debate.not_found")
+    
+    debate = require_debate_mutation_access(debate, current_user, session)
+    target_persona = body.persona
+
+    agent_config_dict = None
+    agents_list = debate.config.get("agents", []) if debate.config else []
+    for ag in agents_list:
+        if ag.get("name") == target_persona:
+            agent_config_dict = ag
+            break
+            
+    if not agent_config_dict:
+        panel_seats = debate.panel_config.get("seats", []) if debate.panel_config else []
+        for seat in panel_seats:
+            if seat.get("name") == target_persona:
+                agent_config_dict = {
+                    "name": seat.get("name"),
+                    "model": seat.get("model"),
+                    "provider": seat.get("provider"),
+                    "persona": seat.get("persona_tagline"),
+                }
+                break
+
+    if not agent_config_dict:
+        raise ValidationError(message=f"Agent '{target_persona}' config not found in debate", code="agent.not_found")
+
+    # Extract provider before constructing AgentConfig (AgentConfig schema has no provider field)
+    agent_provider = agent_config_dict.get("provider", "unknown")
+
+    from schemas import AgentConfig
+    # Only pass fields that AgentConfig accepts
+    agent_config = AgentConfig(
+        name=agent_config_dict.get("name", target_persona),
+        persona=agent_config_dict.get("persona", ""),
+        model=agent_config_dict.get("model"),
+        tools=agent_config_dict.get("tools"),
+    )
+
+    await sse_backend.publish(
+        f"debate:{debate_id}",
+        {
+            "type": "notice",
+            "level": "info",
+            "debate_id": debate_id,
+            "message": f"Retrying agent '{target_persona}'...",
+        }
+    )
+
+    from agents import produce_candidate
+    from fastapi import HTTPException
+    try:
+        candidate_payload, candidate_usage = await produce_candidate(
+            debate.prompt,
+            agent_config,
+            model_id=debate.model_id,
+            debate_id=debate.id,
+        )
+        
+        stmt = select(Message).where(
+            Message.debate_id == debate_id,
+            Message.round_index == 1,
+            Message.persona == target_persona,
+            Message.role == "candidate"
+        )
+        existing_msg = session.exec(stmt).first()
+        if existing_msg:
+            existing_msg.content = candidate_payload.get("text", "")
+            existing_msg.meta = {k: v for k, v in candidate_payload.items() if k not in {"persona", "text"}}
+            session.add(existing_msg)
+        else:
+            new_msg = Message(
+                debate_id=debate_id,
+                round_index=1,
+                role="candidate",
+                persona=target_persona,
+                content=candidate_payload.get("text", ""),
+                meta={k: v for k, v in candidate_payload.items() if k not in {"persona", "text"}},
+            )
+            session.add(new_msg)
+
+        try:
+            from billing.service import increment_debate_usage as _inc_usage
+            _inc_usage(session, current_user.id)
+        except Exception as usage_err:
+            logging.getLogger("fastapi").warning(f"Failed to increment usage: {usage_err}")
+
+        import copy
+        final_meta = copy.deepcopy(debate.final_meta or {})
+        model_warnings = final_meta.get("model_warnings", [])
+        new_warnings = [w for w in model_warnings if w.get("display_name") != target_persona and w.get("persona_name") != target_persona]
+        final_meta["model_warnings"] = new_warnings
+        
+        models_list = final_meta.get("models", [])
+        for m_info in models_list:
+            if m_info.get("display_name") == target_persona:
+                m_info["success"] = True
+                
+        final_meta["successful_count"] = sum(1 for m in models_list if m.get("success") != False)
+        final_meta["models"] = models_list
+        debate.final_meta = final_meta
+        session.add(debate)
+        session.commit()
+
+        await sse_backend.publish(
+            f"debate:{debate_id}",
+            {
+                "type": "arena_response",
+                "debate_id": debate_id,
+                "model_id": agent_config.model,
+                "display_name": target_persona,
+                "provider": agent_provider,
+                "content": candidate_payload.get("text", ""),
+                "success": True,
+            }
+        )
+
+        return {
+            "success": True,
+            "message": f"Agent '{target_persona}' successfully retried.",
+            "content": candidate_payload.get("text", ""),
+        }
+    except Exception as exc:
+        logging.getLogger("fastapi").exception(f"Failed to retry agent {target_persona}: {exc}")
+        await sse_backend.publish(
+            f"debate:{debate_id}",
+            {
+                "type": "notice",
+                "level": "error",
+                "debate_id": debate_id,
+                "message": f"Retry for agent '{target_persona}' failed: {exc}",
+            }
+        )
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # Alias for router inclusion and compatibility
