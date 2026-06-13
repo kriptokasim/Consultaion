@@ -514,26 +514,152 @@ async def start_debate_run(
     return {"id": debate_id, "status": "scheduled"}
 
 
+def check_continue_preflight(debate: Debate, current_user: User, session: Session):
+    """
+    Validates token quotas, budget limits (max_cost_usd, max_tokens),
+    and provider/model health before allowing a debate run to continue.
+    """
+    # 1. Token quota check
+    from usage_limits import QuotaExceededError, check_quota
+    estimated_tokens = 3000  # Average continue uses ~3k tokens
+    try:
+        check_quota(session, current_user, required_tokens=estimated_tokens)
+    except QuotaExceededError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "quota_exceeded",
+                "kind": exc.kind,
+                "limit": exc.limit,
+                "used": exc.used,
+            }
+        ) from exc
+
+    # 2. Budget limits validation (max_cost_usd, max_tokens)
+    config = debate.config or {}
+    budget = config.get("budget", {})
+    max_cost_usd = budget.get("max_cost_usd")
+    max_tokens = budget.get("max_tokens")
+
+    if max_cost_usd is not None or max_tokens is not None:
+        from models import LLMUsageLog
+        usage_stmt = select(
+            sa.func.sum(LLMUsageLog.cost_usd).label("total_cost"),
+            sa.func.sum(LLMUsageLog.total_tokens).label("total_tokens")
+        ).where(LLMUsageLog.debate_id == debate.id)
+        usage_res = session.execute(usage_stmt).first()
+        cost_used = usage_res[0] if usage_res and usage_res[0] is not None else 0.0
+        tokens_used = usage_res[1] if usage_res and usage_res[1] is not None else 0
+
+        if max_cost_usd is not None and cost_used >= max_cost_usd:
+            raise ValidationError(
+                message=f"Debate cost limit exceeded: {cost_used:.4f} USD >= {max_cost_usd:.4f} USD",
+                code="debate.budget_exceeded"
+            )
+        if max_tokens is not None and tokens_used >= max_tokens:
+            raise ValidationError(
+                message=f"Debate token limit exceeded: {tokens_used} >= {max_tokens}",
+                code="debate.budget_exceeded"
+            )
+
+    # 3. Model/Provider health check
+    from parliament.model_registry import list_enabled_models, get_default_model
+    from parliament.provider_health import get_health_state
+    from datetime import datetime, timezone
+
+    enabled_models = {m.id: m for m in list_enabled_models()}
+    target_model_id = debate.model_id or get_default_model().id
+    target_model_info = enabled_models.get(target_model_id)
+
+    if target_model_info:
+        provider_name = getattr(target_model_info.provider, "value", str(target_model_info.provider)) if hasattr(target_model_info, "provider") else "unknown"
+        target_model = target_model_info.litellm_model
+        now = datetime.now(timezone.utc)
+        health_state = get_health_state(provider_name, target_model)
+        if health_state.is_open(now):
+            raise ValidationError(
+                message=f"Circuit breaker open for provider '{provider_name}' and model '{target_model}'. Model is currently unhealthy.",
+                code="provider.unhealthy"
+            )
+
+
+from fastapi import Header, HTTPException
+
 @router.post("/debates/{debate_id}/continue")
 async def continue_debate_run(
     debate_id: str,
     background_tasks: BackgroundTasks,
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    # Load debate and verify mutation access
     debate = session.get(Debate, debate_id)
+    if not debate:
+        raise NotFoundError(message=f"Debate {debate_id} not found", code="debate.not_found")
     debate = require_debate_mutation_access(debate, current_user, session)
-    if debate.status != "perspectives_ready":
-        raise ValidationError(message="Debate is not paused or perspectives are not ready yet", code="debate.not_paused")
 
+    # 1. Idempotency Check
+    continuation_record = None
+    if x_idempotency_key:
+        from models import DebateContinuation
+        stmt_chk = select(DebateContinuation).where(
+            DebateContinuation.debate_id == debate_id,
+            DebateContinuation.idempotency_key == x_idempotency_key
+        )
+        continuation_record = session.execute(stmt_chk).scalars().first()
+        if continuation_record:
+            if continuation_record.status in {"requested", "dispatched", "completed"}:
+                # Act as a no-op
+                return {"id": debate_id, "status": debate.status}
+            # If status is failed, allow retry by updating status to requested
+            continuation_record.status = "requested"
+            continuation_record.updated_at = sa.func.now()
+            session.add(continuation_record)
+            session.commit()
+        else:
+            continuation_record = DebateContinuation(
+                debate_id=debate_id,
+                idempotency_key=x_idempotency_key,
+                status="requested"
+            )
+            session.add(continuation_record)
+            try:
+                session.commit()
+            except sa.exc.IntegrityError:
+                session.rollback()
+                continuation_record = session.execute(stmt_chk).scalars().first()
+                if continuation_record and continuation_record.status in {"requested", "dispatched", "completed"}:
+                    return {"id": debate_id, "status": debate.status}
+
+    # 2. Preflight checks
+    check_continue_preflight(debate, current_user, session)
+
+    # 3. Conditional atomic update
+    stmt_upd = (
+        sa.update(Debate)
+        .where(Debate.id == debate_id)
+        .where(Debate.status.in_(["perspectives_ready", "failed"]))
+        .values(status="scheduled")
+    )
+    result = session.execute(stmt_upd)
+    session.commit()
+
+    if result.rowcount == 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Conflict: Debate run is already in progress, completed, or cannot be continued."
+        )
+
+    # Refresh debate object
+    session.refresh(debate)
+
+    # Setup SSE channel
     channel_id = debate_channel_id(debate_id)
     await sse_backend.create_channel(channel_id)
 
-    debate.status = "scheduled"
-    session.add(debate)
-    session.commit()
-
+    # Dispatch task (resume = True)
     background_tasks.add_task(
         dispatch_debate_run,
         debate_id,
@@ -541,15 +667,34 @@ async def continue_debate_run(
         channel_id,
         debate.config or {},
         debate.model_id,
+        True,
     )
+
+    # 4. Mark continuation as dispatched
+    if continuation_record:
+        continuation_record.status = "dispatched"
+        continuation_record.updated_at = sa.func.now()
+        session.add(continuation_record)
+        session.commit()
 
     from log_config import log_event
     log_event(
         "debate.continued",
         debate_id=debate_id,
         user_id=current_user.id if current_user else None,
+        x_idempotency_key=x_idempotency_key,
     )
+    record_audit(
+        "debate_continue",
+        user_id=current_user.id if current_user else None,
+        target_type="debate",
+        target_id=debate_id,
+        meta={"x_idempotency_key": x_idempotency_key},
+        session=session,
+    )
+
     return {"id": debate_id, "status": "scheduled"}
+
 
 
 from pydantic import BaseModel

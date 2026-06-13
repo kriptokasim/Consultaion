@@ -53,10 +53,118 @@ class StandardDebatePipeline(DebatePipeline):
             state.revised_candidates = revised
             logger.info("Resuming debate %s: loaded %d candidates and %d revised candidates", context.debate_id, len(candidates), len(revised))
         
+        from orchestration.checkpoints import run_with_checkpoint
+        
         for stage in self.stages:
             logger.info("Debate %s: starting stage %s", context.debate_id, stage.name)
+            
+            # 1. Define input_data mapping for the stage
+            if stage.name == "draft":
+                input_data = {
+                    "prompt": context.prompt,
+                    "agents": [a.name for a in context.config.get("agents", [])] if context.config else [],
+                    "model_id": context.model_id
+                }
+            elif stage.name == "critique":
+                input_data = {
+                    "prompt": context.prompt,
+                    "candidates": state.candidates,
+                    "model_id": context.model_id
+                }
+            elif stage.name == "judge":
+                input_data = {
+                    "prompt": context.prompt,
+                    "candidates": state.revised_candidates or state.candidates,
+                    "judges": [j.name for j in context.config.get("judges", [])] if context.config else [],
+                    "model_id": context.model_id
+                }
+            elif stage.name == "synthesis":
+                input_data = {
+                    "prompt": context.prompt,
+                    "candidates": state.revised_candidates or state.candidates,
+                    "scores": state.scores,
+                    "model_id": context.model_id
+                }
+            else:
+                input_data = {"prompt": context.prompt}
+
+            # 2. Define run callback
+            # Use default arguments in lambda or async def to bind state
+            async def run_fn(s=stage, c=context, st=state):
+                return await s.run(c, st)
+
+            # 3. Define load callback to retrieve DB entities on cache hit
+            async def load_fn(session, s=stage, c=context, st=state):
+                from models import Message, Score, Vote
+                from sqlmodel import select
+                
+                if s.name == "draft":
+                    stmt = select(Message).where(Message.debate_id == c.debate_id).where(Message.role == "candidate")
+                    result = await session.execute(stmt)
+                    messages = result.scalars().all()
+                    st.candidates = [{
+                        "persona": msg.persona,
+                        "text": msg.content,
+                        **(msg.meta or {})
+                    } for msg in messages]
+                    st.round_index = 1
+                elif s.name == "critique":
+                    stmt = select(Message).where(Message.debate_id == c.debate_id).where(Message.role == "revised")
+                    result = await session.execute(stmt)
+                    messages = result.scalars().all()
+                    st.revised_candidates = [{
+                        "persona": msg.persona,
+                        "text": msg.content,
+                        **(msg.meta or {})
+                    } for msg in messages]
+                    st.round_index = 2
+                elif s.name == "judge":
+                    stmt = select(Score).where(Score.debate_id == c.debate_id)
+                    res = await session.execute(stmt)
+                    scores = res.scalars().all()
+                    
+                    stmt_vote = select(Vote).where(Vote.debate_id == c.debate_id)
+                    res_vote = await session.execute(stmt_vote)
+                    vote = res_vote.scalars().first()
+                    
+                    aggregated = {}
+                    for detail in scores:
+                        persona_entry = aggregated.setdefault(
+                            detail.persona, {"persona": detail.persona, "scores": [], "rationale": detail.rationale}
+                        )
+                        persona_entry["scores"].append(detail.score)
+                        persona_entry["rationale"] = detail.rationale
+                    summary = []
+                    for persona, payload in aggregated.items():
+                        avg_score = sum(payload["scores"]) / max(1, len(payload["scores"]))
+                        summary.append({
+                            "persona": persona,
+                            "score": round(avg_score, 2),
+                            "rationale": payload["rationale"],
+                        })
+                    st.scores = summary
+                    if vote:
+                        st.ranking = vote.rankings.get("order") if vote.rankings else []
+                        st.vote_details = vote.result
+                    st.round_index = 3
+                elif s.name == "synthesis":
+                    stmt = select(Message).where(Message.debate_id == c.debate_id).where(Message.role == "synthesizer")
+                    result = await session.execute(stmt)
+                    msg = result.scalars().first()
+                    if msg:
+                        st.final_content = msg.content
+                        if msg.meta and "synthesis_report" in msg.meta:
+                            st.final_meta["synthesis_report"] = msg.meta["synthesis_report"]
+                return st
+
             try:
-                state = await stage.run(context, state)
+                state = await run_with_checkpoint(
+                    context.debate_id,
+                    stage.name,
+                    input_data,
+                    run_fn,
+                    load_fn
+                )
             except Exception as exc:
                 logger.error("Debate %s: stage %s failed: %s", context.debate_id, stage.name, exc)
                 raise
@@ -68,3 +176,4 @@ class StandardDebatePipeline(DebatePipeline):
                 
         state.status = "completed"
         return state
+

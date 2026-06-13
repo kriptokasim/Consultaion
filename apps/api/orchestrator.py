@@ -471,6 +471,7 @@ async def run_debate(
     config_data: Dict[str, Any],
     model_id: str | None = None,
     trace_id: str | None = None,
+    is_resume: bool = False,
 ):
     if trace_id:
         current_trace_id.set(trace_id)
@@ -508,11 +509,10 @@ async def run_debate(
     stop_heartbeat = asyncio.Event()
 
     # Check if this is a resume execution before leasing
-    is_resume = False
     async with async_session_scope() as session:
         db_debate = await session.get(Debate, debate_id)
         if db_debate:
-            is_resume = (db_debate.status == "perspectives_ready")
+            is_resume = is_resume or (db_debate.status == "perspectives_ready")
 
     try:
         # Attempt to acquire lease immediately

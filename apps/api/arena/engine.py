@@ -74,16 +74,17 @@ async def run_arena(
     backend = get_sse_backend()
     usage = UsageAccumulator()
 
-    # Load existing responses if resuming/continuing
-    existing_messages = []
-    async with async_session_scope() as session:
+    # Load responses with checkpoint safety
+    perspectives_input = {
+        "prompt": prompt,
+        "models": [m.id for m in arena_models]
+    }
+
+    async def load_perspectives_fn(session):
         stmt = select(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_response")
         result = await session.execute(stmt)
-        existing_messages = result.scalars().all()
-
-    model_responses: List[ArenaModelResponse] = []
-    if existing_messages:
-        model_responses = [
+        existing = result.scalars().all()
+        return [
             ArenaModelResponse(
                 model_id=msg.meta.get("model_id") if msg.meta else "",
                 display_name=msg.persona,
@@ -94,10 +95,10 @@ async def run_arena(
                 persona_type=msg.meta.get("persona_type") if msg.meta else None,
                 persona_tagline=msg.meta.get("persona_tagline") if msg.meta else None,
             )
-            for msg in existing_messages
+            for msg in existing
         ]
-        logger.info("Resuming arena %s: loaded %d existing responses", debate_id, len(model_responses))
-    else:
+
+    async def run_perspectives_fn():
         # Notify start
         await backend.publish(
             f"debate:{debate_id}",
@@ -174,6 +175,7 @@ async def run_arena(
             return_exceptions=True,
         )
 
+        responses = []
         # Process results
         for i, result in enumerate(results):
             if isinstance(result, Exception):
@@ -187,11 +189,11 @@ async def run_arena(
                     success=False,
                     logo_url=model_info.logo_url,
                 )
-                model_responses.append(response)
+                responses.append(response)
                 continue
 
             response, call_usage = result
-            model_responses.append(response)
+            responses.append(response)
 
             if call_usage:
                 usage.add_call(call_usage)
@@ -234,6 +236,16 @@ async def run_arena(
                     "success": response.success,
                 },
             )
+        return responses
+
+    from orchestration.checkpoints import run_with_checkpoint
+    model_responses = await run_with_checkpoint(
+        debate_id,
+        "arena_perspectives",
+        perspectives_input,
+        run_perspectives_fn,
+        load_perspectives_fn
+    )
 
     # Check if we have any successful responses
     successful = [r for r in model_responses if r.success]
@@ -291,29 +303,69 @@ async def run_arena(
         )
 
     # Synthesize final verdict
-    synthesis_content, synthesis_report, meta_updates = await _synthesize_verdict(
-        debate_id=debate_id,
-        prompt=prompt,
-        model_responses=successful,
-        usage=usage,
-        model_id=model_id,
-        locale=locale,
+    synthesis_input = {
+        "prompt": prompt,
+        "responses": [r.content for r in model_responses if r.success]
+    }
+
+    async def load_synthesis_fn(session):
+        stmt = select(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_synthesis")
+        result = await session.execute(stmt)
+        msg = result.scalars().first()
+        if msg:
+            sreport = msg.meta.get("synthesis_report") if msg.meta else None
+            meta = {
+                "synthesis_status": "succeeded" if msg.meta and msg.meta.get("synthesis_success") else "failed",
+                "synthesis_error": msg.meta.get("synthesis_error") if msg.meta else None,
+                "fallback_model": msg.meta.get("fallback_model") if msg.meta else None,
+                "fallback_reason": msg.meta.get("fallback_reason") if msg.meta else None,
+                "fallback_response": msg.meta.get("fallback_response") if msg.meta else None,
+                "semantic_analysis": msg.meta.get("semantic_analysis") if msg.meta else None,
+                "divergence_breakdown": msg.meta.get("divergence_breakdown") if msg.meta else None,
+            }
+            return msg.content, sreport, meta
+        return "Synthesis unavailable.", None, {}
+
+    async def run_synthesis_fn():
+        scontent, sreport, meta = await _synthesize_verdict(
+            debate_id=debate_id,
+            prompt=prompt,
+            model_responses=successful,
+            usage=usage,
+            model_id=model_id,
+            locale=locale,
+        )
+        ssuccess = meta.get("synthesis_status") == "succeeded"
+
+        # Persist synthesis
+        async with async_session_scope() as session:
+            session.add(
+                Message(
+                    debate_id=debate_id,
+                    round_index=2,
+                    role="arena_synthesis",
+                    persona="Synthesizer",
+                    content=scontent,
+                    meta={
+                        "mode": "arena",
+                        "phase": "synthesis",
+                        "synthesis_success": ssuccess,
+                        "synthesis_report": sreport,
+                        **meta
+                    },
+                )
+            )
+            await session.commit()
+        return scontent, sreport, meta
+
+    synthesis_content, synthesis_report, meta_updates = await run_with_checkpoint(
+        debate_id,
+        "arena_synthesis",
+        synthesis_input,
+        run_synthesis_fn,
+        load_synthesis_fn
     )
     synthesis_success = meta_updates.get("synthesis_status") == "succeeded"
-
-    # Persist synthesis
-    async with async_session_scope() as session:
-        session.add(
-            Message(
-                debate_id=debate_id,
-                round_index=2,
-                role="arena_synthesis",
-                persona="Synthesizer",
-                content=synthesis_content,
-                meta={"mode": "arena", "phase": "synthesis", "synthesis_success": synthesis_success},
-            )
-        )
-        await session.commit()
 
     # Build final meta
     failed_models = [r for r in model_responses if not r.success]

@@ -523,3 +523,35 @@ class UserProviderKey(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class DebateContinuation(SQLModel, table=True):
+    __tablename__ = "debate_continuation"
+    __table_args__ = (
+        UniqueConstraint("debate_id", "idempotency_key", name="uq_debate_continuation_debate_id_idempotency_key"),
+    )
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    idempotency_key: str = Field(nullable=False)
+    status: str = Field(default="requested", nullable=False)  # requested, dispatched, completed, failed
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class DebateStageCheckpoint(SQLModel, table=True):
+    __tablename__ = "debate_stage_checkpoint"
+    __table_args__ = (
+        UniqueConstraint("debate_id", "stage_key", name="uq_debate_stage_checkpoint_debate_id_stage_key"),
+    )
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    stage_key: str = Field(nullable=False)  # arena_perspectives, debate_draft, debate_critique, judging, divergence_analysis, synthesis, verification, complete
+    status: str = Field(default="pending", nullable=False)  # pending, running, completed, failed
+    input_hash: str = Field(nullable=False)
+    error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    started_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    execution_metadata: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+
+
+
