@@ -37,22 +37,26 @@ export function RiskMatrix({ risks }: RiskMatrixProps) {
           <div
             key={i}
             className={cn(
-              "flex items-start gap-3 rounded-xl border border-slate-200 dark:border-slate-800 p-3",
+              "flex flex-col sm:flex-row sm:items-start gap-3 rounded-xl border border-slate-200 dark:border-slate-800 p-4 bg-card/65 shadow-xs transition-colors duration-200",
               style.bg
             )}
           >
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className={cn("text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded", style.text)}>
+            <div className="flex items-center gap-2 shrink-0 sm:w-32">
+              <span className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded", style.text, "bg-background/80 dark:bg-black/20 border border-current/10")}>
                 {risk.severity}
               </span>
-              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase">
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                 {typeLabels[risk.type] || risk.type}
               </span>
             </div>
-            <p className="text-sm text-slate-700 dark:text-slate-300 flex-1">{risk.item}</p>
-            {risk.mitigation && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 italic flex-1">Mitigation: {risk.mitigation}</p>
-            )}
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <p className="text-sm font-medium text-slate-850 dark:text-slate-200 leading-relaxed">{risk.item}</p>
+              {risk.mitigation && (
+                <p className="text-xs text-slate-550 dark:text-slate-450 italic leading-relaxed border-l-2 border-slate-200 dark:border-slate-700 pl-2">
+                  <span className="font-semibold not-italic">Mitigation:</span> {risk.mitigation}
+                </p>
+              )}
+            </div>
           </div>
         )
       })}

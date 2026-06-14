@@ -71,6 +71,16 @@ class PublicDebateDTO(BaseModel):
     semantic_analysis: Optional[Dict[str, Any]] = None
     divergence_breakdown: Optional[Dict[str, Any]] = None
 
+    # Extra fields for continuous workspace
+    current_stage: Optional[str] = None
+    stage_checkpoints: Optional[List[Dict[str, Any]]] = None
+    continuation_id: Optional[str] = None
+    perspectives_ready_at: Optional[datetime] = None
+    responses_received: Optional[int] = None
+    models_expected: Optional[int] = None
+    scores_received: Optional[int] = None
+    verification_status: Optional[str] = None
+
 
 class PrivateDebateDTO(BaseModel):
     """
@@ -105,6 +115,16 @@ class PrivateDebateDTO(BaseModel):
     # Worker internals (admin/owner diagnostics)
     runner_id: Optional[str] = None
     run_attempt: int = 0
+
+    # Extra fields for continuous workspace
+    current_stage: Optional[str] = None
+    stage_checkpoints: Optional[List[Dict[str, Any]]] = None
+    continuation_id: Optional[str] = None
+    perspectives_ready_at: Optional[datetime] = None
+    responses_received: Optional[int] = None
+    models_expected: Optional[int] = None
+    scores_received: Optional[int] = None
+    verification_status: Optional[str] = None
 
 
 class PublicDebateEventDTO(BaseModel):
@@ -184,15 +204,114 @@ def _safe_final_meta(final_meta: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return safe
 
 
-def serialize_debate_public(debate, continuation_status: Optional[str] = None) -> dict:
+def _get_debate_extra_fields(debate, session=None, continuation_status: Optional[str] = None) -> dict:
+    """Helper to fetch and calculate extra fields for debate serialization."""
+    from models import DebateStageCheckpoint, DebateContinuation, Message, Score
+    from sqlmodel import select
+
+    res = {
+        "current_stage": debate.status,
+        "stage_checkpoints": None,
+        "continuation_id": None,
+        "continuation_status": continuation_status or getattr(debate, "continuation_status", None),
+        "perspectives_ready_at": None,
+        "responses_received": None,
+        "models_expected": None,
+        "scores_received": None,
+        "verification_status": (debate.final_meta or {}).get("verification_status"),
+    }
+
+    config = debate.config or {}
+
+    # Expose expected models count based on config or registry
+    mode = getattr(debate, "mode", "arena")
+    if mode == "arena":
+        from parliament.model_registry import get_arena_models
+        try:
+            res["models_expected"] = len(get_arena_models())
+        except Exception:
+            res["models_expected"] = 4
+    else:
+        agents = config.get("agents", [])
+        res["models_expected"] = len(agents) if agents else 3
+
+    if session:
+        # 1. Fetch checkpoints
+        stmt_ck = select(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id == debate.id)
+        checkpoints = list(session.execute(stmt_ck).scalars().all())
+        if checkpoints:
+            res["stage_checkpoints"] = [
+                {
+                    "stage_key": cp.stage_key,
+                    "status": cp.status,
+                    "attempt": cp.attempt,
+                    "started_at": cp.started_at,
+                    "completed_at": cp.completed_at,
+                    "failed_at": cp.failed_at,
+                    "error_code": cp.error_code,
+                }
+                for cp in checkpoints
+            ]
+
+            # Determine current_stage from checkpoints
+            # If debate is in progress (running/queued/scheduled)
+            if debate.status in ("running", "queued", "scheduled"):
+                # Find first checkpoint that is running or failed
+                active_cp = next((cp for cp in checkpoints if cp.status in ("running", "failed")), None)
+                if active_cp:
+                    res["current_stage"] = active_cp.stage_key
+                else:
+                    # Otherwise find the last completed checkpoint
+                    # Sort completed checkpoints by completed_at
+                    completed = [cp for cp in checkpoints if cp.status == "completed" and cp.completed_at]
+                    if completed:
+                        last_completed = max(completed, key=lambda cp: cp.completed_at)
+                        res["current_stage"] = last_completed.stage_key
+                    else:
+                        res["current_stage"] = debate.status
+
+            # Find perspectives_ready_at
+            target_key = "arena_perspectives" if mode == "arena" else "critique"
+            ready_cp = next((cp for cp in checkpoints if cp.stage_key == target_key and cp.status == "completed"), None)
+            if ready_cp:
+                res["perspectives_ready_at"] = ready_cp.completed_at
+
+        # 2. Fetch continuation
+        stmt_cont = (
+            select(DebateContinuation)
+            .where(DebateContinuation.debate_id == debate.id)
+            .order_by(DebateContinuation.created_at.desc())
+        )
+        continuation = session.execute(stmt_cont).scalars().first()
+        if continuation:
+            res["continuation_status"] = continuation.status
+            res["continuation_id"] = continuation.id
+
+        # 3. Calculate responses_received
+        stmt_msg = select(Message).where(Message.debate_id == debate.id)
+        messages = list(session.execute(stmt_msg).scalars().all())
+        if mode == "arena":
+            res["responses_received"] = sum(1 for m in messages if m.role == "arena_response")
+        else:
+            res["responses_received"] = sum(1 for m in messages if m.role == "candidate")
+
+        # 4. Calculate scores_received
+        stmt_score = select(Score).where(Score.debate_id == debate.id)
+        scores = list(session.execute(stmt_score).scalars().all())
+        res["scores_received"] = len(scores)
+
+    return res
+
+
+def serialize_debate_public(debate, continuation_status: Optional[str] = None, session=None) -> dict:
     """
     Serialize a Debate ORM object into a public-safe dictionary.
 
     Used for unauthenticated access to public runs.
     """
-    config = debate.config or {}
     final_meta = debate.final_meta or {}
     safe_meta = _safe_final_meta(final_meta)
+    extra = _get_debate_extra_fields(debate, session=session, continuation_status=continuation_status)
 
     return PublicDebateDTO(
         id=debate.id,
@@ -205,30 +324,40 @@ def serialize_debate_public(debate, continuation_status: Optional[str] = None) -
         is_public=True,
         model_id=debate.model_id,
         routed_model=debate.routed_model,
-        continuation_status=continuation_status or getattr(debate, "continuation_status", None),
+        continuation_status=extra["continuation_status"],
         successful_count=safe_meta.get("successful_count"),
         total_count=safe_meta.get("total_count"),
         synthesis_success=safe_meta.get("synthesis_success"),
         models=safe_meta.get("models"),
         synthesis_report=safe_meta.get("synthesis_report"),
         synthesis_status=safe_meta.get("synthesis_status"),
-        synthesis_error=safe_meta.get("synthesis_error"),
+        synthesis_error=None,  # Exclude raw provider/synthesis errors from public
         fallback_model=safe_meta.get("fallback_model"),
         fallback_reason=safe_meta.get("fallback_reason"),
-        fallback_response=safe_meta.get("fallback_response"),
+        fallback_response=None,  # Exclude raw fallback responses/debug from public
         semantic_analysis=safe_meta.get("semantic_analysis"),
         divergence_breakdown=safe_meta.get("divergence_breakdown"),
+        # Extra continuous workspace fields
+        current_stage=extra["current_stage"],
+        stage_checkpoints=extra["stage_checkpoints"],
+        continuation_id=extra["continuation_id"],
+        perspectives_ready_at=extra["perspectives_ready_at"],
+        responses_received=extra["responses_received"],
+        models_expected=extra["models_expected"],
+        scores_received=extra["scores_received"],
+        verification_status=extra["verification_status"],
     ).model_dump()
 
 
 
-def serialize_debate_private(debate, continuation_status: Optional[str] = None) -> dict:
+def serialize_debate_private(debate, continuation_status: Optional[str] = None, session=None) -> dict:
     """
     Serialize a Debate ORM object into a full private dictionary.
 
     Used for authenticated owner/admin access.
     """
     config = debate.config or {}
+    extra = _get_debate_extra_fields(debate, session=session, continuation_status=continuation_status)
 
     return PrivateDebateDTO(
         id=debate.id,
@@ -242,7 +371,7 @@ def serialize_debate_private(debate, continuation_status: Optional[str] = None) 
         model_id=debate.model_id,
         routed_model=debate.routed_model,
         routing_policy=debate.routing_policy,
-        continuation_status=continuation_status or getattr(debate, "continuation_status", None),
+        continuation_status=extra["continuation_status"],
         config=config,
         panel_config=debate.panel_config,
         routing_meta=debate.routing_meta,
@@ -252,6 +381,15 @@ def serialize_debate_private(debate, continuation_status: Optional[str] = None) 
         team_id=debate.team_id,
         runner_id=debate.runner_id,
         run_attempt=getattr(debate, "run_attempt", 0),
+        # Extra continuous workspace fields
+        current_stage=extra["current_stage"],
+        stage_checkpoints=extra["stage_checkpoints"],
+        continuation_id=extra["continuation_id"],
+        perspectives_ready_at=extra["perspectives_ready_at"],
+        responses_received=extra["responses_received"],
+        models_expected=extra["models_expected"],
+        scores_received=extra["scores_received"],
+        verification_status=extra["verification_status"],
     ).model_dump()
 
 

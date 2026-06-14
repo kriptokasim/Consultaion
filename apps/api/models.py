@@ -532,9 +532,20 @@ class DebateContinuation(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
     idempotency_key: str = Field(nullable=False)
-    status: str = Field(default="requested", nullable=False)  # requested, dispatched, completed, failed
+    status: str = Field(default="requested", nullable=False)  # requested, preflight_passed, dispatched, running, completed, failed
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    user_id: Optional[str] = Field(default=None, foreign_key="user.id", index=True, nullable=True)
+    target: Optional[str] = Field(default=None, nullable=True)
+    requested_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    preflight_passed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    dispatched_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    started_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    failed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    failure_code: Optional[str] = Field(default=None, nullable=True)
+    failure_detail_safe: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    credit_reservation_id: Optional[str] = Field(default=None, nullable=True)
 
 
 class DebateStageCheckpoint(SQLModel, table=True):
@@ -546,12 +557,16 @@ class DebateStageCheckpoint(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
     stage_key: str = Field(nullable=False)  # arena_perspectives, debate_draft, debate_critique, judging, divergence_analysis, synthesis, verification, complete
-    status: str = Field(default="pending", nullable=False)  # pending, running, completed, failed
+    status: str = Field(default="pending", nullable=False)  # pending, running, completed, failed, invalidated
     input_hash: str = Field(nullable=False)
     error_message: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     started_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     execution_metadata: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    attempt: int = Field(default=1, nullable=False)
+    output_reference: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    failed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    error_code: Optional[str] = Field(default=None, nullable=True)
 
 
 

@@ -39,7 +39,15 @@ async def test_continue_conditional_transition(authenticated_client, db_session)
         response = authenticated_client.post(f"/api/v1/debates/{debate_paused.id}/continue")
         assert response.status_code == 200
         assert response.json()["status"] == "scheduled"
-        mock_dispatch.assert_called_once()
+        mock_dispatch.assert_called_once_with(
+            "test-continue-paused",
+            "Test prompt",
+            "debate:test-continue-paused",
+            {},
+            None,
+            trace_id=None,
+            resume=True,
+        )
 
         # Check DB status is updated to scheduled
         db_session.refresh(debate_paused)
@@ -254,4 +262,45 @@ async def test_retry_debate_run(authenticated_client, db_session):
         # Debate status updated to scheduled
         db_session.refresh(debate)
         assert debate.status == "scheduled"
+
+
+@pytest.mark.anyio
+async def test_continue_dispatch_failure_safety(authenticated_client, db_session):
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    
+    debate = Debate(
+        id="test-continue-fail-safety",
+        user_id=user.id,
+        prompt="Test prompt",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+
+    headers = {"X-Idempotency-Key": "test-fail-safety-key"}
+
+    # Mock BackgroundTasks.add_task to throw an error
+    with patch("starlette.background.BackgroundTasks.add_task", side_effect=Exception("celery queue full")):
+        with pytest.raises(Exception, match="celery queue full"):
+            authenticated_client.post(
+                f"/api/v1/debates/{debate.id}/continue",
+                headers=headers
+            )
+        
+    # Verify the database state was rolled back to perspectives_ready
+    db_session.refresh(debate)
+    assert debate.status == "perspectives_ready"
+
+    # Verify continuation record is marked as failed
+    continuation = db_session.exec(
+        select(DebateContinuation).where(
+            DebateContinuation.debate_id == debate.id,
+            DebateContinuation.idempotency_key == "test-fail-safety-key"
+        )
+    ).first()
+    assert continuation is not None
+    assert continuation.status == "failed"
+    assert continuation.failure_code == "debate.dispatch_failed"
+    assert "celery queue full" in continuation.failure_detail_safe
+
 

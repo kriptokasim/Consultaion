@@ -1,5 +1,5 @@
 import React from "react"
-import { ShieldCheck, ShieldAlert } from "lucide-react"
+import { ShieldCheck, ShieldAlert, Maximize2, Minimize2, Compass, BookOpen } from "lucide-react"
 import { SemanticAlignmentSection, DivergenceBreakdown } from "./SemanticAlignmentSection"
 import { FallbackResponsePanel } from "./FallbackResponsePanel"
 import { ReportGenerationFailedCard } from "./ReportGenerationFailedCard"
@@ -49,6 +49,44 @@ export function DecisionReportShell({
   children,
 }: DecisionReportShellProps) {
   const isFailed = synthesisStatus === "failed" || synthesisStatus === "fallback"
+  const [isFocusMode, setIsFocusMode] = React.useState(false)
+  const [tocOpen, setTocOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    if (isFocusMode) {
+      document.body.style.overflow = "hidden"
+      document.body.style.overscrollBehavior = "contain"
+    } else {
+      document.body.style.overflow = ""
+      document.body.style.overscrollBehavior = ""
+    }
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.overscrollBehavior = ""
+    }
+  }, [isFocusMode])
+
+  const sections = [
+    { id: "report-verdict", label: "Verdict" },
+    { id: "report-findings", label: "Key Findings" },
+    { id: "report-positions", label: "Model Positions" },
+    { id: "report-risks", label: "Risks & Assumptions" },
+    { id: "report-actions", label: "Next Actions" },
+    { id: "report-caveats", label: "Caveats" },
+  ].filter((s) => {
+    if (typeof document !== "undefined") {
+      return !!document.getElementById(s.id);
+    }
+    return true;
+  });
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTocOpen(false);
+    }
+  };
 
   // Render Quality Gate Status
   const renderQualityGate = () => {
@@ -153,28 +191,8 @@ export function DecisionReportShell({
     )
   }
 
-  return (
-    <div className={`space-y-8 ${className || ""}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{title || "Decision Report"}</h2>
-          {executiveSummary && (
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed">
-              {executiveSummary}
-            </p>
-          )}
-        </div>
-        {onExport && !isFailed && (
-          <button
-            onClick={onExport}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-          >
-            Export
-          </button>
-        )}
-      </div>
-
+  const contentMarkup = (
+    <>
       {/* Quality Gate */}
       {renderQualityGate()}
 
@@ -199,6 +217,120 @@ export function DecisionReportShell({
           {children}
         </>
       )}
+    </>
+  )
+
+  if (isFocusMode) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background dark:bg-stone-950 flex flex-col animate-in fade-in duration-200">
+        {/* Sticky top header */}
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3.5 backdrop-blur-md">
+          <div className="flex items-center gap-2 min-w-0">
+            <BookOpen className="h-5 w-5 text-primary shrink-0" />
+            <h1 className="text-sm sm:text-base font-bold text-foreground truncate">
+              {title || "Decision Report"} (Focus Mode)
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            {onExport && !isFailed && (
+              <button
+                onClick={onExport}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted/40 transition"
+              >
+                Export
+              </button>
+            )}
+            <button
+              onClick={() => setIsFocusMode(false)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted/40 transition"
+            >
+              <Minimize2 className="h-3.5 w-3.5" />
+              Exit Focus
+            </button>
+          </div>
+        </header>
+
+        {/* Focus Mode Scrollable Body Container */}
+        <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-8 max-w-4xl mx-auto w-full space-y-8 pb-24 scroll-smooth">
+          {executiveSummary && (
+            <p className="text-sm sm:text-base text-slate-700 dark:text-slate-300 leading-relaxed font-medium bg-muted/20 border border-border/40 p-4 rounded-xl">
+              {executiveSummary}
+            </p>
+          )}
+          {contentMarkup}
+        </div>
+
+        {/* Floating Table of Contents for Focus Mode */}
+        {sections.length > 0 && (
+          <div className="fixed bottom-4 right-4 z-40">
+            <div className="relative">
+              {tocOpen && (
+                <div className="absolute bottom-12 right-0 bg-card border border-border rounded-xl shadow-lg p-3 w-56 space-y-1 animate-in slide-in-from-bottom-2 fade-in duration-150">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2 pb-1.5 border-b border-border/60">
+                    Jump to Section
+                  </p>
+                  {sections.map((sec) => (
+                    <button
+                      key={sec.id}
+                      onClick={() => scrollToSection(sec.id)}
+                      className="w-full text-left px-2 py-1.5 text-xs font-medium text-foreground rounded-lg hover:bg-muted/50 transition truncate block"
+                    >
+                      {sec.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => setTocOpen(!tocOpen)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/95 transition-all active:scale-95"
+              >
+                <Compass className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className={`space-y-8 ${className || ""}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white truncate">{title || "Decision Report"}</h2>
+          {executiveSummary && (
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed hidden sm:block">
+              {executiveSummary}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIsFocusMode(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-755 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+          >
+            <Maximize2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Focus Mode</span>
+          </button>
+          {onExport && !isFailed && (
+            <button
+              onClick={onExport}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Export
+            </button>
+          )}
+        </div>
+      </div>
+
+      {executiveSummary && (
+        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-3xl leading-relaxed sm:hidden">
+          {executiveSummary}
+        </p>
+      )}
+
+      {contentMarkup}
     </div>
   )
 }

@@ -66,6 +66,9 @@ async def run_with_checkpoint(
             checkpoint.input_hash = input_hash
             checkpoint.started_at = datetime.now(timezone.utc)
             checkpoint.error_message = None
+            checkpoint.error_code = None
+            checkpoint.failed_at = None
+            checkpoint.attempt = (checkpoint.attempt or 0) + 1
             session.add(checkpoint)
             await session.commit()
         else:
@@ -76,6 +79,7 @@ async def run_with_checkpoint(
                 status="running",
                 input_hash=input_hash,
                 started_at=datetime.now(timezone.utc),
+                attempt=1,
             )
             session.add(checkpoint)
             await session.commit()
@@ -84,6 +88,12 @@ async def run_with_checkpoint(
     try:
         result = await run_fn()
 
+        output_ref = None
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], str) and stage_key in {"synthesis", "verification"}:
+            actual_result, output_ref = result
+        else:
+            actual_result = result
+
         # 4. Mark checkpoint as completed
         async with async_session_scope() as session:
             res = await session.execute(stmt)
@@ -91,10 +101,12 @@ async def run_with_checkpoint(
             if checkpoint:
                 checkpoint.status = "completed"
                 checkpoint.completed_at = datetime.now(timezone.utc)
+                if output_ref:
+                    checkpoint.output_reference = output_ref
                 session.add(checkpoint)
                 await session.commit()
 
-        return result
+        return actual_result
     except Exception as exc:
         # Mark checkpoint as failed
         async with async_session_scope() as session:
@@ -103,6 +115,8 @@ async def run_with_checkpoint(
             if checkpoint:
                 checkpoint.status = "failed"
                 checkpoint.error_message = str(exc)
+                checkpoint.failed_at = datetime.now(timezone.utc)
+                checkpoint.error_code = getattr(exc, "code", "EXECUTION_ERROR")
                 checkpoint.completed_at = datetime.now(timezone.utc)
                 session.add(checkpoint)
                 await session.commit()

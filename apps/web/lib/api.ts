@@ -121,6 +121,21 @@ export async function startDebateRun(debateId: string) {
   });
 }
 
+export async function continueDebate(debateId: string) {
+  return apiRequest<{ id: string; status: string }>({
+    method: "POST",
+    path: `/debates/${debateId}/continue`,
+  });
+}
+
+export async function retryDebate(debateId: string, stageKey?: string) {
+  return apiRequest<{ id: string; status: string; retried_stage?: string }>({
+    method: "POST",
+    path: `/debates/${debateId}/retry`,
+    body: stageKey ? { stage_key: stageKey } : undefined,
+  });
+}
+
 export async function getEvents(id: string) {
   return request<any>(`/debates/${id}/events`, undefined, { auth: true });
 }

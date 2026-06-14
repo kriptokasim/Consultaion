@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useReducer, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,10 +12,8 @@ import ArenaRunView from "@/components/arena/ArenaRunView";
 import VotingRunView from "@/components/voting/VotingRunView";
 import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/arena/ModelCard";
-import { useDebate } from "@/lib/api/hooks/useDebate";
-import { timelineReducer, initialTimelineState } from "@/lib/timeline/reducer";
+import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 import { TimelineEvent } from "@/lib/timeline/types";
-import { useEventSource } from "@/lib/sse";
 import { fetchWithAuth } from "@/lib/auth";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { normalizeEvent } from "@/lib/api/normalizeEvent";
@@ -32,9 +30,17 @@ const POLL_INTERVAL_MS = 4000;
 export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   const params = useParams();
   const id = runId || (params?.id as string);
-  const { data: debate, isLoading, error: debateError, refetch } = useDebate(id);
-  const [state, dispatch] = useReducer(timelineReducer, initialTimelineState);
-  const mounted = useRef(true);
+  const {
+    debate,
+    events,
+    status: workspaceStatus,
+    sseStatus,
+    error: workspaceError,
+    isPollingFallback,
+    continueRun,
+    retryRun,
+    refetch,
+  } = useRunWorkspace(id);
 
   // --- Results data for completed debates (ParliamentRunView) ---
   const [resultsEvents, setResultsEvents] = useState<DebateEvent[]>([]);
@@ -43,15 +49,12 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   const [resultsFetched, setResultsFetched] = useState(false);
 
   const isCompleted = !!debate && COMPLETED_STATUSES.has(debate.status);
-
-  // --- Polling state for running debates ---
-  const [pollingFallback, setPollingFallback] = useState(false);
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLoading = workspaceStatus === "loading" || (!debate && workspaceStatus !== "failed" && workspaceStatus !== "error");
+  const debateError = workspaceError ? new Error(workspaceError) : null;
 
   // --- Elapsed time tracking ---
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number | null>(null);
-  const hydratedTimelineForRef = useRef<string | null>(null);
 
   // Fetch profile to know if user is authenticated for PLG CTAs
   const [profile, setProfile] = useState<any>(null);
@@ -81,20 +84,14 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     if (!id || isContinuing) return;
     setIsContinuing(true);
     try {
-      const res = await fetchWithAuth(`/debates/${id}/continue`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        throw new Error("Failed to continue debate execution");
-      }
-      await refetch();
+      await continueRun();
     } catch (err) {
       console.error("Failed to continue:", err);
       alert("Error resuming the decision pipeline. Please try again.");
     } finally {
       setIsContinuing(false);
     }
-  }, [id, isContinuing, refetch]);
+  }, [id, isContinuing, continueRun]);
 
   // Fetch events + members for completed debates
   useEffect(() => {
@@ -166,91 +163,15 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     }
   }, [debate?.created_at]);
 
-  // 1. Initial Hydration (REST) — uses authenticated fetch with cookies
-  useEffect(() => {
-    mounted.current = true;
-    if (!id || !debate) return;
-    if (hydratedTimelineForRef.current === id) return;
-    hydratedTimelineForRef.current = id;
-
-    async function hydrate() {
-      try {
-        const res = await fetchWithAuth(`/debates/${id}/timeline`);
-        if (!res.ok) throw new Error("Failed to fetch timeline");
-        const events: TimelineEvent[] = await res.json();
-
-        if (mounted.current) {
-          dispatch({
-            type: "INIT",
-            events,
-            status: debate?.status || "unknown",
-            config: (debate?.config as any) || null,
-          });
-        }
-      } catch (err) {
-        console.error("Timeline hydration failed:", err);
-
-        try {
-          const fallback = await fetchWithAuth(`/debates/${id}/events`);
-          if (!fallback.ok) return;
-          const data = await fallback.json();
-          const fallbackEvents = (data.items || data || []).map(normalizeEvent);
-
-          if (mounted.current) {
-            dispatch({
-              type: "INIT",
-              events: fallbackEvents,
-              status: debate?.status || "unknown",
-              config: (debate?.config as any) || null,
-            });
-          }
-        } catch (fallbackErr) {
-          console.error("Events hydration fallback failed:", fallbackErr);
-        }
-      }
-    }
-
-    hydrate();
-
-    return () => {
-      mounted.current = false;
-    };
-  }, [id, debate?.id]);
-
-  // 2. Polling fallback for running debates
-  const pollDebate = useCallback(async () => {
-    if (!id || isCompleted || !mounted.current) return;
-    try {
-      await refetch();
-    } catch {
-      // Silently ignore poll errors
-    }
-  }, [id, isCompleted, refetch]);
-
-  useEffect(() => {
-    if (!id || isCompleted || (debate?.status && TERMINAL_STATUSES.has(debate.status))) {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-      return;
-    }
-
-    pollTimerRef.current = setInterval(pollDebate, POLL_INTERVAL_MS);
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-    };
-  }, [id, isCompleted, debate?.status, pollDebate]);
-
-  // 3. Elapsed time tracking
+  // Elapsed time tracking
   useEffect(() => {
     if (isCompleted || debate?.status === "failed") return;
 
-    if (!startTimeRef.current) {
-      startTimeRef.current = Date.now();
+    if (!startTimeRef.current && debate?.created_at) {
+      const parsedStart = new Date(debate.created_at).getTime();
+      if (!isNaN(parsedStart)) {
+        startTimeRef.current = parsedStart;
+      }
     }
 
     const interval = setInterval(() => {
@@ -260,51 +181,10 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isCompleted, debate?.status]);
+  }, [isCompleted, debate?.status, debate?.created_at]);
 
-  // 4. Live Updates (SSE) — only for non-completed debates
-  const streamUrl =
-    id && !isCompleted
-      ? `${API_ORIGIN}/debates/${id}/stream`
-      : null;
-  const { lastEvent, status: sseStatus } = useEventSource<any>(streamUrl, {
-    enabled: !!id && !isCompleted,
-    withCredentials: true,
-    parseJson: true,
-  });
-
-  // Track SSE disconnect for fallback indicator
-  useEffect(() => {
-    if (sseStatus === "reconnecting" || sseStatus === "closed") {
-      setPollingFallback(true);
-    } else if (sseStatus === "connected") {
-      setPollingFallback(false);
-    }
-  }, [sseStatus]);
-
-  useEffect(() => {
-    if (!lastEvent) return;
-
-    try {
-      const normalized = normalizeEvent(lastEvent);
-      const event: TimelineEvent = {
-        id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
-        debate_id: id,
-        ts: lastEvent.ts || new Date().toISOString(),
-        type: lastEvent.type,
-        round: lastEvent.round || 0,
-        seat: lastEvent.seat,
-        payload: normalized as unknown as Record<string, unknown>,
-      };
-      dispatch({ type: "APPEND", event });
-    } catch (err) {
-      console.error("Error processing SSE event", err);
-    }
-  }, [lastEvent, id]);
-
-  // Derive pipeline stage for running debates
   const liveResponseCount = useMemo(() => {
-    return state.events.filter((e: any) => {
+    return events.filter((e: any) => {
       const eventType = e.type || e.payload?.type;
       const payload = e.payload || e;
 
@@ -314,46 +194,30 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
         typeof payload.content === "string"
       );
     }).length;
-  }, [state.events]);
+  }, [events]);
 
   const responsesReceived = useMemo(() => {
-    const finalMeta = debate?.final_meta || {};
-    const metaCount =
-      finalMeta.live_response_count ??
-      finalMeta.response_count ??
-      finalMeta.successful_count ??
-      finalMeta.models_responded ??
-      finalMeta.responded_count;
-
-    if (typeof metaCount === "number" && metaCount > 0) return metaCount;
-
-    const messages = (debate as any)?.messages || [];
-    const responseMessages = messages.filter((m: any) =>
-      ["arena_response", "candidate", "message", "seat_message", "model_response"].includes(m.role || m.type)
-      || typeof m.text === "string"
-      || typeof m.content === "string"
-    );
-
-    if (responseMessages.length > 0) return responseMessages.length;
+    if (typeof debate?.responses_received === "number" && debate.responses_received > 0) {
+      return debate.responses_received;
+    }
     return liveResponseCount;
-  }, [debate, liveResponseCount]);
+  }, [debate?.responses_received, liveResponseCount]);
 
   const pipelineStage = useMemo(() => {
     if (!debate) return "queued";
-    const eventTypes = new Set(state.events.map((e) => e.type));
-    return derivePipelineStage(debate, eventTypes, responsesReceived);
-  }, [debate, state.events, responsesReceived]);
+    return debate.current_stage || "queued";
+  }, [debate]);
 
   const modelsExpected = useMemo(() => {
-    return debate?.final_meta?.models?.length || (debate?.config as any)?.models?.length || 4;
+    return debate?.models_expected || debate?.final_meta?.models?.length || (debate?.config as any)?.models?.length || 4;
   }, [debate]);
 
   const scoresReceived = useMemo(() => {
-    if (debate?.final_meta?.scores) {
-      return Object.keys(debate.final_meta.scores).length;
+    if (typeof debate?.scores_received === "number") {
+      return debate.scores_received;
     }
-    return state.events.filter((e) => e.type === "score").length;
-  }, [debate, state.events]);
+    return events.filter((e) => e.type === "score").length;
+  }, [debate?.scores_received, events]);
 
   if (isLoading) {
     return (
@@ -531,7 +395,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   }
 
   // Running / queued debates → live stream view with pipeline progress
-  const liveEvents = state.events.map((e: any) => e.payload || e);
+  const liveEvents = events.map((e: any) => e.payload || e);
 
   // Show pipeline progress for arena mode running debates
   if (debate?.mode === "arena" && !isCompleted) {
@@ -588,7 +452,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           </div>
         )}
 
-        {pollingFallback && (
+        {isPollingFallback && (
           <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
             <Loader2 className="h-3 w-3 animate-spin" />
             <span>Connection interrupted — using polling fallback</span>
@@ -631,7 +495,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
-      {pollingFallback && (
+      {isPollingFallback && (
         <div className="flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
           <Loader2 className="h-3 w-3 animate-spin" />
           <span>Connection interrupted — using polling fallback</span>
@@ -669,7 +533,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
       )}
       <DebateArena
         debate={debate}
-        events={state.events}
+        events={events}
         connectionStatus={sseStatus}
       />
     </div>

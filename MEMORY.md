@@ -123,5 +123,12 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
   - **Frontend Type & Import Fixes**: Resolved missing `React` import in `PipelineProgress.tsx` and resolved static TypeScript type error on `quality_meta.scores` in `DecisionReportView.tsx` by casting.
 - **Tests & Verification**: Verified all backend tests pass successfully (11/11 in `test_debates_api.py`) and Next.js production build compiles successfully (Exit Code: 0).
 
+## Staged Checkpoints & Retry Safety Hardening (2026-06-14)
+- **Goal**: Hardened the debate and arena pipeline execution stages with granular checkpoints, retry-safe worker tasks, and cascade stage-local retries.
+- **Key Enhancements**:
+  - **Granular Synthesizer & Divergence Checkpoints**: Split report generation into `"synthesis_draft"` (scoring, claim extraction, drafting) and `"verification"` (quality critique, self-healing loop). Wrapped divergence computation under `"divergence_analysis"`. Both serialize state to database checkpoint records.
+  - **Downstream Cascade Retry Clearing**: Updated `/api/v1/debates/{debate_id}/retry` to clear specific downstream stage checkpoints and corresponding database entities (scores, votes, messages, divergence reports) based on the target retry stage.
+  - **Tests**: Created comprehensive tests covering attempt tracking, serialization, and correct cascade clearing. All tests pass cleanly.
+
 
 

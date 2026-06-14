@@ -96,11 +96,13 @@ export function PipelineProgress({
 
   const activeStageLabel = activeIdx >= 0 ? getStageLabel(ALL_STAGES[activeIdx]) : "Idle";
 
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
   if (variant === "compact") {
     return (
       <div className={cn("rounded-2xl border border-stone-200 bg-white/85 p-3.5 shadow-sm dark:border-stone-800 dark:bg-stone-900/75 backdrop-blur-sm", className)}>
         {/* Horizontal dots rail */}
-        <div className="flex items-center w-full gap-1 mb-2.5">
+        <div className="flex items-center w-full gap-1 mb-2.5 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
           {ALL_STAGES.map((stage, idx) => {
             const isDone = idx < activeIdx;
             const isActive = idx === activeIdx;
@@ -128,16 +130,44 @@ export function PipelineProgress({
           })}
         </div>
         {/* Description line */}
-        <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center justify-between text-xs cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
           <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 font-medium">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
             <span>Step {activeIdx + 1}/9:</span>
             <span className="text-stone-900 dark:text-stone-100 font-semibold">{activeStageLabel}</span>
           </div>
-          <span className="text-stone-500 dark:text-stone-400 font-mono font-semibold">
-            {formatProgressDuration(elapsedSeconds)}
-          </span>
+          <div className="flex items-center gap-1.5 text-stone-500 dark:text-stone-400 font-mono font-semibold">
+            <span>{formatProgressDuration(elapsedSeconds)}</span>
+            <span className="text-[10px] text-muted-foreground bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded transition hover:bg-stone-200 dark:hover:bg-stone-700">
+              {isExpanded ? "Hide Details" : "Show Details"}
+            </span>
+          </div>
         </div>
+
+        {isExpanded && (
+          <div className="mt-4 pt-3 border-t border-stone-100 dark:border-stone-800 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+            {ALL_STAGES.map((stage, idx) => {
+              let state: "done" | "active" | "pending" = "pending";
+              if (idx < activeIdx) state = "done";
+              else if (idx === activeIdx) state = "active";
+
+              return (
+                <div
+                  key={stage.key}
+                  className={cn(
+                    "flex items-center gap-2 text-xs transition-colors",
+                    state === "done" && "text-emerald-700 dark:text-emerald-400",
+                    state === "active" && "text-amber-700 dark:text-amber-400 font-medium",
+                    state === "pending" && "text-stone-400 dark:text-stone-600",
+                  )}
+                >
+                  <StageIcon state={state} stageKey={stage.key} />
+                  <span>{getStageLabel(stage)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }

@@ -600,21 +600,32 @@ async def continue_debate_run(
         raise NotFoundError(message=f"Debate {debate_id} not found", code="debate.not_found")
     debate = require_debate_mutation_access(debate, current_user, session)
 
-    # 1. Idempotency Check
+    # 1. Idempotency Check & Continuation record setup
     continuation_record = None
+    from models import DebateContinuation
     if x_idempotency_key:
-        from models import DebateContinuation
         stmt_chk = select(DebateContinuation).where(
             DebateContinuation.debate_id == debate_id,
             DebateContinuation.idempotency_key == x_idempotency_key
         )
         continuation_record = session.execute(stmt_chk).scalars().first()
         if continuation_record:
-            if continuation_record.status in {"requested", "dispatched", "completed"}:
+            if continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed"}:
                 # Act as a no-op
                 return {"id": debate_id, "status": debate.status}
             # If status is failed, allow retry by updating status to requested
             continuation_record.status = "requested"
+            continuation_record.user_id = current_user.id if current_user else None
+            continuation_record.target = debate.model_id
+            continuation_record.requested_at = sa.func.now()
+            continuation_record.preflight_passed_at = None
+            continuation_record.dispatched_at = None
+            continuation_record.started_at = None
+            continuation_record.completed_at = None
+            continuation_record.failed_at = None
+            continuation_record.failure_code = None
+            continuation_record.failure_detail_safe = None
+            continuation_record.credit_reservation_id = None
             continuation_record.updated_at = sa.func.now()
             session.add(continuation_record)
             session.commit()
@@ -622,7 +633,10 @@ async def continue_debate_run(
             continuation_record = DebateContinuation(
                 debate_id=debate_id,
                 idempotency_key=x_idempotency_key,
-                status="requested"
+                status="requested",
+                user_id=current_user.id if current_user else None,
+                target=debate.model_id,
+                requested_at=sa.func.now(),
             )
             session.add(continuation_record)
             try:
@@ -630,13 +644,74 @@ async def continue_debate_run(
             except sa.exc.IntegrityError:
                 session.rollback()
                 continuation_record = session.execute(stmt_chk).scalars().first()
-                if continuation_record and continuation_record.status in {"requested", "dispatched", "completed"}:
+                if continuation_record and continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed"}:
                     return {"id": debate_id, "status": debate.status}
+    else:
+        # If no X-Idempotency-Key header, we still create a continuation record for tracking
+        import uuid
+        continuation_record = DebateContinuation(
+            debate_id=debate_id,
+            idempotency_key=str(uuid.uuid4()),
+            status="requested",
+            user_id=current_user.id if current_user else None,
+            target=debate.model_id,
+            requested_at=sa.func.now(),
+        )
+        session.add(continuation_record)
+        session.commit()
 
     # 2. Preflight checks
-    check_continue_preflight(debate, current_user, session)
+    try:
+        check_continue_preflight(debate, current_user, session)
+    except Exception as exc:
+        if continuation_record:
+            continuation_record.status = "failed"
+            continuation_record.failed_at = sa.func.now()
+            continuation_record.failure_code = getattr(exc, "code", "preflight_failed")
+            continuation_record.failure_detail_safe = str(exc.detail) if hasattr(exc, "detail") else str(exc)
+            session.add(continuation_record)
+            session.commit()
+        raise exc
 
-    # 3. Conditional atomic update
+    # 3. Credit Reservation prior to state transition
+    from billing.service import get_active_plan, reserve_hosted_credit, refund_hosted_credit
+    plan = get_active_plan(session, current_user.id)
+    
+    from parliament.model_registry import list_enabled_models, get_default_model
+    enabled_models = {m.id: m for m in list_enabled_models()}
+    target_model_id = debate.model_id or get_default_model().id
+    target_model_info = enabled_models.get(target_model_id)
+    model_tier = "standard"
+    if target_model_info:
+        model_tier = getattr(target_model_info, "tier", "standard")
+        
+    is_sota_run = (model_tier == "advanced" or debate.mode == "arena")
+    credit_reserved = False
+    
+    if plan.is_default_free and is_sota_run:
+        try:
+            reserve_hosted_credit(session, current_user.id)
+            credit_reserved = True
+            if continuation_record:
+                continuation_record.credit_reservation_id = "hosted_credit"
+        except Exception as exc:
+            if continuation_record:
+                continuation_record.status = "failed"
+                continuation_record.failed_at = sa.func.now()
+                continuation_record.failure_code = getattr(exc, "code", "hosted_credits.exhausted")
+                continuation_record.failure_detail_safe = str(exc)
+                session.add(continuation_record)
+                session.commit()
+            raise exc
+
+    # Mark preflight passed
+    if continuation_record:
+        continuation_record.status = "preflight_passed"
+        continuation_record.preflight_passed_at = sa.func.now()
+        session.add(continuation_record)
+        session.commit()
+
+    # 4. Conditional atomic update
     stmt_upd = (
         sa.update(Debate)
         .where(Debate.id == debate_id)
@@ -647,6 +722,17 @@ async def continue_debate_run(
     session.commit()
 
     if result.rowcount == 0:
+        # Revert/release reservation
+        if credit_reserved:
+            refund_hosted_credit(session, current_user.id)
+            session.commit()
+        if continuation_record:
+            continuation_record.status = "failed"
+            continuation_record.failed_at = sa.func.now()
+            continuation_record.failure_code = "debate.continue_conflict"
+            continuation_record.failure_detail_safe = "This run is no longer waiting for continuation."
+            session.add(continuation_record)
+            session.commit()
         raise ValidationError(
             message="This run is no longer waiting for continuation.",
             code="debate.continue_conflict",
@@ -656,28 +742,53 @@ async def continue_debate_run(
     # Refresh debate object
     session.refresh(debate)
 
-    # Setup SSE channel
-    channel_id = debate_channel_id(debate_id)
-    await sse_backend.create_channel(channel_id)
+    # 5. Dispatch task
+    try:
+        # Setup SSE channel
+        channel_id = debate_channel_id(debate_id)
+        await sse_backend.create_channel(channel_id)
 
-    # Dispatch task (resume = True)
-    background_tasks.add_task(
-        dispatch_debate_run,
-        debate_id,
-        debate.prompt,
-        channel_id,
-        debate.config or {},
-        debate.model_id,
-        trace_id=None,
-        resume=True,
-    )
+        # Dispatch task (resume = True)
+        background_tasks.add_task(
+            dispatch_debate_run,
+            debate_id,
+            debate.prompt,
+            channel_id,
+            debate.config or {},
+            debate.model_id,
+            trace_id=None,
+            resume=True,
+        )
 
-    # 4. Mark continuation as dispatched
-    if continuation_record:
-        continuation_record.status = "dispatched"
-        continuation_record.updated_at = sa.func.now()
-        session.add(continuation_record)
+        # Mark continuation as dispatched
+        if continuation_record:
+            continuation_record.status = "dispatched"
+            continuation_record.dispatched_at = sa.func.now()
+            session.add(continuation_record)
+            session.commit()
+            
+    except Exception as dispatch_exc:
+        # Failure safety: revert credit reservation and update status back to failed/previous
+        if credit_reserved:
+            refund_hosted_credit(session, current_user.id)
+        
+        # Revert debate status back to perspectives_ready
+        stmt_revert = (
+            sa.update(Debate)
+            .where(Debate.id == debate_id)
+            .values(status="perspectives_ready")
+        )
+        session.execute(stmt_revert)
+        
+        if continuation_record:
+            continuation_record.status = "failed"
+            continuation_record.failed_at = sa.func.now()
+            continuation_record.failure_code = "debate.dispatch_failed"
+            continuation_record.failure_detail_safe = str(dispatch_exc)
+            session.add(continuation_record)
+            
         session.commit()
+        raise dispatch_exc
 
     from log_config import log_event
     log_event(
@@ -747,11 +858,15 @@ async def retry_debate_run(
     # If we still have a stage_key, clear it and all downstream stages
     if stage_key:
         DOWNSTREAM_STAGES = {
-            "draft": ["draft", "critique", "judge", "synthesis"],
-            "critique": ["critique", "judge", "synthesis"],
-            "judge": ["judge", "synthesis"],
-            "synthesis": ["synthesis"],
-            "arena_perspectives": ["arena_perspectives", "synthesis"],
+            "draft": ["draft", "critique", "judge", "synthesis", "synthesis_draft", "verification"],
+            "critique": ["critique", "judge", "synthesis", "synthesis_draft", "verification"],
+            "judge": ["judge", "synthesis", "synthesis_draft", "verification"],
+            "divergence_analysis": ["divergence_analysis", "synthesis", "synthesis_draft", "verification"],
+            "synthesis": ["synthesis", "synthesis_draft", "verification"],
+            "synthesis_draft": ["synthesis_draft", "verification", "synthesis", "arena_synthesis"],
+            "verification": ["verification", "synthesis", "arena_synthesis"],
+            "arena_perspectives": ["arena_perspectives", "arena_synthesis", "divergence_analysis", "synthesis_draft", "verification"],
+            "arena_synthesis": ["arena_synthesis", "synthesis_draft", "verification"],
         }
         
         stages_to_clear = DOWNSTREAM_STAGES.get(stage_key, [stage_key])
@@ -765,6 +880,7 @@ async def retry_debate_run(
         session.execute(stmt_del)
 
         # Delete database entities generated by those stages
+        from models import DivergenceReport
         if "draft" in stages_to_clear:
             session.execute(sa.delete(Message).where(Message.debate_id == debate_id).where(Message.role == "candidate"))
         if "critique" in stages_to_clear:
@@ -772,10 +888,12 @@ async def retry_debate_run(
         if "judge" in stages_to_clear:
             session.execute(sa.delete(Score).where(Score.debate_id == debate_id))
             session.execute(sa.delete(Vote).where(Vote.debate_id == debate_id))
-        if "synthesis" in stages_to_clear:
+        if "divergence_analysis" in stages_to_clear:
+            session.execute(sa.delete(DivergenceReport).where(DivergenceReport.debate_id == debate_id))
+        if any(s in stages_to_clear for s in ["synthesis", "synthesis_draft", "arena_synthesis", "verification"]):
             session.execute(sa.delete(Message).where(Message.debate_id == debate_id).where(Message.role.in_(["synthesizer", "arena_synthesis"])))
         if "arena_perspectives" in stages_to_clear:
-            session.execute(sa.delete(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_perspectives"))
+            session.execute(sa.delete(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_response"))
 
         session.commit()
 
@@ -957,9 +1075,9 @@ async def get_debate(
                 ip_address=ip,
                 session=session,
             )
-            return serialize_debate_public(debate, continuation_status=continuation_status)
+            return serialize_debate_public(debate, continuation_status=continuation_status, session=session)
         # Non-public, non-owner access was already rejected by require_debate_access
-    return serialize_debate_private(debate, continuation_status=continuation_status)
+    return serialize_debate_private(debate, continuation_status=continuation_status, session=session)
 
 
 @router.get("/debates/{debate_id}/report")

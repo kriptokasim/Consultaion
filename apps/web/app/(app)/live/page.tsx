@@ -18,7 +18,9 @@ import { useToast } from "@/components/ui/toast";
 import { getMe } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n/client";
 import { DebateReplay } from "@/components/debate/DebateReplay";
-import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar } from "@/components/prompt";
+import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar, IdleDecisionComposer, ActiveWorkspaceComposer } from "@/components/prompt";
+import { ModelPanelSheet, AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
+import { ContinueRunSheet } from "@/components/auth/ContinueRunSheet";
 import { track } from "@/lib/analytics";
 import { OnboardingHint } from "@/components/ui/onboarding-hint";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
@@ -71,6 +73,10 @@ function ArenaPageContent() {
   const [truncated, setTruncated] = useState(false)
   const [truncateReason, setTruncateReason] = useState<string | null>(null)
   const [errorState, setErrorState] = useState<{ title?: string; message: string; hint?: string; retryable?: boolean } | null>(null)
+  const [continueRunSheetOpen, setContinueRunSheetOpen] = useState(false)
+  const [modelPanelOpen, setModelPanelOpen] = useState(false)
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>(() => panelConfig.seats.map((s) => s.model))
+  const [activePrompt, setActivePrompt] = useState('')
 
   const promptSectionRef = useRef<HTMLDivElement | null>(null)
 
@@ -279,6 +285,115 @@ function ArenaPageContent() {
     }
   }, [])
 
+  const handleModelSelectionSave = (ids: string[]) => {
+    setSelectedModelIds(ids)
+    // Convert to PanelSeatConfig
+    const newSeats: PanelSeatConfig[] = ids.map((id) => {
+      const match = AVAILABLE_MODELS.find((m) => m.id === id) || AVAILABLE_MODELS[0]
+      return {
+        seat_id: id,
+        display_name: match.name,
+        provider_key: match.providerKey,
+        model: id,
+        role_profile: 'architect',
+      }
+    })
+    setPanelConfig((prev) => ({
+      ...prev,
+      seats: newSeats,
+    }))
+    setMembers(seatsToMembers(newSeats))
+    track('model_config_saved', {
+      seat_count: newSeats.length,
+    })
+  }
+
+  const resumeParam = searchParams?.get('resume')
+  useEffect(() => {
+    if (resumeParam && authStatus === 'authed') {
+      const intentKey = `pending_run_${resumeParam}`
+      try {
+        const stored = sessionStorage.getItem(intentKey)
+        if (stored) {
+          sessionStorage.removeItem(intentKey)
+          const intent = JSON.parse(stored)
+          if (intent.expiresAt > Date.now()) {
+            setPrompt(intent.prompt)
+            setMode(intent.mode)
+            if (intent.models && intent.models.length > 0) {
+              const newSeats = intent.models.map((id: string) => {
+                const match = AVAILABLE_MODELS.find((m) => m.id === id) || AVAILABLE_MODELS[0]
+                return {
+                  seat_id: id,
+                  display_name: match.name,
+                  provider_key: match.providerKey,
+                  model: id,
+                  role_profile: 'architect',
+                }
+              })
+              setPanelConfig({
+                engine_version: 'parliament-v1',
+                seats: newSeats,
+              })
+              setMembers(seatsToMembers(newSeats))
+              setSelectedModelIds(intent.models)
+            }
+            
+            // Auto-launch the resumed run
+            const launchResume = async () => {
+              reset()
+              setRateLimitNotice(null)
+              setErrorState(null)
+              setSessionStatus('creating')
+              setRunning(true)
+              runningRef.current = true
+              manualStartAttemptedRef.current = false
+              try {
+                const finalSeats = intent.models.map((id: string) => {
+                  const match = AVAILABLE_MODELS.find((m) => m.id === id) || AVAILABLE_MODELS[0]
+                  return {
+                    seat_id: id,
+                    display_name: match.name,
+                    provider_key: match.providerKey,
+                    model: id,
+                    role_profile: 'architect',
+                  }
+                })
+                const { id } = await startDebate({
+                  prompt: intent.prompt,
+                  panel_config: { engine_version: 'parliament-v1', seats: finalSeats },
+                  mode: intent.mode,
+                  gateway_policy: gatewayPolicy,
+                })
+                currentDebateIdRef.current = id
+                setCurrentDebateId(id)
+                setSessionStatus('created')
+                track('debate_started', {
+                  prompt_length: intent.prompt.length,
+                  seat_count: finalSeats.length,
+                  mode: intent.mode,
+                })
+                setSessionStatus('redirecting')
+                router.replace(`/live?run=${id}`)
+              } catch (error) {
+                console.error('Failed to run resumed intent:', error)
+                stopStream('terminal_error')
+              }
+            }
+            launchResume()
+          }
+        }
+      } catch (err) {
+        console.error('Error resuming pending run:', err)
+      }
+      
+      // Clean query parameter from URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete('resume')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [resumeParam, authStatus])
+
   const handlePanelChange = useCallback(
     (seats: PanelSeatConfig[]) => {
       setPanelConfig((prev) => ({ ...prev, seats }))
@@ -309,12 +424,7 @@ function ArenaPageContent() {
   const onStart = async () => {
     if (!prompt.trim()) return
     if (authStatus === 'guest') {
-      pushToast({
-        title: t("live.signInRequired"),
-        description: t("live.signInDescription"),
-        variant: "error",
-      })
-      router.push("/login?next=/live")
+      setContinueRunSheetOpen(true)
       return
     }
     if (authStatus === 'unknown') {
@@ -346,7 +456,7 @@ function ArenaPageContent() {
       })
       // Redirect to run detail page
       setSessionStatus('redirecting')
-      router.push(`/runs/${id}`)
+      router.replace(`/live?run=${id}`)
     } catch (error) {
       if (error instanceof ApiError) {
         const info = getRateLimitInfo(error)
@@ -405,8 +515,64 @@ function ArenaPageContent() {
 
   if (runId) {
     return (
-      <main id="main" className="p-4 lg:p-6">
+      <main id="main" className="p-4 lg:p-6 pb-[calc(100px+env(safe-area-inset-bottom))]">
         <RunDetailClient runId={runId} />
+        <ActiveWorkspaceComposer
+          value={activePrompt}
+          onChange={setActivePrompt}
+          onSubmit={async () => {
+            if (!activePrompt.trim()) return
+            if (authStatus === 'guest') {
+              setContinueRunSheetOpen(true)
+              return
+            }
+            const newPrompt = activePrompt
+            setActivePrompt('')
+            setPrompt(newPrompt)
+            reset()
+            setRateLimitNotice(null)
+            setErrorState(null)
+            setSessionStatus('creating')
+            setRunning(true)
+            runningRef.current = true
+            manualStartAttemptedRef.current = false
+            try {
+              const { id } = await startDebate({
+                prompt: newPrompt,
+                panel_config: panelConfig,
+                mode,
+                gateway_policy: gatewayPolicy,
+              })
+              currentDebateIdRef.current = id
+              setCurrentDebateId(id)
+              setSessionStatus('created')
+              track('debate_started', {
+                prompt_length: newPrompt.length,
+                seat_count: panelConfig.seats.length,
+                mode,
+              })
+              setSessionStatus('redirecting')
+              router.replace(`/live?run=${id}`)
+            } catch (error) {
+              console.error(error)
+              stopStream('terminal_error')
+            }
+          }}
+          isLoading={running}
+        />
+        <ContinueRunSheet
+          open={continueRunSheetOpen}
+          onOpenChange={setContinueRunSheetOpen}
+          promptText={activePrompt || prompt}
+          selectedModels={selectedModelIds}
+          mode={mode === 'debate' ? 'debate' : 'arena'}
+        />
+        <ModelPanelSheet
+          open={modelPanelOpen}
+          onOpenChange={setModelPanelOpen}
+          selectedModelIds={selectedModelIds}
+          onSave={handleModelSelectionSave}
+        />
       </main>
     )
   }
@@ -483,28 +649,22 @@ function ArenaPageContent() {
           />
         )}
 
-        <PromptPanel
+        <IdleDecisionComposer
           value={prompt}
           onChange={setPrompt}
           onSubmit={onStart}
-          status={running ? 'running' : sessionStatus === 'terminal_error' ? 'error' : 'idle'}
-          disabled={running || authStatus === 'guest'}
-          isSubmitLoading={running}
-          submitLabel={t("live.start")}
-          onAdvancedSettingsClick={() => {
-            setAdvancedOpen(true)
-            track('settings_opened', { source: 'prompt_panel' })
-          }}
-          mode={mode}
-          onModeChange={ENABLE_CONVERSATION_MODE ? (newMode: 'arena' | 'debate' | 'conversation') => {
+          mode={mode === 'debate' ? 'debate' : 'arena'}
+          onModeChange={(newMode) => {
             setMode(newMode)
             setSessionStatus('idle')
             setErrorState(null)
             setEvents([])
             setCurrentDebateId(null)
             currentDebateIdRef.current = null
-          } : undefined}
-          autoFocus={autoFocus}
+          }}
+          isLoading={running}
+          disabled={running}
+          onConfigureModels={() => setModelPanelOpen(true)}
         />
 
         <OnboardingHint id="live_prompt" text={t("onboarding.live.promptHint")} className="mt-2" />
@@ -557,6 +717,19 @@ function ArenaPageContent() {
         onPanelConfigChange={handlePanelChange}
         gatewayPolicy={gatewayPolicy}
         onGatewayPolicyChange={setGatewayPolicy}
+      />
+      <ContinueRunSheet
+        open={continueRunSheetOpen}
+        onOpenChange={setContinueRunSheetOpen}
+        promptText={activePrompt || prompt}
+        selectedModels={selectedModelIds}
+        mode={mode === 'debate' ? 'debate' : 'arena'}
+      />
+      <ModelPanelSheet
+        open={modelPanelOpen}
+        onOpenChange={setModelPanelOpen}
+        selectedModelIds={selectedModelIds}
+        onSave={handleModelSelectionSave}
       />
       {currentDebateId && events.length > 0 && (
         <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/70">

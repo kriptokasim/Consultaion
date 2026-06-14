@@ -225,15 +225,26 @@ async def generate_decision_report(
     usage: Any | None = None,
 ) -> DecisionReport:
     """Generate a structured, verified decision report by aggregating candidate model responses."""
-    # Step 1: Blind scoring
-    logger.info("Running blind scoring for debate %s", debate_id)
-    model_evals = await evaluate_models_blind(prompt, responses, debate_id, usage)
-    
-    # Step 2: Semantic claim analysis
-    logger.info("Running semantic claim analysis for debate %s", debate_id)
-    semantic_analysis = await run_semantic_claims_analysis(prompt, responses, debate_id, usage)
-    
-    try:
+    from orchestration.checkpoints import run_with_checkpoint
+    from sqlmodel import select
+
+    # Stage 1: Synthesis Draft Checkpoint
+    synthesis_input = {
+        "prompt": prompt,
+        "responses": [r.get("content", r.get("text", "")) for r in responses],
+        "locale": locale,
+        "model_override": model_override,
+    }
+
+    async def run_synthesis_fn():
+        # Step 1: Blind scoring
+        logger.info("Running blind scoring for debate %s", debate_id)
+        model_evals = await evaluate_models_blind(prompt, responses, debate_id, usage)
+        
+        # Step 2: Semantic claim analysis
+        logger.info("Running semantic claim analysis for debate %s", debate_id)
+        semantic_analysis = await run_semantic_claims_analysis(prompt, responses, debate_id, usage)
+        
         # Format candidate answers block
         candidate_block = "\n\n---\n\n".join(
             f"### {r.get('persona', r.get('model', 'Model'))}\n{r.get('text', r.get('content', ''))}"
@@ -444,6 +455,51 @@ async def generate_decision_report(
                 from reporting.report_builder import build_report_from_synthesis
                 draft_report = build_report_from_synthesis(prompt, raw_content or candidate_block)
 
+        output_ref_data = {
+            "raw_content": raw_content,
+            "draft_report": draft_report.model_dump(),
+            "model_evals": model_evals,
+            "semantic_analysis": semantic_analysis,
+            "report_validation_repaired": report_validation_repaired,
+        }
+        return (raw_content, draft_report, model_evals, semantic_analysis, report_validation_repaired), json.dumps(output_ref_data)
+
+    async def load_synthesis_fn(session):
+        from models import DebateStageCheckpoint
+        stmt = select(DebateStageCheckpoint).where(
+            DebateStageCheckpoint.debate_id == debate_id,
+            DebateStageCheckpoint.stage_key == "synthesis_draft"
+        )
+        res = await session.execute(stmt)
+        ckpt = res.scalars().first()
+        if ckpt and ckpt.output_reference:
+            data = json.loads(ckpt.output_reference)
+            loaded_report = DecisionReport.model_validate(data["draft_report"])
+            return (
+                data["raw_content"],
+                loaded_report,
+                data["model_evals"],
+                data["semantic_analysis"],
+                data["report_validation_repaired"],
+            )
+        raise ValueError("Synthesis draft checkpoint output not found")
+
+    raw_content, draft_report, model_evals, semantic_analysis, report_validation_repaired = await run_with_checkpoint(
+        debate_id=debate_id,
+        stage_key="synthesis_draft",
+        input_data=synthesis_input,
+        run_fn=run_synthesis_fn,
+        load_fn=load_synthesis_fn
+    )
+
+    # Stage 2: Verification Checkpoint
+    verification_input = {
+        "prompt": prompt,
+        "raw_content": raw_content,
+        "draft_report": draft_report.model_dump(),
+    }
+
+    async def run_verification_fn():
         # Step 3: Verify / Critic quality check pass
         from reporting.synthesis_critic import verify_synthesis_report
         logger.info("Running critic check for debate %s", debate_id)
@@ -452,6 +508,27 @@ async def generate_decision_report(
         # Step 4: Revise loop (if enabled, limit to 1 loop)
         enable_revise = getattr(settings, "ENABLE_SYNTHESIS_REVISE", True)
         critic_revision_triggered = False
+        final_raw = raw_content
+        final_report = draft_report
+
+        # We need system_prompt constructed for the revision loop if needed
+        system_prompt = (
+            "You are the Lead Decision Strategist. Synthesize the candidate model responses "
+            "and logical analysis into a premium, professional Decision Report JSON object.\n"
+            "Analyze consensus points, resolve disagreements, highlight critical risks/assumptions, "
+            "and compile actionable next steps.\n\n"
+            "CRITICAL SPECIFICITY RULES:\n"
+            "- Do NOT generate a generic checklist. Tailor the report to the user's exact question, product, company stage, and available context.\n"
+            "- If specific project context (ARR, users, ICP, retention, CAC/LTV, team, runway, etc.) is available in the prompt, USE IT.\n"
+            "- If context is missing, label recommendations as generic and include a 'context_needed' list of items needed to make the report specific.\n"
+            "- Avoid clichéd SaaS fundraising advice unless directly relevant.\n"
+            "- Each risk must include a specific diagnostic or action, not just a category name.\n"
+            "- Avoid generic-only risks like 'Market demand' or 'Team strength' unless paired with concrete diagnostics.\n\n"
+            "You MUST output strictly in JSON format. Do not add markdown code fences, headers, or conversational text. "
+            "Your response must be parseable by json.loads()."
+        )
+        if locale and locale != "en":
+            system_prompt += f"\nIMPORTANT: Respond and write all text values in the '{locale}' language.\n"
         
         if enable_revise and critic_res.get("needs_revision") and not settings.USE_MOCK:
             logger.info("Critic flagged revision loop for debate %s. Feedback: %s", debate_id, critic_res.get("critic_feedback"))
@@ -459,7 +536,7 @@ async def generate_decision_report(
             
             revise_messages = [
                 {"role": "system", "content": system_prompt + "\n\nCRITICAL: Revise the draft JSON according to the verifier feedback. Fix any hallucinations, add missing critical evidence/dissenting views, and correct inaccuracies. Output strictly valid JSON."},
-                {"role": "user", "content": f"Draft Report:\n{raw_content}\n\nVerifier Feedback:\n{critic_res.get('critic_feedback')}\n\nReturn revised JSON decision report:"}
+                {"role": "user", "content": f"Draft Report:\n{final_raw}\n\nVerifier Feedback:\n{critic_res.get('critic_feedback')}\n\nReturn revised JSON decision report:"}
             ]
             
             try:
@@ -475,15 +552,15 @@ async def generate_decision_report(
                     usage.add_call(call_usage)
                 match = re.search(r"\{.*\}", revised_raw, flags=re.S)
                 revised_json = match.group(0) if match else revised_raw
-                draft_report = DecisionReport.model_validate_json(revised_json)
+                final_report = DecisionReport.model_validate_json(revised_json)
                 # Check revised report integrity
-                ok, problems = validate_report_integrity(draft_report)
+                ok, problems = validate_report_integrity(final_report)
                 if not ok:
                     raise ValueError(f"Revised report integrity failed: {problems}")
-                raw_content = revised_json
+                final_raw = revised_json
                 
                 # Run critic on the revised report to update the score
-                critic_res = await verify_synthesis_report(prompt, responses, raw_content, debate_id, usage)
+                critic_res = await verify_synthesis_report(prompt, responses, final_raw, debate_id, usage)
             except Exception as revise_exc:
                 logger.warning("Revision pass failed: %s. Keeping original draft.", revise_exc)
 
@@ -504,7 +581,7 @@ async def generate_decision_report(
             verification_status = "verified"
 
         # Attach metadata to report object
-        draft_report.quality_meta = QualityMeta(
+        final_report.quality_meta = QualityMeta(
             completeness_score=critic_res.get("completeness_score"),
             faithfulness_score=critic_res.get("faithfulness_score"),
             has_hallucinations=critic_res.get("has_hallucinations", False),
@@ -517,8 +594,8 @@ async def generate_decision_report(
             genericity_risk=genericity_risk,
             renderable=True,
         )
-        draft_report.model_contributions = model_evals
-        draft_report.divergence_breakdown = {
+        final_report.model_contributions = model_evals
+        final_report.divergence_breakdown = {
             "divergence_score": semantic_analysis["divergence_score"],
             "consensus_claims": semantic_analysis["consensus_claims"],
             "unique_insights": semantic_analysis.get("unique_insights", semantic_analysis.get("contested_claims", [])),
@@ -530,7 +607,7 @@ async def generate_decision_report(
         }
         
         # Populate Telemetry
-        draft_report.telemetry = {
+        final_report.telemetry = {
             "embedding_success": semantic_analysis.get("embedding_success", False),
             "contradiction_pairs_classified": semantic_analysis.get("contradiction_pairs_classified", 0),
             "critic_revision_triggered": critic_revision_triggered,
@@ -542,11 +619,41 @@ async def generate_decision_report(
         }
 
         # Final report integrity check pass before returning
-        ok, problems = validate_report_integrity(draft_report)
+        ok, problems = validate_report_integrity(final_report)
         if not ok:
             raise ValueError(f"Structured report integrity check failed: {', '.join(problems)}")
-        
-        return draft_report
+
+        output_ref_data = {
+            "raw_content": final_raw,
+            "final_report": final_report.model_dump(),
+            "critic_res": critic_res,
+            "critic_revision_triggered": critic_revision_triggered,
+        }
+        return final_report, json.dumps(output_ref_data)
+
+    async def load_verification_fn(session):
+        from models import DebateStageCheckpoint
+        stmt = select(DebateStageCheckpoint).where(
+            DebateStageCheckpoint.debate_id == debate_id,
+            DebateStageCheckpoint.stage_key == "verification"
+        )
+        res = await session.execute(stmt)
+        ckpt = res.scalars().first()
+        if ckpt and ckpt.output_reference:
+            data = json.loads(ckpt.output_reference)
+            loaded_report = DecisionReport.model_validate(data["final_report"])
+            return loaded_report
+        raise ValueError("Verification checkpoint output not found")
+
+    try:
+        final_report = await run_with_checkpoint(
+            debate_id=debate_id,
+            stage_key="verification",
+            input_data=verification_input,
+            run_fn=run_verification_fn,
+            load_fn=load_verification_fn
+        )
+        return final_report
     except Exception as exc:
         logger.exception(
             "arena_synthesis_failed",
@@ -554,9 +661,9 @@ async def generate_decision_report(
                 "debate_id": debate_id,
                 "stage": "structured_report_generation",
                 "reason": str(exc),
-                "has_semantic_analysis": bool(semantic_analysis),
+                "has_semantic_analysis": bool(semantic_analysis) if 'semantic_analysis' in locals() else False,
                 "fallback_model": responses[0].get("persona", responses[0].get("model", "Model")) if responses else "unknown",
             },
         )
-        raise StructuredSynthesisError(str(exc), semantic_analysis=semantic_analysis, original_exc=exc)
+        raise StructuredSynthesisError(str(exc), semantic_analysis=semantic_analysis if 'semantic_analysis' in locals() else None, original_exc=exc)
 

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "plugin": [
+    "ecc-universal"
+  ],
+
+  "share": "disabled",
+
+  "permission": {
+    "*": "ask",
+
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "skill": "allow",
+    "task": "allow",
+
+    "edit": "ask",
+
+    "bash": {
+      "*": "ask",
+
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git branch*": "allow",
+
+      "npm test*": "allow",
+      "npm run test*": "allow",
+      "npm run lint*": "allow",
+      "npm run typecheck*": "allow",
+      "npm run build*": "allow",
+
+      "pnpm test*": "allow",
+      "pnpm run test*": "allow",
+      "pnpm run lint*": "allow",
+      "pnpm run build*": "allow",
+
+      "rm *": "deny",
+      "sudo *": "deny",
+      "git push*": "deny",
+      "git reset --hard*": "deny",
+      "git clean*": "deny"
+    },
+
+    "external_directory": "deny"
+  }
+}
