@@ -14,6 +14,43 @@ export interface PanelConfig {
     engine_version?: string;
 }
 
+export type PipelineSubStage =
+    | "queued"
+    | "models_contacted"
+    | "collecting_responses"
+    | "perspectives_ready"
+    | "scoring"
+    | "divergence_analysis"
+    | "synthesizing"
+    | "verifying"
+    | "complete";
+
+export interface StageCheckpointDTO {
+    stage_key: string;
+    status: "pending" | "running" | "completed" | "failed" | "invalidated";
+    attempt: number;
+    input_hash?: string;
+    output_reference?: string;
+    started_at?: string;
+    completed_at?: string;
+    failed_at?: string;
+    error_code?: string;
+    error_message?: string;
+}
+
+export interface ContinuationDTO {
+    id: string;
+    status: "requested" | "preflight_passed" | "dispatched" | "running" | "completed" | "failed";
+    requested_at?: string;
+    preflight_passed_at?: string;
+    dispatched_at?: string;
+    started_at?: string;
+    completed_at?: string;
+    failed_at?: string;
+    failure_code?: string;
+    failure_detail_safe?: string;
+}
+
 export interface DebateSummary {
     id: string;
     prompt: string;
@@ -23,8 +60,18 @@ export interface DebateSummary {
     user_id?: string;
     team_id?: string;
     model_id?: string;
-    score?: number; // derived or from meta
+    score?: number;
     mode?: 'arena' | 'conversation' | 'compare' | 'debate' | 'voting' | 'redteam' | 'oracle' | 'challenge';
+    current_stage?: PipelineSubStage;
+    stage_checkpoints?: StageCheckpointDTO[];
+    continuation_status?: ContinuationDTO["status"];
+    continuation_id?: string;
+    perspectives_ready_at?: string;
+    responses_received?: number;
+    models_expected?: number;
+    scores_received?: number;
+    synthesis_status?: "pending" | "succeeded" | "failed" | "fallback";
+    verification_status?: "pending" | "verified" | "unverified" | "failed" | "unavailable";
 }
 
 export interface DebateDetail extends DebateSummary {
@@ -185,6 +232,81 @@ export type DebateEvent =
             provider: string;
             logo_url?: string;
         }>;
+        at?: string;
+    }
+    | {
+        type: "pipeline_stage_started";
+        debate_id?: string;
+        stage?: string;
+        attempt?: number;
+        at?: string;
+        counts?: {
+            responses?: number;
+            models_expected?: number;
+            scores?: number;
+        };
+    }
+    | {
+        type: "pipeline_stage_completed";
+        debate_id?: string;
+        stage?: string;
+        attempt?: number;
+        at?: string;
+    }
+    | {
+        type: "pipeline_stage_failed";
+        debate_id?: string;
+        stage?: string;
+        attempt?: number;
+        error_code?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_started";
+        model_id?: string;
+        display_name?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_completed";
+        model_id?: string;
+        display_name?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_failed";
+        model_id?: string;
+        display_name?: string;
+        error?: string;
+        at?: string;
+    }
+    | {
+        type: "perspectives_ready";
+        debate_id?: string;
+        count?: number;
+        at?: string;
+    }
+    | {
+        type: "continuation_scheduled";
+        debate_id?: string;
+        continuation_id?: string;
+        at?: string;
+    }
+    | {
+        type: "continuation_started";
+        debate_id?: string;
+        continuation_id?: string;
+        at?: string;
+    }
+    | {
+        type: "decision_report_ready";
+        debate_id?: string;
+        at?: string;
+    }
+    | {
+        type: "verification_completed";
+        debate_id?: string;
+        status?: string;
         at?: string;
     };
 

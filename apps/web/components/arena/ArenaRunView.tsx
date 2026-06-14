@@ -112,11 +112,11 @@ export default function ArenaRunView({ debate, events, profile, onRefetch }: Are
         // Threshold of 50px for swipe gesture
         if (Math.abs(diffX) > 50) {
             if (diffX > 0) {
-                // Swipe left -> next card
-                setActiveTab((prev) => (prev + 1) % expectedModels);
+                // Swipe left -> next card (clamped, no circular wrap)
+                setActiveTab((prev) => Math.min(prev + 1, modelResponses.length - 1));
             } else {
-                // Swipe right -> previous card
-                setActiveTab((prev) => (prev - 1 + expectedModels) % expectedModels);
+                // Swipe right -> previous card (clamped, no circular wrap)
+                setActiveTab((prev) => Math.max(prev - 1, 0));
             }
         }
         setTouchStartX(null);
@@ -224,6 +224,29 @@ export default function ArenaRunView({ debate, events, profile, onRefetch }: Are
 
                     {/* Right gradient fade overlay */}
                     <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background via-background/60 to-transparent pointer-events-none z-10" />
+                </div>
+
+                {/* Mobile counter and progress dots */}
+                <div className="flex sm:hidden items-center justify-between px-6 mb-3">
+                    <span className="text-xs font-medium text-muted-foreground">
+                        {activeTab + 1} of {modelResponses.length || expectedModels}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                        {Array.from({ length: expectedModels }).map((_, i) => (
+                            <button
+                                key={i}
+                                onClick={() => setActiveTab(i)}
+                                className={`h-1.5 rounded-full transition-all duration-200 ${
+                                    i === activeTab
+                                        ? 'w-4 bg-primary'
+                                        : i < modelResponses.length
+                                            ? 'w-1.5 bg-primary/40'
+                                            : 'w-1.5 bg-muted-foreground/20'
+                                }`}
+                                aria-label={`Go to model ${i + 1}`}
+                            />
+                        ))}
+                    </div>
                 </div>
 
                 {/* Mobile View: Render only active card with swipe gesture handlers */}

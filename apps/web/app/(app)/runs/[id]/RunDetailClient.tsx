@@ -1,24 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react";
 import { useParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import DebateArena from "@/components/debate/DebateArena";
-import ParliamentRunView from "@/components/parliament/ParliamentRunView";
-import CompareRunView from "@/components/compare/CompareRunView";
-import ConversationRunView from "@/components/conversation/ConversationRunView";
-import ArenaRunView from "@/components/arena/ArenaRunView";
-import VotingRunView from "@/components/voting/VotingRunView";
 import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/arena/ModelCard";
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
+import { useToast } from "@/components/ui/toast";
 import { TimelineEvent } from "@/lib/timeline/types";
 import { fetchWithAuth } from "@/lib/auth";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { normalizeEvent } from "@/lib/api/normalizeEvent";
 import { PipelineProgress, derivePipelineStage } from "@/components/arena/PipelineProgress";
 import type { DebateEvent, ScoreItem, Member, JudgeVoteFlow, VotePayload } from "@/lib/api/types";
+
+// Lazy-load heavy view components
+const DebateArena = dynamic(() => import("@/components/debate/DebateArena"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
+const ParliamentRunView = dynamic(() => import("@/components/parliament/ParliamentRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
+const CompareRunView = dynamic(() => import("@/components/compare/CompareRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
+const ConversationRunView = dynamic(() => import("@/components/conversation/ConversationRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
+const ArenaRunView = dynamic(() => import("@/components/arena/ArenaRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
+const VotingRunView = dynamic(() => import("@/components/voting/VotingRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 
 /** Statuses that indicate a debate has finished and results should be shown */
 const COMPLETED_STATUSES = new Set(["completed", "success", "completed_budget"]);
@@ -79,6 +83,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   }, [id]);
 
   const [isContinuing, setIsContinuing] = useState(false);
+  const { pushToast } = useToast();
 
   const handleContinue = useCallback(async () => {
     if (!id || isContinuing) return;
@@ -87,11 +92,15 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
       await continueRun();
     } catch (err) {
       console.error("Failed to continue:", err);
-      alert("Error resuming the decision pipeline. Please try again.");
+      pushToast({
+        title: "Pipeline Error",
+        description: "Error resuming the decision pipeline. Please try again.",
+        variant: "error",
+      });
     } finally {
       setIsContinuing(false);
     }
-  }, [id, isContinuing, continueRun]);
+  }, [id, isContinuing, continueRun, pushToast]);
 
   // Fetch events + members for completed debates
   useEffect(() => {

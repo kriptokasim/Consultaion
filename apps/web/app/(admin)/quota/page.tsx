@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useI18n } from "@/lib/i18n/client"
+import { useToast } from "@/components/ui/toast"
 
 interface User {
     user_id: string
@@ -114,6 +115,7 @@ export default function AdminQuotaUsagePage() {
 function UserRow({ user, onUpdate }: { user: User; onUpdate: () => void }) {
     const [changing, setChanging] = useState(false)
     const [saving, setSaving] = useState(false)
+    const { pushToast } = useToast()
 
     const changePlan = async (newPlan: string) => {
         if (newPlan === user.plan) {
@@ -133,10 +135,10 @@ function UserRow({ user, onUpdate }: { user: User; onUpdate: () => void }) {
                 onUpdate()
                 setChanging(false)
             } else {
-                alert("Failed to change plan")
+                pushToast({ title: "Plan Change Failed", description: "Failed to change plan.", variant: "error" })
             }
         } catch (error) {
-            alert("Error changing plan")
+            pushToast({ title: "Error", description: "Error changing plan.", variant: "error" })
         } finally {
             setSaving(false)
         }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { useToast } from "@/components/ui/toast";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { FileDown, Terminal, ShieldAlert, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 
@@ -16,6 +17,7 @@ interface AuditLog {
 }
 
 export default function AuditLogsPage() {
+  const { pushToast } = useToast();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export default function AuditLogsPage() {
       a.click();
       a.remove();
     } catch (err) {
-      alert("Failed to export CSV. Please try again.");
+      pushToast({ title: "Export Failed", description: "Failed to export CSV. Please try again.", variant: "error" });
     } finally {
       setIsExportingCSV(false);
     }
@@ -78,7 +80,7 @@ export default function AuditLogsPage() {
       a.click();
       a.remove();
     } catch (err) {
-      alert("Failed to export JSON. Please try again.");
+      pushToast({ title: "Export Failed", description: "Failed to export JSON. Please try again.", variant: "error" });
     } finally {
       setIsExportingJSON(false);
     }

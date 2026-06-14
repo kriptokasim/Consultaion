@@ -1,0 +1,5 @@
+export { WorkspaceHeader } from './WorkspaceHeader'
+export { MobileStageBar } from './MobileStageBar'
+export { DesktopStageRail } from './DesktopStageRail'
+export { PerspectivesGrid } from './PerspectivesGrid'
+export { PerspectivesReadyAction } from './PerspectivesReadyAction'

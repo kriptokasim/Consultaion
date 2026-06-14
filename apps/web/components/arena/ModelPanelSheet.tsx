@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { Search, ShieldAlert, Key, Check } from 'lucide-react'
+import { ShieldAlert } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { ModelSearchInput } from './ModelSearchInput'
+import { SelectedModelsTray } from './SelectedModelsTray'
+import { ModelListRow } from './ModelListRow'
 
 export interface ModelOption {
   id: string
@@ -140,71 +141,24 @@ export function ModelPanelSheet({
         </SheetHeader>
 
         {/* Search Input (16px font to prevent iOS zoom) */}
-        <div className="px-6 py-3 border-b border-border/40 bg-muted/30 flex items-center gap-2">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-          <input
-            type="text"
-            placeholder="Search models or providers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ fontSize: '16px' }}
-            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none py-1"
-          />
-        </div>
+        <ModelSearchInput value={searchQuery} onChange={setSearchQuery} />
+
+        {/* Selected Models Tray */}
+        <SelectedModelsTray selectedIds={tempSelection} onRemove={(id) => setTempSelection((prev) => prev.filter((item) => item !== id))} />
 
         {/* Scrollable Model List */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 custom-scrollbar">
           {filteredModels.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">No models match your search.</p>
           ) : (
-            filteredModels.map((model) => {
-              const isSelected = tempSelection.includes(model.id)
-              return (
-                <div
-                  key={model.id}
-                  onClick={() => toggleModel(model.id)}
-                  className={cn(
-                    'border rounded-2xl p-4 cursor-pointer transition-all duration-200 flex flex-col justify-between hover:bg-muted/40 relative',
-                    isSelected
-                      ? 'border-primary/60 bg-primary/5 dark:bg-primary/10'
-                      : 'border-border bg-card'
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-foreground">{model.name}</span>
-                        <Badge variant="secondary" className="text-[10px] font-semibold py-0 px-1.5 bg-muted">
-                          {model.capability}
-                        </Badge>
-                        {model.byokRequired && (
-                          <Badge variant="outline" className="text-[10px] font-semibold py-0 px-1.5 border-amber-500/40 text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                            <Key className="h-2.5 w-2.5" /> BYOK
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{model.description}</p>
-                    </div>
-
-                    <div className={cn(
-                      'h-5 w-5 rounded-full border flex items-center justify-center shrink-0',
-                      isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30'
-                    )}>
-                      {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
-                    </div>
-                  </div>
-
-                  {model.byokRequired && isSelected && (
-                    <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 text-[10px] text-amber-700 dark:text-amber-400 leading-normal flex items-start gap-2">
-                      <ShieldAlert className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
-                      <span>
-                        This model requires custom key setup (BYOK) enabled in your profile settings.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )
-            })
+            filteredModels.map((model) => (
+              <ModelListRow
+                key={model.id}
+                model={model}
+                isSelected={tempSelection.includes(model.id)}
+                onToggle={() => toggleModel(model.id)}
+              />
+            ))
           )}
         </div>
 

@@ -121,10 +121,11 @@ export async function startDebateRun(debateId: string) {
   });
 }
 
-export async function continueDebate(debateId: string) {
+export async function continueDebate(debateId: string, idempotencyKey?: string) {
   return apiRequest<{ id: string; status: string }>({
     method: "POST",
     path: `/debates/${debateId}/continue`,
+    headers: idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : undefined,
   });
 }
 

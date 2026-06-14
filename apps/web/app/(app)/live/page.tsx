@@ -78,6 +78,11 @@ function ArenaPageContent() {
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>(() => panelConfig.seats.map((s) => s.model))
   const [activePrompt, setActivePrompt] = useState('')
 
+  // Track workspace_opened on mount
+  useEffect(() => {
+    track('workspace_opened', { viewport_class: typeof window !== 'undefined' && window.innerWidth < 640 ? 'mobile' : 'desktop' })
+  }, [])
+
   const promptSectionRef = useRef<HTMLDivElement | null>(null)
 
   const focusPromptPanel = useCallback(() => {
@@ -423,6 +428,7 @@ function ArenaPageContent() {
 
   const onStart = async () => {
     if (!prompt.trim()) return
+    track('prompt_started', { prompt_length: prompt.length, mode })
     if (authStatus === 'guest') {
       setContinueRunSheetOpen(true)
       return
@@ -661,6 +667,7 @@ function ArenaPageContent() {
             setEvents([])
             setCurrentDebateId(null)
             currentDebateIdRef.current = null
+            track('mode_selected', { mode: newMode })
           }}
           isLoading={running}
           disabled={running}

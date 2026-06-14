@@ -192,6 +192,8 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
   const [loadingProfile, setLoadingProfile] = useState(!hasInitialProfile)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const sidebarRef = useRef<HTMLElement>(null)
+  const sidebarTriggerRef = useRef<HTMLButtonElement>(null)
   const apiBase = API_ORIGIN
   const { t } = useI18n()
 
@@ -204,6 +206,65 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
       }
     }
   }, [])
+
+  // Body scroll lock and focus trap for mobile sidebar
+  useEffect(() => {
+    if (!sidebarOpen) return
+
+    const previousActiveElement = document.activeElement as HTMLElement
+    document.body.style.overflow = "hidden"
+    document.body.style.overscrollBehavior = "contain"
+
+    // Focus first focusable element in sidebar
+    const timer = setTimeout(() => {
+      const focusable = sidebarRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex="0"]'
+      )
+      if (focusable && focusable.length > 0) {
+        focusable[0].focus()
+      }
+    }, 50)
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSidebarOpen(false)
+        sidebarTriggerRef.current?.focus()
+        return
+      }
+
+      if (e.key === "Tab" && sidebarRef.current) {
+        const focusableElements = sidebarRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex="0"]'
+        )
+        if (focusableElements.length === 0) return
+
+        const first = focusableElements[0]
+        const last = focusableElements[focusableElements.length - 1]
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus()
+            e.preventDefault()
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus()
+            e.preventDefault()
+          }
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.overscrollBehavior = ""
+      window.removeEventListener("keydown", handleKeyDown)
+      clearTimeout(timer)
+      previousActiveElement?.focus()
+    }
+  }, [sidebarOpen])
 
   const handleToggleCollapse = () => {
     const nextState = !isCollapsed
@@ -330,12 +391,15 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
         
         {/* Sidebar */}
         <aside
+          ref={sidebarRef}
+          role="dialog"
+          aria-modal={sidebarOpen ? "true" : undefined}
+          aria-label="Primary navigation"
           className={cn(
             "sidebar-surface fixed inset-y-0 left-0 z-40 flex-col border-r border-border py-6 shadow-2xl transition-all duration-200 md:relative md:flex md:translate-x-0",
             sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
             isCollapsed ? "w-72 md:w-20 px-3" : "w-72 md:w-72 px-4"
           )}
-          aria-label="Primary navigation"
         >
           <Link
             href="/live"
@@ -409,8 +473,11 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           </div>
           <button
             type="button"
-            className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full p-1 text-slate-700 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 md:hidden"
-            onClick={() => setSidebarOpen(false)}
+            className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full h-11 w-11 text-slate-700 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700 md:hidden"
+            onClick={() => {
+              setSidebarOpen(false)
+              sidebarTriggerRef.current?.focus()
+            }}
             aria-label={t("dashboardShell.nav.close")}
           >
             <X className="h-5 w-5" />
@@ -437,8 +504,9 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
           <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-card/90 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-slate-900/5 dark:border-slate-700 md:px-6">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               <button
+                ref={sidebarTriggerRef}
                 type="button"
-                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white/70 p-2 text-slate-700 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 md:hidden"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white/70 h-11 w-11 text-slate-700 shadow-sm transition hover:-translate-y-[1px] hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 md:hidden"
                 onClick={() => setSidebarOpen(true)}
                 aria-label={t("dashboardShell.nav.open")}
               >

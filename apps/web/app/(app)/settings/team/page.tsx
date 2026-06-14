@@ -2,9 +2,11 @@
 
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { useToast } from "@/components/ui/toast";
 import { Users, ShieldCheck, Mail, Sparkles, Building2, UserPlus } from "lucide-react";
 
 export default function TeamPage() {
+  const { pushToast } = useToast();
   const mockMembers = [
     { name: "Kasim", email: "kasim@kripto.com", role: "Owner", status: "Active" }
   ];
@@ -25,7 +27,7 @@ export default function TeamPage() {
           variant="outline"
           onClick={() => {
             trackEvent("team_invite_clicked_blocked");
-            alert("Team invitations require a team license. Please upgrade to a Team or Enterprise plan.");
+            pushToast({ title: "Upgrade Required", description: "Team invitations require a team license. Please upgrade to a Team or Enterprise plan.", variant: "info" });
           }}
           className="flex items-center gap-1.5 text-xs font-semibold shrink-0"
         >

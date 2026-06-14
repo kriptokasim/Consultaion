@@ -186,11 +186,17 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   }, []);
 
   // 4. Coordinated Workspace Actions
+  const idempotencyKeyRef = useRef<string | null>(null);
+
   const handleContinue = useCallback(async () => {
     if (!debateId) return;
     try {
       setError(null);
-      await continueDebate(debateId);
+      // Reuse existing idempotency key if present, otherwise generate new one
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = crypto.randomUUID();
+      }
+      await continueDebate(debateId, idempotencyKeyRef.current);
       await fetchDebateAndTimeline(debateId);
     } catch (err: any) {
       console.error("[useRunWorkspace] Continue failed:", err);
