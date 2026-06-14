@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Any, Dict
 
 from fastapi import Request
@@ -19,6 +20,7 @@ def build_error_response(
     hint: str | None = None,
     retryable: bool = False,
     retry_after_seconds: int | None = None,
+    trace_id: str | None = None,
 ) -> JSONResponse:
     """Builds the standardized error envelope for all public API responses."""
     error_payload = {
@@ -27,6 +29,7 @@ def build_error_response(
         "details": details or {},
         "hint": hint,
         "retryable": retryable,
+        "trace_id": trace_id or f"01J{uuid.uuid4().hex[:24]}",
     }
     
     headers: dict[str, str] = {}
@@ -43,6 +46,7 @@ def build_error_response(
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     """Handles domain-specific AppErrors."""
+    trace_id = request.headers.get("x-request-id") or f"01J{uuid.uuid4().hex[:24]}"
     logger.error(
         "AppError",
         extra={
@@ -51,8 +55,9 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
             "status_code": exc.status_code,
             "request_path": request.url.path,
             "request_method": request.method,
-            "request_id": request.headers.get("x-request-id"),
+            "request_id": trace_id,
             "user_id": getattr(request.state, "user_id", None),
+            "trace_id": trace_id,
         },
     )
     
@@ -65,11 +70,13 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         hint=exc.hint,
         retryable=exc.retryable,
         retry_after_seconds=retry_after,
+        trace_id=trace_id,
     )
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handles standard FastAPI/Starlette HTTPExceptions, mapping them to the standard envelope."""
+    trace_id = request.headers.get("x-request-id") or f"01J{uuid.uuid4().hex[:24]}"
     # Special case for 404 to provide a cleaner code
     code = "not_found" if exc.status_code == 404 else "http_error"
     
@@ -88,11 +95,13 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         status_code=exc.status_code,
         details=details,
         retryable=exc.status_code in {408, 429, 502, 503, 504},
+        trace_id=trace_id,
     )
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Handles Pydantic validation errors."""
+    trace_id = request.headers.get("x-request-id") or f"01J{uuid.uuid4().hex[:24]}"
     return build_error_response(
         code="validation_error",
         message="Request validation failed",
@@ -100,4 +109,5 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         details={"errors": exc.errors()},
         hint="Check the request payload and parameter types.",
         retryable=False,
+        trace_id=trace_id,
     )

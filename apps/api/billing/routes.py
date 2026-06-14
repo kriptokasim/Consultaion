@@ -211,10 +211,30 @@ async def billing_webhook(
         import inspect
         provider = get_billing_provider()
         sig = inspect.signature(provider.handle_webhook)
-        if "db_session" in sig.parameters:
-            provider.handle_webhook(payload or {}, headers, db_session=session)
-        else:
-            provider.handle_webhook(payload or {}, headers)
+
+        # OT-10: Wrap webhook handler in explicit DB transaction for atomicity
+        # If the handler fails midway, the entire webhook is rolled back
+        # and Stripe will retry on the next delivery attempt.
+        from database import session_scope
+        with session_scope() as tx_session:
+            try:
+                if "db_session" in sig.parameters:
+                    provider.handle_webhook(payload or {}, headers, db_session=tx_session)
+                else:
+                    provider.handle_webhook(payload or {}, headers)
+            except Exception as exc:
+                logger.error(
+                    "Webhook handler failed (transaction rolled back): provider=%s event_type=%s error=%s",
+                    provider_name,
+                    (payload or {}).get("type", "unknown"),
+                    exc,
+                )
+                from observability.metrics import record_billing_webhook
+                record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "error")
+                raise
+
+        from observability.metrics import record_billing_webhook
+        record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "ok")
         return {"status": "ok"}
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="provider not supported")

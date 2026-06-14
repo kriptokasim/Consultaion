@@ -354,10 +354,13 @@ def get_user_from_api_key(
         )
         return None
     
-    # Update last_used_at
-    api_key_record.last_used_at = datetime.now(timezone.utc)
-    session.add(api_key_record)
-    session.commit()
+    # Update last_used_at only when stale (>5 minutes) to reduce write amplification
+    now = datetime.now(timezone.utc)
+    last_used = api_key_record.last_used_at
+    if last_used is None or (now - last_used.replace(tzinfo=timezone.utc)).total_seconds() > 300:
+        api_key_record.last_used_at = now
+        session.add(api_key_record)
+        session.commit()
     
     # Get the user
     user = session.get(User, api_key_record.user_id)

@@ -188,6 +188,17 @@ async def create_debate(
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    # OT-12: Track debate creation via PostHog
+    try:
+        from integrations.posthog import track_event as _ph_track
+        _ph_track("debate_created", str(current_user.id), {
+            "mode": body.mode,
+            "seat_count": len(body.panel_config.seats) if body.panel_config else 4,
+            "prompt_length": len(body.prompt) if body.prompt else 0,
+        })
+    except Exception:
+        pass
+
     # 1. Account Active Check
     from fastapi import HTTPException
     if not current_user.is_active:
@@ -464,6 +475,17 @@ async def create_debate(
     # Replaced legacy mode.{mode}.started with consistent mode.debate.started 
     # and tracking the specific mode as a tag or sub-metric if needed, but for now just:
     track_metric(f"mode.debate.{mode}.started")
+
+    # OT-12: Track debate start via PostHog
+    try:
+        from integrations.posthog import track_event as _ph_track
+        _ph_track("debate_started", str(current_user.id), {
+            "debate_id": debate_id,
+            "mode": mode,
+        })
+    except Exception:
+        pass
+
     return {"id": debate_id}
 
 

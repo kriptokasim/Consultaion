@@ -98,6 +98,9 @@ class AppSettings(BaseSettings):
     ENABLE_METRICS: bool = True
     ENABLE_CONVERSATION_MODE: bool = Field(True, description="Enable new conversation mode")
     ENABLE_GIPHY: bool = Field(False, description="Enable Giphy integration visual delights")
+
+    # Deployment target for topology-aware configuration
+    DEPLOY_TARGET: Literal["local", "render", "docker", "ecs", "fly", "railway", "other"] = "local"
     ENABLE_EMAIL_SUMMARIES: bool = Field(False, description="Enable email summary notifications")
     ENABLE_SLACK_ALERTS: bool = Field(False, description="Enable Slack webhook alerts")
     
@@ -251,6 +254,19 @@ class AppSettings(BaseSettings):
 
     EXPORT_DIR: str = "exports"
 
+    # OT-2: Weighted rate limit budget (cost units per window)
+    WEIGHTED_RL_BUDGET: int = 200
+
+    # OT-5: Observability feature flags
+    ENABLE_OTEL_TRACING: bool = False
+    ENABLE_PROMETHEUS_METRICS: bool = True
+
+    # OT-6: GDPR settings
+    GDPR_DELETION_GRACE_DAYS: int = 30
+
+    # OT-10: Webhook transaction atomicity
+    WEBHOOK_TRANSACTION_MODE: str = "atomic"  # "atomic" or "passthrough"
+
     @field_validator("WEB_CONCURRENCY", "GUNICORN_WORKERS", mode="before")
     @classmethod
     def empty_str_to_none(cls, v):
@@ -282,6 +298,13 @@ class AppSettings(BaseSettings):
             # Production or unknown -> treat as production
             app_env = "production"
         object.__setattr__(self, "APP_ENV", app_env)
+
+        # OT-3: Auto-derive DEPLOY_TARGET from environment
+        if self.DEPLOY_TARGET == "local" and not is_local:
+            if is_render:
+                object.__setattr__(self, "DEPLOY_TARGET", "render")
+            else:
+                object.__setattr__(self, "DEPLOY_TARGET", "other")
         
         # Set active rate limits based on environment
         if is_local:
@@ -361,6 +384,11 @@ class AppSettings(BaseSettings):
                 raise ValueError("FATAL: ENABLE_SEC_HEADERS=False is not allowed in production/staging environments.")
             if not getattr(self, "ENABLE_CSRF", True):
                 raise ValueError("FATAL: ENABLE_CSRF=False is not allowed in production/staging environments without explicit documented bypass.")
+            # OT-3: Reject unsafe flags in production
+            if getattr(self, "FAST_DEBATE", False):
+                raise ValueError("FATAL: FAST_DEBATE=True is not allowed in staging or production.")
+            if getattr(self, "STRIPE_WEBHOOK_INSECURE_DEV", False):
+                raise ValueError("FATAL: STRIPE_WEBHOOK_INSECURE_DEV=True is not allowed outside local development.")
         else:
             # Local env: log warnings
             if not self.JWT_SECRET or self.JWT_SECRET in ("change_me_in_prod", "CHANGE_ME_IN_PRODUCTION"):

@@ -91,6 +91,48 @@ jobs:
           npm audit --audit-level=high
         continue-on-error: true
 
+  sbom-generation:
+    name: SBOM Generation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SBOM Tools
+        run: |
+          pip install cyclonedx-bom pip-audit
+
+      - name: Generate Python SBOM
+        working-directory: apps/api
+        run: |
+          cyclonedx-py environment --format json --output-file ../../sbom-python.json
+        continue-on-error: true
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Generate Node SBOM
+        working-directory: apps/web
+        run: |
+          npx @cyclonedx/cyclonedx-npm --output-file ../../sbom-node.json
+        continue-on-error: true
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom-python.json
+            sbom-node.json
+          retention-days: 90
+
   backend-test:
     runs-on: ubuntu-latest
     defaults:

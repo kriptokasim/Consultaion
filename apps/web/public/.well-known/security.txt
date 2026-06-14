@@ -1,0 +1,6 @@
+Contact: mailto:security@consultaion.com
+Expires: 2027-06-01T00:00:00Z
+Preferred-Languages: en, tr
+Canonical: https://consultaion.com/.well-known/security.txt
+Policy: https://consultaion.com/security
+Acknowledgments: https://consultaion.com/security#acknowledgments

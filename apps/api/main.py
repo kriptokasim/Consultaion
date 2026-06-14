@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
 from middleware.body_limit import BodySizeLimitMiddleware
+from middleware.weighted_rate_limit import WeightedRateLimitMiddleware
+from observability.tracing import init_tracing
 from parliament.model_registry import get_default_model, list_enabled_models
 from promotions.routes import promotions_router
 from ratelimit import ensure_rate_limiter_ready
@@ -114,7 +116,8 @@ if TEST_FAST_APP:
             logger.error("Failed to reset DB engine in TEST_FAST_APP mode", exc_info=exc)
             raise
 
-init_sentry()
+    init_sentry()
+    init_tracing()
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 ENABLE_SEC_HEADERS = settings.ENABLE_SEC_HEADERS
@@ -230,6 +233,20 @@ async def lifespan(app: FastAPI):
             logger.warning("WARNING: Startup permitted with ENABLE_CSRF=False but this is not recommended in production.")
             
     _warn_on_multi_worker()
+
+    # OT-3: Log resolved safe configuration at startup
+    logger.info(
+        "Startup config: env=%s deploy_target=%s sse_backend=%s rate_limit_backend=%s "
+        "dispatch_mode=%s cookie_domain=%s cors_origins=%s",
+        settings.APP_ENV,
+        settings.DEPLOY_TARGET,
+        settings.SSE_BACKEND,
+        settings.RATE_LIMIT_BACKEND,
+        settings.DEBATE_DISPATCH_MODE,
+        settings.COOKIE_DOMAIN,
+        settings.CORS_ORIGINS,
+    )
+
     try:
         ensure_rate_limiter_ready(raise_on_failure=settings.RATE_LIMIT_BACKEND == "redis")
     except Exception as exc:
@@ -324,6 +341,7 @@ origins = settings.CORS_ORIGINS.split(",")
 app.add_middleware(RequestIDMiddleware)
 if settings.ENV != "test":
     app.add_middleware(BodySizeLimitMiddleware, max_content_size=10 * 1024 * 1024) # 10MB
+    app.add_middleware(WeightedRateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -382,9 +400,11 @@ app.include_router(audit_logs_router)
 
 from routes.features import router as features_router
 from routes.gifs import router as gifs_router
+from gdpr.routes import gdpr_router
 
 app.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
 app.include_router(features_router)
+app.include_router(gdpr_router)
 
 # Patchset 77: Conversation V2 voting API
 from routes.votes import router as votes_router
@@ -392,6 +412,7 @@ app.include_router(votes_router)
 
 # Phase 4: API Versioning Strategy - Mount API v1 namespace router
 from fastapi import APIRouter
+from fastapi.responses import PlainTextResponse
 
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(auth_router)
@@ -412,6 +433,7 @@ v1_router.include_router(audit_logs_router)
 v1_router.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
 v1_router.include_router(features_router)
 v1_router.include_router(votes_router)
+v1_router.include_router(gdpr_router)
 v1_router.include_router(arena_router)
 v1_router.include_router(participation_router)
 v1_router.include_router(voting_router)
@@ -420,6 +442,37 @@ v1_router.include_router(oracle_router)
 v1_router.include_router(challenge_router)
 
 app.include_router(v1_router)
+
+
+# ── OT-5: Prometheus Metrics Endpoint ────────────────────────────────────
+@app.get("/metrics", response_class=PlainTextResponse, include_in_schema=False)
+async def prometheus_metrics():
+    from observability.metrics import get_metrics_bytes, get_metrics_content_type
+    data = get_metrics_bytes()
+    if data is None:
+        return PlainTextResponse("# prometheus_client not installed\n", media_type="text/plain")
+    return PlainTextResponse(data.decode("utf-8"), media_type=get_metrics_content_type())
+
+
+# ── OT-5: SLO Status Endpoint ────────────────────────────────────────────
+@app.get("/ops/slo", tags=["ops"])
+async def get_slo_statuses():
+    from observability.slo import get_all_slo_statuses
+    statuses = get_all_slo_statuses()
+    return {
+        "slos": {
+            name: {
+                "target": s.target,
+                "current_success_rate": round(s.current_success_rate, 6),
+                "error_budget_remaining_seconds": round(s.error_budget_remaining_seconds, 1),
+                "window_seconds": s.window_seconds,
+                "total_requests": s.total_requests,
+                "failed_requests": s.failed_requests,
+                "burning": s.burning,
+            }
+            for name, s in statuses.items()
+        }
+    }
 
 
 
