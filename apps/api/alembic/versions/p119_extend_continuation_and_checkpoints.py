@@ -1,7 +1,7 @@
 """Extend debate_continuation and debate_stage_checkpoint tables
 
-Revision ID: p119_extend_continuation_and_checkpoints
-Revises: p118_add_continuation_and_checkpoints
+Revision ID: p119_extend_continuation
+Revises: p118_add_continuation
 Create Date: 2026-06-14
 
 """
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "p119_extend_continuation_and_checkpoints"
-down_revision: Union[str, None] = "p118_add_continuation_and_checkpoints"
+revision: str = "p119_extend_continuation"
+down_revision: Union[str, None] = "p118_add_continuation"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

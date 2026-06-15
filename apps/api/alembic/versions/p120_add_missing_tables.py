@@ -1,7 +1,7 @@
 """Create missing tables: llm_usage_log, divergence_report, debate_turn, vote_record, red_team_session, oracle_session, oracle_branch, user_provider_keys
 
 Revision ID: p120_add_missing_tables
-Revises: p119_extend_continuation_and_checkpoints
+Revises: p119_extend_continuation
 Create Date: 2026-06-14
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "p120_add_missing_tables"
-down_revision: Union[str, None] = "p119_extend_continuation_and_checkpoints"
+down_revision: Union[str, None] = "p119_extend_continuation"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
