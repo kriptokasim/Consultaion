@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getServerTranslations } from "@/lib/i18n/server";
 import type { Metadata } from 'next';
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: 'Pricing & Plans',
@@ -52,7 +53,7 @@ export default async function PricingPage() {
               </ul>
             </div>
             <Button asChild className="mt-8 w-full bg-amber-600 text-white hover:bg-amber-700">
-              <a href={`/settings/billing?plan=${plan.slug}`}>{t("pricing.plan.cta")} {plan.name}</a>
+              <Link href={`/settings/billing?plan=${plan.slug}`}>{t("pricing.plan.cta")} {plan.name}</Link>
             </Button>
           </Card>
         ))}

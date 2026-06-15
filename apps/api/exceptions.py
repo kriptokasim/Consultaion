@@ -94,3 +94,26 @@ class ProviderCircuitOpenError(AppError):
         retryable: bool = True,
     ):
         super().__init__(message, code, status_code, details, hint, retryable)
+
+
+class ContinuationTransitionError(RuntimeError):
+    """Raised when a continuation state transition is invalid or conflicts.
+
+    This is a domain-level invariant violation (not an HTTP error).
+    The caller decides how to surface it to the client.
+    """
+    def __init__(
+        self,
+        continuation_id: str,
+        current_status: str,
+        target_status: str,
+        message: Optional[str] = None,
+    ):
+        self.continuation_id = continuation_id
+        self.current_status = current_status
+        self.target_status = target_status
+        msg = message or (
+            f"Invalid continuation transition: {current_status} → {target_status} "
+            f"(continuation_id={continuation_id})"
+        )
+        super().__init__(msg)

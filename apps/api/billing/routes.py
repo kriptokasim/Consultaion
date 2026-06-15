@@ -17,6 +17,11 @@ from sqlmodel import Session, select
 
 from .models import BillingPlan, BillingUsage
 from .providers import get_billing_provider
+from .reconciliation import (
+    reconcile_usage,
+    get_reconciliation_runs,
+    get_reconciliation_discrepancies,
+)
 from .service import (
     _current_period,
     get_active_plan,
@@ -238,6 +243,56 @@ async def billing_webhook(
         return {"status": "ok"}
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="provider not supported")
+
+
+# ── Admin Reconciliation Endpoints ──────────────────────────────────────────
+
+@router.get("/admin/reconciliation/runs")
+def admin_list_reconciliation_runs(
+    limit: int = 10,
+    period: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """List recent reconciliation runs (admin only)."""
+    from security.owner import is_owner
+    if not is_owner(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
+    runs = get_reconciliation_runs(session, limit=limit, period=period)
+    return {"items": runs}
+
+
+@router.get("/admin/reconciliation/runs/{run_id}/discrepancies")
+def admin_get_reconciliation_discrepancies(
+    run_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Get discrepancies for a specific reconciliation run (admin only)."""
+    from security.owner import is_owner
+    if not is_owner(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
+    import uuid as _uuid
+    try:
+        run_uuid = _uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid run_id")
+    discs = get_reconciliation_discrepancies(session, run_uuid)
+    return {"items": discs}
+
+
+@router.post("/admin/reconciliation/run")
+def admin_trigger_reconciliation(
+    period: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Manually trigger a reconciliation run (admin only)."""
+    from security.owner import is_owner
+    if not is_owner(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
+    report = reconcile_usage(db=session, period=period, run_type="manual")
+    return report
 
 
 billing_router = router

@@ -47,22 +47,26 @@ def _get_runner_id() -> str:
 
 
 async def _update_continuation_status(
-    debate_id: str,
+    continuation_id: Optional[str],
     status: str,
+    expected_statuses: List[str],
     failure_code: Optional[str] = None,
     failure_detail_safe: Optional[str] = None,
 ):
-    """Update the status of the latest continuation record for this debate."""
+    """Update the status of the specific continuation record."""
+    if not continuation_id:
+        return
     try:
-        from services.continuations import update_continuation_async
-        await update_continuation_async(
-            debate_id=debate_id,
-            status=status,
+        from services.continuations import transition_continuation_async
+        await transition_continuation_async(
+            continuation_id=continuation_id,
+            expected_statuses=expected_statuses,
+            target_status=status,
             failure_code=failure_code,
             failure_detail_safe=failure_detail_safe,
         )
     except Exception as e:
-        logger.warning(f"Failed to update continuation status for debate {debate_id} to {status}: {e}")
+        logger.warning(f"Failed to update continuation status for {continuation_id} to {status}: {e}")
 
 
 async def _try_acquire_lease(debate_id: str, runner_id: str, lease_seconds: int = 60) -> bool:
@@ -491,6 +495,7 @@ async def run_debate(
     model_id: str | None = None,
     trace_id: str | None = None,
     is_resume: bool = False,
+    continuation_id: Optional[str] = None,
 ):
     if trace_id:
         current_trace_id.set(trace_id)
@@ -575,7 +580,7 @@ async def run_debate(
         state_manager = DebateStateManager(debate_id, debate_user_id)
         await state_manager.set_status("running")
         if is_resume:
-            await _update_continuation_status(debate_id, "running")
+            await _update_continuation_status(continuation_id, "running", ["dispatched", "requested", "preflight_passed"])
 
         if debate_mode == "arena":
             from arena.engine import run_arena
@@ -584,7 +589,7 @@ async def run_debate(
 
             if result.status == "perspectives_ready":
                 logger.info("Arena run %s paused at perspectives_ready stage", debate_id, extra=log_extra)
-                await _update_continuation_status(debate_id, "completed")
+                # perspectives_ready must never write continuation.status = completed
                 return
 
             await state_manager.complete_debate(
@@ -618,11 +623,12 @@ async def run_debate(
                         await _execute_divergence_computation(debate_id)
                 except Exception as exc:
                     logger.warning("Failed to trigger divergence computation for debate %s: %s", debate_id, exc)
-                await _update_continuation_status(debate_id, "completed")
+                await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
             else:
                 await _update_continuation_status(
-                    debate_id,
+                    continuation_id,
                     "failed",
+                    ["running", "dispatched", "requested", "preflight_passed"],
                     failure_code="arena_run_failed",
                     failure_detail_safe="Arena run completed with non-success status"
                 )
@@ -653,11 +659,12 @@ async def run_debate(
                 },
             )
             if result.status == "completed":
-                await _update_continuation_status(debate_id, "completed")
+                await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
             else:
                 await _update_continuation_status(
-                    debate_id,
+                    continuation_id,
                     "failed",
+                    ["running", "dispatched", "requested", "preflight_passed"],
                     failure_code="compare_run_failed",
                     failure_detail_safe="Compare run completed with non-success status"
                 )
@@ -689,11 +696,12 @@ async def run_debate(
                 },
             )
             if result.status == "completed":
-                await _update_continuation_status(debate_id, "completed")
+                await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
             else:
                 await _update_continuation_status(
-                    debate_id,
+                    continuation_id,
                     "failed",
+                    ["running", "dispatched", "requested", "preflight_passed"],
                     failure_code="conversation_run_failed",
                     failure_detail_safe="Conversation run completed with non-success status"
                 )
@@ -733,8 +741,9 @@ async def run_debate(
                     },
                 )
                 await _update_continuation_status(
-                    debate_id,
+                    continuation_id,
                     "failed",
+                    ["running", "dispatched", "requested", "preflight_passed"],
                     failure_code="parliament_run_failed",
                     failure_detail_safe=panel_result.error_reason or "seat_failure_threshold_exceeded"
                 )
@@ -751,7 +760,7 @@ async def run_debate(
                     }
                 },
             )
-            await _update_continuation_status(debate_id, "completed")
+            await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
             return
 
         # 3. Standard Pipeline Execution
@@ -767,6 +776,7 @@ async def run_debate(
             model_id=model_id,
             usage_tracker=usage_tracker, # Pass the tracker we initialized
             is_resume=is_resume,
+            continuation_id=continuation_id,
         )
         
         pipeline = StandardDebatePipeline(state_manager)
@@ -776,21 +786,22 @@ async def run_debate(
         
         if final_state and final_state.status == "perspectives_ready":
             logger.info("Debate %s paused at perspectives_ready stage", debate_id, extra=log_extra)
-            await _update_continuation_status(debate_id, "completed")
+            # perspectives_ready must never write continuation.status = completed
             return
         
         # Success path for Standard Pipeline
         logger.info(f"Debate completed successfully", extra=log_extra)
         increment_metric("debate.completed")
         await _build_and_send_summary(debate_id, debate_user_id)
-        await _update_continuation_status(debate_id, "completed")
+        await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
 
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
         logger.warning(f"Debate encountered transient/provider error: {exc}", extra=log_extra)
         increment_metric("debate.degraded")
         await _update_continuation_status(
-            debate_id,
+            continuation_id,
             "failed",
+            ["running", "dispatched", "requested", "preflight_passed"],
             failure_code="transient_provider_error",
             failure_detail_safe=str(exc)
         )
@@ -839,8 +850,9 @@ async def run_debate(
         logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
         increment_metric("debate.failed")
         await _update_continuation_status(
-            debate_id,
+            continuation_id,
             "failed",
+            ["running", "dispatched", "requested", "preflight_passed"],
             failure_code="terminal_execution_error",
             failure_detail_safe=str(exc)
         )

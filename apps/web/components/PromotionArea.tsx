@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { API_ORIGIN } from "@/lib/config/runtime";
+import Link from "next/link";
 
 interface PromotionItem {
   id: string;
@@ -44,7 +45,11 @@ export function PromotionArea({ location }: { location: string }) {
           <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{promo.body}</p>
           {promo.cta_url && promo.cta_label ? (
             <Button asChild size="sm" className="mt-3 bg-amber-600 text-white hover:bg-amber-700">
-              <a href={promo.cta_url}>{promo.cta_label}</a>
+              {promo.cta_url.startsWith("http://") || promo.cta_url.startsWith("https://") ? (
+                <a href={promo.cta_url} target="_blank" rel="noopener noreferrer">{promo.cta_label}</a>
+              ) : (
+                <Link href={promo.cta_url}>{promo.cta_label}</Link>
+              )}
             </Button>
           ) : null}
         </Card>

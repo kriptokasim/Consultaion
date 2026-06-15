@@ -233,3 +233,11 @@ class UserProfileUpdate(BaseModel):
     bio: Optional[str] = Field(default=None, max_length=1000)
     timezone: Optional[str] = Field(default=None)
     email_summaries_enabled: Optional[bool] = Field(default=None)
+
+
+class ContinuationResponse(BaseModel):
+    continuation_id: str
+    debate_id: str
+    status: str
+    idempotency_key: str
+    created: bool

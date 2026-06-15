@@ -532,7 +532,7 @@ class DebateContinuation(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
     idempotency_key: str = Field(nullable=False)
-    status: str = Field(default="requested", nullable=False)  # requested, preflight_passed, dispatched, running, completed, failed
+    status: str = Field(default="requested", nullable=False, index=True)  # requested, preflight_passed, dispatched, running, completed, failed, cancelled
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     user_id: Optional[str] = Field(default=None, foreign_key="user.id", index=True, nullable=True)
@@ -543,6 +543,7 @@ class DebateContinuation(SQLModel, table=True):
     started_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     failed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    cancelled_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     failure_code: Optional[str] = Field(default=None, nullable=True)
     failure_detail_safe: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     credit_reservation_id: Optional[str] = Field(default=None, nullable=True)

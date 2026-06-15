@@ -1,5 +1,6 @@
 import asyncio
 import logging.config
+import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 
@@ -328,9 +329,31 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         clear_log_context()
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         token = set_request_id(request_id)
+        start = time.perf_counter()
+        status_code = 500
         try:
             response = await call_next(request)
+            status_code = response.status_code
+        except Exception:
+            status_code = 500
+            raise
         finally:
+            duration = time.perf_counter() - start
+            from observability.metrics import record_http_request, PROMETHEUS_AVAILABLE
+            if PROMETHEUS_AVAILABLE:
+                import re
+                path = request.url.path
+                path = re.sub(
+                    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                    "{id}", path, flags=re.IGNORECASE,
+                )
+                path = re.sub(r"/\d+(?=/|$)", "/{id}", path)
+                record_http_request(request.method, path, status_code, duration)
+            if duration > 2.0:
+                logger.warning(
+                    "slow_request method=%s path=%s duration=%.2fs status=%d",
+                    request.method, request.url.path, duration, status_code,
+                )
             reset_request_id(token)
             clear_log_context()
         response.headers["X-Request-ID"] = request_id

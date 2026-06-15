@@ -218,20 +218,18 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Verify Single Alembic Migration Head
-        run: |
-          HEADS_COUNT=$(alembic heads | wc -l)
-          echo "Divergent heads count: $HEADS_COUNT"
-          if [ "$HEADS_COUNT" -ne 1 ]; then
-            echo "ERROR: Multiple or zero Alembic migration heads detected! Please merge migrations."
-            alembic heads
-            exit 1
-          fi
+        run: bash scripts/check-alembic-heads.sh
 
       - name: Run Alembic Migrations
         env:
           DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_test"
         run: |
           alembic upgrade head
+
+      - name: Check Schema Drift
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_test"
+        run: bash scripts/check-schema-drift.sh
 
       - name: Run integration tests on Postgres
         env:

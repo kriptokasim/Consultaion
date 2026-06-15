@@ -1,0 +1,63 @@
+name: Docker Smoke Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  COMPOSE_PROJECT_NAME: consultaion-smoke
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start containers
+        run: |
+          docker compose -f docker-compose.smoke.yml build
+          docker compose -f docker-compose.smoke.yml up -d
+
+      - name: Wait for API health
+        run: |
+          echo "Waiting for API to be healthy..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then
+              echo "API is healthy!"
+              break
+            fi
+            echo "Attempt $i/30..."
+            sleep 2
+          done
+          curl -sf http://localhost:8000/healthz || (echo "API health check failed" && docker compose -f docker-compose.smoke.yml logs api && exit 1)
+
+      - name: Verify API health endpoint
+        run: |
+          curl -sf http://localhost:8000/healthz | python -m json.tool
+          echo "API healthz OK"
+
+      - name: Verify API readiness endpoint
+        run: |
+          curl -sf http://localhost:8000/readyz || echo "readyz not available (non-critical)"
+
+      - name: Verify web server
+        run: |
+          curl -sf http://localhost:3000 > /dev/null
+          echo "Web server OK"
+
+      - name: Verify Alembic migrations exist in API container
+        run: |
+          docker compose -f docker-compose.smoke.yml exec -T api python -c "from alembic.config import Config; from alembic.script import ScriptDirectory; config = Config('alembic.ini'); script = ScriptDirectory.from_config(config); heads = script.get_heads(); print(f'Heads: {heads}'); assert len(heads) == 1, f'Expected 1 head, got {len(heads)}'"
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.smoke.yml logs api
+          docker compose -f docker-compose.smoke.yml logs web
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.smoke.yml down -v --remove-orphans

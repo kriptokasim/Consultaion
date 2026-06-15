@@ -1,0 +1,57 @@
+version: "3.8"
+
+# Docker Compose for smoke tests — networked topology.
+# API is reachable from web via service name, not localhost.
+
+services:
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    container_name: consultaion-smoke-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - DATABASE_URL=sqlite:///./smoke_test.db
+      - JWT_SECRET=smoke-test-secret-key-for-ci-only
+      - WEB_APP_ORIGIN=http://localhost:3000
+      - REDIS_URL=
+      - RATE_LIMIT_BACKEND=memory
+      - ENABLE_CSRF=false
+      - STRIPE_WEBHOOK_VERIFY=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - smoke-net
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://api:8000
+    container_name: consultaion-smoke-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - smoke-net
+
+networks:
+  smoke-net:
+    driver: bridge

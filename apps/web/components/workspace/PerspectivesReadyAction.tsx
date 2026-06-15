@@ -10,6 +10,7 @@ interface PerspectivesReadyActionProps {
   modelCount?: number
   onContinue: () => void
   isContinuing?: boolean
+  outcomeUnknown?: boolean
   className?: string
 }
 
@@ -18,6 +19,7 @@ export function PerspectivesReadyAction({
   modelCount = 4,
   onContinue,
   isContinuing = false,
+  outcomeUnknown = false,
   className,
 }: PerspectivesReadyActionProps) {
   return (
@@ -32,9 +34,11 @@ export function PerspectivesReadyAction({
             {modelCount} perspectives are ready
           </h3>
           <p className="text-sm text-muted-foreground">
-            {mode === 'arena'
-              ? 'All model responses have been collected. Generate the Decision Report to see consensus, disagreements, and actionable recommendations.'
-              : 'Deliberation is complete. Evaluate the arguments and generate the final verdict report.'}
+            {outcomeUnknown
+              ? 'Request was sent but the outcome is unknown. You can safely retry — idempotency will prevent duplicate work.'
+              : mode === 'arena'
+                ? 'All model responses have been collected. Generate the Decision Report to see consensus, disagreements, and actionable recommendations.'
+                : 'Deliberation is complete. Evaluate the arguments and generate the final verdict report.'}
           </p>
         </div>
         <Button
@@ -42,7 +46,9 @@ export function PerspectivesReadyAction({
           disabled={isContinuing}
           className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 font-semibold px-6 py-2.5 shadow-sm transition-all rounded-xl shrink-0"
         >
-          {isContinuing ? (
+          {outcomeUnknown ? (
+            'Retry Synthesis'
+          ) : isContinuing ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Generating...

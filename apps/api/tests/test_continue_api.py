@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 from models import Debate, User, DebateContinuation, LLMUsageLog
 from sqlmodel import select
 from datetime import datetime, timezone
@@ -46,6 +46,7 @@ def test_continue_conditional_transition(authenticated_client, db_session):
             None,
             trace_id=None,
             resume=True,
+            continuation_id=ANY,
         )
 
         # Check DB status is updated to scheduled
@@ -99,8 +100,8 @@ def test_continue_idempotency_key(authenticated_client, db_session):
             headers=headers
         )
         assert response.status_code == 200
-        # Debate status is currently scheduled, so it returns scheduled
-        assert response.json()["status"] == "scheduled"
+        # Debate status is currently scheduled, but continuation status is dispatched
+        assert response.json()["status"] == "dispatched"
         mock_dispatch.assert_not_called()
 
     # If it is marked as failed, retry should be allowed
@@ -298,5 +299,43 @@ def test_continue_dispatch_failure_safety(authenticated_client, db_session):
     assert continuation.status == "failed"
     assert continuation.failure_code == "debate.dispatch_failed"
     assert "celery queue full" in continuation.failure_detail_safe
+
+
+def test_get_debate_continuation(authenticated_client, db_session):
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-get-continuation-debate",
+        user_id=user.id,
+        prompt="Test prompt",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+    
+    continuation = DebateContinuation(
+        debate_id=debate.id,
+        idempotency_key="get-test-key",
+        status="requested",
+        user_id=user.id
+    )
+    db_session.add(continuation)
+    db_session.commit()
+    
+    # Try valid request
+    response = authenticated_client.get(f"/api/v1/debates/{debate.id}/continuations/{continuation.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["continuation_id"] == str(continuation.id)
+    assert data["status"] == "requested"
+    assert data["idempotency_key"] == "get-test-key"
+    assert data["created"] is False
+
+    # Try non-existent UUID
+    response = authenticated_client.get(f"/api/v1/debates/{debate.id}/continuations/00000000-0000-0000-0000-000000000000")
+    assert response.status_code == 404
+
+    # Try invalid UUID string format
+    response = authenticated_client.get(f"/api/v1/debates/{debate.id}/continuations/not-a-uuid")
+    assert response.status_code == 404
 
 

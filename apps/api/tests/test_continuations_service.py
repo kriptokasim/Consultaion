@@ -3,10 +3,11 @@ from models import Debate, User, DebateContinuation
 from sqlmodel import select
 from datetime import datetime, timezone
 from auth import hash_password
-from services.continuations import update_continuation_sync, update_continuation_async
+from exceptions import ContinuationTransitionError
+from services.continuations import transition_continuation_sync, transition_continuation_async
 
 
-def test_update_continuation_sync(db_session):
+def test_transition_continuation_sync(db_session):
     # Setup test user
     user = User(email="normal@example.com", password_hash=hash_password("password"))
     db_session.add(user)
@@ -30,14 +31,16 @@ def test_update_continuation_sync(db_session):
     db_session.add(continuation)
     db_session.commit()
 
-    # 1. Update status to running
-    res = update_continuation_sync(db_session, debate.id, "running")
+    continuation_id = str(continuation.id)
+
+    # 1. Update status to running (expect requested)
+    res = transition_continuation_sync(db_session, continuation_id, ["requested"], "running")
     assert res is not None
     assert res.status == "running"
     assert res.started_at is not None
 
-    # 2. Update status to completed
-    res = update_continuation_sync(db_session, debate.id, "completed")
+    # 2. Update status to completed (expect running)
+    res = transition_continuation_sync(db_session, continuation_id, ["running"], "completed")
     assert res is not None
     assert res.status == "completed"
     assert res.completed_at is not None
@@ -52,9 +55,12 @@ def test_update_continuation_sync(db_session):
     db_session.add(continuation2)
     db_session.commit()
 
-    res = update_continuation_sync(
+    continuation2_id = str(continuation2.id)
+
+    res = transition_continuation_sync(
         db_session,
-        debate.id,
+        continuation2_id,
+        ["requested"],
         "failed",
         failure_code="test_error",
         failure_detail_safe="Test safe failure detail"
@@ -65,9 +71,27 @@ def test_update_continuation_sync(db_session):
     assert res.failure_code == "test_error"
     assert res.failure_detail_safe == "Test safe failure detail"
 
+    # 4. Test ContinuationTransitionError on invalid transition
+    with pytest.raises(ContinuationTransitionError):
+        transition_continuation_sync(
+            db_session,
+            continuation2_id,
+            ["running"],  # continuation2 is failed, so this should fail
+            "completed"
+        )
+
+    # 5. Test ContinuationTransitionError on non-existent ID
+    with pytest.raises(ContinuationTransitionError):
+        transition_continuation_sync(
+            db_session,
+            "non-existent-id",
+            ["requested"],
+            "running"
+        )
+
 
 @pytest.mark.asyncio
-async def test_update_continuation_async(db_session):
+async def test_transition_continuation_async(db_session):
     # Setup test user
     user = User(email="normal@example.com", password_hash=hash_password("password"))
     db_session.add(user)
@@ -91,19 +115,19 @@ async def test_update_continuation_async(db_session):
     db_session.add(continuation)
     db_session.commit()
 
-    # Cache debate ID as standard string to prevent DetachedInstanceError
-    debate_id = str(debate.id)
+    continuation_id = str(continuation.id)
     db_session.close()
 
     # 1. Update status to running
-    res = await update_continuation_async(debate_id, "running")
+    res = await transition_continuation_async(continuation_id, ["requested"], "running")
     assert res is not None
     assert res.status == "running"
     assert res.started_at is not None
 
     # 2. Update status to failed
-    res = await update_continuation_async(
-        debate_id,
+    res = await transition_continuation_async(
+        continuation_id,
+        ["running"],
         "failed",
         failure_code="async_error",
         failure_detail_safe="Async safe failure detail"
@@ -113,3 +137,11 @@ async def test_update_continuation_async(db_session):
     assert res.failed_at is not None
     assert res.failure_code == "async_error"
     assert res.failure_detail_safe == "Async safe failure detail"
+
+    # 3. Test ContinuationTransitionError on invalid transition
+    with pytest.raises(ContinuationTransitionError):
+        await transition_continuation_async(
+            continuation_id,
+            ["requested"],
+            "running"
+        )

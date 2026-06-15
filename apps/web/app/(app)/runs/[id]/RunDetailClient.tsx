@@ -46,6 +46,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     status: workspaceStatus,
     sseStatus,
     error: workspaceError,
+    outcomeUnknown,
     isPollingFallback,
     continueRun,
     retryRun,
@@ -487,6 +488,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
                 modelCount={modelsExpected}
                 onContinue={handleContinue}
                 isContinuing={isContinuing}
+                outcomeUnknown={outcomeUnknown}
               />
             )}
 
@@ -556,7 +558,9 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
                 Perspectives Collected
               </h3>
               <p className="text-xs text-stone-600 dark:text-stone-400">
-                All individual agent responses are in. Click below to continue and generate the decision-ready report.
+                {outcomeUnknown
+                  ? "Request was sent but the outcome is unknown. You can safely retry — idempotency will prevent duplicate work."
+                  : "All individual agent responses are in. Click below to continue and generate the decision-ready report."}
               </p>
             </div>
             <Button
@@ -565,7 +569,9 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               size="sm"
               className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 font-semibold rounded-lg shrink-0"
             >
-              {isContinuing ? (
+              {outcomeUnknown ? (
+                "Retry Synthesis"
+              ) : isContinuing ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                   Synthesizing...

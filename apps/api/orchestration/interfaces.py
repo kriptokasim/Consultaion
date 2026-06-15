@@ -22,6 +22,7 @@ class DebateContext:
     # Runtime flags
     is_mock: bool = False
     is_resume: bool = False
+    continuation_id: Optional[str] = None
 
 
 @dataclass

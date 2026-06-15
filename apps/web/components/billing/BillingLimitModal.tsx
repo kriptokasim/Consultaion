@@ -2,6 +2,7 @@
 
 import { PromotionArea } from "@/components/PromotionArea";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 interface BillingLimitModalProps {
   open: boolean;
@@ -30,10 +31,10 @@ export function BillingLimitModal({ open, code, onClose }: BillingLimitModalProp
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{content.message}</p>
         <div className="mt-4 space-x-2">
           <Button asChild variant="secondary" className="bg-stone-100 text-stone-900">
-            <a href="/pricing">View pricing</a>
+            <Link href="/pricing">View pricing</Link>
           </Button>
           <Button asChild className="bg-amber-600 text-white hover:bg-amber-700">
-            <a href="/settings/billing">Manage plan</a>
+            <Link href="/settings/billing">Manage plan</Link>
           </Button>
         </div>
         <div className="mt-5">

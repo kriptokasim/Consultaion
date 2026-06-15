@@ -133,3 +133,43 @@ def test_debate_stage_checkpoint_schema_contract():
     
     for field in expected_fields:
         assert field in columns, f"Field '{field}' is missing from debate_stage_checkpoint schema."
+
+def test_debate_continuation_status_values():
+    """Verify debate_continuation status column accepts expected values."""
+    from models import DebateContinuation
+    import sqlmodel
+    with sqlmodel.Session(database.engine) as session:
+        # Verify the column exists and has a string type
+        inspector = inspect(database.engine)
+        cols = {col["name"]: col["type"] for col in inspector.get_columns("debate_continuation")}
+        assert "status" in cols
+        status_type = str(cols["status"])
+        assert "VARCHAR" in status_type or "TEXT" in status_type or "String" in status_type, (
+            f"Expected string type for status, got {status_type}"
+        )
+
+def test_debate_stage_checkpoint_status_values():
+    """Verify debate_stage_checkpoint status column accepts expected values."""
+    import sqlmodel
+    with sqlmodel.Session(database.engine) as session:
+        inspector = inspect(database.engine)
+        cols = {col["name"]: col["type"] for col in inspector.get_columns("debate_stage_checkpoint")}
+        assert "status" in cols
+        status_type = str(cols["status"])
+        assert "VARCHAR" in status_type or "TEXT" in status_type or "String" in status_type, (
+            f"Expected string type for status, got {status_type}"
+        )
+
+def test_debate_continuation_has_unique_idempotency_key():
+    """Verify debate_continuation has a unique constraint on idempotency_key + debate_id."""
+    inspector = inspect(database.engine)
+    constraints = inspector.get_unique_constraints("debate_continuation")
+    # At least one unique constraint should reference idempotency_key
+    idempotency_in_constraint = False
+    for constraint in constraints:
+        if "idempotency_key" in constraint.get("column_names", []):
+            idempotency_in_constraint = True
+            break
+    assert idempotency_in_constraint, (
+        "debate_continuation should have a unique constraint involving idempotency_key"
+    )

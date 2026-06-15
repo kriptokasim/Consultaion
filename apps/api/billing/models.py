@@ -3,11 +3,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from models import utcnow
 from pydantic import ConfigDict
-from sqlalchemy import JSON, Column, DateTime, Numeric, UniqueConstraint, text
+from sqlalchemy import JSON, Column, DateTime, Numeric, String, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -80,4 +80,40 @@ class BillingWebhookEvent(SQLModel, table=True):
     provider: str = Field(nullable=False, index=True)
     event_type: str = Field(nullable=False)
     processed_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class BillingReconciliationRun(SQLModel, table=True):
+    """Records each reconciliation execution for audit trail."""
+    __tablename__ = "billing_reconciliation_runs"
+    __table_args__ = {"extend_existing": True}
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
+    period: str = Field(nullable=False, index=True)
+    run_type: str = Field(nullable=False)  # "daily" or "monthly"
+    status: str = Field(nullable=False, default="running")  # "running", "completed", "failed"
+    users_checked: int = Field(default=0, nullable=False)
+    discrepancies_found: int = Field(default=0, nullable=False)
+    total_tokens_internal: int = Field(default=0, nullable=False)
+    total_tokens_usage: int = Field(default=0, nullable=False)
+    started_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    error_message: Optional[str] = Field(default=None, sa_column=Column(String(500), nullable=True))
+
+
+class BillingReconciliationDiscrepancy(SQLModel, table=True):
+    """Individual discrepancies found during reconciliation."""
+    __tablename__ = "billing_reconciliation_discrepancies"
+    __table_args__ = {"extend_existing": True}
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
+    run_id: uuid.UUID = Field(foreign_key="billing_reconciliation_runs.id", nullable=False, index=True)
+    user_id: str = Field(nullable=False, index=True)
+    discrepancy_type: str = Field(nullable=False)  # "token_mismatch", "negative_tokens", "negative_debates", etc.
+    internal_value: int = Field(default=0, nullable=False)
+    expected_value: int = Field(default=0, nullable=False)
+    severity: str = Field(default="warning", nullable=False)  # "warning", "critical"
+    details: Optional[str] = Field(default=None, sa_column=Column(String(1000), nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 

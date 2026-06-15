@@ -38,6 +38,7 @@ from schemas import (
     PanelConfig,
     default_debate_config,
     default_panel_config,
+    ContinuationResponse,
 )
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -634,7 +635,13 @@ async def continue_debate_run(
         if continuation_record:
             if continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed"}:
                 # Act as a no-op
-                return {"id": debate_id, "status": debate.status}
+                return ContinuationResponse(
+                    continuation_id=str(continuation_record.id),
+                    debate_id=debate_id,
+                    status=continuation_record.status,
+                    idempotency_key=continuation_record.idempotency_key,
+                    created=False,
+                )
             # If status is failed, allow retry by updating status to requested
             continuation_record.status = "requested"
             continuation_record.user_id = current_user.id if current_user else None
@@ -667,7 +674,13 @@ async def continue_debate_run(
                 session.rollback()
                 continuation_record = session.execute(stmt_chk).scalars().first()
                 if continuation_record and continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed"}:
-                    return {"id": debate_id, "status": debate.status}
+                    return ContinuationResponse(
+                        continuation_id=str(continuation_record.id),
+                        debate_id=debate_id,
+                        status=continuation_record.status,
+                        idempotency_key=continuation_record.idempotency_key,
+                        created=False,
+                    )
     else:
         # If no X-Idempotency-Key header, we still create a continuation record for tracking
         import uuid
@@ -795,6 +808,7 @@ async def continue_debate_run(
             debate.model_id,
             trace_id=None,
             resume=True,
+            continuation_id=continuation_record.id if continuation_record else None,
         )
 
         # Mark continuation as dispatched
@@ -843,7 +857,47 @@ async def continue_debate_run(
         session=session,
     )
 
-    return {"id": debate_id, "status": "scheduled"}
+    return ContinuationResponse(
+        continuation_id=str(continuation_record.id),
+        debate_id=debate_id,
+        status="scheduled",
+        idempotency_key=continuation_record.idempotency_key,
+        created=True,
+    )
+
+
+@router.get("/debates/{debate_id}/continuations/{continuation_id}", response_model=ContinuationResponse)
+async def get_debate_continuation(
+    debate_id: str,
+    continuation_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    # Load debate and verify read access
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise NotFoundError(message=f"Debate {debate_id} not found", code="debate.not_found")
+    require_debate_access(debate, current_user, session)
+    
+    from models import DebateContinuation
+    import uuid
+    # Validate continuation_id is a valid UUID
+    try:
+        uuid.UUID(continuation_id)
+    except ValueError:
+        raise NotFoundError(message=f"Continuation {continuation_id} not found", code="continuation.not_found")
+
+    continuation = session.get(DebateContinuation, continuation_id)
+    if not continuation or str(continuation.debate_id) != debate_id:
+        raise NotFoundError(message=f"Continuation {continuation_id} not found", code="continuation.not_found")
+        
+    return ContinuationResponse(
+        continuation_id=str(continuation.id),
+        debate_id=str(continuation.debate_id),
+        status=continuation.status,
+        idempotency_key=continuation.idempotency_key,
+        created=False,
+    )
 
 
 

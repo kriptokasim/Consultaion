@@ -5,6 +5,7 @@ import { ApiError, getLeaderboard, getRateLimitInfo, isAuthError } from "@/lib/a
 import { redirect } from "next/navigation";
 import { getServerTranslations } from "@/lib/i18n/server";
 import type { Metadata } from 'next';
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: 'AI Leaderboard & Rankings',
@@ -68,12 +69,12 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         {errorMessage ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-800 dark:border-amber-700 dark:bg-amber-900/50 dark:text-amber-200">
             <p className="mb-4 text-sm font-medium">{errorMessage}</p>
-            <a
+            <Link
               href="/leaderboard"
               className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-amber-500 transition-colors"
             >
               Retry
-            </a>
+            </Link>
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center dark:border-slate-700 dark:bg-slate-900/20">
@@ -81,12 +82,12 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
               Leaderboard is warming up. Once enough Arena runs are completed, model performance rankings will appear here.
             </p>
             <div className="mt-5">
-              <a
+              <Link
                 href="/live"
                 className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-amber-500 transition-colors"
               >
                 Run Arena
-              </a>
+              </Link>
             </div>
           </div>
         ) : (
@@ -124,9 +125,9 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
               >
                 {t("leaderboard.filters.submit")}
               </button>
-              <a href="/methodology" className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+              <Link href="/methodology" className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
                 {t("leaderboard.filters.methodology")} →
-              </a>
+              </Link>
             </form>
             <div className="mt-6">
               <LeaderboardTable items={items} />

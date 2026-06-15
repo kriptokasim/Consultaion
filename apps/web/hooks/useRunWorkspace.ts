@@ -17,12 +17,70 @@ export type RunWorkspaceStatus =
   | "failed"
   | "error";
 
+/** Persisted continuation intent for page-refresh recovery */
+export interface PersistedContinuationIntent {
+  debateId: string;
+  idempotencyKey: string;
+  /** ISO timestamp when this intent was persisted */
+  persistedAt: string;
+  /** Whether the continue POST was successfully dispatched (server acknowledged) */
+  dispatched: boolean;
+}
+
+const CONTINUATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const STORAGE_KEY_PREFIX = "continuation_intent";
+
+function getStorageKey(debateId: string): string {
+  return `${STORAGE_KEY_PREFIX}_${debateId}`;
+}
+
+function isIntentExpired(intent: PersistedContinuationIntent): boolean {
+  const elapsed = Date.now() - new Date(intent.persistedAt).getTime();
+  return elapsed > CONTINUATION_TTL_MS;
+}
+
+function persistIntent(debateId: string, intent: PersistedContinuationIntent): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(getStorageKey(debateId), JSON.stringify(intent));
+  } catch {
+    // localStorage full or blocked — non-critical
+  }
+}
+
+function loadIntent(debateId: string): PersistedContinuationIntent | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(getStorageKey(debateId));
+    if (!raw) return null;
+    const parsed: PersistedContinuationIntent = JSON.parse(raw);
+    if (isIntentExpired(parsed)) {
+      localStorage.removeItem(getStorageKey(debateId));
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearIntent(debateId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(getStorageKey(debateId));
+  } catch {
+    // non-critical
+  }
+}
+
 export interface UseRunWorkspaceResult {
   debate: any | null;
   events: TimelineEvent[];
   status: RunWorkspaceStatus;
   sseStatus: SSEStatus;
   error: string | null;
+  /** True when the POST was dispatched but the outcome is unknown (page refresh or network failure) */
+  outcomeUnknown: boolean;
   isPollingFallback: boolean;
   continueRun: () => Promise<void>;
   retryRun: (stageKey?: string) => Promise<void>;
@@ -37,9 +95,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [error, setError] = useState<string | null>(null);
   const [isPollingFallback, setIsPollingFallback] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
-  
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
+  const intentRef = useRef<PersistedContinuationIntent | null>(null);
 
   // Determine if debate is in a terminal state
   const isTerminal = debate
@@ -191,37 +251,48 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // 4. Coordinated Workspace Actions
   const idempotencyKeyRef = useRef<string | null>(null);
 
-  // Sync idempotency key with sessionStorage to survive page refreshes
+  // Restore persisted intent on mount / debateId change
   useEffect(() => {
-    if (debateId && typeof window !== "undefined") {
-      const stored = sessionStorage.getItem(`continuation_idempotency_key_${debateId}`);
-      if (stored) {
-        idempotencyKeyRef.current = stored;
-        // If the debate status is still perspectives_ready, we restore the continuing state
-        if (debate && debate.status === "perspectives_ready") {
-          setIsContinuing(true);
-        }
+    if (!debateId || typeof window === "undefined") return;
+
+    const persisted = loadIntent(debateId);
+    if (persisted) {
+      intentRef.current = persisted;
+      idempotencyKeyRef.current = persisted.idempotencyKey;
+
+      if (persisted.dispatched) {
+        // POST was sent but outcome is unknown (page refreshed mid-flight)
+        setOutcomeUnknown(true);
+        setIsContinuing(true);
+      } else {
+        // Intent was saved but POST was never dispatched (e.g. tab closed before send)
+        setIsContinuing(true);
       }
     }
-  }, [debateId, debate]);
+  }, [debateId]);
 
-  // Clean up idempotency key when debate becomes terminal
+  // Clear intent + outcomeUnknown when debate becomes terminal
   useEffect(() => {
-    if (isTerminal && debateId && typeof window !== "undefined") {
-      sessionStorage.removeItem(`continuation_idempotency_key_${debateId}`);
+    if (isTerminal && debateId) {
+      clearIntent(debateId);
+      intentRef.current = null;
       idempotencyKeyRef.current = null;
       setIsContinuing(false);
+      setOutcomeUnknown(false);
     }
   }, [isTerminal, debateId]);
 
-  // Clean up idempotency key when debate transitions out of perspectives_ready
+  // Clear intent when debate transitions out of perspectives_ready
   useEffect(() => {
-    if (debateId && typeof window !== "undefined") {
-      const stored = sessionStorage.getItem(`continuation_idempotency_key_${debateId}`);
-      if (stored && debate && debate.status !== "perspectives_ready") {
-        sessionStorage.removeItem(`continuation_idempotency_key_${debateId}`);
+    if (debateId && debate && debate.status !== "perspectives_ready") {
+      const intent = intentRef.current;
+      if (intent && !intent.dispatched) {
+        // Only clear undelivered intents; dispatched intents stay until terminal
+        clearIntent(debateId);
+        intentRef.current = null;
         idempotencyKeyRef.current = null;
         setIsContinuing(false);
+        setOutcomeUnknown(false);
       }
     }
   }, [debateId, debate]);
@@ -231,20 +302,48 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     try {
       setError(null);
       setIsContinuing(true);
+      setOutcomeUnknown(false);
+
       // Reuse existing idempotency key if present, otherwise generate new one
       if (!idempotencyKeyRef.current) {
         const key = crypto.randomUUID();
         idempotencyKeyRef.current = key;
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem(`continuation_idempotency_key_${debateId}`, key);
-        }
       }
+
+      // Persist intent BEFORE dispatch so page refresh can recover
+      const intent: PersistedContinuationIntent = {
+        debateId,
+        idempotencyKey: idempotencyKeyRef.current,
+        persistedAt: new Date().toISOString(),
+        dispatched: false,
+      };
+      persistIntent(debateId, intent);
+      intentRef.current = intent;
+
       await continueDebate(debateId, idempotencyKeyRef.current);
+
+      // POST succeeded — mark dispatched so refresh shows "outcome unknown" not "retry"
+      const dispatchedIntent: PersistedContinuationIntent = {
+        ...intent,
+        dispatched: true,
+        persistedAt: new Date().toISOString(),
+      };
+      persistIntent(debateId, dispatchedIntent);
+      intentRef.current = dispatchedIntent;
+
       await fetchDebateAndTimeline(debateId);
+
+      // Server confirmed — clear intent
+      clearIntent(debateId);
+      intentRef.current = null;
+      idempotencyKeyRef.current = null;
+      setOutcomeUnknown(false);
     } catch (err: any) {
       console.error("[useRunWorkspace] Continue failed:", err);
       setError(err?.message || "Failed to continue debate");
       setIsContinuing(false);
+      setOutcomeUnknown(false);
+      // Leave intent on disk so refresh can retry or show outcome unknown
     }
   }, [debateId, fetchDebateAndTimeline]);
 
@@ -285,6 +384,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     status,
     sseStatus,
     error,
+    outcomeUnknown,
     isPollingFallback,
     continueRun: handleContinue,
     retryRun: handleRetry,
