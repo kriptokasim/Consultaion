@@ -61,4 +61,21 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
         timezone="UTC",
         enable_utc=True,
         task_track_started=True,
+        beat_schedule={
+            "billing-reconcile-daily": {
+                "task": "billing.reconcile_previous_day",
+                "schedule": {
+                    "hour": 3,
+                    "minute": 0,
+                },
+            },
+            "billing-reconcile-monthly": {
+                "task": "billing.reconcile_current_period",
+                "schedule": {
+                    "day_of_month": 1,
+                    "hour": 4,
+                    "minute": 0,
+                },
+            },
+        },
     )

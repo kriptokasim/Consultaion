@@ -195,3 +195,58 @@ def record_rate_limit_exceeded(limit_type: str, backend: str) -> None:
     if not PROMETHEUS_AVAILABLE:
         return
     RATE_LIMIT_EXCEEDED_TOTAL.labels(limit_type=limit_type, backend=backend).inc()
+
+
+# ── Reconciliation Metrics ────────────────────────────────────────────
+RECONCILIATION_RUNS_TOTAL = Counter(
+    "consultaion_reconciliation_runs_total",
+    "Total reconciliation runs",
+    ["run_type", "status"],
+    registry=REGISTRY,
+)
+RECONCILIATION_FAILURES_TOTAL = Counter(
+    "consultaion_reconciliation_failures_total",
+    "Total reconciliation failures",
+    ["error_type"],
+    registry=REGISTRY,
+)
+RECONCILIATION_DISCREPANCIES_TOTAL = Counter(
+    "consultaion_reconciliation_discrepancies_total",
+    "Total reconciliation discrepancies found",
+    ["severity", "type"],
+    registry=REGISTRY,
+)
+RECONCILIATION_DURATION_SECONDS = Histogram(
+    "consultaion_reconciliation_duration_seconds",
+    "Reconciliation job duration in seconds",
+    ["run_type"],
+    buckets=(10.0, 30.0, 60.0, 120.0, 300.0, 600.0),
+    registry=REGISTRY,
+)
+RECONCILIATION_LAST_SUCCESS_TIMESTAMP = Gauge(
+    "consultaion_reconciliation_last_success_timestamp",
+    "Unix timestamp of last successful reconciliation run",
+    registry=REGISTRY,
+)
+
+
+def record_reconciliation_run(run_type: str, status: str, duration: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    RECONCILIATION_RUNS_TOTAL.labels(run_type=run_type, status=status).inc()
+    RECONCILIATION_DURATION_SECONDS.labels(run_type=run_type).observe(duration)
+    if status == "completed":
+        import time as _time
+        RECONCILIATION_LAST_SUCCESS_TIMESTAMP.set(_time.time())
+
+
+def record_reconciliation_failure(error_type: str) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    RECONCILIATION_FAILURES_TOTAL.labels(error_type=error_type).inc()
+
+
+def record_reconciliation_discrepancy(severity: str, disc_type: str) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    RECONCILIATION_DISCREPANCIES_TOTAL.labels(severity=severity, type=disc_type).inc()

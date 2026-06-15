@@ -1,41 +1,40 @@
 #!/usr/bin/env bash
-# check-schema-drift.sh — Detect schema drift by comparing Alembic current vs head.
+# check-schema-drift.sh — Detect real schema drift by comparing SQLModel metadata
+# against Alembic migration head using compare_metadata().
 # Exit 0 if in sync, exit 1 if drift detected.
 set -euo pipefail
 
-echo "Checking for schema drift..."
+echo "Checking for real schema drift (metadata vs migrations)..."
 
-# Get current revision from database
-CURRENT=$(alembic current 2>/dev/null | head -1 || echo "")
-# Get head revision from migration files
-HEAD=$(alembic heads 2>/dev/null | head -1 || echo "")
+python3 -c "
+import sys
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.autogenerate import compare_metadata
+from sqlalchemy import create_engine
+from sqlmodel import SQLModel
 
-echo "Current revision: ${CURRENT:-<none>}"
-echo "Head revision:    ${HEAD:-<none>}"
+# Import all models to register them with SQLModel metadata
+import models
+import billing.models
 
-if [ -z "$HEAD" ]; then
-  echo "ERROR: No Alembic migration heads found."
-  exit 1
-fi
+config = Config('alembic.ini')
+url = config.get_main_option('database_url')
+if not url:
+    print('ERROR: No database_url in alembic.ini')
+    sys.exit(1)
 
-if [ -z "$CURRENT" ]; then
-  echo "WARNING: No current revision in database. Database may not be initialized."
-  echo "Run 'alembic upgrade head' to apply migrations."
-  exit 1
-fi
+engine = create_engine(url)
+with engine.connect() as conn:
+    context = MigrationContext.configure(conn)
+    diff = compare_metadata(context, SQLModel.metadata)
 
-# Compare (first 12 chars for short hash comparison)
-CURRENT_SHORT="${CURRENT:0:12}"
-HEAD_SHORT="${HEAD:0:12}"
-
-if [ "$CURRENT_SHORT" = "$HEAD_SHORT" ]; then
-  echo "OK: Database schema is in sync with migrations."
-  exit 0
-else
-  echo "ERROR: Schema drift detected!"
-  echo "  Database is at:  $CURRENT"
-  echo "  Migrations at:   $HEAD"
-  echo ""
-  echo "Run 'alembic upgrade head' to bring database up to date."
-  exit 1
-fi
+if diff:
+    print('ERROR: Schema drift detected! Model metadata differs from migrations:')
+    for item in diff:
+        print(f'  {item}')
+    sys.exit(1)
+else:
+    print('OK: SQLModel metadata matches Alembic migrations. No drift.')
+    sys.exit(0)
+"

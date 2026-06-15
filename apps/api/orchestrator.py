@@ -589,7 +589,8 @@ async def run_debate(
 
             if result.status == "perspectives_ready":
                 logger.info("Arena run %s paused at perspectives_ready stage", debate_id, extra=log_extra)
-                # perspectives_ready must never write continuation.status = completed
+                if is_resume and continuation_id:
+                    await _update_continuation_status(continuation_id, "paused", ["running"])
                 return
 
             await state_manager.complete_debate(
@@ -786,7 +787,8 @@ async def run_debate(
         
         if final_state and final_state.status == "perspectives_ready":
             logger.info("Debate %s paused at perspectives_ready stage", debate_id, extra=log_extra)
-            # perspectives_ready must never write continuation.status = completed
+            if is_resume and continuation_id:
+                await _update_continuation_status(continuation_id, "paused", ["running"])
             return
         
         # Success path for Standard Pipeline

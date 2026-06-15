@@ -23,8 +23,9 @@ from exceptions import (
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from integrations.langfuse import start_debate_trace
-from models import Debate, Message, PairwiseVote, Score, Team, User
+from models import Debate, DebateContinuation, Message, PairwiseVote, Score, Team, User
 from parliament.model_registry import list_enabled_models
+from services.continuations import transition_continuation_sync
 from parliament.providers import PROVIDERS
 from parliament.roles import ROLE_PROFILES
 from parliament.router_v2 import RouteContext, choose_model
@@ -625,7 +626,6 @@ async def continue_debate_run(
 
     # 1. Idempotency Check & Continuation record setup
     continuation_record = None
-    from models import DebateContinuation
     if x_idempotency_key:
         stmt_chk = select(DebateContinuation).where(
             DebateContinuation.debate_id == debate_id,
@@ -633,8 +633,7 @@ async def continue_debate_run(
         )
         continuation_record = session.execute(stmt_chk).scalars().first()
         if continuation_record:
-            if continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed"}:
-                # Act as a no-op
+            if continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed", "paused"}:
                 return ContinuationResponse(
                     continuation_id=str(continuation_record.id),
                     debate_id=debate_id,
@@ -642,22 +641,14 @@ async def continue_debate_run(
                     idempotency_key=continuation_record.idempotency_key,
                     created=False,
                 )
-            # If status is failed, allow retry by updating status to requested
-            continuation_record.status = "requested"
-            continuation_record.user_id = current_user.id if current_user else None
-            continuation_record.target = debate.model_id
-            continuation_record.requested_at = sa.func.now()
-            continuation_record.preflight_passed_at = None
-            continuation_record.dispatched_at = None
-            continuation_record.started_at = None
-            continuation_record.completed_at = None
-            continuation_record.failed_at = None
-            continuation_record.failure_code = None
-            continuation_record.failure_detail_safe = None
-            continuation_record.credit_reservation_id = None
-            continuation_record.updated_at = sa.func.now()
-            session.add(continuation_record)
-            session.commit()
+            if continuation_record.status in {"failed", "cancelled"}:
+                transition_continuation_sync(
+                    session, continuation_record.id, [continuation_record.status], "requested"
+                )
+                continuation_record.user_id = current_user.id if current_user else None
+                continuation_record.target = debate.model_id
+                session.add(continuation_record)
+                session.commit()
         else:
             continuation_record = DebateContinuation(
                 debate_id=debate_id,
@@ -673,7 +664,7 @@ async def continue_debate_run(
             except sa.exc.IntegrityError:
                 session.rollback()
                 continuation_record = session.execute(stmt_chk).scalars().first()
-                if continuation_record and continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed"}:
+                if continuation_record and continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed", "paused"}:
                     return ContinuationResponse(
                         continuation_id=str(continuation_record.id),
                         debate_id=debate_id,
@@ -682,8 +673,6 @@ async def continue_debate_run(
                         created=False,
                     )
     else:
-        # If no X-Idempotency-Key header, we still create a continuation record for tracking
-        import uuid
         continuation_record = DebateContinuation(
             debate_id=debate_id,
             idempotency_key=str(uuid.uuid4()),
@@ -702,12 +691,14 @@ async def continue_debate_run(
             status_code=400
         )
         if continuation_record:
-            continuation_record.status = "failed"
-            continuation_record.failed_at = sa.func.now()
-            continuation_record.failure_code = getattr(exc, "code", "preflight_failed")
-            continuation_record.failure_detail_safe = str(exc.detail) if hasattr(exc, "detail") else str(exc)
-            session.add(continuation_record)
-            session.commit()
+            try:
+                transition_continuation_sync(
+                    session, continuation_record.id, ["requested"], "failed",
+                    failure_code=getattr(exc, "code", "preflight_failed"),
+                    failure_detail_safe=str(exc.detail) if hasattr(exc, "detail") else str(exc),
+                )
+            except Exception:
+                logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
         raise exc
 
     # 2. Preflight checks
@@ -715,12 +706,14 @@ async def continue_debate_run(
         check_continue_preflight(debate, current_user, session)
     except Exception as exc:
         if continuation_record:
-            continuation_record.status = "failed"
-            continuation_record.failed_at = sa.func.now()
-            continuation_record.failure_code = getattr(exc, "code", "preflight_failed")
-            continuation_record.failure_detail_safe = str(exc.detail) if hasattr(exc, "detail") else str(exc)
-            session.add(continuation_record)
-            session.commit()
+            try:
+                transition_continuation_sync(
+                    session, continuation_record.id, ["requested"], "failed",
+                    failure_code=getattr(exc, "code", "preflight_failed"),
+                    failure_detail_safe=str(exc.detail) if hasattr(exc, "detail") else str(exc),
+                )
+            except Exception:
+                logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
         raise exc
 
     # 3. Credit Reservation prior to state transition
@@ -746,20 +739,21 @@ async def continue_debate_run(
                 continuation_record.credit_reservation_id = "hosted_credit"
         except Exception as exc:
             if continuation_record:
-                continuation_record.status = "failed"
-                continuation_record.failed_at = sa.func.now()
-                continuation_record.failure_code = getattr(exc, "code", "hosted_credits.exhausted")
-                continuation_record.failure_detail_safe = str(exc)
-                session.add(continuation_record)
-                session.commit()
+                try:
+                    transition_continuation_sync(
+                        session, continuation_record.id, ["requested"], "failed",
+                        failure_code=getattr(exc, "code", "hosted_credits.exhausted"),
+                        failure_detail_safe=str(exc),
+                    )
+                except Exception:
+                    logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
             raise exc
 
     # Mark preflight passed
     if continuation_record:
-        continuation_record.status = "preflight_passed"
-        continuation_record.preflight_passed_at = sa.func.now()
-        session.add(continuation_record)
-        session.commit()
+        transition_continuation_sync(
+            session, continuation_record.id, ["requested"], "preflight_passed"
+        )
 
     # 4. Conditional atomic update
     stmt_upd = (
@@ -772,17 +766,18 @@ async def continue_debate_run(
     session.commit()
 
     if result.rowcount == 0:
-        # Revert/release reservation
         if credit_reserved:
             refund_hosted_credit(session, current_user.id)
             session.commit()
         if continuation_record:
-            continuation_record.status = "failed"
-            continuation_record.failed_at = sa.func.now()
-            continuation_record.failure_code = "debate.continue_conflict"
-            continuation_record.failure_detail_safe = "This run is no longer waiting for continuation."
-            session.add(continuation_record)
-            session.commit()
+            try:
+                transition_continuation_sync(
+                    session, continuation_record.id, ["preflight_passed"], "failed",
+                    failure_code="debate.continue_conflict",
+                    failure_detail_safe="This run is no longer waiting for continuation.",
+                )
+            except Exception:
+                logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
         raise ValidationError(
             message="This run is no longer waiting for continuation.",
             code="debate.continue_conflict",
@@ -813,17 +808,14 @@ async def continue_debate_run(
 
         # Mark continuation as dispatched
         if continuation_record:
-            continuation_record.status = "dispatched"
-            continuation_record.dispatched_at = sa.func.now()
-            session.add(continuation_record)
-            session.commit()
+            transition_continuation_sync(
+                session, continuation_record.id, ["preflight_passed"], "dispatched"
+            )
             
     except Exception as dispatch_exc:
-        # Failure safety: revert credit reservation and update status back to failed/previous
         if credit_reserved:
             refund_hosted_credit(session, current_user.id)
         
-        # Revert debate status back to perspectives_ready
         stmt_revert = (
             sa.update(Debate)
             .where(Debate.id == debate_id)
@@ -832,11 +824,14 @@ async def continue_debate_run(
         session.execute(stmt_revert)
         
         if continuation_record:
-            continuation_record.status = "failed"
-            continuation_record.failed_at = sa.func.now()
-            continuation_record.failure_code = "debate.dispatch_failed"
-            continuation_record.failure_detail_safe = str(dispatch_exc)
-            session.add(continuation_record)
+            try:
+                transition_continuation_sync(
+                    session, continuation_record.id, ["dispatched", "preflight_passed"], "failed",
+                    failure_code="debate.dispatch_failed",
+                    failure_detail_safe=str(dispatch_exc),
+                )
+            except Exception:
+                logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
             
         session.commit()
         raise dispatch_exc
@@ -891,6 +886,42 @@ async def get_debate_continuation(
     if not continuation or str(continuation.debate_id) != debate_id:
         raise NotFoundError(message=f"Continuation {continuation_id} not found", code="continuation.not_found")
         
+    return ContinuationResponse(
+        continuation_id=str(continuation.id),
+        debate_id=str(continuation.debate_id),
+        status=continuation.status,
+        idempotency_key=continuation.idempotency_key,
+        created=False,
+    )
+
+
+class ContinuationResolveRequest(BaseModel):
+    idempotency_key: str
+
+
+@router.post("/debates/{debate_id}/continuations/resolve", response_model=ContinuationResponse)
+async def resolve_continuation_by_key(
+    debate_id: str,
+    body: ContinuationResolveRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    debate = session.get(Debate, debate_id)
+    if not debate:
+        raise NotFoundError(message=f"Debate {debate_id} not found", code="debate.not_found")
+    debate = require_debate_mutation_access(debate, current_user, session)
+
+    stmt = select(DebateContinuation).where(
+        DebateContinuation.debate_id == debate_id,
+        DebateContinuation.idempotency_key == body.idempotency_key,
+    )
+    continuation = session.execute(stmt).scalars().first()
+    if not continuation:
+        raise NotFoundError(
+            message="No continuation found for this idempotency key",
+            code="continuation.not_found",
+        )
+
     return ContinuationResponse(
         continuation_id=str(continuation.id),
         debate_id=str(continuation.debate_id),

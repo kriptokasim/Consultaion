@@ -17,26 +17,30 @@ export type RunWorkspaceStatus =
   | "failed"
   | "error";
 
-/** Persisted continuation intent for page-refresh recovery */
 export interface PersistedContinuationIntent {
   debateId: string;
+  continuationId?: string;
   idempotencyKey: string;
-  /** ISO timestamp when this intent was persisted */
-  persistedAt: string;
-  /** Whether the continue POST was successfully dispatched (server acknowledged) */
-  dispatched: boolean;
+  target?: string;
+  createdAt: string;
+  updatedAt: string;
+  phase:
+    | "intent_created"
+    | "request_sent"
+    | "server_acknowledged"
+    | "tracking";
+  expiresAt: string;
 }
 
-const CONTINUATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const STORAGE_KEY_PREFIX = "continuation_intent";
+const CONTINUATION_TTL_MS = 24 * 60 * 60 * 1000;
+const STORAGE_KEY_PREFIX = "consultaion:continuation";
 
 function getStorageKey(debateId: string): string {
-  return `${STORAGE_KEY_PREFIX}_${debateId}`;
+  return `${STORAGE_KEY_PREFIX}:${debateId}`;
 }
 
 function isIntentExpired(intent: PersistedContinuationIntent): boolean {
-  const elapsed = Date.now() - new Date(intent.persistedAt).getTime();
-  return elapsed > CONTINUATION_TTL_MS;
+  return Date.now() > new Date(intent.expiresAt).getTime();
 }
 
 function persistIntent(debateId: string, intent: PersistedContinuationIntent): void {
@@ -44,7 +48,7 @@ function persistIntent(debateId: string, intent: PersistedContinuationIntent): v
   try {
     localStorage.setItem(getStorageKey(debateId), JSON.stringify(intent));
   } catch {
-    // localStorage full or blocked — non-critical
+    // non-critical
   }
 }
 
@@ -79,7 +83,6 @@ export interface UseRunWorkspaceResult {
   status: RunWorkspaceStatus;
   sseStatus: SSEStatus;
   error: string | null;
-  /** True when the POST was dispatched but the outcome is unknown (page refresh or network failure) */
   outcomeUnknown: boolean;
   isPollingFallback: boolean;
   continueRun: () => Promise<void>;
@@ -101,12 +104,12 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const isFetchingRef = useRef(false);
   const intentRef = useRef<PersistedContinuationIntent | null>(null);
 
-  // Determine if debate is in a terminal state
   const isTerminal = debate
     ? ["completed", "success", "completed_budget", "failed"].includes(debate.status)
     : false;
 
-  // 1. Load initial debate & timeline
+  const isPaused = debate?.status === "perspectives_ready";
+
   const fetchDebateAndTimeline = useCallback(async (id: string) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
@@ -119,7 +122,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       if (!timelineRes.ok) {
         throw new Error("Failed to fetch timeline");
       }
-      
+
       const timelineData: TimelineEvent[] = await timelineRes.json();
       setDebate(debateData);
       setEvents(timelineData);
@@ -132,7 +135,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     }
   }, []);
 
-  // Initial fetch when debateId changes
   useEffect(() => {
     if (debateId) {
       setIsLoading(true);
@@ -148,7 +150,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     }
   }, [debateId, fetchDebateAndTimeline]);
 
-  // 2. Stream Setup (SSE)
   const streamUrl = debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
 
   const handleStreamEvent = useCallback((lastEvent: any) => {
@@ -170,18 +171,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         return [...prev, newEvent];
       });
 
-      // Refetch debate details on key progress events to update workspace metrics
       const eventType = newEvent.type;
       if (
         [
-          "arena_response",
-          "message",
-          "seat_message",
-          "model_response",
-          "score",
-          "stage_checkpoint",
-          "final",
-          "debate_failed",
+          "arena_response", "message", "seat_message", "model_response",
+          "score", "stage_checkpoint", "final", "debate_failed",
         ].includes(eventType)
       ) {
         getDebate(debateId)
@@ -200,12 +194,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     onEvent: handleStreamEvent,
   });
 
-  // 3. Fallback Polling Loop
   const startPolling = useCallback((id: string) => {
     if (pollTimerRef.current) return;
     setIsPollingFallback(true);
-    console.log("[useRunWorkspace] Starting fallback polling for debate:", id);
-
     const tick = async () => {
       try {
         await fetchDebateAndTimeline(id);
@@ -213,7 +204,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         console.error("[useRunWorkspace] Polling fetch error:", err);
       }
     };
-
     pollTimerRef.current = setInterval(tick, 3000);
   }, [fetchDebateAndTimeline]);
 
@@ -225,13 +215,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     setIsPollingFallback(false);
   }, []);
 
-  // Monitor SSE Status & Terminal state to manage polling fallback
   useEffect(() => {
     if (!debateId || isTerminal) {
       stopPolling();
       return;
     }
-
     if (sseStatus === "closed" || sseStatus === "reconnecting") {
       startPolling(debateId);
     } else if (sseStatus === "connected") {
@@ -239,7 +227,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     }
   }, [sseStatus, debateId, isTerminal, startPolling, stopPolling]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (pollTimerRef.current) {
@@ -248,7 +235,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     };
   }, []);
 
-  // 4. Coordinated Workspace Actions
   const idempotencyKeyRef = useRef<string | null>(null);
 
   // Restore persisted intent on mount / debateId change
@@ -260,34 +246,28 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       intentRef.current = persisted;
       idempotencyKeyRef.current = persisted.idempotencyKey;
 
-      if (persisted.dispatched) {
-        // POST was sent but outcome is unknown (page refreshed mid-flight)
+      if (persisted.phase === "server_acknowledged" || persisted.phase === "tracking") {
+        setOutcomeUnknown(true);
+        setIsContinuing(true);
+      } else if (persisted.phase === "request_sent") {
         setOutcomeUnknown(true);
         setIsContinuing(true);
       } else {
-        // Intent was saved but POST was never dispatched (e.g. tab closed before send)
         setIsContinuing(true);
       }
     }
   }, [debateId]);
 
-  // Clear intent + outcomeUnknown when debate becomes terminal
+  // Clear intent ONLY on terminal or confirmed paused
   useEffect(() => {
-    if (isTerminal && debateId) {
-      clearIntent(debateId);
-      intentRef.current = null;
-      idempotencyKeyRef.current = null;
-      setIsContinuing(false);
-      setOutcomeUnknown(false);
-    }
-  }, [isTerminal, debateId]);
-
-  // Clear intent when debate transitions out of perspectives_ready
-  useEffect(() => {
-    if (debateId && debate && debate.status !== "perspectives_ready") {
-      const intent = intentRef.current;
-      if (intent && !intent.dispatched) {
-        // Only clear undelivered intents; dispatched intents stay until terminal
+    if (debateId) {
+      if (isTerminal) {
+        clearIntent(debateId);
+        intentRef.current = null;
+        idempotencyKeyRef.current = null;
+        setIsContinuing(false);
+        setOutcomeUnknown(false);
+      } else if (isPaused && intentRef.current?.phase === "tracking") {
         clearIntent(debateId);
         intentRef.current = null;
         idempotencyKeyRef.current = null;
@@ -295,7 +275,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         setOutcomeUnknown(false);
       }
     }
-  }, [debateId, debate]);
+  }, [isTerminal, isPaused, debateId]);
 
   const handleContinue = useCallback(async () => {
     if (!debateId) return;
@@ -304,46 +284,60 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setIsContinuing(true);
       setOutcomeUnknown(false);
 
-      // Reuse existing idempotency key if present, otherwise generate new one
       if (!idempotencyKeyRef.current) {
-        const key = crypto.randomUUID();
-        idempotencyKeyRef.current = key;
+        idempotencyKeyRef.current = crypto.randomUUID();
       }
 
-      // Persist intent BEFORE dispatch so page refresh can recover
+      const now = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + CONTINUATION_TTL_MS).toISOString();
+
+      // Phase: intent_created
       const intent: PersistedContinuationIntent = {
         debateId,
         idempotencyKey: idempotencyKeyRef.current,
-        persistedAt: new Date().toISOString(),
-        dispatched: false,
+        createdAt: now,
+        updatedAt: now,
+        phase: "intent_created",
+        expiresAt,
       };
       persistIntent(debateId, intent);
       intentRef.current = intent;
 
-      await continueDebate(debateId, idempotencyKeyRef.current);
+      // Phase: request_sent
+      const sentIntent: PersistedContinuationIntent = { ...intent, phase: "request_sent", updatedAt: new Date().toISOString() };
+      persistIntent(debateId, sentIntent);
+      intentRef.current = sentIntent;
 
-      // POST succeeded — mark dispatched so refresh shows "outcome unknown" not "retry"
-      const dispatchedIntent: PersistedContinuationIntent = {
-        ...intent,
-        dispatched: true,
-        persistedAt: new Date().toISOString(),
+      const response = await continueDebate(debateId, idempotencyKeyRef.current);
+
+      // Phase: server_acknowledged — store continuationId
+      const ackIntent: PersistedContinuationIntent = {
+        ...sentIntent,
+        phase: "server_acknowledged",
+        continuationId: response?.id,
+        updatedAt: new Date().toISOString(),
       };
-      persistIntent(debateId, dispatchedIntent);
-      intentRef.current = dispatchedIntent;
+      persistIntent(debateId, ackIntent);
+      intentRef.current = ackIntent;
 
       await fetchDebateAndTimeline(debateId);
 
-      // Server confirmed — clear intent
-      clearIntent(debateId);
-      intentRef.current = null;
-      idempotencyKeyRef.current = null;
-      setOutcomeUnknown(false);
+      // Phase: tracking — intent stays until terminal
+      const trackIntent: PersistedContinuationIntent = {
+        ...ackIntent,
+        phase: "tracking",
+        updatedAt: new Date().toISOString(),
+      };
+      persistIntent(debateId, trackIntent);
+      intentRef.current = trackIntent;
     } catch (err: any) {
       console.error("[useRunWorkspace] Continue failed:", err);
       setError(err?.message || "Failed to continue debate");
       setIsContinuing(false);
-      setOutcomeUnknown(false);
-      // Leave intent on disk so refresh can retry or show outcome unknown
+      // Keep outcomeUnknown if POST might have been accepted
+      if (intentRef.current?.phase === "request_sent") {
+        setOutcomeUnknown(true);
+      }
     }
   }, [debateId, fetchDebateAndTimeline]);
 
@@ -364,7 +358,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     await fetchDebateAndTimeline(debateId);
   }, [debateId, fetchDebateAndTimeline]);
 
-  // Derive unified UI status
   let status: RunWorkspaceStatus = "idle";
   if (isLoading) {
     status = "loading";

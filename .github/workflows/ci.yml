@@ -218,7 +218,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Verify Single Alembic Migration Head
-        run: bash scripts/check-alembic-heads.sh
+        run: bash ../../scripts/check-alembic-heads.sh
 
       - name: Run Alembic Migrations
         env:
@@ -229,7 +229,7 @@ jobs:
       - name: Check Schema Drift
         env:
           DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_test"
-        run: bash scripts/check-schema-drift.sh
+        run: bash ../../scripts/check-schema-drift.sh
 
       - name: Run integration tests on Postgres
         env:

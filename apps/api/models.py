@@ -544,9 +544,11 @@ class DebateContinuation(SQLModel, table=True):
     completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     failed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     cancelled_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    paused_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     failure_code: Optional[str] = Field(default=None, nullable=True)
     failure_detail_safe: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     credit_reservation_id: Optional[str] = Field(default=None, nullable=True)
+    retry_of_continuation_id: Optional[str] = Field(default=None, nullable=True, index=True)
 
 
 class DebateStageCheckpoint(SQLModel, table=True):

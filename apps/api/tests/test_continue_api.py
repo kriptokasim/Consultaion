@@ -104,7 +104,8 @@ def test_continue_idempotency_key(authenticated_client, db_session):
         assert response.json()["status"] == "dispatched"
         mock_dispatch.assert_not_called()
 
-    # If it is marked as failed, retry should be allowed
+    # If it is marked as failed, retry should reset the same record to requested
+    old_cont_id = continuation.id
     continuation.status = "failed"
     db_session.add(continuation)
     db_session.commit()
@@ -122,8 +123,10 @@ def test_continue_idempotency_key(authenticated_client, db_session):
         print("Idempotency retry response:", response.json())
         assert response.status_code == 200
         mock_dispatch.assert_called_once()
-        
+
+        # Verify the SAME continuation record was reset and dispatched
         db_session.refresh(continuation)
+        assert continuation.id == old_cont_id
         assert continuation.status == "dispatched"
 
 

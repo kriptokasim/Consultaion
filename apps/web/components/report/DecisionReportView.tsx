@@ -185,6 +185,11 @@ export function DecisionReportView({
   report: rawReport,
   rawSynthesis,
   className,
+  synthesisStatus,
+  synthesisError,
+  fallbackModel,
+  fallbackReason,
+  fallbackResponse,
 }: DecisionReportViewProps) {
   const isCorrupted = useMemo(() => {
     if (rawReport && !isRenderableDecisionReport(rawReport)) {
@@ -233,6 +238,11 @@ export function DecisionReportView({
       executiveSummary={activeReport.executive_summary}
       qualityMeta={activeReport.quality_meta}
       divergenceBreakdown={activeReport.divergence_breakdown || rawReport?.divergence_breakdown}
+      synthesisStatus={synthesisStatus}
+      synthesisError={synthesisError}
+      fallbackModel={fallbackModel}
+      fallbackReason={fallbackReason}
+      fallbackResponse={fallbackResponse}
       isCorrupted={isCorrupted}
       onExport={handleExport}
       className={className}

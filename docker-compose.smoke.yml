@@ -1,9 +1,36 @@
 version: "3.8"
 
-# Docker Compose for smoke tests — networked topology.
+# Docker Compose for smoke tests — production-like topology.
 # API is reachable from web via service name, not localhost.
+# Uses PostgreSQL instead of SQLite for realistic testing.
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: consultaion-smoke-postgres
+    environment:
+      POSTGRES_USER: consultaion
+      POSTGRES_PASSWORD: smoke_test_password
+      POSTGRES_DB: consultaion_smoke
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U consultaion -d consultaion_smoke"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - smoke-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: consultaion-smoke-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - smoke-net
+
   api:
     build:
       context: ../apps/api
@@ -13,19 +40,38 @@ services:
       - "8000:8000"
     environment:
       - ENV=production
-      - DATABASE_URL=sqlite:///./smoke_test.db
+      - DATABASE_URL=postgresql+asyncpg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
       - JWT_SECRET=smoke-test-secret-key-for-ci-only
       - WEB_APP_ORIGIN=http://localhost:3000
-      - REDIS_URL=
-      - RATE_LIMIT_BACKEND=memory
+      - REDIS_URL=redis://redis:6379/0
+      - RATE_LIMIT_BACKEND=redis
       - ENABLE_CSRF=false
       - STRIPE_WEBHOOK_VERIFY=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 15s
+      start_period: 20s
+    networks:
+      - smoke-net
+
+  migrate:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    container_name: consultaion-smoke-migrate
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
     networks:
       - smoke-net
 
@@ -44,7 +90,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 5s
       timeout: 5s
       retries: 10

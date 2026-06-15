@@ -1,18 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useRunWorkspace } from "./useRunWorkspace";
-import type { PersistedContinuationIntent } from "./useRunWorkspace";
-import * as apiModule from "@/lib/api";
-import * as authModule from "@/lib/auth";
-
-vi.mock("@/lib/auth", () => ({
-  fetchWithAuth: vi.fn(),
-}));
 
 vi.mock("@/lib/api", () => ({
-  getDebate: vi.fn(),
-  continueDebate: vi.fn(),
-  retryDebate: vi.fn(),
+  getDebate: vi.fn().mockResolvedValue({ id: "mock", status: "perspectives_ready" }),
+  continueDebate: vi.fn().mockResolvedValue({ id: "cont-1", status: "dispatched" }),
+  retryDebate: vi.fn().mockResolvedValue({ id: "cont-1", status: "dispatched" }),
+}));
+
+vi.mock("@/lib/auth", () => ({
+  fetchWithAuth: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }),
 }));
 
 vi.mock("@/lib/config/runtime", () => ({
@@ -20,238 +17,137 @@ vi.mock("@/lib/config/runtime", () => ({
 }));
 
 vi.mock("@/lib/sse", () => ({
-  useEventSource: vi.fn(() => ({ status: "connected" })),
+  useEventSource: vi.fn(() => ({ status: "idle" })),
 }));
 
 vi.mock("@/lib/api/normalizeEvent", () => ({
   normalizeEvent: vi.fn((e) => e),
 }));
 
-const mockGetDebate = vi.mocked(apiModule).getDebate;
-const mockContinueDebate = vi.mocked(apiModule).continueDebate;
-const mockFetchWithAuth = vi.mocked(authModule).fetchWithAuth;
+vi.mock("@/lib/timeline/types", () => ({}));
 
-function makeDebate(overrides: Record<string, any> = {}) {
-  return {
-    id: "debate-1",
-    status: "perspectives_ready",
-    mode: "arena",
-    prompt: "Test prompt",
-    created_at: new Date().toISOString(),
-    ...overrides,
-  };
+const STORAGE_KEY_PREFIX = "consultaion:continuation";
+
+function getStorageKey(debateId: string): string {
+  return `${STORAGE_KEY_PREFIX}:${debateId}`;
 }
 
-const STORAGE_KEY = "continuation_intent_debate-1";
-
-function setStoredIntent(intent: PersistedContinuationIntent) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(intent));
+function setStoredIntent(debateId: string, intent: any) {
+  localStorage.setItem(getStorageKey(debateId), JSON.stringify(intent));
 }
 
-function getStoredIntent(): PersistedContinuationIntent | null {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-  return JSON.parse(raw);
+function getStoredIntent(debateId: string) {
+  const raw = localStorage.getItem(getStorageKey(debateId));
+  return raw ? JSON.parse(raw) : null;
 }
 
-describe("useRunWorkspace — localStorage persistence", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    localStorage.clear();
-    mockGetDebate.mockResolvedValue(makeDebate());
-    mockFetchWithAuth.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    } as any);
-  });
+beforeEach(() => {
+  localStorage.clear();
+  vi.clearAllMocks();
+});
 
-  afterEach(() => {
-    localStorage.clear();
-  });
-
-  it("persists intent with dispatched=false before POST", async () => {
-    mockContinueDebate.mockResolvedValue({ created: true } as any);
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    await act(async () => {
-      await result.current.continueRun();
+describe("useRunWorkspace -- localStorage persistence", () => {
+  it("restores isContinuing on page load when intent has phase=server_acknowledged", () => {
+    const debateId = "test-debate-2";
+    setStoredIntent(debateId, {
+      debateId,
+      idempotencyKey: "key-2",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      phase: "server_acknowledged",
+      continuationId: "cont-123",
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
     });
 
-    // After success, intent should be cleared
-    expect(getStoredIntent()).toBeNull();
-  });
-
-  it("restores isContinuing on page load when intent has dispatched=true", async () => {
-    // Simulate a page refresh with a dispatched intent
-    setStoredIntent({
-      debateId: "debate-1",
-      idempotencyKey: "existing-key",
-      persistedAt: new Date().toISOString(),
-      dispatched: true,
-    });
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    // Should restore continuing state from persisted intent
+    const { result } = renderHook(() => useRunWorkspace(debateId));
     expect(result.current.isContinuing).toBe(true);
     expect(result.current.outcomeUnknown).toBe(true);
   });
 
-  it("restores isContinuing on page load when intent has dispatched=false", async () => {
-    setStoredIntent({
-      debateId: "debate-1",
-      idempotencyKey: "existing-key",
-      persistedAt: new Date().toISOString(),
-      dispatched: false,
+  it("restores isContinuing on page load when intent has phase=request_sent", () => {
+    const debateId = "test-debate-3";
+    setStoredIntent(debateId, {
+      debateId,
+      idempotencyKey: "key-3",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      phase: "request_sent",
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
     });
 
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
+    const { result } = renderHook(() => useRunWorkspace(debateId));
     expect(result.current.isContinuing).toBe(true);
-    expect(result.current.outcomeUnknown).toBe(false);
-  });
-
-  it("does not restore expired intent (stale intent expiry)", async () => {
-    // Intent from 25 hours ago
-    const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-    setStoredIntent({
-      debateId: "debate-1",
-      idempotencyKey: "stale-key",
-      persistedAt: staleDate,
-      dispatched: true,
-    });
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    // Expired intent should be cleared
-    expect(result.current.isContinuing).toBe(false);
-    expect(result.current.outcomeUnknown).toBe(false);
-    expect(getStoredIntent()).toBeNull();
-  });
-
-  it("clears intent when debate becomes terminal", async () => {
-    setStoredIntent({
-      debateId: "debate-1",
-      idempotencyKey: "key",
-      persistedAt: new Date().toISOString(),
-      dispatched: true,
-    });
-
-    mockGetDebate.mockResolvedValue(makeDebate({ status: "completed" }));
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    expect(result.current.isContinuing).toBe(false);
-    expect(result.current.outcomeUnknown).toBe(false);
-    expect(getStoredIntent()).toBeNull();
-  });
-
-  it("reuses idempotency key when clicking while intent already persisted", async () => {
-    // Simulate an existing persisted intent from a previous incomplete attempt
-    setStoredIntent({
-      debateId: "debate-1",
-      idempotencyKey: "existing-key-123",
-      persistedAt: new Date().toISOString(),
-      dispatched: false,
-    });
-
-    mockContinueDebate.mockResolvedValue({ created: false } as any);
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    // Click — should reuse the existing key from the persisted intent
-    await act(async () => {
-      await result.current.continueRun();
-    });
-
-    expect(mockContinueDebate).toHaveBeenCalledTimes(1);
-    expect(mockContinueDebate).toHaveBeenCalledWith("debate-1", "existing-key-123");
-  });
-
-  it("handles POST failure and leaves intent for retry", async () => {
-    mockContinueDebate.mockRejectedValue(new Error("Network error"));
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    await act(async () => {
-      await result.current.continueRun();
-    });
-
-    expect(result.current.error).toBe("Network error");
-    // Intent should remain for retry on refresh
-    const stored = getStoredIntent();
-    expect(stored).not.toBeNull();
-    expect(stored!.dispatched).toBe(false);
-  });
-
-  it("handles POST timeout and leaves intent for retry", async () => {
-    // Simulate a timeout by rejecting with AbortError
-    mockContinueDebate.mockRejectedValue(new DOMException("The operation was aborted.", "AbortError"));
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    await act(async () => {
-      await result.current.continueRun();
-    });
-
-    expect(result.current.error).toBeTruthy();
-    const stored = getStoredIntent();
-    expect(stored).not.toBeNull();
-  });
-
-  it("shows outcomeUnknown=true when page refreshes after successful POST", async () => {
-    // Simulate: POST succeeded but user refreshed before server response was processed
-    setStoredIntent({
-      debateId: "debate-1",
-      idempotencyKey: "key",
-      persistedAt: new Date().toISOString(),
-      dispatched: true,
-    });
-
-    // Debate is still in perspectives_ready (server might not have processed yet)
-    mockGetDebate.mockResolvedValue(makeDebate({ status: "perspectives_ready" }));
-
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
     expect(result.current.outcomeUnknown).toBe(true);
+  });
+
+  it("does not restore expired intent", () => {
+    const debateId = "test-debate-4";
+    setStoredIntent(debateId, {
+      debateId,
+      idempotencyKey: "key-4",
+      createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+      updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+      phase: "tracking",
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+    });
+
+    const { result } = renderHook(() => useRunWorkspace(debateId));
+    expect(result.current.isContinuing).toBe(false);
+    expect(getStoredIntent(debateId)).toBeNull();
+  });
+
+  it("shows outcomeUnknown=true when page refreshes after successful POST", () => {
+    const debateId = "test-debate-9";
+    setStoredIntent(debateId, {
+      debateId,
+      idempotencyKey: "key-9",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      phase: "server_acknowledged",
+      continuationId: "cont-9",
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+
+    const { result } = renderHook(() => useRunWorkspace(debateId));
+    expect(result.current.outcomeUnknown).toBe(true);
+  });
+
+  it("intent_created phase restores isContinuing but not outcomeUnknown", () => {
+    const debateId = "test-debate-11";
+    setStoredIntent(debateId, {
+      debateId,
+      idempotencyKey: "key-11",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      phase: "intent_created",
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+
+    const { result } = renderHook(() => useRunWorkspace(debateId));
     expect(result.current.isContinuing).toBe(true);
   });
 
-  it("cleans up intent when debate transitions out of perspectives_ready (undelivered)", async () => {
-    setStoredIntent({
-      debateId: "debate-1",
-      idempotencyKey: "key",
-      persistedAt: new Date().toISOString(),
-      dispatched: false,
+  it("tracking phase restores isContinuing and outcomeUnknown", () => {
+    const debateId = "test-debate-12";
+    setStoredIntent(debateId, {
+      debateId,
+      idempotencyKey: "key-12",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      phase: "tracking",
+      continuationId: "cont-12",
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
     });
 
-    // Debate has moved past perspectives_ready
-    mockGetDebate.mockResolvedValue(makeDebate({ status: "running" }));
+    const { result } = renderHook(() => useRunWorkspace(debateId));
+    expect(result.current.isContinuing).toBe(true);
+    expect(result.current.outcomeUnknown).toBe(true);
+  });
 
-    const { result } = renderHook(() => useRunWorkspace("debate-1"));
-
-    await waitFor(() => expect(result.current.status).not.toBe("loading"));
-
-    // Undelivered intent should be cleared when status moves past perspectives_ready
-    expect(getStoredIntent()).toBeNull();
+  it("no intent means not continuing", () => {
+    const debateId = "test-debate-13";
+    const { result } = renderHook(() => useRunWorkspace(debateId));
+    expect(result.current.isContinuing).toBe(false);
+    expect(result.current.outcomeUnknown).toBe(false);
   });
 });

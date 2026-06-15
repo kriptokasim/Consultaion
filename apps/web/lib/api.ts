@@ -129,6 +129,14 @@ export async function continueDebate(debateId: string, idempotencyKey?: string) 
   });
 }
 
+export async function resolveContinuationByKey(debateId: string, idempotencyKey: string) {
+  return apiRequest<{ continuation_id: string; debate_id: string; status: string; idempotency_key: string }>({
+    method: "POST",
+    path: `/debates/${debateId}/continuations/resolve`,
+    body: { idempotency_key: idempotencyKey },
+  });
+}
+
 export async function retryDebate(debateId: string, stageKey?: string) {
   return apiRequest<{ id: string; status: string; retried_stage?: string }>({
     method: "POST",

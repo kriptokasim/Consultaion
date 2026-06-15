@@ -46,7 +46,21 @@ def init_tracing() -> None:
             "service.version": settings.APP_VERSION,
         })
         provider = TracerProvider(resource=resource)
+
+        # Console exporter for development
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+
+        # OTLP exporter for production (configurable endpoint)
+        otlp_endpoint = getattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT", None)
+        if otlp_endpoint:
+            try:
+                from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+                otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+                provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+                logger.info("OTLP exporter configured: endpoint=%s", otlp_endpoint)
+            except ImportError:
+                logger.warning("OTLP exporter not installed; using console only")
+
         trace.set_tracer_provider(provider)
         _tracer = trace.get_tracer("consultaion-api")
         logger.info("OpenTelemetry tracing initialized (env=%s)", settings.APP_ENV)

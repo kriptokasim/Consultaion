@@ -6,15 +6,15 @@ light reads consume 1 unit. Per-user budget is enforced via Redis
 or in-memory backend.
 
 Features:
-- Authenticated identity resolution (user ID, API key fingerprint)
+- Authenticated identity resolution via dedicated module
+- SSE connection limits (separate budget, evaluated before general GET)
+- Read operation classification with per-class budgets
 - Atomic remaining budget reporting via X-RateLimit-Remaining
-- SSE connection limits (separate budget for streaming)
 - Proper rate limit headers on all responses
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import time
 from typing import Callable, Optional
@@ -32,6 +32,7 @@ from core.operation_classes import (
     get_operation_weight,
 )
 from ratelimit import get_rate_limiter_backend
+from middleware.rate_limit_identity import resolve_identity
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,6 @@ SSE_WINDOW_SECONDS: int = 60
 
 def _classify_endpoint(method: str, path: str) -> str:
     """Map request to an operation class action name."""
-    # Arena / Debate creation
     if method == "POST":
         if path.rstrip("/").endswith("/arena") or "/arena/" in path:
             return "create_arena"
@@ -60,7 +60,7 @@ def _classify_endpoint(method: str, path: str) -> str:
         if path.rstrip("/").endswith("/debates"):
             return "create_debate"
         if "checkout" in path:
-            return "create_debate"  # billing checkout is medium
+            return "create_debate"
         if "validate" in path or "provider-key" in path:
             return "validate_provider_key"
         if "export" in path:
@@ -68,8 +68,9 @@ def _classify_endpoint(method: str, path: str) -> str:
         if "retry" in path or "rerun" in path:
             return "retry_single_model"
 
-    # Reads
     if method == "GET":
+        if "/stream" in path:
+            return "sse_stream"
         if "/run" in path or "/debate" in path:
             if "report" in path:
                 return "read_report"
@@ -87,12 +88,18 @@ def _classify_endpoint(method: str, path: str) -> str:
         if "usage" in path:
             return "list_runs"
         if "health" in path:
-            return "list_runs"
+            return "health_check"
         if "ops-summary" in path:
             return "list_runs"
 
-    # Default: medium
     return "validate_provider_key"
+
+
+# Read operation classes that should be rate-limited
+READ_ACTIONS = {
+    "read_run", "read_report", "get_events", "list_runs",
+    "get_members", "search", "health_check",
+}
 
 
 def get_weighted_budget() -> int:
@@ -100,31 +107,6 @@ def get_weighted_budget() -> int:
     if settings.IS_LOCAL_ENV:
         return getattr(settings, "WEIGHTED_RL_BUDGET", DEV_WEIGHTED_BUDGET)
     return getattr(settings, "WEIGHTED_RL_BUDGET", PROD_WEIGHTED_BUDGET)
-
-
-def _resolve_identity(request: Request) -> str:
-    """Resolve authenticated user identity for rate limiting.
-
-    Priority:
-    1. Authenticated user ID from request.state
-    2. API key fingerprint (hashed, truncated)
-    3. Client IP address
-    """
-    # Check for authenticated user
-    user_id = getattr(request.state, "user_id", None)
-    if user_id:
-        return f"wl:user:{user_id}"
-
-    # Check for API key
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer ") and len(auth_header) > 20:
-        # Hash the API key to create a stable fingerprint
-        key_hash = hashlib.sha256(auth_header.encode()).hexdigest()[:16]
-        return f"wl:api_key:{key_hash}"
-
-    # Fall back to IP
-    ip = request.client.host if request.client else "unknown"
-    return f"wl:ip:{ip}"
 
 
 def _is_sse_request(path: str, method: str) -> bool:
@@ -141,22 +123,27 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
         self._window = window_seconds or WEIGHTED_WINDOW_SECONDS
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Skip rate limiting for safe methods on read-only endpoints
-        if request.method in ("GET", "HEAD", "OPTIONS"):
-            response = await call_next(request)
-            # Still add rate limit headers for reads
-            response.headers["X-RateLimit-Budget"] = str(self._budget)
-            response.headers["X-RateLimit-Window"] = str(self._window)
-            return response
+        # Resolve identity early (user ID > API key > IP)
+        key, identity_type = resolve_identity(request)
 
-        # Resolve identity (user ID > API key > IP)
-        key = _resolve_identity(request)
-
-        # Check for SSE-specific budget
+        # SSE: evaluate before general GET handling
         if _is_sse_request(request.url.path, request.method):
             return await self._enforce_sse_limit(request, call_next, key)
 
+        # Classify the endpoint
         action = _classify_endpoint(request.method, request.url.path)
+
+        # Health checks: exempt from weighted enforcement
+        if action == "health_check":
+            response = await call_next(request)
+            self._add_headers(response, key, action, 0, 0)
+            return response
+
+        # Read operations: apply lightweight enforcement
+        if action in READ_ACTIONS:
+            return await self._enforce_read_limit(request, call_next, key, action)
+
+        # Write operations: full weighted enforcement
         weight = get_operation_weight(action)
         op_class = get_operation_class(action)
 
@@ -187,20 +174,49 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
                         "retryable": True,
                     }
                 },
-                headers={
-                    "Retry-After": str(retry_after or self._window),
-                    "X-RateLimit-Budget": str(self._budget),
-                    "X-RateLimit-Cost": str(weight),
-                    "X-RateLimit-Action": action,
-                    "X-RateLimit-Window": str(self._window),
-                },
+                headers=self._build_headers(key, action, weight, retry_after),
             )
 
         response = await call_next(request)
-        response.headers["X-RateLimit-Budget"] = str(self._budget)
-        response.headers["X-RateLimit-Cost"] = str(weight)
-        response.headers["X-RateLimit-Action"] = action
-        response.headers["X-RateLimit-Window"] = str(self._window)
+        remaining = max(0, self._budget - weight)
+        self._add_headers(response, key, action, weight, remaining)
+        return response
+
+    async def _enforce_read_limit(
+        self, request: Request, call_next: Callable, key: str, action: str
+    ) -> Response:
+        """Enforce lightweight rate limiting on read operations."""
+        weight = get_operation_weight(action)
+        backend = get_rate_limiter_backend()
+        # Reads use a lighter budget within the same window
+        allowed, retry_after = backend.allow_weighted(key, self._window, self._budget, weight)
+
+        if not allowed:
+            logger.info("read_rate_limit.exceeded key=%s action=%s", key, action)
+            from observability.metrics import record_rate_limit_exceeded
+            record_rate_limit_exceeded("read", settings.RATE_LIMIT_BACKEND)
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "code": "rate_limit_exceeded",
+                        "message": "Too many read requests. Please slow down.",
+                        "details": {
+                            "action": action,
+                            "cost_units": weight,
+                            "budget": self._budget,
+                            "window_seconds": self._window,
+                        },
+                        "retry_after_seconds": retry_after or self._window,
+                        "retryable": True,
+                    }
+                },
+                headers=self._build_headers(key, action, weight, retry_after),
+            )
+
+        response = await call_next(request)
+        remaining = max(0, self._budget - weight)
+        self._add_headers(response, key, action, weight, remaining)
         return response
 
     async def _enforce_sse_limit(
@@ -231,6 +247,7 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
                 headers={
                     "Retry-After": str(retry_after or SSE_WINDOW_SECONDS),
                     "X-RateLimit-Budget": str(SSE_BUDGET),
+                    "X-RateLimit-Remaining": str(max(0, SSE_BUDGET - 1)),
                     "X-RateLimit-Cost": "1",
                     "X-RateLimit-Action": "sse_stream",
                     "X-RateLimit-Window": str(SSE_WINDOW_SECONDS),
@@ -238,3 +255,24 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
             )
 
         return await call_next(request)
+
+    def _add_headers(
+        self, response: Response, key: str, action: str, cost: int, remaining: int
+    ) -> None:
+        response.headers["X-RateLimit-Budget"] = str(self._budget)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Cost"] = str(cost)
+        response.headers["X-RateLimit-Action"] = action
+        response.headers["X-RateLimit-Window"] = str(self._window)
+
+    def _build_headers(
+        self, key: str, action: str, cost: int, retry_after: Optional[int]
+    ) -> dict:
+        return {
+            "Retry-After": str(retry_after or self._window),
+            "X-RateLimit-Budget": str(self._budget),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Cost": str(cost),
+            "X-RateLimit-Action": action,
+            "X-RateLimit-Window": str(self._window),
+        }
