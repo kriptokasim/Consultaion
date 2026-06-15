@@ -360,88 +360,11 @@ app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
-# Domain routers live in apps/api/routes/*
-from routes.debug import router as debug_router  # Patchset 53.0
-
-app.include_router(auth_router)
-app.include_router(ops_router)
-app.include_router(stats_router)
-app.include_router(models_router)
-app.include_router(debates_router)
-app.include_router(teams_router)
-app.include_router(admin_router)
-app.include_router(participation_router)
-app.include_router(arena_router)
-app.include_router(voting_router)
-app.include_router(redteam_router)
-app.include_router(oracle_router)
-app.include_router(challenge_router)
-app.include_router(public_stats_router)
-
-
-# Patchset 53.0: Debug routes (only registered in safe environments)
-if settings.IS_LOCAL_ENV or settings.AUTH_DEBUG:
-    app.include_router(debug_router)
-
-# Import and add routing admin router
-from routes.routing_admin import router as routing_admin_router
-
-app.include_router(routing_admin_router)
-
-app.include_router(billing_router)
-app.include_router(promotions_router)
-app.include_router(api_keys_router)
-
-from routes.provider_keys import router as provider_keys_router
-app.include_router(provider_keys_router)
-
-from routes.audit_logs import router as audit_logs_router
-app.include_router(audit_logs_router)
-
-from routes.features import router as features_router
-from routes.gifs import router as gifs_router
-from gdpr.routes import gdpr_router
-
-app.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
-app.include_router(features_router)
-app.include_router(gdpr_router)
-
-# Patchset 77: Conversation V2 voting API
-from routes.votes import router as votes_router
-app.include_router(votes_router)
-
-# Phase 4: API Versioning Strategy - Mount API v1 namespace router
-from fastapi import APIRouter
+# Register all domain routers canonically via the central router registry
 from fastapi.responses import PlainTextResponse
+from core.router_registry import register_routers
+register_routers(app, settings)
 
-v1_router = APIRouter(prefix="/api/v1")
-v1_router.include_router(auth_router)
-v1_router.include_router(ops_router)
-v1_router.include_router(stats_router)
-v1_router.include_router(models_router)
-v1_router.include_router(debates_router)
-v1_router.include_router(teams_router)
-v1_router.include_router(admin_router)
-if settings.IS_LOCAL_ENV or settings.AUTH_DEBUG:
-    v1_router.include_router(debug_router)
-v1_router.include_router(routing_admin_router)
-v1_router.include_router(billing_router)
-v1_router.include_router(promotions_router)
-v1_router.include_router(api_keys_router)
-v1_router.include_router(provider_keys_router)
-v1_router.include_router(audit_logs_router)
-v1_router.include_router(gifs_router, prefix="/gifs", tags=["gifs"])
-v1_router.include_router(features_router)
-v1_router.include_router(votes_router)
-v1_router.include_router(gdpr_router)
-v1_router.include_router(arena_router)
-v1_router.include_router(participation_router)
-v1_router.include_router(voting_router)
-v1_router.include_router(redteam_router)
-v1_router.include_router(oracle_router)
-v1_router.include_router(challenge_router)
-
-app.include_router(v1_router)
 
 
 # ── OT-5: Prometheus Metrics Endpoint ────────────────────────────────────

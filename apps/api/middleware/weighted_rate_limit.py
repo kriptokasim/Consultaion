@@ -114,7 +114,7 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
         op_class = get_operation_class(action)
 
         backend = get_rate_limiter_backend()
-        allowed, retry_after = backend.allow(key, self._window, self._budget)
+        allowed, retry_after = backend.allow_weighted(key, self._window, self._budget, weight)
 
         if not allowed:
             logger.info(
@@ -140,11 +140,6 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
                 },
                 headers={"Retry-After": str(retry_after or self._window)},
             )
-
-        # Deduct cost units from the budget
-        allowed_after_deduct, retry_after_deduct = backend.allow(
-            f"{key}:cost", self._window, max(0, self._budget - weight)
-        )
 
         response = await call_next(request)
         response.headers["X-RateLimit-Budget"] = str(self._budget)

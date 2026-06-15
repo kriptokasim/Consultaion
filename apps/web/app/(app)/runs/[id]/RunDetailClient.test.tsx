@@ -1,20 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import React from "react";
 import RunDetailClient from "./RunDetailClient";
-import { useDebate } from "@/lib/api/hooks/useDebate";
-import { fetchWithAuth } from "@/lib/auth";
+import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "test-run-id" }),
+  useRouter: () => ({
+    push: vi.fn(),
+  }),
 }));
 
-vi.mock("@/lib/api/hooks/useDebate", () => ({
-  useDebate: vi.fn(),
+vi.mock("@/hooks/useRunWorkspace", () => ({
+  useRunWorkspace: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
-  fetchWithAuth: vi.fn(),
+  fetchWithAuth: vi.fn(() => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ email: "test@example.com" }),
+  })),
+}));
+
+vi.mock("@/components/ui/toast", () => ({
+  useToast: () => ({
+    toast: vi.fn(),
+  }),
 }));
 
 vi.mock("@/components/debate/DebateArena", () => ({
@@ -25,11 +36,12 @@ vi.mock("@/components/arena/ArenaRunView", () => ({
   default: () => <div data-testid="arena-run-view" />,
 }));
 
-vi.mock("@/lib/sse", () => ({
-  useEventSource: () => ({
-    lastEvent: null,
-    status: "connected",
-  }),
+vi.mock("@/components/workspace", () => ({
+  WorkspaceHeader: () => <div data-testid="workspace-header" />,
+  DesktopStageRail: () => <div data-testid="desktop-stage-rail" />,
+  MobileStageBar: () => <div data-testid="mobile-stage-bar" />,
+  PerspectivesGrid: () => <div data-testid="perspectives-grid" />,
+  PerspectivesReadyAction: () => <div data-testid="perspectives-ready-action" />,
 }));
 
 describe("RunDetailClient Hydration", () => {
@@ -37,76 +49,62 @@ describe("RunDetailClient Hydration", () => {
     vi.clearAllMocks();
   });
 
-  it("hydrates from /timeline on mount", async () => {
-    const mockRefetch = vi.fn();
-    (useDebate as any).mockReturnValue({
-      data: { id: "test-run-id", status: "running", mode: "arena", created_at: new Date().toISOString() },
-      isLoading: false,
+  it("renders loading skeleton when workspace status is loading", async () => {
+    (useRunWorkspace as any).mockReturnValue({
+      debate: null,
+      events: [],
+      status: "loading",
+      sseStatus: "connected",
       error: null,
-      refetch: mockRefetch,
+      continueRun: vi.fn(),
+      isContinuing: false,
+      refetch: vi.fn(),
     });
 
-    const mockTimelineEvents = [
-      { id: "e1", type: "arena_started", ts: new Date().toISOString() }
-    ];
-
-    (fetchWithAuth as any).mockImplementation((url: string) => {
-      if (url.includes("/me")) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ email: "test@example.com" }) });
-      }
-      if (url.includes("/timeline")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockTimelineEvents),
-        });
-      }
-      return Promise.resolve({ ok: false });
-    });
-
-    render(<RunDetailClient />);
-
-    await waitFor(() => {
-      expect(fetchWithAuth).toHaveBeenCalledWith("/debates/test-run-id/timeline");
-    });
+    const { container } = render(<RunDetailClient />);
+    // Verify skeleton card divs exist
+    expect(container.getElementsByClassName("animate-pulse").length).toBeGreaterThan(0);
   });
 
-  it("falls back to /events if /timeline fails", async () => {
-    const mockRefetch = vi.fn();
-    (useDebate as any).mockReturnValue({
-      data: { id: "test-run-id", status: "running", mode: "arena", created_at: new Date().toISOString() },
-      isLoading: false,
-      error: null,
-      refetch: mockRefetch,
-    });
-
-    const mockFallbackEvents = [
-      { id: "e1", type: "arena_response", ts: new Date().toISOString(), payload: { text: "hello" } }
-    ];
-
-    (fetchWithAuth as any).mockImplementation((url: string) => {
-      if (url.includes("/me")) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ email: "test@example.com" }) });
-      }
-      if (url.includes("/timeline")) {
-        return Promise.resolve({
-          ok: false,
-          status: 500,
-        });
-      }
-      if (url.includes("/events")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ items: mockFallbackEvents }),
-        });
-      }
-      return Promise.resolve({ ok: false });
+  it("renders error alert when workspace status has error", async () => {
+    (useRunWorkspace as any).mockReturnValue({
+      debate: null,
+      events: [],
+      status: "error",
+      sseStatus: "connected",
+      error: "Test error description",
+      continueRun: vi.fn(),
+      isContinuing: false,
+      refetch: vi.fn(),
     });
 
     render(<RunDetailClient />);
+    expect(screen.getByText("Error loading debate")).toBeInTheDocument();
+    expect(screen.getByText("Test error description")).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(fetchWithAuth).toHaveBeenCalledWith("/debates/test-run-id/timeline");
-      expect(fetchWithAuth).toHaveBeenCalledWith("/debates/test-run-id/events");
+  it("renders running workspace view when debate is active", async () => {
+    (useRunWorkspace as any).mockReturnValue({
+      debate: {
+        id: "test-run-id",
+        status: "running",
+        mode: "arena",
+        prompt: "Should we use Kafka?",
+        created_at: new Date().toISOString(),
+      },
+      events: [
+        { id: "e1", type: "arena_started", ts: new Date().toISOString() }
+      ],
+      status: "streaming",
+      sseStatus: "connected",
+      error: null,
+      continueRun: vi.fn(),
+      isContinuing: false,
+      refetch: vi.fn(),
     });
+
+    render(<RunDetailClient />);
+    expect(screen.getByTestId("workspace-header")).toBeInTheDocument();
+    expect(screen.getByTestId("desktop-stage-rail")).toBeInTheDocument();
   });
 });

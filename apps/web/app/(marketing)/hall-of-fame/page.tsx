@@ -70,7 +70,7 @@ export default async function HallOfFamePage({
 
   return (
     <main id="main" className="space-y-8 p-6">
-      <header className="space-y-3 rounded-3xl border border-amber-100/70 bg-gradient-to-r from-white via-amber-50 to-stone-50 p-5 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/80 dark:to-slate-900 dark:shadow-none">
+      <header className="space-y-3 rounded-3xl border border-amber-100/70 bg-gradient-to-r from-white via-amber-50 to-stone-50 p-5 shadow-[0_18px_36px_#70491c1f] dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/80 dark:to-slate-900 dark:shadow-none">
         <div className="flex items-center gap-3">
           <Brand height={40} className="drop-shadow-sm" />
           <div>

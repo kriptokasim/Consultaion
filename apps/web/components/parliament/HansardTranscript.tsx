@@ -131,7 +131,7 @@ export default function HansardTranscript({
   return (
     <section
       id="transcript"
-      className="rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_10px_30px_rgba(120,113,108,0.08)] dark:border-border dark:bg-card"
+      className="rounded-3xl border border-stone-200 bg-white p-6 shadow-[0_10px_30px_#78716c14] dark:border-border dark:bg-card"
     >
       <header className="flex flex-col gap-4 border-b border-stone-100 pb-6 md:flex-row md:items-center md:justify-between">
         <div>

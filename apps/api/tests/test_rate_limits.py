@@ -209,6 +209,17 @@ def test_redis_backend_tracks_recent_events(monkeypatch):
         def ping(self):
             return True
 
+        def ttl(self, _key: str):
+            return 60
+
+        def eval(self, _script: str, _numkeys: int, key: str, window: int, max_requests: int, weight: int):
+            current = self.counters.get(key, 0)
+            if current + int(weight) <= int(max_requests):
+                self.counters[key] = current + int(weight)
+                return [1, 0]
+            else:
+                return [0, int(window)]
+
     fake_client = FakeRedisClient()
 
     class FakeRedisFactory:
@@ -220,9 +231,12 @@ def test_redis_backend_tracks_recent_events(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://test")
     import config as config_module  # noqa: WPS433
 
-    importlib.reload(config_module)
+    config_module.settings.reload()
     importlib.reload(ratelimit_module)
     ratelimit_module.redis = SimpleNamespace(Redis=FakeRedisFactory)
+    # Also reload redis_pool or monkeypatch get_sync_redis_client to return fake_client
+    import redis_pool
+    monkeypatch.setattr(redis_pool, "get_sync_redis_client", lambda: fake_client)
     ratelimit_module.reset_rate_limiter_backend_for_tests()
 
     backend = ratelimit_module.get_rate_limiter_backend()
@@ -233,6 +247,14 @@ def test_redis_backend_tracks_recent_events(monkeypatch):
     backend.record_429("ip-1", "/debates")
     events = backend.recent_429()
     assert events and events[-1]["path"] == "/debates"
+
+    # Test allow_weighted
+    allowed_w1, _ = backend.allow_weighted("ip-w", 60, 10, 8)
+    assert allowed_w1
+    allowed_w2, retry_after_w = backend.allow_weighted("ip-w", 60, 10, 3)
+    assert not allowed_w2
+    assert retry_after_w == 60
+
 
 
 def test_increment_ip_bucket_composite():
@@ -252,4 +274,26 @@ def test_increment_ip_bucket_composite():
     # User B on the same IP still has access (isolation works!)
     allowed, _ = ratelimit_module.increment_ip_bucket(ip, 60, 1, user_id=user_b)
     assert allowed
+
+
+def test_allow_weighted_memory():
+    # Make sure we use the memory backend
+    ratelimit_module.reset_rate_limiter_backend_for_tests()
+    backend = ratelimit_module.get_rate_limiter_backend()
+    assert isinstance(backend, ratelimit_module.MemoryRateLimiterBackend)
+
+    # Allow a budget of 10
+    # Request 1: cost 8 -> allowed
+    allowed1, _ = backend.allow_weighted("user-1", 60, 10, 8)
+    assert allowed1
+
+    # Request 2: cost 3 -> blocked (8 + 3 = 11 > 10)
+    allowed2, retry_after = backend.allow_weighted("user-1", 60, 10, 3)
+    assert not allowed2
+    assert retry_after is not None and retry_after > 0
+
+    # Request 3: cost 2 -> allowed (8 + 2 = 10 <= 10)
+    allowed3, _ = backend.allow_weighted("user-1", 60, 10, 2)
+    assert allowed3
+
 

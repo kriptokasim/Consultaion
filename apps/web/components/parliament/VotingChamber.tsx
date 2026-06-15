@@ -96,7 +96,7 @@ export default function VotingChamber({
 
   return (
     <section
-      className="space-y-8 rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-50 via-white to-amber-50 p-6 shadow-[0_35px_65px_rgba(120,113,108,0.15)] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900"
+      className="space-y-8 rounded-3xl border border-stone-200 bg-gradient-to-br from-stone-50 via-white to-amber-50 p-6 shadow-[0_35px_65px_#78716c26] dark:border-slate-700 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900"
       role="region"
       aria-label="Voting Chamber"
       aria-live="polite"

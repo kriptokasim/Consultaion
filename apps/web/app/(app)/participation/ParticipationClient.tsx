@@ -151,7 +151,7 @@ export default function ParticipationClient({ profile }: { profile: UserProfile 
     return (
       <div className="space-y-8 p-4">
         {/* Header Banner */}
-        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 md:p-8 shadow-[0_20px_45px_rgba(120,113,108,0.12)] dark:border-border dark:from-stone-900 dark:via-card dark:to-stone-900">
+        <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 md:p-8 shadow-[0_20px_45px_#78716c1f] dark:border-border dark:from-stone-900 dark:via-card dark:to-stone-900">
           <div className="relative z-10">
             <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400">
               {t("participation.hero.kicker")}
@@ -188,7 +188,7 @@ export default function ParticipationClient({ profile }: { profile: UserProfile 
   return (
     <div className="space-y-8 p-4">
       {/* Header Banner */}
-      <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 md:p-8 shadow-[0_20px_45px_rgba(120,113,108,0.12)] dark:border-border dark:from-stone-900 dark:via-card dark:to-stone-900">
+      <header className="relative overflow-hidden rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 md:p-8 shadow-[0_20px_45px_#78716c1f] dark:border-border dark:from-stone-900 dark:via-card dark:to-stone-900">
         <div className="relative z-10">
           <p className="text-xs font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400">
             {t("participation.hero.kicker")}

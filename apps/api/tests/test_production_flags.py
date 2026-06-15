@@ -14,6 +14,8 @@ def test_production_config_validation_rules():
     with override_env({
         "ENV": "production",
         "USE_MOCK": "True",
+        "FAST_DEBATE": "False",
+        "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "REQUIRE_REAL_LLM": "True",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
@@ -28,6 +30,8 @@ def test_production_config_validation_rules():
         "ENV": "production",
         "REQUIRE_REAL_LLM": "False",
         "USE_MOCK": "False",
+        "FAST_DEBATE": "False",
+        "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
@@ -42,6 +46,8 @@ def test_production_config_validation_rules():
         "ENABLE_SEC_HEADERS": "False",
         "REQUIRE_REAL_LLM": "True",
         "USE_MOCK": "False",
+        "FAST_DEBATE": "False",
+        "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
@@ -56,6 +62,8 @@ def test_production_config_validation_rules():
         "ENABLE_CSRF": "False",
         "REQUIRE_REAL_LLM": "True",
         "USE_MOCK": "False",
+        "FAST_DEBATE": "False",
+        "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
@@ -65,29 +73,21 @@ def test_production_config_validation_rules():
             AppSettings()
 
 
-def test_fast_debate_warning_in_production(caplog):
+def test_fast_debate_warning_in_production():
     """
     Assert that having FAST_DEBATE set in production/staging environments
-    logs a warning, ensuring developers don't inadvertently run speed shortcuts in prod.
+    raises a validation error, preventing developers from running speed shortcuts in prod.
     """
-    with caplog.at_level(logging.WARNING):
-        # We can simulate the check. In config.py model_post_init or in our test,
-        # let's write the check. If FAST_DEBATE is True, it's a mock speed shortcut.
-        with override_env({
-            "ENV": "production",
-            "FAST_DEBATE": "True",
-            "REQUIRE_REAL_LLM": "True",
-            "USE_MOCK": "False",
-            "JWT_SECRET": "secure_production_secret_32_characters_long_123",
-            "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
-            "REDIS_URL": "redis://localhost:6379",
-            "OPENAI_API_KEY": "sk-dummykey"
-        }):
-            try:
-                config = AppSettings()
-                if config.FAST_DEBATE:
-                    logging.warning("WARNING: FAST_DEBATE=True is enabled in non-development environment! This runs mock-speed debate shortcuts.")
-            except Exception:
-                pass
-
-        assert any("FAST_DEBATE=True is enabled" in record.message for record in caplog.records)
+    with override_env({
+        "ENV": "production",
+        "FAST_DEBATE": "True",
+        "REQUIRE_REAL_LLM": "True",
+        "USE_MOCK": "False",
+        "JWT_SECRET": "secure_production_secret_32_characters_long_123",
+        "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
+        "REDIS_URL": "redis://localhost:6379",
+        "OPENAI_API_KEY": "sk-dummykey"
+    }):
+        with pytest.raises(ValidationError) as exc:
+            AppSettings()
+        assert "FAST_DEBATE=True is not allowed in staging or production" in str(exc.value)

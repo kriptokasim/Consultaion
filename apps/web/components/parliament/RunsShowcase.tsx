@@ -35,7 +35,7 @@ export default function RunsShowcase({ runs }: RunsShowcaseProps) {
         return (
           <article
             key={run.id}
-            className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/50 p-5 shadow-[0_18px_40px_rgba(112,73,28,0.12)] transition duration-200 hover:-translate-y-[3px] hover:shadow-[0_26px_50px_rgba(112,73,28,0.18)] dark:border-amber-900/50 dark:from-stone-900 dark:via-stone-900 dark:to-amber-900/20"
+            className="group relative overflow-hidden rounded-2xl border border-amber-200/70 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/50 p-5 shadow-[0_18px_40px_#70491c1f] transition duration-200 hover:-translate-y-[3px] hover:shadow-[0_26px_50px_#70491c2e] dark:border-amber-900/50 dark:from-stone-900 dark:via-stone-900 dark:to-amber-900/20"
             style={{ transitionDelay: `${Math.min(idx, 4) * 40}ms` }}
           >
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-amber-100/20 via-transparent to-amber-50/10 opacity-0 transition duration-300 group-hover:opacity-100 dark:from-amber-900/10 dark:to-amber-900/5" />

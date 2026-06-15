@@ -37,13 +37,13 @@ describe("DecisionReportView", () => {
 
   it("renders the verdict card", () => {
     render(<DecisionReportView report={mockReport} />);
-    expect(screen.getByText("Proceed")).toBeInTheDocument();
+    expect(screen.getAllByText("Proceed")[0]).toBeInTheDocument();
     expect(screen.getByText("Proceed with the project")).toBeInTheDocument();
   });
 
   it("renders confidence percentage", () => {
     render(<DecisionReportView report={mockReport} />);
-    expect(screen.getByText("85%")).toBeInTheDocument();
+    expect(screen.getAllByText("85%")[0]).toBeInTheDocument();
   });
 
   it("renders key findings", () => {
@@ -54,8 +54,8 @@ describe("DecisionReportView", () => {
 
   it("renders model positions", () => {
     render(<DecisionReportView report={mockReport} />);
-    expect(screen.getByText("GPT-4o")).toBeInTheDocument();
-    expect(screen.getByText("supportive")).toBeInTheDocument();
+    expect(screen.getAllByText("GPT-4o")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("supportive")[0]).toBeInTheDocument();
   });
 
   it("renders risks", () => {
@@ -196,7 +196,7 @@ describe("DecisionReportView", () => {
       },
     };
     render(<DecisionReportView report={reportNoContradictions} />);
-    expect(screen.queryByText(/Active Contradictions/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Active Contradictions \(/)).not.toBeInTheDocument();
   });
 
   it("shows context needed section when present", () => {

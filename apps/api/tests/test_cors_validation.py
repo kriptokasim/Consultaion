@@ -17,6 +17,8 @@ def test_cors_validation_prod_disallows_wildcard(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379") 
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test") # Required when verify=True (default)
     monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
@@ -32,6 +34,8 @@ def test_cors_validation_prod_allows_valid_origins(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
     monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     

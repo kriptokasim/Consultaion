@@ -89,7 +89,7 @@ async def run_with_checkpoint(
         result = await run_fn()
 
         output_ref = None
-        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], str) and stage_key in {"synthesis", "verification"}:
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], str) and stage_key in {"synthesis", "verification", "synthesis_draft"}:
             actual_result, output_ref = result
         else:
             actual_result = result

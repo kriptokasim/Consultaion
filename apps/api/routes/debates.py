@@ -682,6 +682,21 @@ async def continue_debate_run(
         session.add(continuation_record)
         session.commit()
 
+    if debate.status not in {"perspectives_ready", "failed"}:
+        exc = ValidationError(
+            message="Debate is not paused or ready for continuation",
+            code="debate.not_paused",
+            status_code=400
+        )
+        if continuation_record:
+            continuation_record.status = "failed"
+            continuation_record.failed_at = sa.func.now()
+            continuation_record.failure_code = getattr(exc, "code", "preflight_failed")
+            continuation_record.failure_detail_safe = str(exc.detail) if hasattr(exc, "detail") else str(exc)
+            session.add(continuation_record)
+            session.commit()
+        raise exc
+
     # 2. Preflight checks
     try:
         check_continue_preflight(debate, current_user, session)

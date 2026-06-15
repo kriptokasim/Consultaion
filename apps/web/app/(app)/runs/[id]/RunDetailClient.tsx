@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,6 +15,10 @@ import { API_ORIGIN } from "@/lib/config/runtime";
 import { normalizeEvent } from "@/lib/api/normalizeEvent";
 import { PipelineProgress, derivePipelineStage } from "@/components/arena/PipelineProgress";
 import type { DebateEvent, ScoreItem, Member, JudgeVoteFlow, VotePayload } from "@/lib/api/types";
+import { WorkspaceHeader, DesktopStageRail, MobileStageBar, PerspectivesGrid, PerspectivesReadyAction } from "@/components/workspace";
+import { deriveWorkspaceStage } from "@/lib/workspace/deriveWorkspaceStage";
+import type { WorkspaceModelSlot } from "@/lib/workspace/types";
+import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
 
 // Lazy-load heavy view components
 const DebateArena = dynamic(() => import("@/components/debate/DebateArena"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
@@ -33,7 +37,9 @@ const POLL_INTERVAL_MS = 4000;
 
 export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   const params = useParams();
+  const router = useRouter();
   const id = runId || (params?.id as string);
+  const [showMobileDetails, setShowMobileDetails] = useState(false);
   const {
     debate,
     events,
@@ -44,6 +50,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     continueRun,
     retryRun,
     refetch,
+    isContinuing,
   } = useRunWorkspace(id);
 
   // --- Results data for completed debates (ParliamentRunView) ---
@@ -82,12 +89,10 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
       });
   }, [id]);
 
-  const [isContinuing, setIsContinuing] = useState(false);
   const { pushToast } = useToast();
 
   const handleContinue = useCallback(async () => {
     if (!id || isContinuing) return;
-    setIsContinuing(true);
     try {
       await continueRun();
     } catch (err) {
@@ -97,8 +102,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
         description: "Error resuming the decision pipeline. Please try again.",
         variant: "error",
       });
-    } finally {
-      setIsContinuing(false);
     }
   }, [id, isContinuing, continueRun, pushToast]);
 
@@ -227,6 +230,42 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     }
     return events.filter((e) => e.type === "score").length;
   }, [debate?.scores_received, events]);
+
+  const eventTypes = useMemo(() => new Set(events.map((e: any) => e.type)), [events]);
+
+  const currentWorkspaceStage = useMemo(() => {
+    return deriveWorkspaceStage(debate, eventTypes, liveResponseCount);
+  }, [debate, eventTypes, liveResponseCount]);
+
+  const modelSlots = useMemo<WorkspaceModelSlot[]>(() => {
+    const modelsList = debate?.final_meta?.models || (debate?.config as any)?.models || [];
+    return modelsList.map((model: any) => {
+      const modelId = typeof model === "string" ? model : model.model_id;
+      const matchingDetail = AVAILABLE_MODELS.find((m) => m.id === modelId);
+      const displayName = typeof model === "object" ? model.display_name : (matchingDetail?.name || modelId);
+      const provider = typeof model === "object" ? model.provider : (matchingDetail?.providerKey || "AI");
+      const logoUrl = typeof model === "object" ? model.logo_url : undefined;
+
+      const respEvent = events.find((e: any) => {
+        const payload = e.payload || e;
+        return e.type === "arena_response" && (payload.model_id === modelId || payload.display_name === displayName);
+      });
+
+      const payload = (respEvent?.payload || respEvent) as any;
+      const state = respEvent
+        ? (payload.success === false ? "failed" : "complete")
+        : (currentWorkspaceStage === "collecting_perspectives" ? "streaming" : "queued");
+
+      return {
+        model_id: modelId,
+        display_name: displayName,
+        provider: provider,
+        logo_url: logoUrl,
+        state: state as any,
+        content: payload?.content || payload?.text || undefined,
+      };
+    });
+  }, [debate, events, currentWorkspaceStage]);
 
   if (isLoading) {
     return (
@@ -410,65 +449,63 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   if (debate?.mode === "arena" && !isCompleted) {
     return (
       <div className="container max-w-[1400px] py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Arena Run</h1>
-            <p className="text-sm text-stone-500 dark:text-stone-400 truncate max-w-md">{debate?.prompt}</p>
-          </div>
-          <Button variant="outline" size="sm" asChild>
-            <a href="/live">
-              New Run
-            </a>
-          </Button>
-        </div>
-
-        <PipelineProgress
-          currentStage={pipelineStage}
-          elapsedSeconds={elapsedSeconds}
-          responsesReceived={responsesReceived}
-          modelsExpected={modelsExpected}
-          scoresReceived={scoresReceived}
-          variant="compact"
+        <WorkspaceHeader
+          stage={currentWorkspaceStage}
+          prompt={debate?.prompt}
+          mode="arena"
+          modelCount={modelsExpected}
+          onBack={() => router.push("/live")}
         />
 
-        {debate.status === "perspectives_ready" && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-6 dark:border-amber-900/50 dark:bg-amber-950/20 shadow-md space-y-4 animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="space-y-1">
-                <h3 className="text-base font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
-                  <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-                  Perspectives Collected
-                </h3>
-                <p className="text-sm text-stone-600 dark:text-stone-300">
-                  Multiple viewpoints have been generated. Review the model responses below and trigger the consensus engine to score disagreements and produce the final decision report.
-                </p>
-              </div>
-              <Button
-                onClick={handleContinue}
-                disabled={isContinuing}
-                className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 font-semibold px-6 py-2.5 shadow-sm transition-all rounded-xl shrink-0"
-              >
-                {isContinuing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Continuing...
-                  </>
-                ) : (
-                  "Generate Decision Report"
-                )}
-              </Button>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar for Progress on Desktop */}
+          <div className="hidden lg:block lg:col-span-1">
+            <DesktopStageRail
+              currentStage={currentWorkspaceStage}
+              elapsedSeconds={elapsedSeconds}
+            />
+          </div>
+
+          {/* Main workspace area */}
+          <div className="col-span-1 lg:col-span-3 space-y-6">
+            {/* Mobile progress bar */}
+            <div className="block lg:hidden">
+              <MobileStageBar
+                currentStage={currentWorkspaceStage}
+                responsesReceived={responsesReceived}
+                modelsExpected={modelsExpected}
+                elapsedSeconds={elapsedSeconds}
+                showDetails={showMobileDetails}
+                onToggleDetails={() => setShowMobileDetails(!showMobileDetails)}
+              />
             </div>
-          </div>
-        )}
 
-        {isPollingFallback && (
-          <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            <span>Connection interrupted — using polling fallback</span>
-          </div>
-        )}
+            {/* Perspectives Action when ready */}
+            {currentWorkspaceStage === "perspectives_ready" && (
+              <PerspectivesReadyAction
+                mode="arena"
+                modelCount={modelsExpected}
+                onContinue={handleContinue}
+                isContinuing={isContinuing}
+              />
+            )}
 
-        <ArenaRunView debate={debate as any} events={liveEvents as any} onRefetch={refetch} />
+            {/* Perspectives Grid during collecting/streaming */}
+            {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
+              <PerspectivesGrid modelSlots={modelSlots} />
+            ) : (
+              /* Once past perspectives generation, show the standard synthesis/arena view */
+              <ArenaRunView debate={debate as any} events={liveEvents as any} onRefetch={refetch} />
+            )}
+
+            {isPollingFallback && (
+              <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Connection interrupted — using polling fallback</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

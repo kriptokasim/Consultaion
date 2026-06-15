@@ -57,7 +57,7 @@ export default function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
 
   return (
     <section className="space-y-6">
-      <header className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-[0_20px_45px_rgba(120,113,108,0.12)] dark:border-border dark:from-stone-900 dark:via-card dark:to-stone-900">
+      <header className="rounded-3xl border border-stone-200 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-6 shadow-[0_20px_45px_#78716c1f] dark:border-border dark:from-stone-900 dark:via-card dark:to-stone-900">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
           {t("analytics.header.kicker")}
         </p>

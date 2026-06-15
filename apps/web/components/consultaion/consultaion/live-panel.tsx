@@ -91,7 +91,7 @@ export default function LivePanel({
   return (
     <div className="space-y-6">
       {mode === 'conversation' ? (
-        <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
+        <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_#70491c1f] dark:border-amber-900/40 dark:bg-stone-900/70">
           <CardHeader>
             <CardTitle className="heading-serif text-lg font-semibold text-amber-900 dark:text-amber-50">Conversation Transcript</CardTitle>
           </CardHeader>
@@ -106,7 +106,7 @@ export default function LivePanel({
         </Card>
       ) : (
         (mappedEvents.length > 0 || loading) && (
-          <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-stone-900/70">
+          <Card className="border border-amber-200/70 bg-white/95 shadow-[0_18px_36px_#70491c1f] dark:border-amber-900/40 dark:bg-stone-900/70">
             <CardHeader>
               <CardTitle className="heading-serif text-lg font-semibold text-amber-900 dark:text-amber-50">Live Stream</CardTitle>
             </CardHeader>

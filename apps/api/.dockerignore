@@ -24,7 +24,6 @@ MEMORY.md
 *.db
 *.log
 coverage.xml
-alembic/versions/
 .pytest_ratings.db
 tmp_ratings.db
 sse_test.db

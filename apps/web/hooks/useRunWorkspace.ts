@@ -27,6 +27,7 @@ export interface UseRunWorkspaceResult {
   continueRun: () => Promise<void>;
   retryRun: (stageKey?: string) => Promise<void>;
   refetch: () => Promise<void>;
+  isContinuing: boolean;
 }
 
 export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult {
@@ -35,6 +36,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPollingFallback, setIsPollingFallback] = useState(false);
+  const [isContinuing, setIsContinuing] = useState(false);
   
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
@@ -82,6 +84,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setEvents([]);
       setError(null);
       setIsPollingFallback(false);
+      setIsContinuing(false);
     }
   }, [debateId, fetchDebateAndTimeline]);
 
@@ -188,19 +191,60 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // 4. Coordinated Workspace Actions
   const idempotencyKeyRef = useRef<string | null>(null);
 
+  // Sync idempotency key with sessionStorage to survive page refreshes
+  useEffect(() => {
+    if (debateId && typeof window !== "undefined") {
+      const stored = sessionStorage.getItem(`continuation_idempotency_key_${debateId}`);
+      if (stored) {
+        idempotencyKeyRef.current = stored;
+        // If the debate status is still perspectives_ready, we restore the continuing state
+        if (debate && debate.status === "perspectives_ready") {
+          setIsContinuing(true);
+        }
+      }
+    }
+  }, [debateId, debate]);
+
+  // Clean up idempotency key when debate becomes terminal
+  useEffect(() => {
+    if (isTerminal && debateId && typeof window !== "undefined") {
+      sessionStorage.removeItem(`continuation_idempotency_key_${debateId}`);
+      idempotencyKeyRef.current = null;
+      setIsContinuing(false);
+    }
+  }, [isTerminal, debateId]);
+
+  // Clean up idempotency key when debate transitions out of perspectives_ready
+  useEffect(() => {
+    if (debateId && typeof window !== "undefined") {
+      const stored = sessionStorage.getItem(`continuation_idempotency_key_${debateId}`);
+      if (stored && debate && debate.status !== "perspectives_ready") {
+        sessionStorage.removeItem(`continuation_idempotency_key_${debateId}`);
+        idempotencyKeyRef.current = null;
+        setIsContinuing(false);
+      }
+    }
+  }, [debateId, debate]);
+
   const handleContinue = useCallback(async () => {
     if (!debateId) return;
     try {
       setError(null);
+      setIsContinuing(true);
       // Reuse existing idempotency key if present, otherwise generate new one
       if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = crypto.randomUUID();
+        const key = crypto.randomUUID();
+        idempotencyKeyRef.current = key;
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(`continuation_idempotency_key_${debateId}`, key);
+        }
       }
       await continueDebate(debateId, idempotencyKeyRef.current);
       await fetchDebateAndTimeline(debateId);
     } catch (err: any) {
       console.error("[useRunWorkspace] Continue failed:", err);
       setError(err?.message || "Failed to continue debate");
+      setIsContinuing(false);
     }
   }, [debateId, fetchDebateAndTimeline]);
 
@@ -245,5 +289,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     continueRun: handleContinue,
     retryRun: handleRetry,
     refetch: handleRefetch,
+    isContinuing,
   };
 }

@@ -22,6 +22,8 @@ def test_config_prod_env_defaults(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")  # Required for prod
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
     monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
     
@@ -40,6 +42,8 @@ def test_config_workers_validation_memory_backend(monkeypatch):
     monkeypatch.setenv("WEB_CONCURRENCY", "2")
     monkeypatch.setenv("SSE_BACKEND", "memory")
     monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
     
@@ -57,6 +61,8 @@ def test_config_workers_validation_redis_backend(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
     monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
     
@@ -71,6 +77,8 @@ def test_config_jwt_secret_validation_missing_or_default(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
     monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
 
@@ -87,6 +95,8 @@ def test_config_jwt_secret_validation_too_short(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret")
     monkeypatch.setenv("USE_MOCK", "False")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-fake")
 

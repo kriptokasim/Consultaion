@@ -48,7 +48,7 @@ export function ActiveWorkspaceComposer({
   return (
     <div
       className={cn(
-        'fixed bottom-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-t border-border px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(0,0,0,0.05)] transition-all',
+        'fixed bottom-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-t border-border px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-[0_-8px_32px_#0000000d] transition-all',
         className
       )}
     >

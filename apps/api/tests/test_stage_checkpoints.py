@@ -162,8 +162,7 @@ async def test_checkpoint_attempt_and_output_ref(db_session):
         assert ckpt.attempt == 2
 
 
-@pytest.mark.anyio
-async def test_retry_api_downstream_clearing(authenticated_client, db_session):
+def test_retry_api_downstream_clearing(authenticated_client, db_session):
     # Retrieve authenticated user
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
 

@@ -23,6 +23,10 @@ class BaseRateLimiterBackend:
         """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
         raise NotImplementedError
 
+    def allow_weighted(self, key: str, window_seconds: int, max_requests: int, weight: int) -> tuple[bool, int | None]:
+        """Check if request is allowed under cost weight. Returns (allowed, retry_after_seconds)."""
+        raise NotImplementedError
+
     def record_429(self, ip: str, path: str) -> None:
         raise NotImplementedError
 
@@ -53,6 +57,23 @@ class MemoryRateLimiterBackend(BaseRateLimiterBackend):
         allowed = bucket["count"] <= max_requests
         retry_after = None if allowed else max(1, int(bucket["reset"] - now))
         return allowed, retry_after
+
+    def allow_weighted(self, key: str, window_seconds: int, max_requests: int, weight: int) -> tuple[bool, int | None]:
+        """Check if request under cost weight is allowed. Returns (allowed, retry_after_seconds)."""
+        now = time.time()
+        bucket = self._buckets.get(key)
+        if not bucket or bucket.get("reset", 0) < now:
+            bucket = {"count": 0.0, "reset": now + window_seconds}
+        
+        current = bucket.get("count", 0.0)
+        if current + weight <= max_requests:
+            bucket["count"] = current + weight
+            self._buckets[key] = bucket
+            return True, None
+        else:
+            self._buckets[key] = bucket
+            retry_after = max(1, int(bucket["reset"] - now))
+            return False, retry_after
 
     def record_429(self, ip: str, path: str) -> None:
         self._recent.append({"ip": ip, "path": path, "ts": _utc_timestamp()})
@@ -96,6 +117,42 @@ class RedisRateLimiterBackend(BaseRateLimiterBackend):
         except Exception as exc:  # pragma: no cover - redis failure path
             logger.warning("Redis rate limiter failed (%s), falling back to memory", exc)
             return self._fallback.allow(key, window_seconds, max_requests)
+
+    def allow_weighted(self, key: str, window_seconds: int, max_requests: int, weight: int) -> tuple[bool, int | None]:
+        """Check if request under cost weight is allowed. Returns (allowed, retry_after_seconds)."""
+        redis_key = f"rl:ip:{key}:{window_seconds}"
+        lua_script = """
+local key = KEYS[1]
+local window = tonumber(ARGV[1])
+local max_requests = tonumber(ARGV[2])
+local weight = tonumber(ARGV[3])
+
+local current = tonumber(redis.call('get', key) or "0")
+
+if current + weight <= max_requests then
+    redis.call('incrby', key, weight)
+    if current == 0 then
+        redis.call('expire', key, window)
+    end
+    return {1, 0}
+else
+    local ttl = redis.call('ttl', key)
+    if ttl < 0 then
+        ttl = window
+    end
+    return {0, ttl}
+end
+"""
+        try:
+            res = self._client.eval(lua_script, 1, redis_key, window_seconds, max_requests, weight)
+            allowed = bool(res[0])
+            retry_after = res[1] if not allowed else None
+            if retry_after is not None:
+                retry_after = max(1, int(retry_after))
+            return allowed, retry_after
+        except Exception as exc:  # pragma: no cover - redis failure path
+            logger.warning("Redis weighted rate limiter failed (%s), falling back to memory", exc)
+            return self._fallback.allow_weighted(key, window_seconds, max_requests, weight)
 
     def record_429(self, ip: str, path: str) -> None:
         entry = {"ip": ip, "path": path, "ts": _utc_timestamp()}

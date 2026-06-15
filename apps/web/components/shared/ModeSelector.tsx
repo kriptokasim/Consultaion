@@ -139,7 +139,7 @@ export default function ModeSelector({
               "bg-slate-900/40 backdrop-blur-md",
               mounted && "animate-in fade-in slide-in-from-bottom-2 fill-mode-both",
               isActive
-                ? "border-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/50"
+                ? "border-amber-500/80 shadow-[0_0_20px_#f59e0b26] ring-1 ring-amber-500/50"
                 : "border-slate-800 hover:bg-slate-900/60",
               mode.borderHover
             )}

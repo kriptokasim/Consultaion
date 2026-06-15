@@ -71,7 +71,7 @@ export default SkeletonLoader;
 
 export function DebateCardSkeleton() {
   return (
-    <div className="rounded-3xl border border-amber-200/70 bg-amber-50/70 p-6 shadow-[0_12px_28px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:bg-amber-950/30">
+    <div className="rounded-3xl border border-amber-200/70 bg-amber-50/70 p-6 shadow-[0_12px_28px_#70491c1f] dark:border-amber-900/40 dark:bg-amber-950/30">
       <Skeleton className="h-4 w-24 rounded-full" />
       <Skeleton className="mt-4 h-6 w-3/4 rounded-full" />
       <Skeleton className="mt-2 h-6 w-2/3 rounded-full" />
@@ -86,7 +86,7 @@ export function DebateCardSkeleton() {
 
 export function DebateListSkeleton() {
   return (
-    <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white/90 shadow-[0_18px_40px_rgba(112,73,28,0.12)]">
+    <div className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white/90 shadow-[0_18px_40px_#70491c1f]">
       <div className="divide-y divide-amber-100/80">
         {[1, 2, 3].map((i) => (
           <div key={i} className="flex items-center gap-4 px-5 py-4">

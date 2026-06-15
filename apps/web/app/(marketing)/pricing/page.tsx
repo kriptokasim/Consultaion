@@ -31,7 +31,7 @@ export default async function PricingPage() {
       </div>
       <div className="grid gap-6 grid-cols-1 md:grid-cols-3">
         {plans.map((plan) => (
-          <Card key={plan.slug} className="border-amber-200 bg-white/90 p-6 shadow-[0_20px_50px_rgba(112,73,28,0.08)] dark:border-slate-600 dark:bg-slate-800 flex flex-col justify-between">
+          <Card key={plan.slug} className="border-amber-200 bg-white/90 p-6 shadow-[0_20px_50px_#70491c14] dark:border-slate-600 dark:bg-slate-800 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <div>
@@ -58,7 +58,7 @@ export default async function PricingPage() {
         ))}
 
         {/* Enterprise Tier Card */}
-        <Card className="border-amber-400/80 bg-gradient-to-b from-amber-50/15 via-white to-white p-6 shadow-[0_20px_50px_rgba(112,73,28,0.12)] dark:border-amber-900/40 dark:from-slate-900 dark:to-slate-800 flex flex-col justify-between relative overflow-hidden">
+        <Card className="border-amber-400/80 bg-gradient-to-b from-amber-50/15 via-white to-white p-6 shadow-[0_20px_50px_#70491c1f] dark:border-amber-900/40 dark:from-slate-900 dark:to-slate-800 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 right-0 bg-amber-600 text-white text-[9px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-xl">
             Custom
           </div>

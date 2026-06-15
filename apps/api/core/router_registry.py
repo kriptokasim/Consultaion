@@ -46,14 +46,15 @@ def build_router_registry() -> List[RouterRegistration]:
     from routes.challenge import router as challenge_router
     from routes.public_stats import router as public_stats_router
     from routes.routing_admin import router as routing_admin_router
-    from routes.billing import router as billing_router
-    from routes.promotions import router as promotions_router
-    from routes.api_keys import router as api_keys_router
+    from billing.routes import billing_router
+    from promotions.routes import promotions_router
+    from routes.api_keys import api_keys_router
     from routes.provider_keys import router as provider_keys_router
     from routes.audit_logs import router as audit_logs_router
     from routes.features import router as features_router
     from routes.gifs import router as gifs_router
     from routes.votes import router as votes_router
+    from gdpr.routes import gdpr_router
 
     return [
         RouterRegistration(auth_router),
@@ -79,6 +80,7 @@ def build_router_registry() -> List[RouterRegistration]:
         RouterRegistration(features_router),
         RouterRegistration(gifs_router, root_prefix="/gifs", v1_prefix="/gifs", tags=["gifs"]),
         RouterRegistration(votes_router),
+        RouterRegistration(gdpr_router),
     ]
 
 

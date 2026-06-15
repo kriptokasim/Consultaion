@@ -10,6 +10,7 @@ const withBundleAnalyzer = bundleAnalyzer({
 const workspaceRoot = path.join(__dirname, '..', '..')
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   // Patchset 112: Optimize package imports to reduce bundle size
   experimental: {
     optimizePackageImports: [

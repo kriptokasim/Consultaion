@@ -739,7 +739,7 @@ function ArenaPageContent() {
         onSave={handleModelSelectionSave}
       />
       {currentDebateId && events.length > 0 && (
-        <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_rgba(112,73,28,0.12)] dark:border-amber-900/50 dark:bg-stone-900/70">
+        <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_#70491c1f] dark:border-amber-900/50 dark:bg-stone-900/70">
           <DebateReplay debateId={currentDebateId} />
         </section>
       )}

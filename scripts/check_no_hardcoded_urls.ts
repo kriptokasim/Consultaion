@@ -14,8 +14,11 @@
  */
 
 import { readFileSync, readdirSync, statSync } from "fs";
-import { join, relative } from "path";
+import { join, relative, dirname } from "path";
+import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 const REPO_ROOT = join(__dirname, "..");
 
 // ── CLI args ───────────────────────────────────────────────────────────────

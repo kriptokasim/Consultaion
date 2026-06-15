@@ -39,6 +39,8 @@ def test_production_env_cookie_settings(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "1")
     monkeypatch.setenv("USE_MOCK", "0")
+    monkeypatch.setenv("FAST_DEBATE", "0")
+    monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key-at-least-32-chars-long")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
     

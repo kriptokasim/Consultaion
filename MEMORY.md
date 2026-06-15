@@ -130,5 +130,14 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
   - **Downstream Cascade Retry Clearing**: Updated `/api/v1/debates/{debate_id}/retry` to clear specific downstream stage checkpoints and corresponding database entities (scores, votes, messages, divergence reports) based on the target retry stage.
   - **Tests**: Created comprehensive tests covering attempt tracking, serialization, and correct cascade clearing. All tests pass cleanly.
 
+## Continuation Lifecycle, Refresh-Safe Idempotency & Schema Contract Verification (2026-06-15)
+- **Goal**: Standardized runtime SSE continuation tracking, centralized database continuation state transitions, made frontend continuation state refresh-safe, and implemented schema contract checks.
+- **Key Enhancements**:
+  - **Continuation DB Lifecycle Updates**: Integrated centralized state updates inside `orchestrator.py` via `apps/api/services/continuations.py` to correctly map continuation record status to `running`, `completed`, or `failed` as debate execution proceeds.
+  - **Refresh-Safe continuation state**: Refactored `apps/web/hooks/useRunWorkspace.ts` to sync the active idempotency key in `sessionStorage` and restore `isContinuing` state directly from the hook across page refreshes.
+  - **Schema Contract E2E Tests**: Added comprehensive database table existence checks inside `tests/test_schema_contract.py`.
+- **Tests & Verification**: Verified that all new automated test suites (`test_schema_contract.py`, `test_continue_api.py`, `test_continuations_service.py`) pass 100% successfully.
+
+
 
 

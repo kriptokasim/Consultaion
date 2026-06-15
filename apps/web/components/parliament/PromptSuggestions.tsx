@@ -55,7 +55,7 @@ export default function PromptSuggestions({
   };
 
   return (
-    <div className="rounded-2xl border border-amber-200/70 bg-white/85 p-4 shadow-[0_16px_40px_rgba(112,73,28,0.12)] backdrop-blur-sm dark:border-amber-900/40 dark:bg-stone-900/70">
+    <div className="rounded-2xl border border-amber-200/70 bg-white/85 p-4 shadow-[0_16px_40px_#70491c1f] backdrop-blur-sm dark:border-amber-900/40 dark:bg-stone-900/70">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-800 shadow-inner shadow-amber-900/5 dark:bg-amber-900/40 dark:text-amber-100">
