@@ -1,5 +1,6 @@
 import { apiRequest } from "@/lib/apiClient";
 import { API_ORIGIN } from "@/lib/config/runtime";
+import type { RequestOptions } from "@/lib/api/types";
 
 // Patchset 105: Use relative /api path on client to ensure cookie consistency
 const API_BASE = typeof window === 'undefined' ? API_ORIGIN : "/api";
@@ -20,13 +21,15 @@ async function buildHeaders(init?: HeadersInit): Promise<Headers> {
   return headers;
 }
 
-async function authFetch(path: string, init?: RequestInit) {
+async function authFetch(input: RequestInfo | URL, init?: RequestInit, options?: RequestOptions) {
+  const path = typeof input === "string" ? input : input.toString();
   const headers = await buildHeaders(init?.headers);
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers,
     credentials: "include",
     cache: "no-store",
+    signal: options?.signal ?? init?.signal,
   });
   return response;
 }
@@ -58,6 +61,6 @@ export async function logout() {
   }
 }
 
-export async function fetchWithAuth(path: string, init?: RequestInit) {
-  return authFetch(path, init);
+export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit, options?: RequestOptions) {
+  return authFetch(input, init, options);
 }

@@ -5,6 +5,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
+from enum import Enum
 from typing import Optional, Protocol
 
 from config import settings
@@ -15,6 +16,13 @@ except ImportError:  # pragma: no cover - redis optional for memory backend
     redis = None
 
 logger = logging.getLogger(__name__)
+
+
+class StreamLeaseResult(Enum):
+    ACQUIRED = "acquired"
+    DENIED = "denied"
+    ERROR_FAIL_OPEN = "error_fail_open"
+    ERROR_FAIL_CLOSED = "error_fail_closed"
 
 
 class BaseSSEBackend(Protocol):
@@ -385,8 +393,8 @@ class StreamLeaseManager:
         """
         return f"{user_id}:{subscriber_id}"
 
-    async def try_acquire(self, debate_id: str, subscriber_id: str, user_id: str | None = None) -> bool:
-        """Try to acquire a streaming lease. Returns True if acquired."""
+    async def try_acquire(self, debate_id: str, subscriber_id: str, user_id: str | None = None) -> StreamLeaseResult:
+        """Try to acquire a streaming lease."""
         identity = self._subscriber_identity(debate_id, user_id or "anon", subscriber_id)
         try:
             from redis_pool import get_async_redis_client
@@ -396,23 +404,31 @@ class StreamLeaseManager:
                 key = self._lease_key(debate_id)
                 result = await sse_acquire_lease_async(client, key, identity, self._max_streams, self._lease_ttl)
                 if result in (1, 2):
-                    return True
+                    return StreamLeaseResult.ACQUIRED
                 if result == 0:
-                    return False
+                    return StreamLeaseResult.DENIED
                 # result == -1 (backend error) — fall through to memory
-        except Exception:
-            logger.warning("Redis lease acquire failed, falling back to memory")
+        except Exception as exc:
+            logger.warning("Redis lease acquire failed, falling back to memory: %s", exc)
 
-        now = time.time()
-        memory_set = self._memory_leases.setdefault(debate_id, {})
-        # Clean expired entries
-        expired = [k for k, v in memory_set.items() if v < now]
-        for k in expired:
-            del memory_set[k]
-        if len(memory_set) >= self._max_streams:
-            return False
-        memory_set[identity] = now + self._lease_ttl
-        return True
+        try:
+            now = time.time()
+            memory_set = self._memory_leases.setdefault(debate_id, {})
+            # Clean expired entries
+            expired = [k for k, v in memory_set.items() if v < now]
+            for k in expired:
+                del memory_set[k]
+            if len(memory_set) >= self._max_streams:
+                return StreamLeaseResult.DENIED
+            memory_set[identity] = now + self._lease_ttl
+            return StreamLeaseResult.ACQUIRED
+        except Exception as exc:
+            logger.error("Memory lease acquire failed: %s", exc)
+            
+        fail_open = getattr(settings, "SSE_LEASE_FAIL_OPEN", False)
+        if fail_open:
+            return StreamLeaseResult.ERROR_FAIL_OPEN
+        return StreamLeaseResult.ERROR_FAIL_CLOSED
 
     async def release(self, debate_id: str, subscriber_id: str, user_id: str | None = None) -> None:
         """Release a streaming lease."""

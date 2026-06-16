@@ -273,68 +273,7 @@ def _get_debate_extra_fields(debate, session=None, continuation_status: Optional
                     debate.id, caps.missing_capabilities,
                 )
         else:
-            try:
-                from models import DebateStageCheckpoint, DebateContinuation, Message, Score
-                from sqlmodel import select
-
-                stmt_ck = select(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id == debate.id)
-                checkpoints = list(session.execute(stmt_ck).scalars().all())
-                if checkpoints:
-                    res["stage_checkpoints"] = [
-                        {
-                            "stage_key": cp.stage_key,
-                            "status": cp.status,
-                            "attempt": cp.attempt,
-                            "started_at": cp.started_at,
-                            "completed_at": cp.completed_at,
-                            "failed_at": cp.failed_at,
-                            "error_code": cp.error_code,
-                        }
-                        for cp in checkpoints
-                    ]
-                    mode = getattr(debate, "mode", "arena")
-                    if debate.status in ("running", "queued", "scheduled"):
-                        active_cp = next((cp for cp in checkpoints if cp.status in ("running", "failed")), None)
-                        if active_cp:
-                            res["current_stage"] = active_cp.stage_key
-                        else:
-                            completed = [cp for cp in checkpoints if cp.status == "completed" and cp.completed_at]
-                            if completed:
-                                last_completed = max(completed, key=lambda cp: cp.completed_at)
-                                res["current_stage"] = last_completed.stage_key
-                            else:
-                                res["current_stage"] = debate.status
-                    target_key = "arena_perspectives" if mode == "arena" else "critique"
-                    ready_cp = next((cp for cp in checkpoints if cp.stage_key == target_key and cp.status == "completed"), None)
-                    if ready_cp:
-                        res["perspectives_ready_at"] = ready_cp.completed_at
-
-                stmt_cont = (
-                    select(DebateContinuation)
-                    .where(DebateContinuation.debate_id == debate.id)
-                    .order_by(DebateContinuation.created_at.desc())
-                )
-                continuation = session.execute(stmt_cont).scalars().first()
-                if continuation:
-                    res["continuation_status"] = continuation.status
-                    res["continuation_id"] = continuation.id
-
-                stmt_msg = select(Message).where(Message.debate_id == debate.id)
-                messages = list(session.execute(stmt_msg).scalars().all())
-                mode = getattr(debate, "mode", "arena")
-                if mode == "arena":
-                    res["responses_received"] = sum(1 for m in messages if m.role == "arena_response")
-                else:
-                    res["responses_received"] = sum(1 for m in messages if m.role == "candidate")
-
-                stmt_score = select(Score).where(Score.debate_id == debate.id)
-                scores = list(session.execute(stmt_score).scalars().all())
-                res["scores_received"] = len(scores)
-            except Exception as exc:
-                logger.warning(
-                    "extra_fields_fallback_failed debate_id=%s error=%s",
-                    debate.id, exc,
-                )
+            logger.warning("schema_capabilities_failed debate_id=%s — skipping enrichment", debate.id)
 
     return res
 

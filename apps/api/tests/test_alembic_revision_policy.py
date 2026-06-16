@@ -62,6 +62,8 @@ def test_all_down_revisions_resolve():
     revisions = {r.revision: r for r in script.walk_revisions() if r.revision and r.revision != "heads"}
     for rev_id, rev in revisions.items():
         if rev.down_revision:
-            assert rev.down_revision in revisions or rev.down_revision is None, (
-                f"down_revision {rev.down_revision} of {rev_id} not found"
-            )
+            targets = rev.down_revision if isinstance(rev.down_revision, tuple) else (rev.down_revision,)
+            for target in targets:
+                assert target in revisions or target is None, (
+                    f"down_revision {target} of {rev_id} not found"
+                )

@@ -70,12 +70,13 @@ def _safe_query_checkpoints(debate_id: str, session: Session) -> dict[str, Any]:
     try:
         from models import DebateStageCheckpoint
 
-        stmt = (
-            select(DebateStageCheckpoint)
-            .where(DebateStageCheckpoint.debate_id == debate_id)
-            .order_by(DebateStageCheckpoint.created_at)
-        )
-        checkpoints = list(session.execute(stmt).scalars().all())
+        with session.begin_nested():
+            stmt = (
+                select(DebateStageCheckpoint)
+                .where(DebateStageCheckpoint.debate_id == debate_id)
+                .order_by(DebateStageCheckpoint.created_at)
+            )
+            checkpoints = list(session.execute(stmt).scalars().all())
         if checkpoints:
             return {
                 "stage_checkpoints": [
@@ -100,12 +101,13 @@ def _safe_query_continuation(debate_id: str, session: Session) -> dict[str, Any]
     try:
         from models import DebateContinuation
 
-        stmt = (
-            select(DebateContinuation)
-            .where(DebateContinuation.debate_id == debate_id)
-            .order_by(DebateContinuation.created_at.desc())
-        )
-        continuation = session.execute(stmt).scalars().first()
+        with session.begin_nested():
+            stmt = (
+                select(DebateContinuation)
+                .where(DebateContinuation.debate_id == debate_id)
+                .order_by(DebateContinuation.created_at.desc())
+            )
+            continuation = session.execute(stmt).scalars().first()
         if continuation:
             return {
                 "continuation_status": continuation.status,
@@ -134,8 +136,9 @@ def _safe_query_message_count(debate_id: str, session: Session) -> dict[str, Any
         from models import Message
         from sqlalchemy import func, select as sa_select
 
-        stmt = sa_select(func.count()).where(Message.debate_id == debate_id)
-        count = session.execute(stmt).scalar() or 0
+        with session.begin_nested():
+            stmt = sa_select(func.count()).where(Message.debate_id == debate_id)
+            count = session.execute(stmt).scalar() or 0
         return {"responses_received": count}
     except Exception as exc:
         logger.warning("message_count_query_failed debate_id=%s error=%s", debate_id, exc)
@@ -147,8 +150,9 @@ def _safe_query_score_count(debate_id: str, session: Session) -> dict[str, Any]:
         from models import Score
         from sqlalchemy import func, select as sa_select
 
-        stmt = sa_select(func.count()).where(Score.debate_id == debate_id)
-        count = session.execute(stmt).scalar() or 0
+        with session.begin_nested():
+            stmt = sa_select(func.count()).where(Score.debate_id == debate_id)
+            count = session.execute(stmt).scalar() or 0
         return {"scores_received": count}
     except Exception as exc:
         logger.warning("score_count_query_failed debate_id=%s error=%s", debate_id, exc)

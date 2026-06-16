@@ -237,12 +237,14 @@ def reconcile_usage(
         pricing = _get_model_pricing()
         discrepancies: List[Dict[str, object]] = []
 
-        for usage in usages:
-            report["users_checked"] += 1
-            report["total_tokens_usage"] += usage.tokens_used
+        # Only perform BillingUsage comparisons for full monthly runs
+        if run_type in ("monthly", "manual"):
+            for usage in usages:
+                report["users_checked"] += 1
+                report["total_tokens_usage"] += usage.tokens_used
 
-            # 1. Token reconciliation: BillingUsage.tokens_used vs SUM(LLMUsageLog.total_tokens)
-            llm_tokens = db.exec(
+                # 1. Token reconciliation: BillingUsage.tokens_used vs SUM(LLMUsageLog.total_tokens)
+                llm_tokens = db.exec(
                 select(func.coalesce(func.sum(LLMUsageLog.total_tokens), 0))
                 .where(LLMUsageLog.user_id == usage.user_id)
                 .where(LLMUsageLog.created_at >= window.start_at)
@@ -295,8 +297,21 @@ def reconcile_usage(
                     "severity": "warning",
                     "details": f"{usage.debates_created} debates but 0 tokens",
                 })
+        else:
+            # For daily runs, populate aggregate stats directly from LLM logs
+            daily_stats = db.exec(
+                select(
+                    func.count(func.distinct(LLMUsageLog.user_id)),
+                    func.coalesce(func.sum(LLMUsageLog.total_tokens), 0)
+                )
+                .where(LLMUsageLog.created_at >= window.start_at)
+                .where(LLMUsageLog.created_at < window.end_at)
+            ).first()
+            if daily_stats:
+                report["users_checked"] = daily_stats[0]
+                report["total_tokens_internal"] = daily_stats[1]
 
-            # 6. Orphan check: LLM usage without a BillingUsage record
+        # 6. Orphan check: LLM usage without a BillingUsage record
         orphan_discs = _check_orphan_usage(db, window)
         discrepancies.extend(orphan_discs)
 

@@ -1606,11 +1606,11 @@ async def stream_events(
         record_sse_reconnect()
 
     # Acquire lease-based concurrent stream slot
-    from sse_backend import get_stream_lease_manager
+    from sse_backend import get_stream_lease_manager, StreamLeaseResult
     lease_mgr = get_stream_lease_manager()
     subscriber_id = f"{user.id}:{uuid.uuid4().hex}"
-    acquired = await lease_mgr.try_acquire(debate_id, subscriber_id)
-    if not acquired:
+    lease_result = await lease_mgr.try_acquire(debate_id, subscriber_id)
+    if lease_result in (StreamLeaseResult.DENIED, StreamLeaseResult.ERROR_FAIL_CLOSED):
         active = await lease_mgr.active_count(debate_id)
         raise HTTPException(
             status_code=503,

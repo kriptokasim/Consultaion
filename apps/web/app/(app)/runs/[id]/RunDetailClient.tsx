@@ -84,7 +84,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
 
-    fetchWithAuth('/me')
+    fetchWithAuth('/me', { signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         setProfile(data);
@@ -131,8 +131,8 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     const timeout = setTimeout(() => controller.abort(), 10000);
 
     Promise.allSettled([
-      fetchWithAuth(`/debates/${id}/events`).then((r) => (r.ok ? r.json() : { items: [] })),
-      fetchWithAuth(`/debates/${id}/members`).then((r) => (r.ok ? r.json() : { members: [] })),
+      fetchWithAuth(`/debates/${id}/events`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : { items: [] })),
+      fetchWithAuth(`/debates/${id}/members`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : { members: [] })),
     ])
       .then(([eventsResult, membersResult]) => {
         if (eventsResult.status === "fulfilled") {
@@ -161,11 +161,12 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     return () => clearTimeout(timeout);
   }, [isCompleted, id, resultsFetched]);
 
-  useEffect(() => {
-    if (debate && isCompleted && !resultsLoading) {
-      setCompletedLoadState("ready");
-    }
-  }, [debate, isCompleted, resultsLoading]);
+  const retryEnrichment = useCallback(() => {
+    setResultsFetched(false);
+    setResultsEvents([]);
+    setResultsMembers([]);
+    setCompletedLoadState("loading_enrichment");
+  }, []);
 
   const { scores, judgeVotes, vote } = useMemo(() => {
     const scoreMap = new Map<string, { total: number; count: number; rationale?: string }>();
@@ -432,6 +433,16 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                 The core Run and stored report are available, but some timeline events could not be retrieved. Refresh or retry event loading.
               </p>
+              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
+            </div>
+          )}
+          {completedLoadState === "ready_degraded" && hydrationQuality === "complete" && (
+            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Results loaded in recovery mode</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                The core Run is available, but post-run event enrichment failed.
+              </p>
+              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
             </div>
           )}
           <ArenaRunView debate={debate} events={resultsEvents.length > 0 ? resultsEvents : (events as unknown as DebateEvent[])} profile={profile} onRefetch={refetch} />
@@ -448,6 +459,16 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                 The core Run and stored report are available, but some timeline events could not be retrieved.
               </p>
+              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
+            </div>
+          )}
+          {completedLoadState === "ready_degraded" && hydrationQuality === "complete" && (
+            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Results loaded in recovery mode</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                The core Run is available, but post-run event enrichment failed.
+              </p>
+              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
             </div>
           )}
           <VotingRunView
@@ -471,6 +492,16 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
               The core Run is available, but some optional data could not be retrieved.
             </p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
+          </div>
+        )}
+        {completedLoadState === "ready_degraded" && hydrationQuality === "complete" && (
+          <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+            <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Results loaded in recovery mode</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              The core Run is available, but post-run event enrichment failed.
+            </p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
           </div>
         )}
         <ParliamentRunView

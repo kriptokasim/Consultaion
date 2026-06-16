@@ -1,4 +1,5 @@
 import type { DebateEvent } from "./types";
+import type { TimelineEvent } from "../timeline/types";
 
 /**
  * Shape of a raw SSE / timeline event from the backend.
@@ -162,4 +163,50 @@ export function normalizeEvent(raw: RawEvent): DebateEvent {
  */
 export function normalizeEvents(raw: RawEvent[]): DebateEvent[] {
     return raw.map(normalizeEvent);
+}
+
+/**
+ * Normalise raw timeline or fallback items into stable TimelineEvents, deduplicating
+ * by ID or synthetic stable keys.
+ */
+export function normalizeTimelineItems(items: unknown[], debateId: string): TimelineEvent[] {
+    const events: TimelineEvent[] = [];
+    const seenKeys = new Set<string>();
+
+    for (const raw of items as any[]) {
+        if (!raw) continue;
+
+        const normalizedPayload = normalizeEvent(raw);
+        const ts = raw.ts || raw.at || raw.created_at || new Date().toISOString();
+        const type = raw.type || "notice";
+
+        // Stable deduplication key
+        let dedupKey = raw.id;
+        if (!dedupKey && raw.payload?.id) dedupKey = raw.payload.id;
+        if (!dedupKey && type === "arena_response") {
+            const modelId = raw.model_id || raw.payload?.model_id || "unknown_model";
+            dedupKey = `${type}-${modelId}-${ts}`;
+        }
+        // Fallback for types without obvious stable IDs
+        if (!dedupKey) {
+            dedupKey = `${type}-${ts}-${Math.random().toString(36).substring(7)}`;
+        }
+
+        if (seenKeys.has(dedupKey)) continue;
+        seenKeys.add(dedupKey);
+
+        const event: TimelineEvent = {
+            id: dedupKey,
+            debate_id: debateId,
+            ts,
+            type,
+            round: raw.round || 0,
+            seat: raw.seat,
+            payload: normalizedPayload as unknown as Record<string, unknown>,
+        };
+
+        events.push(event);
+    }
+
+    return events;
 }

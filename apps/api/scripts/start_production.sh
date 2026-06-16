@@ -2,11 +2,14 @@
 set -euo pipefail
 
 echo "Consultaion API — production startup"
-echo "Running safe migration..."
+echo "Verifying database schema (migrations should be run via Release Command)..."
 
-python scripts/migrate_database.py
+python scripts/migrate_database.py --check || {
+    echo "FATAL: Database schema is not up to date. Release Command failed or has not run."
+    exit 1
+}
 
-echo "Migration complete. Starting API server..."
+echo "Schema verification passed. Starting API server..."
 
 exec uvicorn main:app \
   --host 0.0.0.0 \

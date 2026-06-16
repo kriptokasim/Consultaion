@@ -91,18 +91,27 @@ def main() -> None:
     # Check 3: Missing down_revision targets
     for rev_id, info in revisions.items():
         down = info.get("down_revision")
-        if down and down not in revisions and down != "heads":
-            errors.append(
-                f"down_revision {down} in {info['file']} (rev {rev_id}) "
-                f"not found in migration graph"
-            )
+        if down:
+            targets = down if isinstance(down, tuple) else (down,)
+            for target in targets:
+                if target and target not in revisions and target != "heads":
+                    errors.append(
+                        f"down_revision {target} in {info['file']} (rev {rev_id}) "
+                        f"not found in migration graph"
+                    )
 
     # Check 4: Multiple heads (error in CI mode)
-    heads = [rev_id for rev_id, info in revisions.items()
-             if not any(
-                 other_info.get("down_revision") == rev_id
-                 for other_info in revisions.values()
-             )]
+    heads = []
+    for rev_id, info in revisions.items():
+        is_head = True
+        for other_info in revisions.values():
+            other_down = other_info.get("down_revision")
+            other_targets = other_down if isinstance(other_down, tuple) else ((other_down,) if other_down else ())
+            if rev_id in other_targets:
+                is_head = False
+                break
+        if is_head:
+            heads.append(rev_id)
     if len(heads) != 1:
         if args.ci:
             errors.append(
@@ -122,12 +131,15 @@ def main() -> None:
         rec_stack.add(rev_id)
         info = revisions.get(rev_id, {})
         down = info.get("down_revision")
-        if down and down in revisions:
-            if down not in visited:
-                if _has_cycle(down):
+        
+        targets = down if isinstance(down, tuple) else ((down,) if down else ())
+        for target in targets:
+            if target in revisions:
+                if target not in visited:
+                    if _has_cycle(target):
+                        return True
+                elif target in rec_stack:
                     return True
-            elif down in rec_stack:
-                return True
         rec_stack.discard(rev_id)
         return False
 

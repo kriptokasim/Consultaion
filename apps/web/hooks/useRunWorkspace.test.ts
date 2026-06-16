@@ -1,6 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { fetchWithAuth } from "@/lib/auth";
+import { requestWithTimeout } from "@/lib/api";
 import { useRunWorkspace } from "./useRunWorkspace";
 
 vi.mock("@/lib/api", () => ({
@@ -26,9 +27,12 @@ vi.mock("@/lib/sse", () => ({
   useEventSource: vi.fn(() => ({ status: "idle" })),
 }));
 
-vi.mock("@/lib/api/normalizeEvent", () => ({
-  normalizeEvent: vi.fn((e) => e),
-}));
+vi.mock("@/lib/api/normalizeEvent", () => {
+  return {
+    normalizeEvent: vi.fn((e) => e),
+    normalizeTimelineItems: vi.fn((items) => items),
+  };
+});
 
 vi.mock("@/lib/timeline/types", () => ({}));
 
@@ -179,5 +183,48 @@ describe("useRunWorkspace -- localStorage persistence", () => {
       expect(result.current.isContinuing).toBe(false);
     });
     expect(getStoredIntent(debateId)).toBeNull();
+  });
+});
+
+describe("useRunWorkspace -- timeline and fallback events", () => {
+  it("uses /events fallback when /timeline fails, and returns normalized events", async () => {
+    const debateId = "test-fallback-debate";
+    
+    // First call is /timeline (fails), Second is /events (succeeds)
+    vi.mocked(requestWithTimeout)
+      .mockRejectedValueOnce(new Error("Timeline fetch failed"))
+      .mockResolvedValueOnce([
+        { id: "event-1", type: "message", ts: "2026-06-16T12:00:00Z", payload: { text: "Hello" } }
+      ]);
+      
+    const { result } = renderHook(() => useRunWorkspace(debateId));
+    
+    await vi.waitFor(() => {
+      expect(result.current.status).not.toBe("loading");
+    });
+    
+    expect(result.current.hydrationQuality).toBe("events_fallback");
+    expect(result.current.events.length).toBe(1);
+    expect(result.current.events[0].id).toBe("event-1");
+  });
+
+  it("handles when both /timeline and /events fail, preserving debate context", async () => {
+    const debateId = "test-both-fail-debate";
+    
+    vi.mocked(requestWithTimeout)
+      .mockRejectedValueOnce(new Error("Timeline fetch failed"))
+      .mockRejectedValueOnce(new Error("Events fetch failed"));
+      
+    const { result } = renderHook(() => useRunWorkspace(debateId));
+    
+    await vi.waitFor(() => {
+      expect(result.current.status).not.toBe("loading");
+    });
+    
+    expect(result.current.hydrationQuality).toBe("debate_only");
+    expect(result.current.events.length).toBe(0);
+    expect(result.current.timelineError).toBe("Timeline fetch failed");
+    expect(result.current.eventsError).toBe("Events fetch failed");
+    expect(result.current.debate.id).toBe("mock"); // Debate data should still be there
   });
 });

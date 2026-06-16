@@ -15,14 +15,14 @@ ALEMBIC_DIR = API_ROOT / "alembic"
 
 @dataclass
 class SchemaCapabilities:
-    has_stage_checkpoint_table: bool = True
-    has_stage_checkpoint_attempt_column: bool = True
-    has_continuation_table: bool = True
-    has_pairwise_vote_table: bool = True
-    has_score_table: bool = True
-    has_message_table: bool = True
-    is_at_alembic_head: bool = True
-    inspection_succeeded: bool = True
+    has_stage_checkpoint_table: bool = False
+    has_stage_checkpoint_attempt_column: bool = False
+    has_continuation_table: bool = False
+    has_pairwise_vote_table: bool = False
+    has_score_table: bool = False
+    has_message_table: bool = False
+    is_at_alembic_head: bool = False
+    inspection_succeeded: bool = False
 
     missing_capabilities: list[str] = field(default_factory=list)
 
@@ -56,7 +56,7 @@ def _build_cache_key(session: Session) -> str:
     try:
         bind = session.get_bind()
         dialect = bind.dialect.name
-        url = str(bind.url)
+        url = bind.url.render_as_string(hide_password=True)
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
         return f"{dialect}:{url_hash}"
     except Exception:
@@ -127,7 +127,9 @@ def get_schema_capabilities(
             is_at_alembic_head=_check_alembic_head(session),
             inspection_succeeded=True,
         )
-    except Exception:
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("schema_inspection_failed error=%s", exc)
         caps = SchemaCapabilities(inspection_succeeded=False)
 
     missing = []

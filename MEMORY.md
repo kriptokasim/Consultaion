@@ -4,11 +4,15 @@
 Consultaion is a multi-agent AI debate platform — users submit one prompt and get synthesized answers from multiple LLMs (GPT-4o, Claude, Gemini, DeepSeek). The product name is intentionally spelled "Consultaion" (not Consultation).
 
 ## Tech Stack
-- **Backend:** Python 3.11, FastAPI, SQLModel/SQLAlchemy, Alembic, Celery, Redis
-- **Frontend:** Next.js 15, React 19, Tailwind CSS, Zustand, TanStack React Query
-- **Infra:** Docker Compose, Nginx, Supabase (Postgres), Render + Vercel deployment
-- **Monitoring:** Sentry, PostHog, Langfuse
-- **Testing:** pytest (backend), Playwright E2E (frontend)
+- **Backend:** Python 3.11, FastAPI 0.121.0, SQLModel 0.0.22 (SQLAlchemy 2.x), Alembic 1.13.2, Celery 5.4.0, Redis 5.2.0
+- **Frontend:** Next.js 15.5.9 (App Router), React 19.0.0, TypeScript 5.6.3, Tailwind CSS 3.4.10, Zustand 4.5.2, TanStack React Query 5.59.0
+- **UI:** Radix UI, Lucide icons, class-variance-authority
+- **Infra:** Docker Compose, Nginx 1.27-alpine, Supabase (Postgres 16), Render + Vercel
+- **LLM Gateway:** LiteLLM 1.61.15 (OpenAI, Anthropic, Gemini, OpenRouter, Groq, Mistral)
+- **Auth:** JWT cookie-based (PyJWT 2.10.1), bcrypt, Google OAuth, CSRF double-submit
+- **Monitoring:** Sentry, PostHog, Langfuse, Prometheus, OpenTelemetry
+- **Testing:** pytest 8.3.3 (backend), Vitest + Playwright (frontend)
+- **Billing:** Stripe (skeleton/placeholder)
 
 ## VC-Readiness Assessment (2026-06-04)
 - **Overall Score: 6.5/10** — strong product/code, weak on tests/legal
@@ -43,7 +47,6 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
   - Removed duplicate verdict blocks by hiding the raw markdown SynthesisCard whenever the structured report successfully renders.
 - **Testing**: Added new tests to `test_synthesis_engine.py`, `test_report_builder.py`, `test_claim_quality.py`, and `DecisionReportView.test.tsx`. All tests are passing.
 
-
 ## Arena Pipeline Integrity & Fail-Closed Reporting (2026-06-10)
 - **Goal**: Hardened the debate run pipeline UI hydration and enforced decision report integrity against LLM failures.
 - **Key Enhancements**:
@@ -69,35 +72,61 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
 - **Tests & Verification**: Integrated vitest coverage for BackButton component. All 110 tests passed and Next.js builds successfully. Pushed changes to the remote.
 
 ## Key Files to Know
-- `apps/api/main.py` — FastAPI app entry (419 lines)
+- `apps/api/main.py` — FastAPI app entry, middleware, lifespan
 - `apps/api/orchestrator.py` — debate execution (814 lines, god file)
-- `apps/api/agents.py` — LLM agent roles (829 lines)
-- `apps/api/config.py` — Pydantic settings (493 lines)
-- `apps/api/models.py` — 16 SQLModel tables
+- `apps/api/agents.py` — LLM agent roles
+- `apps/api/config.py` — Pydantic AppSettings (centralized config)
+- `apps/api/models.py` — SQLModel ORM models (25+ tables)
+- `apps/api/services/continuations.py` — continuation DB lifecycle
+- `apps/api/services/schema_capabilities.py` — runtime PG inspection
+- `apps/api/services/debate_enrichment.py` — enrichment fail-safe
+- `apps/api/services/migration_safety.py` — safe migration runner
+- `apps/api/orchestration/checkpoints.py` — stage checkpoint caching
+- `apps/api/reporting/synthesizer.py` — report generation with verification
+- `apps/api/routes/debates.py` — debate API endpoints (continue, retry)
 - `docs/investor-positioning.md` — pitch narrative
-- `docs/vc-readiness-scorecard.md` — existing VC checklist
+- `docs/diligence/VC_READINESS.md` — VC readiness checklist
 - `docs/pricing-strategy.md` — 3-tier pricing
 - `docs/defensibility.md` — moat strategy
 
-## Known Issues (as of 2026-06-04)
-- `orchestrator.py` mixes sync/async database access
-- `votes_router` registered twice in main.py
-- 8 stale .db files previously tracked in git
-- Frontend has zero unit tests
-- No API versioning (/api/v1/)
-- `core/settings.py` and `config.py` coexist (potential confusion)
-
-## Known Issues (as of 2026-06-09)
-- LLM guard NOT wired into `POST /debates` and `POST /debates/{id}/start` (these already have granular rate limiting)
+## Known Issues (as of 2026-06-16)
+- `orchestrator.py` (814 lines) — monolithic, mixes sync/async, needs refactoring
 - API client consolidation needed (3 overlapping modules: apiClient.ts, api.ts, auth.ts)
-- No E2E tests (Playwright)
-- `orchestrator.py` (814 lines) — monolithic, needs refactoring
+- No E2E tests (Playwright) despite playwright.config.ts existing
 - Terms/Privacy are product-specific but not legal-grade (P1: lawyer review before paid launch)
+- `core/settings.py` and `config.py` coexist (potential confusion)
+- LLM guard NOT wired into `POST /debates` and `POST /debates/{id}/start` (rate-limited already)
+- No API versioning (/api/v1/) despite routes living under `/api/v1/` prefix
 
 ## User Context
 - Solo founder building Consultaion
 - Preparing for pre-seed fundraising
 - Working on model gateway, arena UX, and PLG optimizations
+
+## Dev Tooling
+- **Linting:** Ruff 0.8.0, MyPy 1.13.0
+- **Testing:** pytest 8.3.3 + pytest-cov (75% coverage gate), Vitest, Playwright
+- **CI/CD:** GitHub Actions (7 workflows), pre-commit hooks (ruff, mypy, fast pytest)
+- **Security:** Bandit (SAST), pip-audit / npm audit, Gitleaks (secret scanning), SBOM (CycloneDX)
+- **Code review:** CodeRabbit automated PR reviews
+- **Client SDKs:** Python SDK (`consultaion-sdk` v0.1.0, async httpx), JS SDK (`@consultaion/sdk` v0.1.0, TypeScript)
+- **Theme:** "Amber-Mocha" cockpit theme (warm cream background, amber accents)
+
+## Competitor Intelligence
+- **SummaChat** (2026-06-13): Multi-Agent Debate mode with moderator + multiple LLMs, unified action menus (Create Image, Create Doc, Crawl). Critical consensus synthesis error observed — moderator failed to generate final report, showing red retry card. Reinforces that robust error boundaries for multi-agent synthesis are essential.
+
+## Key Learnings
+- **Checkpoint isolation:** Isolating outer checkpoints (e.g. `"synthesis"`) from inner (e.g. `"synthesis_draft"`, `"verification"`) avoids namespace collisions and enables granular retry control. [2026-06-14]
+- **SQLAlchemy JSON mutation tracking:** Must deep-copy JSON columns to trigger change detection. [2026-06-13]
+- **Test fixture engine imports:** Dynamic database engine updates in conftest can lead to stale references; use `db_session` fixture or import engine inside functions. [2026-06-12]
+- **StreamingResponse charset:** Next.js test assertions should use `.startswith()` for content-type checks due to inconsistent `charset=utf-8` appending. [2026-06-12]
+- **SQLite text-JSON:** SQLite stores JSON as text; test assertions must account for text-JSON representation. [2026-06-10]
+
+## Current Status (2026-06-16)
+- **Blocker:** OpenRouter credits exhausted — 402 errors on all LLM calls
+- **Completed:** FH51–FH62 (Run recovery, enrichment fail-safe, migration safety, schema verification)
+- **In Progress:** FH63–FH76 (Final Release Recovery & Runtime Correctness) — started but interrupted
+- **Remaining:** FH57–FH62 items, FH63–FH76 completion, E2E tests, API client consolidation, orchestrator refactor
 
 ## SaaS Readiness & PLG Activation Polish (2026-06-12)
 - **Goal**: Hardened SaaS readiness, added BYOK integrations, audit logs JSON/CSV streaming, data retention policies, dynamic team invites, pricing strategy, interactive PLG simulation, and completed visual sticky scrolling fixes.
@@ -148,7 +177,4 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
   - **FH55** — Alembic revision policy audit: `audit_alembic_revisions.py`, `test_alembic_revision_policy.py`
   - **FH56** — Schema verification scripts and runbook: diagnostic, verification, `/readyz` integrity check
 - **Tests & Verification**: Frontend 127 tests pass; backend module imports validate.
-
-
-
 

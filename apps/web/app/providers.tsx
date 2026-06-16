@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
+import { FeatureFlagProvider } from '@/components/FeatureFlagProvider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
     // Patchset 112: Tuned React Query defaults
@@ -40,7 +41,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
             <QueryClientProvider client={queryClient}>
-                {children}
+                <FeatureFlagProvider>
+                    {children}
+                </FeatureFlagProvider>
             </QueryClientProvider>
         </ThemeProvider>
     );

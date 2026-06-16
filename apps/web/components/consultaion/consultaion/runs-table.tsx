@@ -58,12 +58,28 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () =
   }, [handler, ref])
 }
 
+function getInitialScope(profile: { id: string; role: string } | null | undefined): Scope {
+  if (!profile) return "all"
+  return profile.role === "admin" ? "all" : "mine"
+}
+
 export default function RunsTable({ items, teams, profile, initialQuery = "", initialStatus = null }: RunsTableProps) {
   const { t } = useI18n()
   const profileId = profile?.id ?? null
   const isAdmin = profile?.role === "admin"
   const hasProfile = Boolean(profileId)
-  const [scope, setScope] = useState<Scope>(isAdmin ? "all" : "mine")
+  const [scope, setScope] = useState<Scope>(() => getInitialScope(profile))
+  const scopeWasManuallyChangedRef = useRef(false)
+
+  const handleScopeChange = useCallback((option: Scope) => {
+    scopeWasManuallyChangedRef.current = true
+    setScope(option)
+  }, [])
+
+  useEffect(() => {
+    if (scopeWasManuallyChangedRef.current) return
+    setScope(getInitialScope(profile))
+  }, [profile])
   const [rows, setRows] = useState(items)
   const [search, setSearch] = useState(initialQuery)
   const [statusFilter, setStatusFilter] = useState<string | null>(initialStatus)
@@ -90,13 +106,16 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map((team) => [team.id, team.name])), [teams])
 
-  const availableScopes: Scope[] = isAdmin ? ["mine", "team", "all"] : ["mine", "team"]
+  const availableScopes: Scope[] = !hasProfile 
+    ? ["all"] 
+    : isAdmin 
+      ? ["mine", "team", "all"] 
+      : ["mine", "team"]
 
   const filteredRuns = useMemo(() => {
     const lowerQuery = debouncedSearch.trim().toLowerCase()
     return rows.filter((run) => {
       if (scope === "mine" && profileId && run.user_id !== profileId && run.user_id) return false
-      if (scope === "mine" && !profileId) return false
       if (scope === "team" && !run.team_id) return false
       if (statusFilter && run.status !== statusFilter) return false
       if (lowerQuery) {
@@ -206,7 +225,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                 "rounded-full px-3 py-1 transition",
                 scope === option ? "bg-amber-600 text-white shadow" : "text-stone-600 hover:text-stone-900",
               )}
-              onClick={() => setScope(option)}
+              onClick={() => handleScopeChange(option)}
             >
               {t(SCOPE_KEYS[option])}
             </button>

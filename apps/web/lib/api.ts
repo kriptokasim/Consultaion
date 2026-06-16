@@ -2,6 +2,7 @@ import { apiRequest } from "@/lib/apiClient";
 import { fetchWithAuth } from "@/lib/auth";
 import type { PanelConfigPayload } from "@/lib/panels";
 import { API_ORIGIN } from "@/lib/config/runtime";
+import type { RequestOptions } from "@/lib/api/types";
 
 const API = API_ORIGIN;
 
@@ -49,6 +50,41 @@ export type ListResponse<T> = {
 const baseFetcher = async (url: string, init?: RequestInit) =>
   fetch(`${API}${url}`, { cache: "no-store", credentials: "include", ...init });
 
+export function composeAbortSignal(
+  timeoutMs?: number,
+  externalSignal?: AbortSignal
+): { signal?: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const onExternalAbort = () => {
+    controller.abort(externalSignal?.reason);
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener("abort", onExternalAbort);
+    }
+  }
+
+  if (timeoutMs) {
+    timeoutId = setTimeout(() => {
+      controller.abort(new TimeoutError(`Request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  }
+
+  const cleanup = () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", onExternalAbort);
+    }
+  };
+
+  return { signal: controller.signal, cleanup };
+}
+
 const AUTH_STATUSES = new Set([401, 403]);
 
 export class ApiError extends Error {
@@ -65,15 +101,13 @@ export class ApiError extends Error {
 export async function requestWithTimeout<T>(
   pathOrUrl: string,
   timeoutMs: number,
-  init?: RequestInit,
+  options?: RequestOptions,
 ): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const { signal, cleanup } = composeAbortSignal(timeoutMs, options?.signal);
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API}${pathOrUrl}`;
   try {
     const res = await fetch(url, {
-      ...init,
-      signal: controller.signal,
+      signal,
       credentials: "include",
     });
     if (!res.ok) {
@@ -95,12 +129,12 @@ export async function requestWithTimeout<T>(
     }
     return undefined as T;
   } catch (err: any) {
-    if (err.name === "AbortError") {
+    if (err.name === "AbortError" && !options?.signal?.aborted) {
       throw new TimeoutError(`Request timed out after ${timeoutMs}ms`);
     }
     throw err;
   } finally {
-    clearTimeout(timer);
+    cleanup();
   }
 }
 
@@ -121,9 +155,11 @@ const handleClientAuthRedirect = (status: number | undefined) => {
   }
 };
 
-async function request<T>(path: string, init?: RequestInit, opts?: { auth?: boolean }) {
+async function request<T>(path: string, init?: RequestInit, opts?: { auth?: boolean } & RequestOptions) {
   const fetcher = opts?.auth && typeof fetchWithAuth === "function" ? fetchWithAuth : baseFetcher;
-  const res = await fetcher(path, init);
+  const { signal, cleanup } = composeAbortSignal(opts?.timeoutMs, opts?.signal);
+  try {
+    const res = await fetcher(path, { ...init, signal });
   if (!res.ok) {
     let body: ErrorBody | string | null = null;
     const contentType = res.headers.get("content-type") || "";
@@ -144,6 +180,14 @@ async function request<T>(path: string, init?: RequestInit, opts?: { auth?: bool
     return (await res.json()) as T;
   }
   return undefined as T;
+  } catch (err: any) {
+    if (err.name === "AbortError" && !opts?.signal?.aborted && opts?.timeoutMs) {
+      throw new TimeoutError(`Request timed out after ${opts.timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    cleanup();
+  }
 }
 
 export async function getDebates(params: ListParams = {}, opts?: { auth?: boolean }) {
@@ -156,8 +200,8 @@ export async function getDebates(params: ListParams = {}, opts?: { auth?: boolea
   return request<ListResponse<any>>(`/debates${suffix}`, undefined, opts ?? { auth: true });
 }
 
-export async function getDebate(id: string) {
-  return request<any>(`/debates/${id}`, undefined, { auth: true });
+export async function getDebate(id: string, options?: RequestOptions) {
+  return request<any>(`/debates/${id}`, undefined, { auth: true, ...options });
 }
 
 export async function getReport(id: string) {
@@ -215,16 +259,16 @@ export async function retryDebate(debateId: string, stageKey?: string) {
   });
 }
 
-export async function getEvents(id: string) {
-  return request<any>(`/debates/${id}/events`, undefined, { auth: true });
+export async function getEvents(id: string, options?: RequestOptions) {
+  return request<any>(`/debates/${id}/events`, undefined, { auth: true, ...options });
 }
 
 export async function getMembers() {
   return request<any>("/config/members");
 }
 
-export async function getDebateMembers(id: string) {
-  return request<any>(`/debates/${id}/members`, undefined, { auth: true });
+export async function getDebateMembers(id: string, options?: RequestOptions) {
+  return request<any>(`/debates/${id}/members`, undefined, { auth: true, ...options });
 }
 
 export async function getMyDebates(params: ListParams = {}) {

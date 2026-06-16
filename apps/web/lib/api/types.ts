@@ -1,3 +1,8 @@
+export interface RequestOptions {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+}
+
 export interface DebateConfig {
     agents?: any[]; // refine as needed
     judges?: any[]; // refine as needed

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 import uuid
 from enum import Enum
@@ -28,6 +29,13 @@ end
 return 0
 """
 
+# Lua script for atomic compare-and-expire renewal
+_RENEW_LUA = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("expire", KEYS[1], ARGV[2])
+end
+return 0
+"""
 
 class LockAcquireResult(Enum):
     ACQUIRED = "acquired"
@@ -70,17 +78,15 @@ def _release_reconciliation_lock(lock: object) -> None:
 
 
 def _renew_lock(lock: object) -> bool:
-    """Renew a Redis distributed lock if we still own it."""
+    """Renew a Redis distributed lock atomically if we still own it."""
     if lock is None:
         return False
     try:
         client, lock_key, owner = lock
-        current = client.get(lock_key)
-        if current and current.decode() == owner:
-            client.expire(lock_key, RECONCILIATION_LOCK_TTL)
-            return True
-        return False
-    except Exception:
+        result = client.eval(_RENEW_LUA, 1, lock_key, owner, RECONCILIATION_LOCK_TTL)
+        return bool(result)
+    except Exception as exc:
+        logger.warning("Failed to renew reconciliation lock: %s", exc)
         return False
 
 
@@ -114,6 +120,14 @@ def reconcile_previous_day(self):
         logger.error("Daily reconciliation: Redis unavailable for run_key=%s — retrying", run_key)
         raise self.retry(exc=RuntimeError("Redis unavailable"), countdown=60)
 
+    stop_renew = threading.Event()
+    def renewer():
+        while not stop_renew.wait(RECONCILIATION_LOCK_RENEW_INTERVAL):
+            _renew_lock(lock)
+            
+    renew_thread = threading.Thread(target=renewer, daemon=True)
+    renew_thread.start()
+
     try:
         start = time.monotonic()
         with SessionLocal() as db:
@@ -132,6 +146,8 @@ def reconcile_previous_day(self):
         logger.error("Daily reconciliation failed: window=%s error=%s", window.label, exc)
         raise self.retry(exc=exc, countdown=300)
     finally:
+        stop_renew.set()
+        renew_thread.join(timeout=1.0)
         _release_reconciliation_lock(lock)
 
 
@@ -166,6 +182,14 @@ def reconcile_current_period(self):
         logger.error("Monthly reconciliation: Redis unavailable for run_key=%s — retrying", run_key)
         raise self.retry(exc=RuntimeError("Redis unavailable"), countdown=60)
 
+    stop_renew = threading.Event()
+    def renewer():
+        while not stop_renew.wait(RECONCILIATION_LOCK_RENEW_INTERVAL):
+            _renew_lock(lock)
+            
+    renew_thread = threading.Thread(target=renewer, daemon=True)
+    renew_thread.start()
+
     try:
         start = time.monotonic()
         with SessionLocal() as db:
@@ -184,6 +208,8 @@ def reconcile_current_period(self):
         logger.error("Monthly reconciliation failed: window=%s error=%s", window.label, exc)
         raise self.retry(exc=exc, countdown=600)
     finally:
+        stop_renew.set()
+        renew_thread.join(timeout=1.0)
         _release_reconciliation_lock(lock)
 
 
@@ -216,6 +242,14 @@ def reconcile_closed_period(self, period: str):
         logger.error("Manual reconciliation: Redis unavailable for run_key=%s — retrying", run_key)
         raise self.retry(exc=RuntimeError("Redis unavailable"), countdown=60)
 
+    stop_renew = threading.Event()
+    def renewer():
+        while not stop_renew.wait(RECONCILIATION_LOCK_RENEW_INTERVAL):
+            _renew_lock(lock)
+            
+    renew_thread = threading.Thread(target=renewer, daemon=True)
+    renew_thread.start()
+
     try:
         start = time.monotonic()
         with SessionLocal() as db:
@@ -234,4 +268,6 @@ def reconcile_closed_period(self, period: str):
         logger.error("Manual reconciliation failed: window=%s error=%s", window.label, exc)
         raise self.retry(exc=exc, countdown=300)
     finally:
+        stop_renew.set()
+        renew_thread.join(timeout=1.0)
         _release_reconciliation_lock(lock)

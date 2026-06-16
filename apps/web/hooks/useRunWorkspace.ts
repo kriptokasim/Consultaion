@@ -5,7 +5,7 @@ import { fetchWithAuth } from "@/lib/auth";
 import { getDebate, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, REQUEST_TIMEOUT } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { useEventSource, type SSEStatus } from "@/lib/sse";
-import { normalizeEvent } from "@/lib/api/normalizeEvent";
+import { normalizeEvent, normalizeTimelineItems } from "@/lib/api/normalizeEvent";
 import type { TimelineEvent } from "@/lib/timeline/types";
 
 export type RunWorkspaceStatus =
@@ -134,13 +134,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   const isPaused = debate?.status === "perspectives_ready";
 
-  const loadTimelineWithFallback = useCallback(async (id: string): Promise<TimelineHydrationResult> => {
+  const loadTimelineWithFallback = useCallback(async (id: string, signal?: AbortSignal): Promise<TimelineHydrationResult> => {
     let timelineEvents: unknown[] | null = null;
 
     try {
       const data = await requestWithTimeout<unknown>(
         `/debates/${id}/timeline`,
         TIMELINE_TIMEOUT_MS,
+        { signal }
       );
       timelineEvents = extractEventItems(data);
     } catch (err: any) {
@@ -151,10 +152,12 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         const eventsData = await requestWithTimeout<unknown>(
           `/debates/${id}/events`,
           EVENTS_TIMEOUT_MS,
+          { signal }
         );
         timelineEvents = extractEventItems(eventsData);
+        const fallbackEvents = normalizeTimelineItems(timelineEvents, id);
         return {
-          events: [],
+          events: fallbackEvents,
           quality: "events_fallback",
           timelineError: msg,
           eventsError: null,
@@ -172,22 +175,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     }
 
     if (timelineEvents && timelineEvents.length > 0) {
-      const normalized: TimelineEvent[] = timelineEvents.map((raw: any) => ({
-        id: raw.id || `event-${Date.now()}-${Math.random()}`,
-        debate_id: id,
-        ts: raw.ts || raw.at || raw.created_at || new Date().toISOString(),
-        type: raw.type || "notice",
-        round: raw.round || 0,
-        seat: raw.seat,
-        payload: raw.payload || raw,
-      }));
+      const normalized: TimelineEvent[] = normalizeTimelineItems(timelineEvents, id);
       return { events: normalized, quality: "complete", timelineError: null, eventsError: null };
     }
     return { events: [], quality: "complete", timelineError: null, eventsError: null };
   }, []);
 
-  const fetchDebateOnly = useCallback(async (id: string) => {
-    const debateData = await getDebate(id);
+  const fetchDebateOnly = useCallback(async (id: string, signal?: AbortSignal) => {
+    const debateData = await getDebate(id, { signal });
     setDebate(debateData);
     setDebateSetOnce(true);
     debateSetOnceRef.current = true;
@@ -195,16 +190,25 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     return debateData;
   }, []);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const fetchDebateAndTimeline = useCallback(async (id: string) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     const generation = requestGenerationRef.current;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort("navigated");
+    }
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     try {
-      const debateData = await fetchDebateOnly(id);
+      const debateData = await fetchDebateOnly(id, signal);
 
       if (generation !== requestGenerationRef.current) return;
 
-      const result = await loadTimelineWithFallback(id);
+      const result = await loadTimelineWithFallback(id, signal);
 
       if (generation !== requestGenerationRef.current) return;
 
@@ -238,6 +242,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         setIsLoading(false);
       });
     } else {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort("navigated");
+        abortControllerRef.current = null;
+      }
       requestGenerationRef.current += 1;
       setDebate(null);
       setEvents([]);
@@ -251,6 +259,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setDebateSetOnce(false);
     }
   }, [debateId, fetchDebateAndTimeline]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort("unmount");
+      }
+    };
+  }, []);
 
   const streamUrl = debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
 
