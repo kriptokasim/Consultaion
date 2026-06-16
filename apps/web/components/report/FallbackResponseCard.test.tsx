@@ -14,7 +14,7 @@ describe("FallbackResponseCard", () => {
     )
 
     expect(screen.getByText("This is the fallback response content.")).toBeInTheDocument()
-    expect(screen.getByText("gpt-4")).toBeInTheDocument()
+    expect(screen.getByText(/gpt-4/)).toBeInTheDocument()
     expect(screen.queryByText("Confidence")).not.toBeInTheDocument()
   })
 

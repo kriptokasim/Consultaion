@@ -1,8 +1,9 @@
 import React from "react"
 import { ShieldCheck, ShieldAlert, Maximize2, Minimize2, Compass, BookOpen } from "lucide-react"
 import { SemanticAlignmentSection, DivergenceBreakdown } from "./SemanticAlignmentSection"
-import { FallbackResponsePanel } from "./FallbackResponsePanel"
+import { FallbackResponseCard } from "./FallbackResponseCard"
 import { ReportGenerationFailedCard } from "./ReportGenerationFailedCard"
+import { ReportSectionNav } from "./ReportSectionNav"
 
 interface QualityMeta {
   completeness_score?: number | null
@@ -66,19 +67,20 @@ export function DecisionReportShell({
     }
   }, [isFocusMode])
 
-  const sections = [
-    { id: "report-verdict", label: "Verdict" },
-    { id: "report-findings", label: "Key Findings" },
-    { id: "report-positions", label: "Model Positions" },
-    { id: "report-risks", label: "Risks & Assumptions" },
-    { id: "report-actions", label: "Next Actions" },
-    { id: "report-caveats", label: "Caveats" },
-  ].filter((s) => {
-    if (typeof document !== "undefined") {
-      return !!document.getElementById(s.id);
-    }
-    return true;
-  });
+  const [activeSections, setActiveSections] = React.useState<Array<{ id: string, label: string }>>([])
+
+  React.useEffect(() => {
+    const rawSections = [
+      { id: "report-verdict", label: "Verdict" },
+      { id: "report-findings", label: "Key Findings" },
+      { id: "report-positions", label: "Model Positions" },
+      { id: "report-risks", label: "Risks & Assumptions" },
+      { id: "report-actions", label: "Next Actions" },
+      { id: "report-caveats", label: "Caveats" },
+    ]
+    const active = rawSections.filter((s) => !!document.getElementById(s.id))
+    setActiveSections(active)
+  }, [children])
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -202,8 +204,8 @@ export function DecisionReportShell({
       ) : isFailed ? (
         <>
           {fallbackResponse && (
-            <FallbackResponsePanel
-              modelName={fallbackModel || fallbackResponse.model}
+            <FallbackResponseCard
+              model={fallbackModel || fallbackResponse.model}
               reason={fallbackReason}
               content={fallbackResponse.content}
             />
@@ -261,7 +263,7 @@ export function DecisionReportShell({
         </div>
 
         {/* Floating Table of Contents for Focus Mode */}
-        {sections.length > 0 && (
+        {activeSections.length > 0 && (
           <div className="fixed bottom-4 right-4 z-40">
             <div className="relative">
               {tocOpen && (
@@ -269,7 +271,7 @@ export function DecisionReportShell({
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-2 pb-1.5 border-b border-border/60">
                     Jump to Section
                   </p>
-                  {sections.map((sec) => (
+                  {activeSections.map((sec) => (
                     <button
                       key={sec.id}
                       onClick={() => scrollToSection(sec.id)}
@@ -330,7 +332,13 @@ export function DecisionReportShell({
         </p>
       )}
 
+      {/* Navigation */}
+      {!isFailed && activeSections.length > 0 && (
+        <ReportSectionNav sections={activeSections} className="rounded-xl border border-border/30 overflow-hidden shadow-xs" />
+      )}
+
       {contentMarkup}
+
     </div>
   )
 }

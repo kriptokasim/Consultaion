@@ -68,6 +68,7 @@ async def test_compute_divergence_success(db_session, monkeypatch):
         return ["Unknown claim"]
 
     monkeypatch.setattr("worker.arena_tasks._extract_claims_from_response", mock_extract)
+    monkeypatch.setattr("reporting.synthesizer._extract_claims_from_response", mock_extract)
     
     # Execute divergence task
     await _execute_divergence_computation(debate_id)

@@ -48,6 +48,7 @@ class AppSettings(BaseSettings):
     RETAIN_DEBATE_ERRORS_DAYS: int = 90
     RETAIN_SUPPORT_NOTES_DAYS: int | None = None  # Indefinite by default
     RETAIN_USAGE_STATS_DAYS: int = 365
+    TRUSTED_PROXY_CIDRS: list[str] = ["127.0.0.1/32", "::1/128"]
 
     # Owner override (Patchset 103)
     OWNER_EMAIL_ALLOWLIST: str = ""   # comma-separated emails
@@ -273,6 +274,14 @@ class AppSettings(BaseSettings):
         """Convert empty strings to None for optional integer fields."""
         if v == "":
             return None
+        return v
+
+    @field_validator("TRUSTED_PROXY_CIDRS", mode="before")
+    @classmethod
+    def parse_trusted_proxies(cls, v):
+        """Parse comma-separated proxy CIDRs list."""
+        if isinstance(v, str):
+            return [x.strip() for x in v.split(",") if x.strip()]
         return v
 
     def model_post_init(self, __context):

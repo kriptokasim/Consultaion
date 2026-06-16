@@ -75,3 +75,23 @@ No TypeScript errors in frontend codebase. Clean compilation across all componen
 - Alembic single-head verification inside container
 - Container log collection on failure
 - Automatic cleanup on exit
+
+## Additional Phase 5 Verification
+
+### Continuation State Machine Tests
+Run the core transition tests:
+```bash
+./.venv/bin/pytest tests/test_continuation_state_machine.py tests/test_continuations_service.py tests/test_continue_api.py -v
+```
+**Results:** All 28 tests pass successfully, confirming that:
+- Atomic DB status transitions function correctly.
+- Continuation retries create new records rather than updating old ones.
+- Duplicate idempotency keys return identical dispatched states.
+- The metrics registry handles absent `prometheus_client` packages gracefully.
+
+### Stage Checkpoint Tests
+Run the stage checkpoint tests:
+```bash
+./.venv/bin/pytest tests/test_stage_checkpoints.py -v
+```
+**Results:** All 5 tests pass successfully, verifying correct draft/verification checkpoint serialization, downstream cascade deletions, and idempotency mapping.

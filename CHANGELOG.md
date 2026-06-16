@@ -5,6 +5,33 @@ All notable changes to the **Consultaion** project will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-16
+
+### Added
+- **FH39: Immutable Continuation Attempts**: Terminal states (completed/failed/cancelled/paused) have empty transition sets; UNIQUE(debate_id, idempotency_key) constraint; FK retry_of_continuation_id.
+- **FH40: Continuation Contract and Recovery Loop**: Frontend stores continuation_id; mount-based recovery from localStorage; duplicate-action protection.
+- **FH41: Real Schema Drift**: Script validates schema drift via compare_metadata(); migration parity tests check revision lengths, chain uniqueness, single head.
+- **FH42: Trusted Rate-Limit Identity**: Validates cookie JWT and API keys; respects TRUSTED_PROXY_CIDRS; bounded cache.
+- **FH43: SSE Concurrent Stream Limiter**: Lease-based limiter via Redis sorted sets; HTTP 503 on limit reached; configurable max streams per debate.
+- **FH44: Report Provenance**: DecisionReportView renders FallbackResponseCard/UnstructuredSynthesisCard/ReportGenerationFailedCard without fabricated data.
+- **FH45: Feature Flags Wiring**: FeatureGate wired in RunDetailClient for unifiedWorkspace, mobileWorkspaceV2, stagedDecisionPipelinePublic; /config/features endpoint enriched.
+- **FH46: ReconciliationWindow + Cost Reconciliation**: New ReconciliationWindow dataclass; versioned model pricing; cost comparison vs recorded totals; removed legacy period helpers.
+- **FH47: Celery Beat + Redis Locking**: crontab() schedules; deterministic run key per window; Redis distributed lock preventing duplicate executions.
+- **FH48: Docker Compose Fixes**: Root-relative paths; test-safe env; psycopg driver; correct startup ordering; smoke script fixes.
+- **FH49: Observability Wiring**: Continuation transition metrics; pipeline stage duration/failure metrics; synthesis/verification result counters; conditional console exporter.
+
+### Changed
+- Reconciliation uses datetime-based window boundaries instead of string period parsing.
+- Celery beat schedules use proper crontab() objects.
+- billing_tasks.py uses window-based run keys with Redis locking.
+- Console span exporter only activates in dev/test/smoke environments.
+
+### Fixed
+- Docker compose paths corrected to root-relative context.
+- Smoke script assertions use proper health checks (no subshell read).
+- SSE reconnection tracking via SSE_RECONNECTS_TOTAL metric.
+- Period_end not exported for legacy period helpers (removed).
+
 ## [0.2.0] - 2026-06-07
 
 ### Added

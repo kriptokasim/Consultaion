@@ -40,6 +40,7 @@ from schemas import (
     default_debate_config,
     default_panel_config,
     ContinuationResponse,
+    ContinuationRequest,
 )
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -613,6 +614,7 @@ from fastapi import Header, HTTPException
 async def continue_debate_run(
     debate_id: str,
     background_tasks: BackgroundTasks,
+    body: Optional[ContinuationRequest] = None,
     x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -623,6 +625,24 @@ async def continue_debate_run(
     if not debate:
         raise NotFoundError(message=f"Debate {debate_id} not found", code="debate.not_found")
     debate = require_debate_mutation_access(debate, current_user, session)
+
+    retry_of_continuation_id = body.retry_of_continuation_id if body else None
+    if retry_of_continuation_id:
+        ref_cont = session.get(DebateContinuation, retry_of_continuation_id)
+        if not ref_cont or ref_cont.debate_id != debate_id:
+            raise NotFoundError(message="Referenced continuation not found", code="continuation.not_found")
+        if ref_cont.status not in {"failed", "cancelled", "completed"}:
+            raise ValidationError(
+                message="Referenced continuation is not in a terminal state",
+                code="continuation.not_terminal",
+                status_code=400
+            )
+        if x_idempotency_key and ref_cont.idempotency_key == x_idempotency_key:
+            raise ValidationError(
+                message="Idempotency key must differ from the referenced continuation's key",
+                code="continuation.duplicate_idempotency_key",
+                status_code=400
+            )
 
     # 1. Idempotency Check & Continuation record setup
     continuation_record = None
@@ -640,15 +660,15 @@ async def continue_debate_run(
                     status=continuation_record.status,
                     idempotency_key=continuation_record.idempotency_key,
                     created=False,
+                    retry_of_continuation_id=continuation_record.retry_of_continuation_id,
                 )
             if continuation_record.status in {"failed", "cancelled"}:
-                transition_continuation_sync(
-                    session, continuation_record.id, [continuation_record.status], "requested"
+                raise ValidationError(
+                    message="The previous continuation attempt failed or was cancelled. A new idempotency key is required.",
+                    code="continuation.new_idempotency_key_required",
+                    status_code=409,
+                    details={"new_idempotency_key_required": True}
                 )
-                continuation_record.user_id = current_user.id if current_user else None
-                continuation_record.target = debate.model_id
-                session.add(continuation_record)
-                session.commit()
         else:
             continuation_record = DebateContinuation(
                 debate_id=debate_id,
@@ -657,6 +677,7 @@ async def continue_debate_run(
                 user_id=current_user.id if current_user else None,
                 target=debate.model_id,
                 requested_at=sa.func.now(),
+                retry_of_continuation_id=retry_of_continuation_id,
             )
             session.add(continuation_record)
             try:
@@ -671,6 +692,7 @@ async def continue_debate_run(
                         status=continuation_record.status,
                         idempotency_key=continuation_record.idempotency_key,
                         created=False,
+                        retry_of_continuation_id=continuation_record.retry_of_continuation_id,
                     )
     else:
         continuation_record = DebateContinuation(
@@ -680,6 +702,7 @@ async def continue_debate_run(
             user_id=current_user.id if current_user else None,
             target=debate.model_id,
             requested_at=sa.func.now(),
+            retry_of_continuation_id=retry_of_continuation_id,
         )
         session.add(continuation_record)
         session.commit()
@@ -858,6 +881,7 @@ async def continue_debate_run(
         status="scheduled",
         idempotency_key=continuation_record.idempotency_key,
         created=True,
+        retry_of_continuation_id=continuation_record.retry_of_continuation_id,
     )
 
 
@@ -892,6 +916,7 @@ async def get_debate_continuation(
         status=continuation.status,
         idempotency_key=continuation.idempotency_key,
         created=False,
+        retry_of_continuation_id=continuation.retry_of_continuation_id,
     )
 
 
@@ -928,6 +953,7 @@ async def resolve_continuation_by_key(
         status=continuation.status,
         idempotency_key=continuation.idempotency_key,
         created=False,
+        retry_of_continuation_id=continuation.retry_of_continuation_id,
     )
 
 
@@ -1542,6 +1568,22 @@ async def stream_events(
     channel_id = debate_channel_id(debate_id)
     await sse_backend.create_channel(channel_id)
     track_metric("sse_stream_open")
+    if last_seq_val is not None:
+        from observability.metrics import record_sse_reconnect
+        record_sse_reconnect()
+
+    # Acquire lease-based concurrent stream slot
+    from sse_backend import get_stream_lease_manager
+    lease_mgr = get_stream_lease_manager()
+    subscriber_id = f"{user.id}:{uuid.uuid4().hex}"
+    acquired = await lease_mgr.try_acquire(debate_id, subscriber_id)
+    if not acquired:
+        active = await lease_mgr.active_count(debate_id)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Too many concurrent streams for debate {debate_id} ({active} active)",
+            headers={"Retry-After": "30"},
+        )
 
     # Determine last sequence from query param or Last-Event-ID header
     last_seq_val = last_sequence
@@ -1552,17 +1594,21 @@ async def stream_events(
             pass
 
     async def eventgen():
-        async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
-            seq = event.get("sequence")
-            id_prefix = f"id: {seq}\n" if seq is not None else ""
-            yield f"{id_prefix}data: {json.dumps(event, ensure_ascii=False)}\n\n"
-            
-            # Check either top-level or payload type
-            evt_type = event.get("type")
-            payload = event.get("payload")
-            payload_type = payload.get("type") if isinstance(payload, dict) else None
-            if evt_type == "final" or payload_type == "final":
-                break
+        try:
+            async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
+                seq = event.get("sequence")
+                id_prefix = f"id: {seq}\n" if seq is not None else ""
+                yield f"{id_prefix}data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                
+                # Check either top-level or payload type
+                evt_type = event.get("type")
+                payload = event.get("payload")
+                payload_type = payload.get("type") if isinstance(payload, dict) else None
+                if evt_type == "final" or payload_type == "final":
+                    break
+        finally:
+            await lease_mgr.release(debate_id, subscriber_id)
+            logger.debug("Released stream lease: debate=%s subscriber=%s", debate_id, subscriber_id)
 
     # Explicit CORS headers — CORSMiddleware does not reliably inject on streaming responses
     allowed_origin = settings.WEB_APP_ORIGIN or "*"

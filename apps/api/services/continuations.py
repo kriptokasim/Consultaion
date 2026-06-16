@@ -15,7 +15,7 @@ ALLOWED_CONTINUATION_TRANSITIONS = {
     "running": {"paused", "completed", "failed"},
     "paused": set(),
     "completed": set(),
-    "failed": {"requested"},
+    "failed": set(),
     "cancelled": set(),
 }
 
@@ -24,6 +24,8 @@ def _validate_transition(current_status: str, target_status: str) -> None:
     """Validate that a transition is allowed by the canonical transition map."""
     allowed = ALLOWED_CONTINUATION_TRANSITIONS.get(current_status, set())
     if target_status not in allowed:
+        from observability.metrics import record_continuation_transition_conflict
+        record_continuation_transition_conflict(current_status, target_status)
         raise ContinuationTransitionError(
             continuation_id="",
             current_status=current_status,
@@ -63,6 +65,8 @@ def transition_continuation_sync(
         )
 
     if continuation.status not in expected_statuses:
+        from observability.metrics import record_continuation_transition_conflict
+        record_continuation_transition_conflict(continuation.status, target_status)
         raise ContinuationTransitionError(
             continuation_id=continuation_id,
             current_status=continuation.status,
@@ -73,9 +77,14 @@ def transition_continuation_sync(
             ),
         )
 
-    _validate_transition(continuation.status, target_status)
+    original_status = continuation.status
+    _validate_transition(original_status, target_status)
 
     _apply_continuation_updates(continuation, target_status, failure_code, failure_detail_safe)
+
+    from observability.metrics import record_continuation_transition
+    record_continuation_transition(original_status, target_status)
+
     session.add(continuation)
     session.commit()
     session.refresh(continuation)
@@ -111,6 +120,8 @@ async def transition_continuation_async(
             )
 
         if continuation.status not in expected_statuses:
+            from observability.metrics import record_continuation_transition_conflict
+            record_continuation_transition_conflict(continuation.status, target_status)
             raise ContinuationTransitionError(
                 continuation_id=continuation_id,
                 current_status=continuation.status,
@@ -121,9 +132,14 @@ async def transition_continuation_async(
                 ),
             )
 
-        _validate_transition(continuation.status, target_status)
+        original_status = continuation.status
+        _validate_transition(original_status, target_status)
 
         _apply_continuation_updates(continuation, target_status, failure_code, failure_detail_safe)
+
+        from observability.metrics import record_continuation_transition
+        record_continuation_transition(original_status, target_status)
+
         session.add(continuation)
         await session.commit()
         return continuation

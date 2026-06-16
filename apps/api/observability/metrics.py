@@ -90,10 +90,58 @@ try:
         registry=REGISTRY,
     )
 
+    # ── Continuation / State Machine Metrics ──────────────────────────────
+    CONTINUATION_TRANSITIONS_TOTAL = Counter(
+        "consultaion_continuation_transitions_total",
+        "Total continuation state transitions",
+        ["from_status", "to_status"],
+        registry=REGISTRY,
+    )
+    CONTINUATION_TRANSITION_CONFLICTS_TOTAL = Counter(
+        "consultaion_continuation_transition_conflicts_total",
+        "Rejected continuation transitions (terminal state or invalid)",
+        ["current_state", "target_state"],
+        registry=REGISTRY,
+    )
+
+    # ── Pipeline Stage Metrics ─────────────────────────────────────────────
+    PIPELINE_STAGE_DURATION_SECONDS = Histogram(
+        "consultaion_pipeline_stage_duration_seconds",
+        "Pipeline stage execution duration in seconds",
+        ["stage", "mode"],
+        buckets=(0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0),
+        registry=REGISTRY,
+    )
+    PIPELINE_STAGE_FAILURES_TOTAL = Counter(
+        "consultaion_pipeline_stage_failures_total",
+        "Total pipeline stage failures",
+        ["stage", "mode"],
+        registry=REGISTRY,
+    )
+
+    # ── Synthesis / Verification Metrics ───────────────────────────────────
+    SYNTHESIS_RESULTS_TOTAL = Counter(
+        "consultaion_synthesis_results_total",
+        "Total synthesis results by outcome",
+        ["outcome"],
+        registry=REGISTRY,
+    )
+    VERIFICATION_RESULTS_TOTAL = Counter(
+        "consultaion_verification_results_total",
+        "Total verification results by outcome",
+        ["outcome"],
+        registry=REGISTRY,
+    )
+
     # ── SSE Stream Metrics ─────────────────────────────────────────────────
     SSE_STREAMS_ACTIVE = Gauge(
         "consultaion_sse_streams_active",
         "Number of active SSE streams",
+        registry=REGISTRY,
+    )
+    SSE_RECONNECTS_TOTAL = Counter(
+        "consultaion_sse_reconnects_total",
+        "Total SSE reconnection events",
         registry=REGISTRY,
     )
     SSE_MESSAGES_TOTAL = Counter(
@@ -125,6 +173,38 @@ try:
     REDIS_POOL_SIZE = Gauge(
         "consultaion_redis_pool_size",
         "Active Redis connection pool size",
+        registry=REGISTRY,
+    )
+
+    # ── Reconciliation Metrics ────────────────────────────────────────────
+    RECONCILIATION_RUNS_TOTAL = Counter(
+        "consultaion_reconciliation_runs_total",
+        "Total reconciliation runs",
+        ["run_type", "status"],
+        registry=REGISTRY,
+    )
+    RECONCILIATION_FAILURES_TOTAL = Counter(
+        "consultaion_reconciliation_failures_total",
+        "Total reconciliation failures",
+        ["error_type"],
+        registry=REGISTRY,
+    )
+    RECONCILIATION_DISCREPANCIES_TOTAL = Counter(
+        "consultaion_reconciliation_discrepancies_total",
+        "Total reconciliation discrepancies found",
+        ["severity", "type"],
+        registry=REGISTRY,
+    )
+    RECONCILIATION_DURATION_SECONDS = Histogram(
+        "consultaion_reconciliation_duration_seconds",
+        "Reconciliation job duration in seconds",
+        ["run_type"],
+        buckets=(10.0, 30.0, 60.0, 120.0, 300.0, 600.0),
+        registry=REGISTRY,
+    )
+    RECONCILIATION_LAST_SUCCESS_TIMESTAMP = Gauge(
+        "consultaion_reconciliation_last_success_timestamp",
+        "Unix timestamp of last successful reconciliation run",
         registry=REGISTRY,
     )
 
@@ -197,37 +277,42 @@ def record_rate_limit_exceeded(limit_type: str, backend: str) -> None:
     RATE_LIMIT_EXCEEDED_TOTAL.labels(limit_type=limit_type, backend=backend).inc()
 
 
-# ── Reconciliation Metrics ────────────────────────────────────────────
-RECONCILIATION_RUNS_TOTAL = Counter(
-    "consultaion_reconciliation_runs_total",
-    "Total reconciliation runs",
-    ["run_type", "status"],
-    registry=REGISTRY,
-)
-RECONCILIATION_FAILURES_TOTAL = Counter(
-    "consultaion_reconciliation_failures_total",
-    "Total reconciliation failures",
-    ["error_type"],
-    registry=REGISTRY,
-)
-RECONCILIATION_DISCREPANCIES_TOTAL = Counter(
-    "consultaion_reconciliation_discrepancies_total",
-    "Total reconciliation discrepancies found",
-    ["severity", "type"],
-    registry=REGISTRY,
-)
-RECONCILIATION_DURATION_SECONDS = Histogram(
-    "consultaion_reconciliation_duration_seconds",
-    "Reconciliation job duration in seconds",
-    ["run_type"],
-    buckets=(10.0, 30.0, 60.0, 120.0, 300.0, 600.0),
-    registry=REGISTRY,
-)
-RECONCILIATION_LAST_SUCCESS_TIMESTAMP = Gauge(
-    "consultaion_reconciliation_last_success_timestamp",
-    "Unix timestamp of last successful reconciliation run",
-    registry=REGISTRY,
-)
+def record_continuation_transition(from_status: str, to_status: str) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    CONTINUATION_TRANSITIONS_TOTAL.labels(from_status=from_status, to_status=to_status).inc()
+
+
+def record_continuation_transition_conflict(current_state: str, target_state: str) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    CONTINUATION_TRANSITION_CONFLICTS_TOTAL.labels(
+        current_state=current_state, target_state=target_state
+    ).inc()
+
+
+def record_pipeline_stage_duration(stage: str, mode: str, duration: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    PIPELINE_STAGE_DURATION_SECONDS.labels(stage=stage, mode=mode).observe(duration)
+
+
+def record_pipeline_stage_failure(stage: str, mode: str) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    PIPELINE_STAGE_FAILURES_TOTAL.labels(stage=stage, mode=mode).inc()
+
+
+def record_synthesis_result(outcome: str) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    SYNTHESIS_RESULTS_TOTAL.labels(outcome=outcome).inc()
+
+
+def record_sse_reconnect() -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    SSE_RECONNECTS_TOTAL.inc()
 
 
 def record_reconciliation_run(run_type: str, status: str, duration: float) -> None:

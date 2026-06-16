@@ -104,20 +104,52 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 
 ---
 
+## Frontend Feature Flags (build-time env)
+
+The following flags are evaluated at build time in `feature-flags.ts`:
+
+| Flag | Env Variable | Default |
+|------|-------------|---------|
+| `stagedDecisionPipeline` | `STAGED_DECISION_PIPELINE` | `false` |
+| `stagedDecisionPipelinePublic` | `NEXT_PUBLIC_STAGED_DECISION_PIPELINE` | `false` |
+| `unifiedWorkspace` | `NEXT_PUBLIC_UNIFIED_WORKSPACE` | `false` |
+| `mobileWorkspaceV2` | `NEXT_PUBLIC_MOBILE_WORKSPACE_V2` | `false` |
+| `jitAuth` | `NEXT_PUBLIC_JIT_AUTH` | `false` |
+| `mobileReportV2` | `NEXT_PUBLIC_MOBILE_REPORT_V2` | `false` |
+| `llmOperationLimits` | `ENABLE_LLM_OPERATION_LIMITS` | `false` |
+| `prometheusMetrics` | `ENABLE_PROMETHEUS_METRICS` | `false` |
+| `otelTracing` | `ENABLE_OTEL_TRACING` | `false` |
+| `gdprSelfService` | `ENABLE_GDPR_SELF_SERVICE` | `false` |
+| `statusPage` | `NEXT_PUBLIC_STATUS_PAGE` | `false` |
+| `changelog` | `NEXT_PUBLIC_CHANGELOG` | `false` |
+| `offlineRecovery` | `NEXT_PUBLIC_OFFLINE_RECOVERY` | `false` |
+
+---
+
 ## Checking Feature Status
 
 ### Frontend (API Call)
 
 ```javascript
-const response = await fetch('/features');
+const response = await fetch('/api/v1/config/features');
 const features = await response.json();
 
 if (features.conversation_mode) {
   // Show conversation mode UI
 }
 
-if (features.giphy) {
-  // Show GIF animations
+if (features.staged_decision_pipeline) {
+  // Enable staged decision pipeline
+}
+```
+
+### Frontend (Build-time flags)
+
+```typescript
+import { isFeatureEnabled } from "@/lib/feature-flags";
+
+if (isFeatureEnabled("unifiedWorkspace")) {
+  // Show unified workspace UI
 }
 ```
 
@@ -144,9 +176,13 @@ if settings.ENABLE_CONVERSATION_MODE:
 **Enable Order:**
 
 1. `ENABLE_SLACK_ALERTS` (for monitoring)
-2. `ENABLE_GIPHY` (low risk, visual only)
-3. `ENABLE_EMAIL_SUMMARIES` (medium risk)
-4. `ENABLE_CONVERSATION_MODE` (high complexity)
+2. `ENABLE_LLM_OPERATION_LIMITS` (cost control)
+3. `ENABLE_PROMETHEUS_METRICS` (observability)
+4. `ENABLE_GIPHY` (low risk, visual only)
+5. `ENABLE_EMAIL_SUMMARIES` (medium risk)
+6. `ENABLE_GDPR_SELF_SERVICE` (compliance)
+7. `ENABLE_CONVERSATION_MODE` (high complexity)
+8. `STAGED_DECISION_PIPELINE` (pipeline change)
 
 ---
 
@@ -155,16 +191,16 @@ if settings.ENABLE_CONVERSATION_MODE:
 **Feature Not Working:**
 
 1. Check environment variable is set correctly
-2. Verify no typos (`ENABLE_GIPHY` not `ENABLE_GIFY`)
+2. Verify no typos (e.g., `ENABLE_GIPHY` not `ENABLE_GIFY`)
 3. Restart service after changing env vars
 4. Check logs for feature-related errors
 
 **Frontend Shows Feature But Backend Rejects:**
 
-- Frontend cached old `/features` response
+- Frontend cached old `/config/features` response
 - Hard refresh or clear cache
 - Verify backend environment variable updated
 
 ---
 
-**Last Updated:** December 2025 (Patchset 54.0)
+**Last Updated:** June 2026 (FH45)

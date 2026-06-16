@@ -7,12 +7,14 @@ import { KeyFindingsGrid } from "./KeyFindingsGrid"
 import { ModelPositionsTable } from "./ModelPositionsTable"
 import { RiskMatrix } from "./RiskMatrix"
 import { NextActionsList } from "./NextActionsList"
-import { Download, ShieldCheck, CheckCircle2, AlertTriangle, ShieldAlert, GitBranch } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { isRenderableDecisionReport, fieldLooksCorrupt } from "../../lib/reportIntegrity"
 import { ReportGenerationFailedCard } from "./ReportGenerationFailedCard"
 import { SemanticAlignmentSection } from "./SemanticAlignmentSection"
 import { DecisionReportShell } from "./DecisionReportShell"
 import { DecisionBrief } from "./DecisionBrief"
+import { FallbackResponseCard } from "./FallbackResponseCard"
+import { UnstructuredSynthesisCard } from "./UnstructuredSynthesisCard"
 
 interface DecisionReport {
   title?: string
@@ -99,25 +101,9 @@ interface DecisionReportViewProps {
   fallbackModel?: string
   fallbackReason?: string
   fallbackResponse?: { model: string; content: string }
+  divergenceBreakdown?: any
 }
 
-function buildFallbackReport(rawSynthesis: string): DecisionReport {
-  return {
-    title: "Decision Report",
-    executive_summary: rawSynthesis.slice(0, 500),
-    verdict: {
-      recommendation: rawSynthesis.slice(0, 300),
-      confidence: 0.5,
-      decision_type: "mixed",
-      rationale: rawSynthesis.slice(0, 500),
-    },
-    key_findings: [],
-    model_positions: [],
-    risks_and_assumptions: [],
-    next_actions: [],
-    caveats: [],
-  }
-}
 
 function exportToMarkdown(report: DecisionReport): string {
   const lines: string[] = []
@@ -133,7 +119,7 @@ function exportToMarkdown(report: DecisionReport): string {
   if (report.verdict) {
     lines.push("## Verdict")
     lines.push(`**Recommendation:** ${report.verdict.decision_type?.toUpperCase() || "MIXED"}`)
-    lines.push(`**Confidence:** ${Math.round((report.verdict.confidence || 0) * 100)}%`)
+    lines.push(`**Confidence:** ${Math.round((report.verdict.confidence || 0) * 105)}%`)
     lines.push(`**Rationale:** ${report.verdict.rationale || report.verdict.recommendation || ""}`)
     lines.push("")
   }
@@ -190,6 +176,7 @@ export function DecisionReportView({
   fallbackModel,
   fallbackReason,
   fallbackResponse,
+  divergenceBreakdown,
 }: DecisionReportViewProps) {
   const isCorrupted = useMemo(() => {
     if (rawReport && !isRenderableDecisionReport(rawReport)) {
@@ -201,139 +188,158 @@ export function DecisionReportView({
     return false
   }, [rawReport, rawSynthesis])
 
-  const report = useMemo(() => {
-    if (isCorrupted) return null
-    if (rawReport && rawReport.verdict) return rawReport
-    if (rawSynthesis) return buildFallbackReport(rawSynthesis)
-    return null
-  }, [rawReport, rawSynthesis, isCorrupted])
+  const activeDivergence = divergenceBreakdown || rawReport?.divergence_breakdown;
 
-  if (isCorrupted) {
-    const errorDetails = rawReport?.quality_meta?.critic_feedback || "Structured JSON integrity check failed on raw output."
+  if (synthesisStatus === "failed" || synthesisStatus === "fallback" || isCorrupted) {
+    const errorDetails = synthesisError || rawReport?.quality_meta?.critic_feedback || "Structured JSON integrity check failed on raw output."
     return (
-      <div className={className}>
+      <div className={`space-y-6 ${className || ""}`}>
         <ReportGenerationFailedCard reason={errorDetails} />
+        {(synthesisStatus === "fallback" || fallbackResponse) && (
+          <FallbackResponseCard
+            model={fallbackResponse?.model || fallbackModel}
+            reason={fallbackReason}
+            content={fallbackResponse?.content || rawSynthesis || ""}
+          />
+        )}
+        {activeDivergence && (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
+            <SemanticAlignmentSection divergenceBreakdown={activeDivergence} />
+          </div>
+        )}
       </div>
     )
   }
 
-  if (!report) return null
 
-  const handleExport = () => {
-    const md = exportToMarkdown(report)
-    const blob = new Blob([md], { type: "text/markdown" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `decision-report-${Date.now()}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+  // If a generated report exists and is renderable, show structured report.
+  if (rawReport && isRenderableDecisionReport(rawReport)) {
+    const activeReport = rawReport
+    const handleExport = () => {
+      const md = exportToMarkdown(activeReport)
+      const blob = new Blob([md], { type: "text/markdown" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `decision-report-${Date.now()}.md`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+
+    return (
+      <DecisionReportShell
+        title={activeReport.title}
+        executiveSummary={activeReport.executive_summary}
+        qualityMeta={activeReport.quality_meta}
+        divergenceBreakdown={activeReport.divergence_breakdown}
+        synthesisStatus={synthesisStatus}
+        synthesisError={synthesisError}
+        fallbackModel={fallbackModel}
+        fallbackReason={fallbackReason}
+        fallbackResponse={fallbackResponse}
+        isCorrupted={isCorrupted}
+        onExport={handleExport}
+        className={className}
+      >
+        {/* Decision Stance, Stance Leaderboard, Contradiction Density */}
+        <DecisionBrief
+          verdict={activeReport.verdict || {}}
+          modelPositions={activeReport.model_positions || []}
+          divergenceBreakdown={activeReport.divergence_breakdown}
+          scores={(activeReport.quality_meta as any)?.scores || []}
+        />
+
+        {/* Context Needed */}
+        {activeReport.context_needed && activeReport.context_needed.length > 0 && (
+          <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-3">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              Context Needed to Make This Report Specific
+            </h3>
+            <p className="text-xs text-amber-700 dark:text-amber-400/80 mb-3 leading-relaxed">
+              The following information would help generate a more tailored, actionable report:
+            </p>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {activeReport.context_needed.map((item, i) => (
+                <li key={i} className="text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                  <span className="text-amber-400 mt-0.5">•</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Verdict */}
+        {activeReport.verdict && (
+          <ReportSection id="report-verdict" title="Verdict">
+            <VerdictCard
+              recommendation={activeReport.verdict.recommendation || ""}
+              confidence={activeReport.verdict.confidence || 0.5}
+              decisionType={activeReport.verdict.decision_type || "mixed"}
+              rationale={activeReport.verdict.rationale || ""}
+            />
+          </ReportSection>
+        )}
+
+        {/* Key Findings */}
+        {activeReport.key_findings && activeReport.key_findings.length > 0 && (
+          <ReportSection id="report-findings" title="Key Findings">
+            <KeyFindingsGrid findings={activeReport.key_findings as any} />
+          </ReportSection>
+        )}
+
+        {/* Model Positions */}
+        {activeReport.model_positions && activeReport.model_positions.length > 0 && (
+          <ReportSection id="report-positions" title="Model Positions">
+            <ModelPositionsTable positions={activeReport.model_positions as any} />
+          </ReportSection>
+        )}
+
+        {/* Semantic Alignment & Divergence */}
+        {activeReport.divergence_breakdown && (
+          <SemanticAlignmentSection divergenceBreakdown={activeReport.divergence_breakdown} />
+        )}
+
+        {/* Risks & Assumptions */}
+        {activeReport.risks_and_assumptions && activeReport.risks_and_assumptions.length > 0 && (
+          <ReportSection id="report-risks" title="Risks & Assumptions">
+            <RiskMatrix risks={activeReport.risks_and_assumptions as any} />
+          </ReportSection>
+        )}
+
+        {/* Next Actions */}
+        {activeReport.next_actions && activeReport.next_actions.length > 0 && (
+          <ReportSection id="report-actions" title="Next Actions">
+            <NextActionsList actions={activeReport.next_actions as any} />
+          </ReportSection>
+        )}
+
+        {/* Caveats */}
+        {activeReport.caveats && activeReport.caveats.length > 0 && (
+          <ReportSection id="report-caveats" title="Caveats">
+            <ul className="space-y-1">
+              {activeReport.caveats.map((caveat, i) => (
+                <li key={i} className="text-sm text-slate-600 dark:text-slate-400 flex items-start gap-2">
+                  <span className="text-slate-400 dark:text-slate-500 mt-0.5">-</span>
+                  {caveat}
+                </li>
+              ))}
+            </ul>
+          </ReportSection>
+        )}
+      </DecisionReportShell>
+    )
   }
 
-  const activeReport = report
+  // If raw synthesis is available but not a structured report
+  if (rawSynthesis) {
+    return (
+      <div className={className}>
+        <UnstructuredSynthesisCard content={rawSynthesis} />
+      </div>
+    )
+  }
 
-  return (
-    <DecisionReportShell
-      title={activeReport.title}
-      executiveSummary={activeReport.executive_summary}
-      qualityMeta={activeReport.quality_meta}
-      divergenceBreakdown={activeReport.divergence_breakdown || rawReport?.divergence_breakdown}
-      synthesisStatus={synthesisStatus}
-      synthesisError={synthesisError}
-      fallbackModel={fallbackModel}
-      fallbackReason={fallbackReason}
-      fallbackResponse={fallbackResponse}
-      isCorrupted={isCorrupted}
-      onExport={handleExport}
-      className={className}
-    >
-      {/* Decision Stance, Stance Leaderboard, Contradiction Density */}
-      <DecisionBrief
-        verdict={activeReport.verdict || {}}
-        modelPositions={activeReport.model_positions || []}
-        divergenceBreakdown={activeReport.divergence_breakdown || rawReport?.divergence_breakdown}
-        scores={(activeReport.quality_meta as any)?.scores || []}
-      />
-
-      {/* Context Needed */}
-      {activeReport.context_needed && activeReport.context_needed.length > 0 && (
-        <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-3">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            Context Needed to Make This Report Specific
-          </h3>
-          <p className="text-xs text-amber-700 dark:text-amber-400/80 mb-3 leading-relaxed">
-            The following information would help generate a more tailored, actionable report:
-          </p>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {activeReport.context_needed.map((item, i) => (
-              <li key={i} className="text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
-                <span className="text-amber-400 mt-0.5">•</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Verdict */}
-      {activeReport.verdict && (
-        <ReportSection id="report-verdict" title="Verdict">
-          <VerdictCard
-            recommendation={activeReport.verdict.recommendation || ""}
-            confidence={activeReport.verdict.confidence || 0.5}
-            decisionType={activeReport.verdict.decision_type || "mixed"}
-            rationale={activeReport.verdict.rationale || ""}
-          />
-        </ReportSection>
-      )}
-
-      {/* Key Findings */}
-      {activeReport.key_findings && activeReport.key_findings.length > 0 && (
-        <ReportSection id="report-findings" title="Key Findings">
-          <KeyFindingsGrid findings={activeReport.key_findings as any} />
-        </ReportSection>
-      )}
-
-      {/* Model Positions */}
-      {activeReport.model_positions && activeReport.model_positions.length > 0 && (
-        <ReportSection id="report-positions" title="Model Positions">
-          <ModelPositionsTable positions={activeReport.model_positions as any} />
-        </ReportSection>
-      )}
-
-      {/* Semantic Alignment & Divergence */}
-      {activeReport.divergence_breakdown && (
-        <SemanticAlignmentSection divergenceBreakdown={activeReport.divergence_breakdown} />
-      )}
-
-      {/* Risks & Assumptions */}
-      {activeReport.risks_and_assumptions && activeReport.risks_and_assumptions.length > 0 && (
-        <ReportSection id="report-risks" title="Risks & Assumptions">
-          <RiskMatrix risks={activeReport.risks_and_assumptions as any} />
-        </ReportSection>
-      )}
-
-      {/* Next Actions */}
-      {activeReport.next_actions && activeReport.next_actions.length > 0 && (
-        <ReportSection id="report-actions" title="Next Actions">
-          <NextActionsList actions={activeReport.next_actions as any} />
-        </ReportSection>
-      )}
-
-      {/* Caveats */}
-      {activeReport.caveats && activeReport.caveats.length > 0 && (
-        <ReportSection id="report-caveats" title="Caveats">
-          <ul className="space-y-1">
-            {activeReport.caveats.map((caveat, i) => (
-              <li key={i} className="text-sm text-slate-600 dark:text-slate-400 flex items-start gap-2">
-                <span className="text-slate-400 dark:text-slate-500 mt-0.5">-</span>
-                {caveat}
-              </li>
-            ))}
-          </ul>
-        </ReportSection>
-      )}
-    </DecisionReportShell>
-  )
+  return null
 }

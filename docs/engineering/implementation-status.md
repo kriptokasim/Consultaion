@@ -110,18 +110,111 @@ This document tracks the implementation status of the Final Hardening patchset (
   - Alembic single-head verification inside container
 
 ### PR-FH28: Documentation Truthfulness
-- **Status:** In Progress
+- **Status:** Complete
 - **Created:**
   - `docs/engineering/implementation-status.md` — this file
   - `docs/engineering/test-evidence.md` — test results and coverage
-- **Remaining:** Reconcile README.md and WALKTHROUGH.md overclaiming language
+- **Reconciled:** README.md and WALKTHROUGH.md overclaiming language.
 
-## Verification
+---
 
-All frontend tests pass (121 tests across 19 files). TypeScript compilation clean. No regressions detected.
+## Phase 5 — Production Hardening Completion (PR-FH39 through PR-FH50)
 
-## Next Steps
+### PR-FH39: Immutable Continuation Attempts
+- **Status:** Complete
+- **Changes:**
+  - Terminal states (completed/failed/cancelled/paused) have empty transition sets in `ALLOWED_CONTINUATION_TRANSITIONS`, making retries impossible without a new continuation record.
+  - UNIQUE(debate_id, idempotency_key) constraint on `DebateContinuation` prevents duplicate idempotency keys.
+  - FK `retry_of_continuation_id` → `debate_continuation.id` with `ondelete="SET NULL"` for referential integrity on parent deletion.
+  - Migration `p123_cont_retry_fk` applies constraints.
 
-1. Reconcile README.md and WALKTHROUGH.md with defensible language
-2. Run full backend test suite against PostgreSQL
-3. Deploy to staging for integration verification
+### PR-FH40: Continuation Contract and Recovery Loop
+- **Status:** Complete
+- **Changes:**
+  - `useRunWorkspace.ts` stores `response.continuation_id` (not `response.id`) for correct continuation tracking.
+  - Mount-based recovery checks persisted intent from localStorage.
+  - Duplicated-action protection disables buttons while tracking in-flight requests.
+  - Resolve endpoint called for unknown continuation IDs to clean up stale state.
+
+### PR-FH41: Real Schema Drift
+- **Status:** Complete
+- **Changes:**
+  - `scripts/check-schema-drift.py` uses `compare_metadata()` for reliable drift detection.
+  - `test_model_migration_parity.py` validates: revision lengths (≤32 chars), chain uniqueness, single head, and critical table presence.
+
+### PR-FH42: Trusted Rate-Limit Identity
+- **Status:** Complete
+- **Changes:**
+  - `rate_limit_identity.py` validates cookie JWT signature and API keys via DB cache.
+  - Respects `TRUSTED_PROXY_CIDRS` for X-Forwarded-For resolution.
+  - Bounded cache with configurable TTL for API key lookups.
+
+### PR-FH43: SSE Concurrent Stream Limiter
+- **Status:** Complete
+- **Changes:**
+  - `StreamLeaseManager` class in `sse_backend.py` using Redis sorted sets (or in-memory fallback).
+  - Lease-based concurrent stream limit per debate_id (default: 5 concurrent streams).
+  - Returns HTTP 503 with `Retry-After: 30` when limit is exceeded.
+  - Leases auto-expire after configurable TTL (default: 5 minutes).
+  - Configurable via `SSE_MAX_CONCURRENT_STREAMS` and `SSE_LEASE_TTL_SECONDS`.
+
+### PR-FH44: Report Provenance & Mobile Report Canonicalization
+- **Status:** Complete
+- **Changes:**
+  - `DecisionReportView.tsx` renders `FallbackResponseCard`, `UnstructuredSynthesisCard`, `ReportGenerationFailedCard` based on API response.
+  - No `buildFallbackReport` function exists — all branches derive from real API response fields.
+  - Responsive model positioning grids, risk matrices, and focus mode viewport tracking.
+
+### PR-FH45: Feature Flags Wiring
+- **Status:** Complete
+- **Changes:**
+  - `FeatureGate` imported and wired in `RunDetailClient.tsx`:
+    - `unifiedWorkspace` flag gates the workspace UI (header, stage rail, mobile bar, perspectives grid)
+    - `mobileWorkspaceV2` flag gates `MobileStageBar`
+    - `stagedDecisionPipelinePublic` flag gates `PerspectivesReadyAction`
+  - `GET /api/v1/config/features` endpoint enriched with all operational trust flags.
+
+### PR-FH46: ReconciliationWindow + Cost Reconciliation Refactor
+- **Status:** Complete
+- **Changes:**
+  - `ReconciliationWindow` dataclass with `previous_utc_day()`, `month_to_date()`, `closed_month()` factory methods.
+  - `reconcile_usage()` accepts `window` parameter; `_check_orphan_usage()` uses `window.start_at` / `window.end_at`.
+  - `_get_model_pricing()` returns versioned pricing snapshots with effective date tracking for point-in-time cost recomputation.
+  - Cost check compares recorded `SUM(cost_usd)` vs independently recomputed total using model × token counts.
+  - Removed legacy `_period_start()` / `_period_end()` string-parsing helpers.
+
+### PR-FH47: Celery Beat Schedules + Run Key + Redis Locking
+- **Status:** Complete
+- **Changes:**
+  - `celery_app.py` uses `from celery.schedules import crontab` with proper `crontab()` objects.
+  - `billing_tasks.py` generates deterministic `run_key` per window (`{window.label}:{run_type}`).
+  - Redis distributed lock (`_acquire_reconciliation_lock` / `_release_reconciliation_lock`) prevents duplicate concurrent executions.
+  - Lock TTL: 10 minutes; lock key format: `lock:billing-reconciliation:{run_key}`.
+
+### PR-FH48: Fix Docker Compose Paths, Env, psycopg + Smoke Script
+- **Status:** Complete
+- **Changes:**
+  - Compose uses `context: ./apps/api` (root-relative paths).
+  - Environment: `ENV=test`, `APP_ENV=smoke`, `USE_MOCK=true`.
+  - `psycopg` instead of `asyncpg` for synchronous driver compatibility.
+  - Startup ordering: postgres → migrate → api → web.
+  - Smoke script assertions fixed (eliminated subshell `read`), adds health checks and table verification.
+
+### PR-FH49: Continuation Transition Metrics + Observability Wiring
+- **Status:** Complete
+- **Changes:**
+  - `CONTINUATION_TRANSITIONS_TOTAL` counter (labels: `from_status`, `to_status`) — incremented on successful transitions.
+  - `CONTINUATION_TRANSITION_CONFLICTS_TOTAL` counter (labels: `current_state`, `target_state`) — incremented on rejected transitions.
+  - `PIPELINE_STAGE_DURATION_SECONDS` histogram (labels: `stage`, `mode`) — records stage execution time in `pipeline.py`.
+  - `PIPELINE_STAGE_FAILURES_TOTAL` counter (labels: `stage`, `mode`) — incremented on stage failures.
+  - `SYNTHESIS_RESULTS_TOTAL` and `VERIFICATION_RESULTS_TOTAL` counters.
+  - `SSE_RECONNECTS_TOTAL` counter.
+  - Console span exporter conditional on `APP_ENV in ("development", "test", "smoke")` to prevent production log spam.
+
+### PR-FH50: Documentation Updates
+- **Status:** Complete
+- **Changes:**
+  - SSE ops guide: added `SSE_MAX_CONCURRENT_STREAMS` and `SSE_LEASE_TTL_SECONDS` env vars.
+  - Feature flags reference: enriched with all operational trust flags.
+  - Implementation status: updated through FH50.
+  - Changelog: entries for all PRs.

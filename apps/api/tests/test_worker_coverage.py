@@ -29,7 +29,7 @@ async def test_execute_debate_run_success():
         
         mock_session.get.assert_called_with(Debate, debate_id)
         mock_backend.create_channel.assert_called()
-        mock_run_debate.assert_called_with(debate_id, "Test prompt", f"debate:{debate_id}", {}, "gpt-4", trace_id=None, is_resume=False)
+        mock_run_debate.assert_called_with(debate_id, "Test prompt", f"debate:{debate_id}", {}, "gpt-4", trace_id=None, is_resume=False, continuation_id=None)
 
 @pytest.mark.asyncio
 async def test_execute_debate_run_not_found():

@@ -136,7 +136,7 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
         # Health checks: exempt from weighted enforcement
         if action == "health_check":
             response = await call_next(request)
-            self._add_headers(response, key, action, 0, 0)
+            self._add_headers(response, key, action, 0, self._budget, int(time.time() + self._window))
             return response
 
         # Read operations: apply lightweight enforcement
@@ -148,7 +148,7 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
         op_class = get_operation_class(action)
 
         backend = get_rate_limiter_backend()
-        allowed, retry_after = backend.allow_weighted(key, self._window, self._budget, weight)
+        allowed, retry_after, remaining, reset_epoch = backend.allow_weighted(key, self._window, self._budget, weight)
 
         if not allowed:
             logger.info(
@@ -174,12 +174,11 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
                         "retryable": True,
                     }
                 },
-                headers=self._build_headers(key, action, weight, retry_after),
+                headers=self._build_headers(key, action, weight, retry_after, remaining, reset_epoch),
             )
 
         response = await call_next(request)
-        remaining = max(0, self._budget - weight)
-        self._add_headers(response, key, action, weight, remaining)
+        self._add_headers(response, key, action, weight, remaining, reset_epoch)
         return response
 
     async def _enforce_read_limit(
@@ -189,7 +188,7 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
         weight = get_operation_weight(action)
         backend = get_rate_limiter_backend()
         # Reads use a lighter budget within the same window
-        allowed, retry_after = backend.allow_weighted(key, self._window, self._budget, weight)
+        allowed, retry_after, remaining, reset_epoch = backend.allow_weighted(key, self._window, self._budget, weight)
 
         if not allowed:
             logger.info("read_rate_limit.exceeded key=%s action=%s", key, action)
@@ -211,12 +210,11 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
                         "retryable": True,
                     }
                 },
-                headers=self._build_headers(key, action, weight, retry_after),
+                headers=self._build_headers(key, action, weight, retry_after, remaining, reset_epoch),
             )
 
         response = await call_next(request)
-        remaining = max(0, self._budget - weight)
-        self._add_headers(response, key, action, weight, remaining)
+        self._add_headers(response, key, action, weight, remaining, reset_epoch)
         return response
 
     async def _enforce_sse_limit(
@@ -224,7 +222,7 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         """Enforce separate SSE connection budget."""
         backend = get_rate_limiter_backend()
-        allowed, retry_after = backend.allow_weighted(key, SSE_WINDOW_SECONDS, SSE_BUDGET, 1)
+        allowed, retry_after, remaining, reset_epoch = backend.allow_weighted(key, SSE_WINDOW_SECONDS, SSE_BUDGET, 1)
 
         if not allowed:
             logger.info("sse_rate_limit.exceeded key=%s", key)
@@ -247,32 +245,42 @@ class WeightedRateLimitMiddleware(BaseHTTPMiddleware):
                 headers={
                     "Retry-After": str(retry_after or SSE_WINDOW_SECONDS),
                     "X-RateLimit-Budget": str(SSE_BUDGET),
-                    "X-RateLimit-Remaining": str(max(0, SSE_BUDGET - 1)),
+                    "X-RateLimit-Remaining": str(remaining),
                     "X-RateLimit-Cost": "1",
                     "X-RateLimit-Action": "sse_stream",
                     "X-RateLimit-Window": str(SSE_WINDOW_SECONDS),
+                    "X-RateLimit-Reset": str(reset_epoch),
                 },
             )
 
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers["X-RateLimit-Budget"] = str(SSE_BUDGET)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Cost"] = "1"
+        response.headers["X-RateLimit-Action"] = "sse_stream"
+        response.headers["X-RateLimit-Window"] = str(SSE_WINDOW_SECONDS)
+        response.headers["X-RateLimit-Reset"] = str(reset_epoch)
+        return response
 
     def _add_headers(
-        self, response: Response, key: str, action: str, cost: int, remaining: int
+        self, response: Response, key: str, action: str, cost: int, remaining: int, reset_epoch: int
     ) -> None:
         response.headers["X-RateLimit-Budget"] = str(self._budget)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         response.headers["X-RateLimit-Cost"] = str(cost)
         response.headers["X-RateLimit-Action"] = action
         response.headers["X-RateLimit-Window"] = str(self._window)
+        response.headers["X-RateLimit-Reset"] = str(reset_epoch)
 
     def _build_headers(
-        self, key: str, action: str, cost: int, retry_after: Optional[int]
+        self, key: str, action: str, cost: int, retry_after: Optional[int], remaining: int, reset_epoch: int
     ) -> dict:
         return {
             "Retry-After": str(retry_after or self._window),
             "X-RateLimit-Budget": str(self._budget),
-            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Remaining": str(remaining),
             "X-RateLimit-Cost": str(cost),
             "X-RateLimit-Action": action,
             "X-RateLimit-Window": str(self._window),
+            "X-RateLimit-Reset": str(reset_epoch),
         }

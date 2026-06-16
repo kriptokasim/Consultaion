@@ -16,6 +16,7 @@ import { normalizeEvent } from "@/lib/api/normalizeEvent";
 import { PipelineProgress, derivePipelineStage } from "@/components/arena/PipelineProgress";
 import type { DebateEvent, ScoreItem, Member, JudgeVoteFlow, VotePayload } from "@/lib/api/types";
 import { WorkspaceHeader, DesktopStageRail, MobileStageBar, PerspectivesGrid, PerspectivesReadyAction } from "@/components/workspace";
+import { FeatureGate, useFeatureFlag } from "@/components/FeatureGate";
 import { deriveWorkspaceStage } from "@/lib/workspace/deriveWorkspaceStage";
 import type { WorkspaceModelSlot } from "@/lib/workspace/types";
 import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
@@ -449,66 +450,86 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   // Show pipeline progress for arena mode running debates
   if (debate?.mode === "arena" && !isCompleted) {
     return (
-      <div className="container max-w-[1400px] py-6 space-y-6">
-        <WorkspaceHeader
-          stage={currentWorkspaceStage}
-          prompt={debate?.prompt}
-          mode="arena"
-          modelCount={modelsExpected}
-          onBack={() => router.push("/live")}
-        />
+      <FeatureGate flag="unifiedWorkspace" fallback={
+        <div className="flex flex-col h-[calc(100vh-4rem)]">
+          {isPollingFallback && (
+            <div className="flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Connection interrupted — using polling fallback</span>
+            </div>
+          )}
+          <DebateArena debate={debate} events={events} connectionStatus={sseStatus} />
+        </div>
+      }>
+        <div className="container max-w-[1400px] py-6 space-y-6">
+          <WorkspaceHeader
+            stage={currentWorkspaceStage}
+            prompt={debate?.prompt}
+            mode="arena"
+            modelCount={modelsExpected}
+            onBack={() => router.push("/live")}
+          />
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar for Progress on Desktop */}
-          <div className="hidden lg:block lg:col-span-1">
-            <DesktopStageRail
-              currentStage={currentWorkspaceStage}
-              elapsedSeconds={elapsedSeconds}
-            />
-          </div>
-
-          {/* Main workspace area */}
-          <div className="col-span-1 lg:col-span-3 space-y-6">
-            {/* Mobile progress bar */}
-            <div className="block lg:hidden">
-              <MobileStageBar
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Sidebar for Progress on Desktop */}
+            <div className="hidden lg:block lg:col-span-1">
+              <DesktopStageRail
                 currentStage={currentWorkspaceStage}
-                responsesReceived={responsesReceived}
-                modelsExpected={modelsExpected}
                 elapsedSeconds={elapsedSeconds}
-                showDetails={showMobileDetails}
-                onToggleDetails={() => setShowMobileDetails(!showMobileDetails)}
               />
             </div>
 
-            {/* Perspectives Action when ready */}
-            {currentWorkspaceStage === "perspectives_ready" && (
-              <PerspectivesReadyAction
-                mode="arena"
-                modelCount={modelsExpected}
-                onContinue={handleContinue}
-                isContinuing={isContinuing}
-                outcomeUnknown={outcomeUnknown}
-              />
-            )}
-
-            {/* Perspectives Grid during collecting/streaming */}
-            {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
-              <PerspectivesGrid modelSlots={modelSlots} />
-            ) : (
-              /* Once past perspectives generation, show the standard synthesis/arena view */
-              <ArenaRunView debate={debate as any} events={liveEvents as any} onRefetch={refetch} />
-            )}
-
-            {isPollingFallback && (
-              <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Connection interrupted — using polling fallback</span>
+            {/* Main workspace area */}
+            <div className="col-span-1 lg:col-span-3 space-y-6">
+              {/* Mobile progress bar */}
+              <div className="block lg:hidden">
+                <FeatureGate flag="mobileWorkspaceV2" fallback={
+                  <div className="text-xs text-muted-foreground px-2 py-1 text-center border-b">
+                    Running...
+                  </div>
+                }>
+                  <MobileStageBar
+                    currentStage={currentWorkspaceStage}
+                    responsesReceived={responsesReceived}
+                    modelsExpected={modelsExpected}
+                    elapsedSeconds={elapsedSeconds}
+                    showDetails={showMobileDetails}
+                    onToggleDetails={() => setShowMobileDetails(!showMobileDetails)}
+                  />
+                </FeatureGate>
               </div>
-            )}
+
+              {/* Perspectives Action when ready */}
+              <FeatureGate flag="stagedDecisionPipelinePublic">
+                {currentWorkspaceStage === "perspectives_ready" && (
+                  <PerspectivesReadyAction
+                    mode="arena"
+                    modelCount={modelsExpected}
+                    onContinue={handleContinue}
+                    isContinuing={isContinuing}
+                    outcomeUnknown={outcomeUnknown}
+                  />
+                )}
+              </FeatureGate>
+
+              {/* Perspectives Grid during collecting/streaming */}
+              {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
+                <PerspectivesGrid modelSlots={modelSlots} />
+              ) : (
+                /* Once past perspectives generation, show the standard synthesis/arena view */
+                <ArenaRunView debate={debate as any} events={liveEvents as any} onRefetch={refetch} />
+              )}
+
+              {isPollingFallback && (
+                <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Connection interrupted — using polling fallback</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      </FeatureGate>
     );
   }
 

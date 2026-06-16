@@ -216,9 +216,9 @@ def test_redis_backend_tracks_recent_events(monkeypatch):
             current = self.counters.get(key, 0)
             if current + int(weight) <= int(max_requests):
                 self.counters[key] = current + int(weight)
-                return [1, 0]
+                return [1, 0, int(max_requests) - self.counters[key]]
             else:
-                return [0, int(window)]
+                return [0, int(window), int(max_requests) - current]
 
     fake_client = FakeRedisClient()
 
@@ -249,11 +249,15 @@ def test_redis_backend_tracks_recent_events(monkeypatch):
     assert events and events[-1]["path"] == "/debates"
 
     # Test allow_weighted
-    allowed_w1, _ = backend.allow_weighted("ip-w", 60, 10, 8)
+    allowed_w1, _, remaining_w1, reset_w1 = backend.allow_weighted("ip-w", 60, 10, 8)
     assert allowed_w1
-    allowed_w2, retry_after_w = backend.allow_weighted("ip-w", 60, 10, 3)
+    assert remaining_w1 == 2
+    assert reset_w1 > 0
+    allowed_w2, retry_after_w, remaining_w2, reset_w2 = backend.allow_weighted("ip-w", 60, 10, 3)
     assert not allowed_w2
     assert retry_after_w == 60
+    assert remaining_w2 == 2
+    assert reset_w2 > 0
 
 
 
@@ -284,16 +288,22 @@ def test_allow_weighted_memory():
 
     # Allow a budget of 10
     # Request 1: cost 8 -> allowed
-    allowed1, _ = backend.allow_weighted("user-1", 60, 10, 8)
+    allowed1, _, remaining1, reset1 = backend.allow_weighted("user-1", 60, 10, 8)
     assert allowed1
+    assert remaining1 == 2
+    assert reset1 > 0
 
     # Request 2: cost 3 -> blocked (8 + 3 = 11 > 10)
-    allowed2, retry_after = backend.allow_weighted("user-1", 60, 10, 3)
+    allowed2, retry_after, remaining2, reset2 = backend.allow_weighted("user-1", 60, 10, 3)
     assert not allowed2
     assert retry_after is not None and retry_after > 0
+    assert remaining2 == 2
+    assert reset2 > 0
 
     # Request 3: cost 2 -> allowed (8 + 2 = 10 <= 10)
-    allowed3, _ = backend.allow_weighted("user-1", 60, 10, 2)
+    allowed3, _, remaining3, reset3 = backend.allow_weighted("user-1", 60, 10, 2)
     assert allowed3
+    assert remaining3 == 0
+    assert reset3 > 0
 
 

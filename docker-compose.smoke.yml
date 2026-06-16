@@ -31,23 +31,48 @@ services:
     networks:
       - smoke-net
 
+  migrate:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: consultaion-smoke-migrate
+    environment:
+      - ENV=test
+      - APP_ENV=smoke
+      - USE_MOCK=true
+      - REQUIRE_REAL_LLM=false
+      - DATABASE_URL=postgresql+psycopg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
+      - JWT_SECRET=smoke-test-secret-key-for-ci-only
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    networks:
+      - smoke-net
+
   api:
     build:
-      context: ../apps/api
+      context: ./apps/api
       dockerfile: Dockerfile
     container_name: consultaion-smoke-api
     ports:
       - "8000:8000"
     environment:
-      - ENV=production
-      - DATABASE_URL=postgresql+asyncpg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
+      - ENV=test
+      - APP_ENV=smoke
+      - USE_MOCK=true
+      - REQUIRE_REAL_LLM=false
+      - DATABASE_URL=postgresql+psycopg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
       - JWT_SECRET=smoke-test-secret-key-for-ci-only
       - WEB_APP_ORIGIN=http://localhost:3000
       - REDIS_URL=redis://redis:6379/0
-      - RATE_LIMIT_BACKEND=redis
-      - ENABLE_CSRF=false
+      - SSE_BACKEND=redis
+      - SSE_REDIS_URL=redis://redis:6379/0
       - STRIPE_WEBHOOK_VERIFY=false
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -61,31 +86,18 @@ services:
     networks:
       - smoke-net
 
-  migrate:
-    build:
-      context: ../apps/api
-      dockerfile: Dockerfile
-    container_name: consultaion-smoke-migrate
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["alembic", "upgrade", "head"]
-    networks:
-      - smoke-net
-
   web:
     build:
-      context: ../apps/web
+      context: ./apps/web
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://api:8000
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
     container_name: consultaion-smoke-web
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://api:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - API_INTERNAL_URL=http://api:8000
     depends_on:
       api:
         condition: service_healthy

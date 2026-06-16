@@ -30,7 +30,7 @@ TEST_MODELS = {
     "openrouter": "openrouter/openai/gpt-4o-mini",
 }
 
-async def test_provider(provider: str) -> dict:
+async def check_provider(provider: str) -> dict:
     provider = provider.lower()
     if provider not in TEST_MODELS:
         return {"success": False, "error": f"No diagnostic model mapped for {provider}", "latency_ms": 0}
@@ -86,7 +86,7 @@ async def main():
     print(f"Enabled providers with active configuration: {len(enabled_providers)}")
     print("-" * 60)
 
-    tasks = {provider: test_provider(provider) for provider in all_providers}
+    tasks = {provider: check_provider(provider) for provider in all_providers}
     results = await asyncio.gather(*tasks.values())
     provider_results = dict(zip(tasks.keys(), results))
 

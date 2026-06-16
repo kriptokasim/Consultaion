@@ -15,6 +15,19 @@ vi.mock("@/hooks/useRunWorkspace", () => ({
   useRunWorkspace: vi.fn(),
 }));
 
+// Enable feature flags for workspace tests
+vi.mock("@/lib/feature-flags", () => ({
+  isFeatureEnabled: (flag: string) => {
+    if (flag === "unifiedWorkspace" || flag === "mobileWorkspaceV2" || flag === "stagedDecisionPipelinePublic") return true;
+    return false;
+  },
+  featureFlags: {
+    unifiedWorkspace: true,
+    mobileWorkspaceV2: true,
+    stagedDecisionPipelinePublic: true,
+  },
+}));
+
 vi.mock("@/lib/auth", () => ({
   fetchWithAuth: vi.fn(() => Promise.resolve({
     ok: true,

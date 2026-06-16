@@ -104,7 +104,7 @@ def test_continue_idempotency_key(authenticated_client, db_session):
         assert response.json()["status"] == "dispatched"
         mock_dispatch.assert_not_called()
 
-    # If it is marked as failed, retry should reset the same record to requested
+    # If it is marked as failed, retry with same key should fail with 409
     old_cont_id = continuation.id
     continuation.status = "failed"
     db_session.add(continuation)
@@ -120,14 +120,15 @@ def test_continue_idempotency_key(authenticated_client, db_session):
             f"/api/v1/debates/{debate.id}/continue",
             headers=headers
         )
-        print("Idempotency retry response:", response.json())
-        assert response.status_code == 200
-        mock_dispatch.assert_called_once()
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "continuation.new_idempotency_key_required"
+        assert response.json()["error"]["details"]["new_idempotency_key_required"] is True
+        mock_dispatch.assert_not_called()
 
-        # Verify the SAME continuation record was reset and dispatched
+        # Verify the continuation record remained failed
         db_session.refresh(continuation)
         assert continuation.id == old_cont_id
-        assert continuation.status == "dispatched"
+        assert continuation.status == "failed"
 
 
 def test_continue_preflight_budget(authenticated_client, db_session):
@@ -340,5 +341,41 @@ def test_get_debate_continuation(authenticated_client, db_session):
     # Try invalid UUID string format
     response = authenticated_client.get(f"/api/v1/debates/{debate.id}/continuations/not-a-uuid")
     assert response.status_code == 404
+
+
+def test_continue_retry_of_continuation_id(authenticated_client, db_session):
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-retry-of-cont-debate",
+        user_id=user.id,
+        prompt="Test prompt",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+
+    # Create terminal continuation
+    failed_cont = DebateContinuation(
+        debate_id=debate.id,
+        idempotency_key="failed-key-1",
+        status="failed",
+        user_id=user.id
+    )
+    db_session.add(failed_cont)
+    db_session.commit()
+
+    # Verify we can pass retry_of_continuation_id with a DIFFERENT idempotency key
+    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+        response = authenticated_client.post(
+            f"/api/v1/debates/{debate.id}/continue",
+            json={"retry_of_continuation_id": failed_cont.id},
+            headers={"X-Idempotency-Key": "new-key-2"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["retry_of_continuation_id"] == failed_cont.id
+        assert data["idempotency_key"] == "new-key-2"
+        mock_dispatch.assert_called_once()
+
 
 

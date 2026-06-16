@@ -36,7 +36,7 @@ export function FallbackResponseCard({ model, reason, content, className }: Fall
         <div className="flex items-center gap-2 mb-3">
           <Sparkles className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
           <h4 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">
-            {model ? `${model}` : "Model Response"}
+            {model ? `Top Model Response: ${model}` : "Model Response"}
           </h4>
         </div>
         <div className="text-sm text-slate-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">

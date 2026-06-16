@@ -47,8 +47,9 @@ def init_tracing() -> None:
         })
         provider = TracerProvider(resource=resource)
 
-        # Console exporter for development
-        provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        # Console exporter for development only
+        if settings.APP_ENV in ("development", "test", "smoke"):
+            provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
 
         # OTLP exporter for production (configurable endpoint)
         otlp_endpoint = getattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT", None)

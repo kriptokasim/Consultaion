@@ -246,5 +246,29 @@ describe("DecisionReportView", () => {
     render(<DecisionReportView report={null} rawSynthesis={rawSynthesis} />);
     expect(screen.getByText("Decision Report Validation Guard Triggered")).toBeInTheDocument();
   });
+
+  it("renders UnstructuredSynthesisCard when report is null and rawSynthesis is provided", () => {
+    const rawSynthesis = "This is a clean raw synthesis text without JSON.";
+    render(<DecisionReportView report={null} rawSynthesis={rawSynthesis} />);
+    expect(screen.getByText("Unstructured Synthesis Output")).toBeInTheDocument();
+    expect(screen.getByText("This is a clean raw synthesis text without JSON.")).toBeInTheDocument();
+  });
+
+  it("renders FallbackResponseCard when synthesisStatus is fallback", () => {
+    render(
+      <DecisionReportView
+        report={null}
+        synthesisStatus="fallback"
+        fallbackModel="Fallback-Model"
+        fallbackReason="Primary model failed"
+        rawSynthesis="Raw model fallback response."
+      />
+    );
+    expect(screen.getByText("Fallback Response — No Fabricated Confidence")).toBeInTheDocument();
+    expect(screen.getByText("Primary model failed")).toBeInTheDocument();
+    expect(screen.getByText(/Fallback-Model/)).toBeInTheDocument();
+    expect(screen.getByText("Raw model fallback response.")).toBeInTheDocument();
+  });
 });
+
 

@@ -13,6 +13,8 @@ Server-Sent Events (SSE) enables real-time streaming of debate progress to clien
 | `SSE_CHANNEL_TTL_SECONDS` | int | `900` | Channel expiry time |
 | `SSE_MEMORY_MAX_QUEUE_SIZE` | int | `1000` | Max events per channel (memory backend) |
 | `SSE_MEMORY_IDLE_TIMEOUT_SECONDS` | int | `3600` | Max idle time for subscriptions |
+| `SSE_MAX_CONCURRENT_STREAMS` | int | `5` | Max concurrent SSE streams per debate |
+| `SSE_LEASE_TTL_SECONDS` | int | `300` | Stream lease TTL in seconds |
 
 ## Deployment Configurations
 

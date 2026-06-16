@@ -1,13 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { Eye, Trophy, Sparkles, Check, CheckCircle2, ChevronRight, MessageSquare, AlertTriangle } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Eye, Trophy, ChevronRight, MessageSquare } from "lucide-react";
 import { apiRequest } from "@/lib/apiClient";
-import { SynthesisCard } from "./SynthesisCard";
 import { DecisionReportView } from "@/components/report/DecisionReportView";
-import { ReportGenerationFailedCard } from "@/components/report/ReportGenerationFailedCard";
-import { FallbackResponsePanel } from "@/components/report/FallbackResponsePanel";
-import { SemanticAlignmentSection } from "@/components/report/SemanticAlignmentSection";
 import type { ModelResponse } from "./ModelCard";
 
 interface SynthesisRevealProps {
@@ -42,15 +38,6 @@ export function SynthesisReveal({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
-  // Build structured report from synthesis text or use the direct synthesisReport
-  const report = useMemo(() => {
-    if (synthesisStatus === "failed" || synthesisStatus === "fallback") return null;
-    if (synthesisReport && (synthesisReport.verdict || synthesisReport.executive_summary)) return synthesisReport;
-    if (!synthesis || isSynthesisFailed) return null;
-    // Parse the synthesis into a structured report using heuristic extraction
-    return buildReportFromSynthesis(synthesis, modelResponses);
-  }, [synthesis, modelResponses, isSynthesisFailed, synthesisReport, synthesisStatus]);
-
   useEffect(() => {
     // Check if user previously revealed this synthesis
     const storedRevealed = localStorage.getItem(`synthesis_revealed_${debateId}`);
@@ -75,7 +62,7 @@ export function SynthesisReveal({
       // Track interaction
       try {
         await apiRequest({
-          path: `/users/me/participation`, // Or we can post to the general interaction endpoint if available
+          path: `/users/me/participation`,
           method: "POST",
           body: {
             debate_id: debateId,
@@ -101,7 +88,7 @@ export function SynthesisReveal({
     try {
       // Post to participation / interaction tracking backend
       await apiRequest({
-        path: `/users/me/participation`, 
+        path: `/users/me/participation`,
         method: "POST",
         body: {
           debate_id: debateId,
@@ -117,50 +104,21 @@ export function SynthesisReveal({
   };
 
   if (revealed) {
-    const showStructuredReport = report && !isSynthesisFailed && synthesisStatus !== "failed" && synthesisStatus !== "fallback";
-    const showFallbackReport = (synthesisStatus === "failed" || synthesisStatus === "fallback") && (fallbackResponse || divergenceBreakdown);
-
     return (
       <div className="space-y-6 animate-fade-in">
-        {/* Show raw SynthesisCard only when no structured report and no fallback/divergence breakdown is available */}
-        {!showStructuredReport && !showFallbackReport && (
-          <SynthesisCard
-            synthesis={synthesis}
-            modelResponses={modelResponses}
-            isSynthesisFailed={isSynthesisFailed}
+        {/* Canonical Decision Report View */}
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm animate-fade-in">
+          <DecisionReportView
+            report={synthesisReport}
+            rawSynthesis={synthesis}
+            synthesisStatus={synthesisStatus || (isSynthesisFailed ? "failed" : "succeeded")}
+            synthesisError={synthesisError}
+            fallbackModel={fallbackModel}
+            fallbackReason={fallbackReason}
+            fallbackResponse={fallbackResponse}
+            divergenceBreakdown={divergenceBreakdown}
           />
-        )}
-
-        {/* Structured Decision Report — replaces the raw SynthesisCard */}
-        {showStructuredReport && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
-            <DecisionReportView
-              report={report}
-              rawSynthesis={synthesis}
-            />
-          </div>
-        )}
-
-        {/* Fallback / Failure UI — replaces the raw SynthesisCard */}
-        {showFallbackReport && (
-          <div className="space-y-6">
-            <ReportGenerationFailedCard reason={synthesisError} />
-            {synthesisStatus === "fallback" && fallbackResponse && (
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
-                <FallbackResponsePanel
-                  modelName={fallbackModel || fallbackResponse.model}
-                  reason={fallbackReason}
-                  content={fallbackResponse.content}
-                />
-              </div>
-            )}
-            {divergenceBreakdown && (
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm">
-                <SemanticAlignmentSection divergenceBreakdown={divergenceBreakdown} />
-              </div>
-            )}
-          </div>
-        )}
+        </div>
 
         {/* Post-Reveal Feedback Poll */}
         {!isSynthesisFailed && (
@@ -174,7 +132,7 @@ export function SynthesisReveal({
 
             {feedback ? (
               <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3">
-                <CheckCircle2 className="h-4.5 w-4.5" />
+                <ChevronRight className="h-4.5 w-4.5 rotate-90" />
                 <span>Thank you for your feedback! You voted: <strong>{feedback}</strong></span>
               </div>
             ) : (
@@ -256,137 +214,4 @@ export function SynthesisReveal({
       </div>
     </div>
   );
-}
-
-/**
- * Client-side heuristic report builder.
- * Extracts structured data from synthesis markdown text.
- */
-function buildReportFromSynthesis(synthesis: string, modelResponses: ModelResponse[]) {
-  if (!synthesis) return null;
-
-  const lines = synthesis.split("\n");
-  const sections: Record<string, string[]> = {};
-  let currentKey = "intro";
-  let currentLines: string[] = [];
-
-  for (const line of lines) {
-    const headerMatch = line.match(/^#{1,3}\s+(.*)/);
-    if (headerMatch) {
-      if (currentLines.length) sections[currentKey] = currentLines;
-      currentKey = headerMatch[1].trim().toLowerCase();
-      currentLines = [];
-    } else {
-      currentLines.push(line);
-    }
-  }
-  if (currentLines.length) sections[currentKey] = currentLines;
-
-  // Extract verdict
-  let decisionType = "mixed";
-  let confidence = 0.65;
-  const lowerSynth = synthesis.toLowerCase();
-  if (/\b(proceed|recommended|strong support|go ahead)\b/.test(lowerSynth)) decisionType = "proceed";
-  else if (/\b(revise|modify|adjust|needs work)\b/.test(lowerSynth)) decisionType = "revise";
-  else if (/\b(defer|delay|wait|postpone)\b/.test(lowerSynth)) decisionType = "defer";
-  else if (/\b(reject|against|not recommended|avoid)\b/.test(lowerSynth)) decisionType = "reject";
-
-  const confMatch = synthesis.match(/(\d{1,3})\s*%/);
-  if (confMatch) confidence = Math.min(1, parseInt(confMatch[1]) / 100);
-
-  // Extract summary
-  const summaryKeys = ["summary", "executive summary", "overview", "conclusion"];
-  let executiveSummary = "";
-  for (const key of summaryKeys) {
-    if (sections[key]) {
-      executiveSummary = sections[key].join("\n").slice(0, 500);
-      break;
-    }
-  }
-  if (!executiveSummary) {
-    const paragraphs = synthesis.split("\n\n").filter(p => p.trim() && !p.trim().startsWith("#"));
-    executiveSummary = paragraphs[0]?.slice(0, 500) || synthesis.slice(0, 500);
-  }
-
-  // Extract findings
-  const findings: Array<{ title: string; summary: string; importance: string }> = [];
-  const findingKeys = ["findings", "key findings", "insights", "analysis", "results"];
-  for (const key of findingKeys) {
-    if (sections[key]) {
-      const items = sections[key].join("\n").split(/\n(?:\d+[\.)]\s+|-\s+|\*\s+)/).filter(s => s.trim().length > 10);
-      for (const item of items.slice(0, 6)) {
-        const trimmed = item.trim();
-        let importance = "medium";
-        if (/\b(critical|essential|key|important)\b/i.test(trimmed)) importance = "high";
-        else if (/\b(minor|low|secondary)\b/i.test(trimmed)) importance = "low";
-        findings.push({ title: trimmed.slice(0, 80), summary: trimmed.slice(0, 300), importance });
-      }
-      break;
-    }
-  }
-
-  // Build model positions from responses
-  const modelPositions = modelResponses.filter(r => r.success).map(r => {
-    const content = r.content || "";
-    let stance = "supportive";
-    if (/\b(disagree|however|but|concern|risk)\b/i.test(content)) stance = "concerned";
-    else if (/\b(neutral|depends|mixed)\b/i.test(content)) stance = "neutral";
-    return {
-      model: r.display_name,
-      stance,
-      strongest_point: content.slice(0, 200) || "No response captured",
-      concern: "See full response for details",
-    };
-  });
-
-  // Extract risks
-  const risks: Array<{ item: string; type: string; severity: string }> = [];
-  const riskKeys = ["risks", "risks and assumptions", "concerns", "challenges"];
-  for (const key of riskKeys) {
-    if (sections[key]) {
-      const items = sections[key].join("\n").split(/\n(?:\d+[\.)]\s+|-\s+|\*\s+)/).filter(s => s.trim().length > 10);
-      for (const item of items.slice(0, 8)) {
-        const trimmed = item.trim();
-        let severity = "medium";
-        if (/\b(critical|severe|major)\b/i.test(trimmed)) severity = "critical";
-        else if (/\b(high|significant)\b/i.test(trimmed)) severity = "high";
-        else if (/\b(low|minor)\b/i.test(trimmed)) severity = "low";
-        const type = /\b(assume|assuming|assumption)\b/i.test(trimmed) ? "assumption" : "risk";
-        risks.push({ item: trimmed.slice(0, 200), type, severity });
-      }
-      break;
-    }
-  }
-
-  // Extract next actions
-  const nextActions: Array<{ action: string; priority: string }> = [];
-  const actionKeys = ["next steps", "next actions", "actions", "recommendations", "what to do"];
-  for (const key of actionKeys) {
-    if (sections[key]) {
-      const items = sections[key].join("\n").split(/\n(?:\d+[\.)]\s+|-\s+|\*\s+)/).filter(s => s.trim().length > 5);
-      items.slice(0, 6).forEach((item, i) => {
-        nextActions.push({
-          action: item.trim().slice(0, 200),
-          priority: i < 2 ? "now" : i < 4 ? "next" : "later",
-        });
-      });
-      break;
-    }
-  }
-
-  return {
-    title: "Decision Report",
-    executive_summary: executiveSummary,
-    verdict: {
-      recommendation: executiveSummary.slice(0, 300),
-      confidence,
-      decision_type: decisionType,
-      rationale: executiveSummary.slice(0, 500),
-    },
-    key_findings: findings,
-    model_positions: modelPositions,
-    risks_and_assumptions: risks,
-    next_actions: nextActions,
-    caveats: [],
-  };
 }

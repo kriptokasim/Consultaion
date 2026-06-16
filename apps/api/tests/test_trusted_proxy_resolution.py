@@ -74,3 +74,76 @@ def test_two_different_ips_get_different_buckets():
     k1, _ = resolve_identity(r1)
     k2, _ = resolve_identity(r2)
     assert k1 != k2
+
+
+def test_trusted_proxy_forwarded_for(monkeypatch):
+    from config import settings
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_CIDRS", ["127.0.0.1/32", "192.168.0.0/16"])
+
+    # Case 1: Client connects via trusted proxy
+    request = _make_request(client_host="127.0.0.1", forwarded_for="203.0.113.195, 127.0.0.1")
+    key, id_type = resolve_identity(request)
+    assert key == "wl:ip:203.0.113.195"
+    assert id_type == "ip"
+
+    # Case 2: Client connects via untrusted proxy
+    request = _make_request(client_host="1.2.3.4", forwarded_for="203.0.113.195, 127.0.0.1")
+    key, id_type = resolve_identity(request)
+    assert key == "wl:ip:1.2.3.4"
+    assert id_type == "ip"
+
+    # Case 3: Client connects via trusted proxy but sends invalid X-Forwarded-For IP
+    request = _make_request(client_host="127.0.0.1", forwarded_for="invalid-ip, 127.0.0.1")
+    key, id_type = resolve_identity(request)
+    assert key == "wl:ip:127.0.0.1"
+    assert id_type == "ip"
+
+
+def test_jwt_signature_check_success(monkeypatch):
+    import jwt
+    from config import settings
+    monkeypatch.setattr(settings, "JWT_SECRET", "super-secret-key")
+
+    import time
+    claims = {
+        "sub": "user-999",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 60
+    }
+    valid_token = jwt.encode(claims, "super-secret-key", algorithm="HS256")
+
+    # Pass via Cookie
+    request = _make_request()
+    request.cookies = {settings.COOKIE_NAME: valid_token}
+    key, id_type = resolve_identity(request)
+    assert key == "wl:user:user-999"
+    assert id_type == "user"
+
+    # Pass via Bearer Header
+    request = _make_request(auth_header=f"Bearer {valid_token}")
+    key, id_type = resolve_identity(request)
+    assert key == "wl:user:user-999"
+    assert id_type == "user"
+
+
+def test_jwt_signature_check_failure(monkeypatch):
+    import jwt
+    from config import settings
+    monkeypatch.setattr(settings, "JWT_SECRET", "super-secret-key")
+
+    import time
+    claims = {
+        "sub": "user-999",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 60
+    }
+    # Encoded with a different secret key
+    invalid_token = jwt.encode(claims, "wrong-secret-key", algorithm="HS256")
+
+    request = _make_request()
+    request.cookies = {settings.COOKIE_NAME: invalid_token}
+    key, id_type = resolve_identity(request)
+    # Should fall back to client host
+    assert key == "wl:ip:1.2.3.4"
+    assert id_type == "ip"
+

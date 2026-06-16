@@ -356,6 +356,95 @@ class RedisChannelBackend:
         except Exception:
             return False
 
+# ── Concurrent Stream Limiter (Lease-based) ────────────────────────────
+
+class StreamLeaseManager:
+    """Lease-based concurrent stream limiter.
+
+    Uses Redis sorted sets (or in-memory set) to enforce a maximum number
+    of concurrent SSE subscribers per debate_id or globally.
+
+    Leases auto-expire after TTL seconds.  When the limit is reached,
+    new subscribers get a 503 with Retry-After.
+    """
+
+    def __init__(self, max_streams: int = 5, lease_ttl: int = 300):
+        self._max_streams = max_streams
+        self._lease_ttl = lease_ttl
+        self._memory_leases: dict[str, set[str]] = {}
+
+    def _lease_key(self, debate_id: str) -> str:
+        return f"sse:leases:{debate_id}"
+
+    async def try_acquire(self, debate_id: str, subscriber_id: str) -> bool:
+        """Try to acquire a streaming lease. Returns True if acquired."""
+        try:
+            from redis_pool import get_async_redis_client
+            client = get_async_redis_client()
+            if client is not None:
+                key = self._lease_key(debate_id)
+                now = time.time()
+                await client.zremrangebyscore(key, "-inf", now - self._lease_ttl)
+                count = await client.zcard(key)
+                if count is not None and count >= self._max_streams:
+                    return False
+                await client.zadd(key, {subscriber_id: now})
+                await client.expire(key, self._lease_ttl * 2)
+                return True
+        except Exception:
+            logger.warning("Redis lease acquire failed, falling back to memory")
+
+        memory_set = self._memory_leases.setdefault(debate_id, set())
+        if len(memory_set) >= self._max_streams:
+            return False
+        memory_set.add(subscriber_id)
+        return True
+
+    async def release(self, debate_id: str, subscriber_id: str) -> None:
+        """Release a streaming lease."""
+        try:
+            from redis_pool import get_async_redis_client
+            client = get_async_redis_client()
+            if client is not None:
+                key = self._lease_key(debate_id)
+                await client.zrem(key, subscriber_id)
+                return
+        except Exception:
+            pass
+
+        memory_set = self._memory_leases.get(debate_id)
+        if memory_set:
+            memory_set.discard(subscriber_id)
+
+    async def active_count(self, debate_id: str) -> int:
+        """Return the number of active leases for a debate."""
+        try:
+            from redis_pool import get_async_redis_client
+            client = get_async_redis_client()
+            if client is not None:
+                key = self._lease_key(debate_id)
+                now = time.time()
+                await client.zremrangebyscore(key, "-inf", now - self._lease_ttl)
+                count = await client.zcard(key)
+                return count if count is not None else 0
+        except Exception:
+            pass
+        return len(self._memory_leases.get(debate_id, set()))
+
+
+_stream_lease_manager: StreamLeaseManager | None = None
+_stream_lease_lock = asyncio.Lock()
+
+
+def get_stream_lease_manager() -> StreamLeaseManager:
+    global _stream_lease_manager
+    if _stream_lease_manager is None:
+        max_streams = getattr(settings, "SSE_MAX_CONCURRENT_STREAMS", 5)
+        lease_ttl = getattr(settings, "SSE_LEASE_TTL_SECONDS", 300)
+        _stream_lease_manager = StreamLeaseManager(max_streams=max_streams, lease_ttl=lease_ttl)
+    return _stream_lease_manager
+
+
 def _is_strict() -> bool:
     """Determine if SSE strict mode is enabled.
     

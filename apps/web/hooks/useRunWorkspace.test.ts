@@ -1,15 +1,17 @@
 import { renderHook } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { fetchWithAuth } from "@/lib/auth";
 import { useRunWorkspace } from "./useRunWorkspace";
 
 vi.mock("@/lib/api", () => ({
   getDebate: vi.fn().mockResolvedValue({ id: "mock", status: "perspectives_ready" }),
-  continueDebate: vi.fn().mockResolvedValue({ id: "cont-1", status: "dispatched" }),
-  retryDebate: vi.fn().mockResolvedValue({ id: "cont-1", status: "dispatched" }),
+  continueDebate: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
+  retryDebate: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
+  resolveContinuationByKey: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
 }));
 
 vi.mock("@/lib/auth", () => ({
-  fetchWithAuth: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }),
+  fetchWithAuth: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ status: "dispatched", continuation_id: "cont-1" }) }),
 }));
 
 vi.mock("@/lib/config/runtime", () => ({
@@ -149,5 +151,29 @@ describe("useRunWorkspace -- localStorage persistence", () => {
     const { result } = renderHook(() => useRunWorkspace(debateId));
     expect(result.current.isContinuing).toBe(false);
     expect(result.current.outcomeUnknown).toBe(false);
+  });
+
+  it("cleans up intent on mount if continuation has failed on the server", async () => {
+    const debateId = "test-debate-failed-recovery";
+    setStoredIntent(debateId, {
+      debateId,
+      idempotencyKey: "key-failed",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      phase: "tracking",
+      continuationId: "cont-failed",
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+
+    vi.mocked(fetchWithAuth).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: "failed", continuation_id: "cont-failed" })
+    } as any);
+
+    const { result } = renderHook(() => useRunWorkspace(debateId));
+    await vi.waitFor(() => {
+      expect(result.current.isContinuing).toBe(false);
+    });
+    expect(getStoredIntent(debateId)).toBeNull();
   });
 });

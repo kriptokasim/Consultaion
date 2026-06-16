@@ -121,3 +121,31 @@ def test_billing_usage_unique_constraint(db_session: Session):
     assert any("user" in name and "period" in name for name in uq_names), (
         f"Missing unique constraint on (user_id, period). Found: {uq_names}"
     )
+
+
+def test_alembic_chain_linearity_and_uniqueness():
+    """Assert there is only a single head and all revision IDs are unique."""
+    from alembic.script import ScriptDirectory
+    from alembic.config import Config
+    import os
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    api_dir = os.path.abspath(os.path.join(current_dir, ".."))
+    ini_path = os.path.join(api_dir, "alembic.ini")
+
+    config = Config(ini_path)
+    config.set_main_option("script_location", os.path.join(api_dir, "alembic"))
+    script = ScriptDirectory.from_config(config)
+
+    heads = script.get_heads()
+    assert len(heads) == 1, f"Expected exactly 1 alembic migration head, found {len(heads)}: {heads}"
+
+    revisions = list(script.walk_revisions())
+    rev_ids = [r.revision for r in revisions]
+
+    # Assert all revision IDs are unique
+    assert len(rev_ids) == len(set(rev_ids)), f"Duplicate Alembic revision IDs found: {rev_ids}"
+
+    # Assert all revision IDs have a length between 8 and 32 characters
+    for rev in rev_ids:
+        assert 8 <= len(rev) <= 32, f"Revision ID '{rev}' length ({len(rev)}) must be between 8 and 32 characters"

@@ -3,10 +3,15 @@
 Cross-references BillingUsage against LLMUsageLog to detect real discrepancies
 in token counts, per-model usage, debate counts, hosted credits, and orphans.
 Runs as a background task. Supports daily detection runs and monthly full reconciliation.
+
+Uses ReconciliationWindow for explicit time-window boundaries.
+Cost reconciliation compares recorded cost_usd with independently recomputed
+cost using versioned model pricing.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 import uuid
@@ -18,7 +23,7 @@ from sqlmodel import Session, select, func, col
 
 logger = logging.getLogger(__name__)
 
-RECONCILIATION_VERSION = "v1"
+RECONCILIATION_VERSION = "v2"
 RECONCILIATION_INTERVAL_SECONDS = 86400
 RECONCILIATION_HOUR = 3
 
@@ -30,8 +35,109 @@ RECONCILIATION_COST_TOLERANCE_PERCENT = 10.0
 RECONCILIATION_DEBATE_TOLERANCE_PERCENT = 2.0
 
 
-def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "daily") -> Dict[str, object]:
-    """Cross-reference BillingUsage against LLMUsageLog for real discrepancies."""
+@dataclasses.dataclass
+class ReconciliationWindow:
+    """Explicit time-window boundaries for reconciliation."""
+    start_at: datetime
+    end_at: datetime
+    label: str
+
+    @classmethod
+    def previous_utc_day(cls) -> ReconciliationWindow:
+        """Window covering the previous UTC day."""
+        now = datetime.now(timezone.utc)
+        end = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = end - timedelta(days=1)
+        label = start.strftime("%Y-%m-%d")
+        return cls(start_at=start, end_at=end, label=label)
+
+    @classmethod
+    def month_to_date(cls) -> ReconciliationWindow:
+        """Window from start of current month to now."""
+        now = datetime.now(timezone.utc)
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        label = f"{start.strftime('%Y-%m')}-to-date"
+        return cls(start_at=start, end_at=now, label=label)
+
+    @classmethod
+    def closed_month(cls, year: int, month: int) -> ReconciliationWindow:
+        """Window for a fully closed calendar month."""
+        start = datetime(year, month, 1, tzinfo=timezone.utc)
+        if month == 12:
+            end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            end = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+        label = start.strftime("%Y-%m")
+        return cls(start_at=start, end_at=end, label=label)
+
+    @classmethod
+    def from_period(cls, period: str) -> ReconciliationWindow:
+        """Parse YYYY-MM period string into a month window."""
+        try:
+            start = datetime.strptime(period, "%Y-%m").replace(tzinfo=timezone.utc)
+            if start.month == 12:
+                end = start.replace(year=start.year + 1, month=1)
+            else:
+                end = start.replace(month=start.month + 1)
+            return cls(start_at=start, end_at=end, label=period)
+        except ValueError:
+            now = datetime.now(timezone.utc)
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = now
+            return cls(start_at=start, end_at=end, label="unknown")
+
+    def period_str(self) -> str:
+        """Return the month label (YYYY-MM) for backward compatibility."""
+        return self.start_at.strftime("%Y-%m")
+
+    def run_key(self, run_type: str) -> str:
+        """Generate deterministic run key for idempotency."""
+        return f"{run_type}:{self.start_at.isoformat()}:{self.end_at.isoformat()}:{RECONCILIATION_VERSION}"
+
+
+def _get_model_pricing() -> Dict[str, Dict[str, float]]:
+    """Return a versioned snapshot of model pricing.
+
+    Format: {model_id: {"input_price_per_1k": float, "output_price_per_1k": float}}
+    This acts as a static snapshot for reconciliation consistency.
+    """
+    # Static pricing snapshot keyed by model ID
+    # Values are USD per 1000 tokens
+    return {
+        "openai/gpt-4o": {"input_price_per_1k": 0.01, "output_price_per_1k": 0.03},
+        "openai/gpt-4o-mini": {"input_price_per_1k": 0.0015, "output_price_per_1k": 0.006},
+        "openai/gpt-4-turbo": {"input_price_per_1k": 0.01, "output_price_per_1k": 0.03},
+        "anthropic/claude-3-5-sonnet-20240620": {"input_price_per_1k": 0.003, "output_price_per_1k": 0.015},
+        "anthropic/claude-3-haiku": {"input_price_per_1k": 0.00025, "output_price_per_1k": 0.00125},
+        "anthropic/claude-3-opus": {"input_price_per_1k": 0.015, "output_price_per_1k": 0.075},
+        "gemini/gemini-1.5-pro": {"input_price_per_1k": 0.0035, "output_price_per_1k": 0.0105},
+        "gemini/gemini-1.5-flash": {"input_price_per_1k": 0.00035, "output_price_per_1k": 0.00105},
+        "deepseek/deepseek-chat": {"input_price_per_1k": 0.00027, "output_price_per_1k": 0.0011},
+        "deepseek/deepseek-reasoner": {"input_price_per_1k": 0.00055, "output_price_per_1k": 0.00219},
+    }
+
+
+def _recompute_cost(prompt_tokens: int, completion_tokens: int, model: str, pricing: Dict[str, Dict[str, float]]) -> Optional[float]:
+    """Recompute expected cost from token counts using model pricing snapshot."""
+    model_pricing = pricing.get(model)
+    if not model_pricing:
+        return None
+    input_cost = (prompt_tokens / 1000) * model_pricing["input_price_per_1k"]
+    output_cost = (completion_tokens / 1000) * model_pricing["output_price_per_1k"]
+    return round(input_cost + output_cost, 6)
+
+
+def reconcile_usage(
+    db: Session,
+    window: Optional[ReconciliationWindow] = None,
+    run_type: str = "daily",
+) -> Dict[str, object]:
+    """Cross-reference BillingUsage against LLMUsageLog for real discrepancies.
+
+    Uses ReconciliationWindow for explicit time boundaries.
+    Cost reconciliation compares recorded SUM(cost_usd) vs independently
+    recomputed cost from token counts and model pricing.
+    """
     from billing.models import (
         BillingUsage,
         BillingReconciliationRun,
@@ -40,8 +146,37 @@ def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "
     from billing.service import _current_period
     from models import LLMUsageLog, Debate
 
-    target_period = period or _current_period()
+    if window is None:
+        window = ReconciliationWindow.previous_utc_day()
+
+    target_period = window.period_str()
     run_id = uuid.uuid4()
+    run_key = window.run_key(run_type)
+
+    # Check for existing run with same key to prevent duplicates
+    existing = db.exec(
+        select(BillingReconciliationRun).where(
+            BillingReconciliationRun.period == target_period,
+            BillingReconciliationRun.run_type == run_type,
+            BillingReconciliationRun.status == "completed",
+        )
+    ).first()
+    if existing:
+        logger.info(
+            "Skipping duplicate reconciliation: period=%s run_type=%s existing_run=%s",
+            target_period, run_type, existing.id,
+        )
+        return {
+            "run_id": str(existing.id),
+            "version": RECONCILIATION_VERSION,
+            "period": target_period,
+            "run_type": run_type,
+            "skipped": True,
+            "users_checked": existing.users_checked,
+            "discrepancies": [],
+            "total_tokens_internal": existing.total_tokens_internal,
+            "total_tokens_usage": existing.total_tokens_usage,
+        }
 
     run = BillingReconciliationRun(
         id=run_id,
@@ -57,11 +192,15 @@ def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "
         "version": RECONCILIATION_VERSION,
         "period": target_period,
         "run_type": run_type,
+        "window_start": window.start_at.isoformat(),
+        "window_end": window.end_at.isoformat(),
+        "run_key": run_key,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "users_checked": 0,
         "discrepancies": [],
         "total_tokens_internal": 0,
         "total_tokens_usage": 0,
+        "skipped": False,
     }
 
     try:
@@ -69,6 +208,7 @@ def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "
             select(BillingUsage).where(BillingUsage.period == target_period)
         ).all()
 
+        pricing = _get_model_pricing()
         discrepancies: List[Dict[str, object]] = []
 
         for usage in usages:
@@ -79,8 +219,8 @@ def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "
             llm_tokens = db.exec(
                 select(func.coalesce(func.sum(LLMUsageLog.total_tokens), 0))
                 .where(LLMUsageLog.user_id == usage.user_id)
-                .where(LLMUsageLog.created_at >= _period_start(target_period))
-                .where(LLMUsageLog.created_at < _period_end(target_period))
+                .where(LLMUsageLog.created_at >= window.start_at)
+                .where(LLMUsageLog.created_at < window.end_at)
             ).one()
             report["total_tokens_internal"] += llm_tokens
 
@@ -91,7 +231,7 @@ def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "
             # 2. Per-model reconciliation: BillingUsage.model_tokens vs grouped LLMUsageLog
             if usage.model_tokens:
                 per_model_discs = _check_per_model_tokens(
-                    db, usage.user_id, usage.model_tokens, target_period
+                    db, usage.user_id, usage.model_tokens, window
                 )
                 discrepancies.extend(per_model_discs)
 
@@ -130,12 +270,12 @@ def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "
                     "details": f"{usage.debates_created} debates but 0 tokens",
                 })
 
-        # 6. Orphan check: LLM usage without a BillingUsage record
-        orphan_discs = _check_orphan_usage(db, target_period)
+            # 6. Orphan check: LLM usage without a BillingUsage record
+        orphan_discs = _check_orphan_usage(db, window)
         discrepancies.extend(orphan_discs)
 
-        # 7. Cost reconciliation: total cost_usd vs internal
-        cost_discs = _check_cost_reconciliation(db, target_period)
+        # 7. Cost reconciliation: compare recorded SUM(cost_usd) vs independently recomputed
+        cost_discs = _check_cost_reconciliation(db, window)
         discrepancies.extend(cost_discs)
 
         # Save discrepancies to database
@@ -160,8 +300,9 @@ def reconcile_usage(db: Session, period: Optional[str] = None, run_type: str = "
         db.commit()
 
         logger.info(
-            "Reconciliation complete: period=%s users=%d discrepancies=%d run_id=%s version=%s",
+            "Reconciliation complete: period=%s run_key=%s users=%d discrepancies=%d run_id=%s version=%s",
             target_period,
+            run_key,
             report["users_checked"],
             len(discrepancies),
             str(run_id),
@@ -202,7 +343,7 @@ def _check_token_mismatch(user_id: str, billing_tokens: int, llm_tokens: int) ->
 
 
 def _check_per_model_tokens(
-    db: Session, user_id: str, billing_model_tokens: Dict[str, int], period: str
+    db: Session, user_id: str, billing_model_tokens: Dict[str, int], window: ReconciliationWindow
 ) -> List[Dict[str, object]]:
     """Check per-model token totals."""
     from models import LLMUsageLog
@@ -213,8 +354,8 @@ def _check_per_model_tokens(
             select(func.coalesce(func.sum(LLMUsageLog.total_tokens), 0))
             .where(LLMUsageLog.user_id == user_id)
             .where(LLMUsageLog.model == model)
-            .where(LLMUsageLog.created_at >= _period_start(period))
-            .where(LLMUsageLog.created_at < _period_end(period))
+            .where(LLMUsageLog.created_at >= window.start_at)
+            .where(LLMUsageLog.created_at < window.end_at)
         ).one()
 
         diff = abs(expected_tokens - llm_tokens)
@@ -248,15 +389,16 @@ def _check_debate_count(user_id: str, billing_debates: int, actual_debates: int)
     }
 
 
-def _check_orphan_usage(db: Session, period: str) -> List[Dict[str, object]]:
+def _check_orphan_usage(db: Session, window: ReconciliationWindow) -> List[Dict[str, object]]:
     """Check for LLM usage without a BillingUsage record."""
     from models import LLMUsageLog
     from billing.models import BillingUsage
 
+    period = window.period_str()
     orphans = db.exec(
         select(LLMUsageLog.user_id, func.count().label("usage_count"))
-        .where(LLMUsageLog.created_at >= _period_start(period))
-        .where(LLMUsageLog.created_at < _period_end(period))
+        .where(LLMUsageLog.created_at >= window.start_at)
+        .where(LLMUsageLog.created_at < window.end_at)
         .where(LLMUsageLog.user_id.not_in(
             select(BillingUsage.user_id).where(BillingUsage.period == period)
         ))
@@ -276,42 +418,93 @@ def _check_orphan_usage(db: Session, period: str) -> List[Dict[str, object]]:
     ]
 
 
-def _check_cost_reconciliation(db: Session, period: str) -> List[Dict[str, object]]:
-    """Check total cost_usd vs internal cost."""
+def _check_cost_reconciliation(db: Session, window: ReconciliationWindow) -> List[Dict[str, object]]:
+    """Compare recorded SUM(cost_usd) vs independently recomputed cost.
+
+    Recomputed cost uses input_tokens × input_price + output_tokens × output_price
+    from a versioned model-pricing snapshot.
+    """
     from models import LLMUsageLog
 
-    total_cost = db.exec(
-        select(func.coalesce(func.sum(LLMUsageLog.cost_usd), 0.0))
-        .where(LLMUsageLog.created_at >= _period_start(period))
-        .where(LLMUsageLog.created_at < _period_end(period))
-    ).one()
+    pricing = _get_model_pricing()
+    records = db.exec(
+        select(LLMUsageLog)
+        .where(LLMUsageLog.created_at >= window.start_at)
+        .where(LLMUsageLog.created_at < window.end_at)
+    ).all()
 
-    if total_cost > RECONCILIATION_COST_TOLERANCE_USD:
-        return [{
+    if not records:
+        return []
+
+    total_recorded: float = 0.0
+    total_recomputed: float = 0.0
+    per_model: Dict[str, dict] = {}
+    unknown_models: set = set()
+
+    for rec in records:
+        total_recorded += rec.cost_usd or 0.0
+        recomputed = _recompute_cost(
+            rec.prompt_tokens, rec.completion_tokens, rec.model, pricing
+        )
+        if recomputed is not None:
+            total_recomputed += recomputed
+            if rec.model not in per_model:
+                per_model[rec.model] = {"recorded": 0.0, "recomputed": 0.0}
+            per_model[rec.model]["recorded"] += rec.cost_usd or 0.0
+            per_model[rec.model]["recomputed"] += recomputed
+        else:
+            unknown_models.add(rec.model)
+
+    discrepancies: List[Dict[str, object]] = []
+
+    # Unknown model pricing
+    for model in sorted(unknown_models):
+        discrepancies.append({
             "user_id": "_system_",
-            "type": "total_cost_exceeds_threshold",
-            "internal_value": int(total_cost * 100),
+            "type": "unknown_model_pricing",
+            "internal_value": 0,
             "expected_value": 0,
             "severity": "warning",
-            "details": f"Total cost ${total_cost:.2f} exceeds threshold",
-        }]
-    return []
+            "details": f"Unknown model pricing for '{model}'; cannot recompute cost",
+        })
 
+    # Total cost discrepancy
+    cost_diff = abs(total_recorded - total_recomputed)
+    cost_diff_pct = (cost_diff / total_recomputed * 100) if total_recomputed > 0 else 0.0
 
-def _period_start(period: str) -> datetime:
-    """Parse period string (YYYY-MM) and return start datetime."""
-    try:
-        return datetime.strptime(period, "%Y-%m").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if cost_diff > RECONCILIATION_COST_TOLERANCE_USD and cost_diff_pct > RECONCILIATION_COST_TOLERANCE_PERCENT:
+        discrepancies.append({
+            "user_id": "_system_",
+            "type": "cost_reconciliation_mismatch",
+            "internal_value": int(total_recomputed * 100),
+            "expected_value": int(total_recorded * 100),
+            "severity": "critical" if cost_diff > 5.0 else "warning",
+            "details": (
+                f"Cost mismatch: recorded=${total_recorded:.4f} "
+                f"recomputed=${total_recomputed:.4f} "
+                f"diff=${cost_diff:.4f} ({cost_diff_pct:.1f}%)"
+            ),
+        })
 
+    # Per-model cost discrepancies
+    for model, costs in per_model.items():
+        rec = costs["recorded"]
+        recom = costs["recomputed"]
+        d = abs(rec - recom)
+        if d > 0.01 and (recom > 0 and (d / recom * 100) > 5.0):
+            discrepancies.append({
+                "user_id": "_system_",
+                "type": "per_model_cost_mismatch",
+                "internal_value": int(recom * 100),
+                "expected_value": int(rec * 100),
+                "severity": "warning",
+                "details": (
+                    f"Model {model}: recorded=${rec:.4f} "
+                    f"recomputed=${recom:.4f} diff=${d:.4f}"
+                ),
+            })
 
-def _period_end(period: str) -> datetime:
-    """Parse period string (YYYY-MM) and return end datetime."""
-    start = _period_start(period)
-    if start.month == 12:
-        return start.replace(year=start.year + 1, month=1)
-    return start.replace(month=start.month + 1)
+    return discrepancies
 
 
 def get_last_reconciliation_time() -> Optional[datetime]:

@@ -198,6 +198,8 @@ class SynthesisStage(BaseStage):
         ]
         
         synthesis_usage = UsageAccumulator()
+        from observability.metrics import record_synthesis_result
+        synthesis_outcome = "structured"
         try:
             report = await generate_decision_report(
                 prompt=context.prompt,
@@ -209,6 +211,7 @@ class SynthesisStage(BaseStage):
             final_answer = report.executive_summary or report.title
             state.final_meta["synthesis_report"] = report.model_dump()
         except Exception as e:
+            synthesis_outcome = "fallback_legacy"
             logger.error(f"Structured synthesis in debate failed: {e}. Falling back to legacy synthesize.")
             final_answer, synthesis_usage = await synthesize(
                 context.prompt, 
@@ -217,6 +220,8 @@ class SynthesisStage(BaseStage):
                 model_id=context.model_id, 
                 debate_id=context.debate_id
             )
+        finally:
+            record_synthesis_result(synthesis_outcome)
             
         context.usage_tracker.extend(synthesis_usage)
         

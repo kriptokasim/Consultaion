@@ -628,7 +628,13 @@ def test_debate_creation_dispatches_celery_task(monkeypatch):
             def __init__(self):
                 self.debate_id = None
 
-            def delay(self, debate_id: str, trace_id: str | None = None, is_resume: bool = False):
+            def delay(
+                self,
+                debate_id: str,
+                trace_id: str | None = None,
+                is_resume: bool = False,
+                continuation_id: str | None = None,
+            ):
                 self.debate_id = debate_id
 
         dummy = DummyTask()

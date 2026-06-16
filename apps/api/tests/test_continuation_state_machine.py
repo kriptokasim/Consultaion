@@ -122,20 +122,14 @@ def test_failed_cannot_transition_to_non_requested(db_session: Session):
         transition_continuation_sync(db_session, cont.id, ["failed"], "running")
 
 
-def test_failed_continuation_can_be_retried_via_requested(db_session: Session):
+def test_failed_cannot_transition_to_requested_or_preflight_passed(db_session: Session):
     user, debate, cont = _create_debate_and_continuation(db_session, "sm-10", "key-10")
     transition_continuation_sync(db_session, cont.id, ["requested"], "failed")
-    res = transition_continuation_sync(db_session, cont.id, ["failed"], "requested")
-    assert res.status == "requested"
+    with pytest.raises(ContinuationTransitionError):
+        transition_continuation_sync(db_session, cont.id, ["failed"], "requested")
+    with pytest.raises(ContinuationTransitionError):
+        transition_continuation_sync(db_session, cont.id, ["failed"], "preflight_passed")
 
-
-def test_failed_continuation_can_be_retried(db_session: Session):
-    user, debate, cont = _create_debate_and_continuation(db_session, "sm-11", "key-11")
-    transition_continuation_sync(db_session, cont.id, ["requested"], "failed")
-    res = transition_continuation_sync(db_session, cont.id, ["failed"], "requested")
-    assert res.status == "requested"
-    res = transition_continuation_sync(db_session, cont.id, ["requested"], "preflight_passed")
-    assert res.status == "preflight_passed"
 
 
 def test_normal_non_resume_run_never_modifies_continuation(db_session: Session):
@@ -199,9 +193,9 @@ def test_transition_map_completeness():
         "paused", "completed", "failed", "cancelled",
     }
     assert set(ALLOWED_CONTINUATION_TRANSITIONS.keys()) == expected_statuses
-    for status in ["paused", "completed", "cancelled"]:
+    for status in ["paused", "completed", "cancelled", "failed"]:
         assert ALLOWED_CONTINUATION_TRANSITIONS[status] == set(), f"{status} should be terminal"
-    assert ALLOWED_CONTINUATION_TRANSITIONS["failed"] == {"requested"}, "failed allows retry via requested"
+
 
 
 @pytest.mark.asyncio

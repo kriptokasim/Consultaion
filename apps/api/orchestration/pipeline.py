@@ -173,6 +173,11 @@ class StandardDebatePipeline(DebatePipeline):
                 }
             )
 
+            import time as time_module
+            from observability.metrics import record_pipeline_stage_duration, record_pipeline_stage_failure
+
+            stage_mode = "recovery" if context.is_resume else "full"
+            stage_start = time_module.monotonic()
             try:
                 state = await run_with_checkpoint(
                     context.debate_id,
@@ -181,7 +186,12 @@ class StandardDebatePipeline(DebatePipeline):
                     run_fn,
                     load_fn
                 )
+                stage_elapsed = time_module.monotonic() - stage_start
+                record_pipeline_stage_duration(stage.name, stage_mode, stage_elapsed)
             except Exception as exc:
+                stage_elapsed = time_module.monotonic() - stage_start
+                record_pipeline_stage_duration(stage.name, stage_mode, stage_elapsed)
+                record_pipeline_stage_failure(stage.name, stage_mode)
                 logger.error("Debate %s: stage %s failed: %s", context.debate_id, stage.name, exc)
                 raise
 

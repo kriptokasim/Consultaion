@@ -49,6 +49,8 @@ export interface ContinuationDTO {
     failed_at?: string;
     failure_code?: string;
     failure_detail_safe?: string;
+    retry_of_continuation_id?: string | null;
+    idempotency_key?: string;
 }
 
 export interface DebateSummary {

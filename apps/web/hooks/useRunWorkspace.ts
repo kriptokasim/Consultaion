@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithAuth } from "@/lib/auth";
-import { getDebate, continueDebate, retryDebate } from "@/lib/api";
+import { getDebate, continueDebate, retryDebate, resolveContinuationByKey } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { useEventSource, type SSEStatus } from "@/lib/sse";
 import { normalizeEvent } from "@/lib/api/normalizeEvent";
@@ -246,17 +246,70 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       intentRef.current = persisted;
       idempotencyKeyRef.current = persisted.idempotencyKey;
 
-      if (persisted.phase === "server_acknowledged" || persisted.phase === "tracking") {
-        setOutcomeUnknown(true);
-        setIsContinuing(true);
-      } else if (persisted.phase === "request_sent") {
+      if (persisted.phase === "server_acknowledged" || persisted.phase === "tracking" || persisted.phase === "request_sent") {
         setOutcomeUnknown(true);
         setIsContinuing(true);
       } else {
         setIsContinuing(true);
       }
+
+      // Invoke recovery procedure
+      const recover = async () => {
+        try {
+          let statusData = null;
+          if (persisted.continuationId) {
+            const res = await fetchWithAuth(`/debates/${debateId}/continuations/${persisted.continuationId}`);
+            if (res.ok) {
+              statusData = await res.json();
+            }
+          }
+          if (!statusData && persisted.idempotencyKey) {
+            try {
+              statusData = await resolveContinuationByKey(debateId, persisted.idempotencyKey);
+            } catch {
+              // ignore error
+            }
+          }
+
+          if (statusData) {
+            if (statusData.status === "failed" || statusData.status === "cancelled") {
+              // Clean up the storage intent, update status, and enable retrying.
+              clearIntent(debateId);
+              intentRef.current = null;
+              idempotencyKeyRef.current = null;
+              setIsContinuing(false);
+              setOutcomeUnknown(false);
+            } else {
+              // Succeeded or in progress, update intent to tracking and keep polling/syncing
+              const updatedIntent: PersistedContinuationIntent = {
+                ...persisted,
+                phase: "tracking",
+                continuationId: statusData.continuation_id || statusData.id,
+                updatedAt: new Date().toISOString(),
+              };
+              persistIntent(debateId, updatedIntent);
+              intentRef.current = updatedIntent;
+              setIsContinuing(true);
+              setOutcomeUnknown(false);
+              await fetchDebateAndTimeline(debateId);
+            }
+          } else {
+            // No info, clean up
+            clearIntent(debateId);
+            intentRef.current = null;
+            idempotencyKeyRef.current = null;
+            setIsContinuing(false);
+            setOutcomeUnknown(false);
+          }
+        } catch (err) {
+          console.error("Continuation recovery failed:", err);
+          // If transient error, keep states as is to let polling/user retry
+        }
+      };
+
+      recover();
     }
-  }, [debateId]);
+  }, [debateId, fetchDebateAndTimeline]);
 
   // Clear intent ONLY on terminal or confirmed paused
   useEffect(() => {
@@ -284,6 +337,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setIsContinuing(true);
       setOutcomeUnknown(false);
 
+      // If previous continuation failed/cancelled, clear key to force a new one
+      if (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") {
+        idempotencyKeyRef.current = null;
+      }
+
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = crypto.randomUUID();
       }
@@ -308,13 +366,17 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       persistIntent(debateId, sentIntent);
       intentRef.current = sentIntent;
 
-      const response = await continueDebate(debateId, idempotencyKeyRef.current);
+      const retryOfId = (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled")
+        ? debate.continuation_id
+        : undefined;
+
+      const response = await continueDebate(debateId, idempotencyKeyRef.current, retryOfId);
 
       // Phase: server_acknowledged — store continuationId
       const ackIntent: PersistedContinuationIntent = {
         ...sentIntent,
         phase: "server_acknowledged",
-        continuationId: response?.id,
+        continuationId: response?.continuation_id,
         updatedAt: new Date().toISOString(),
       };
       persistIntent(debateId, ackIntent);
@@ -339,7 +401,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         setOutcomeUnknown(true);
       }
     }
-  }, [debateId, fetchDebateAndTimeline]);
+  }, [debateId, debate?.continuation_status, debate?.continuation_id, fetchDebateAndTimeline]);
 
   const handleRetry = useCallback(async (stageKey?: string) => {
     if (!debateId) return;

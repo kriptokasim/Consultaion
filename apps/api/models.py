@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-from sqlalchemy import JSON, Column, DateTime, Index, Text, UniqueConstraint
+from sqlalchemy import JSON, Column, DateTime, Index, Text, UniqueConstraint, ForeignKey, String
 from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -548,7 +548,15 @@ class DebateContinuation(SQLModel, table=True):
     failure_code: Optional[str] = Field(default=None, nullable=True)
     failure_detail_safe: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     credit_reservation_id: Optional[str] = Field(default=None, nullable=True)
-    retry_of_continuation_id: Optional[str] = Field(default=None, nullable=True, index=True)
+    retry_of_continuation_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String,
+            ForeignKey("debate_continuation.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
 
 
 class DebateStageCheckpoint(SQLModel, table=True):

@@ -235,9 +235,14 @@ class UserProfileUpdate(BaseModel):
     email_summaries_enabled: Optional[bool] = Field(default=None)
 
 
+class ContinuationRequest(BaseModel):
+    retry_of_continuation_id: Optional[str] = None
+
+
 class ContinuationResponse(BaseModel):
     continuation_id: str
     debate_id: str
     status: str
     idempotency_key: str
     created: bool
+    retry_of_continuation_id: Optional[str] = None
