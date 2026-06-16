@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithAuth } from "@/lib/auth";
-import { getDebate, continueDebate, retryDebate, resolveContinuationByKey } from "@/lib/api";
+import { getDebate, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, REQUEST_TIMEOUT } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { useEventSource, type SSEStatus } from "@/lib/sse";
 import { normalizeEvent } from "@/lib/api/normalizeEvent";
@@ -16,6 +16,12 @@ export type RunWorkspaceStatus =
   | "completed"
   | "failed"
   | "error";
+
+export type RunHydrationQuality =
+  | "complete"
+  | "events_fallback"
+  | "debate_only"
+  | "failed";
 
 export interface PersistedContinuationIntent {
   debateId: string;
@@ -34,6 +40,9 @@ export interface PersistedContinuationIntent {
 
 const CONTINUATION_TTL_MS = 24 * 60 * 60 * 1000;
 const STORAGE_KEY_PREFIX = "consultaion:continuation";
+const DEBATE_TIMEOUT_MS = 12000;
+const TIMELINE_TIMEOUT_MS = 6000;
+const EVENTS_TIMEOUT_MS = 8000;
 
 function getStorageKey(debateId: string): string {
   return `${STORAGE_KEY_PREFIX}:${debateId}`;
@@ -48,7 +57,6 @@ function persistIntent(debateId: string, intent: PersistedContinuationIntent): v
   try {
     localStorage.setItem(getStorageKey(debateId), JSON.stringify(intent));
   } catch {
-    // non-critical
   }
 }
 
@@ -73,7 +81,6 @@ function clearIntent(debateId: string): void {
   try {
     localStorage.removeItem(getStorageKey(debateId));
   } catch {
-    // non-critical
   }
 }
 
@@ -89,6 +96,9 @@ export interface UseRunWorkspaceResult {
   retryRun: (stageKey?: string) => Promise<void>;
   refetch: () => Promise<void>;
   isContinuing: boolean;
+  hydrationQuality: RunHydrationQuality;
+  timelineError: string | null;
+  eventsError: string | null;
 }
 
 export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult {
@@ -99,10 +109,15 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [isPollingFallback, setIsPollingFallback] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const [hydrationQuality, setHydrationQuality] = useState<RunHydrationQuality>("complete");
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [debateSetOnce, setDebateSetOnce] = useState(false);
 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
   const intentRef = useRef<PersistedContinuationIntent | null>(null);
+  const debateSetOnceRef = useRef(false);
 
   const isTerminal = debate
     ? ["completed", "success", "completed_budget", "failed"].includes(debate.status)
@@ -110,34 +125,93 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   const isPaused = debate?.status === "perspectives_ready";
 
+  const loadTimelineWithFallback = useCallback(async (id: string) => {
+    setTimelineError(null);
+    setEventsError(null);
+    let timelineEvents: unknown[] | null = null;
+
+    try {
+      const data = await requestWithTimeout<unknown>(
+        `/debates/${id}/timeline`,
+        TIMELINE_TIMEOUT_MS,
+      );
+      timelineEvents = extractEventItems(data);
+    } catch (err: any) {
+      const msg = err?.message || "Timeline fetch failed";
+      setTimelineError(msg);
+      console.warn("[useRunWorkspace] Timeline failed, falling back to /events:", msg);
+
+      try {
+        const eventsData = await requestWithTimeout<unknown>(
+          `/debates/${id}/events`,
+          EVENTS_TIMEOUT_MS,
+        );
+        timelineEvents = extractEventItems(eventsData);
+        setHydrationQuality("events_fallback");
+      } catch (err2: any) {
+        const msg2 = err2?.message || "Events fetch failed";
+        setEventsError(msg2);
+        console.warn("[useRunWorkspace] Both timeline and events failed:", msg2);
+        setHydrationQuality("debate_only");
+        return [];
+      }
+    }
+
+    if (timelineEvents && timelineEvents.length > 0) {
+      const normalized: TimelineEvent[] = timelineEvents.map((raw: any) => ({
+        id: raw.id || `event-${Date.now()}-${Math.random()}`,
+        debate_id: id,
+        ts: raw.ts || raw.at || raw.created_at || new Date().toISOString(),
+        type: raw.type || "notice",
+        round: raw.round || 0,
+        seat: raw.seat,
+        payload: raw.payload || raw,
+      }));
+      return normalized;
+    }
+    return [];
+  }, []);
+
+  const fetchDebateOnly = useCallback(async (id: string) => {
+    const debateData = await getDebate(id);
+    setDebate(debateData);
+    setDebateSetOnce(true);
+    debateSetOnceRef.current = true;
+    setError(null);
+    return debateData;
+  }, []);
+
   const fetchDebateAndTimeline = useCallback(async (id: string) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
-      const [debateData, timelineRes] = await Promise.all([
-        getDebate(id),
-        fetchWithAuth(`/debates/${id}/timeline`),
-      ]);
+      const debateData = await fetchDebateOnly(id);
 
-      if (!timelineRes.ok) {
-        throw new Error("Failed to fetch timeline");
-      }
-
-      const timelineData: TimelineEvent[] = await timelineRes.json();
-      setDebate(debateData);
+      const timelineData = await loadTimelineWithFallback(id);
       setEvents(timelineData);
-      setError(null);
+
+      if (hydrationQuality === "complete") {
+      }
     } catch (err: any) {
       console.error("[useRunWorkspace] Fetch error:", err);
       setError(err?.message || "Failed to load workspace data");
+      if (!debateSetOnceRef.current) {
+        setHydrationQuality("failed");
+      }
     } finally {
       isFetchingRef.current = false;
     }
-  }, []);
+  }, [fetchDebateOnly, loadTimelineWithFallback, hydrationQuality]);
 
   useEffect(() => {
     if (debateId) {
       setIsLoading(true);
+      setHydrationQuality("complete");
+      setTimelineError(null);
+      setEventsError(null);
+      debateSetOnceRef.current = false;
+      setDebateSetOnce(false);
+
       fetchDebateAndTimeline(debateId).finally(() => {
         setIsLoading(false);
       });
@@ -147,6 +221,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setError(null);
       setIsPollingFallback(false);
       setIsContinuing(false);
+      setHydrationQuality("complete");
+      setTimelineError(null);
+      setEventsError(null);
+      debateSetOnceRef.current = false;
+      setDebateSetOnce(false);
     }
   }, [debateId, fetchDebateAndTimeline]);
 
@@ -237,7 +316,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   const idempotencyKeyRef = useRef<string | null>(null);
 
-  // Restore persisted intent on mount / debateId change
   useEffect(() => {
     if (!debateId || typeof window === "undefined") return;
 
@@ -253,7 +331,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         setIsContinuing(true);
       }
 
-      // Invoke recovery procedure
       const recover = async () => {
         try {
           let statusData = null;
@@ -267,20 +344,17 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
             try {
               statusData = await resolveContinuationByKey(debateId, persisted.idempotencyKey);
             } catch {
-              // ignore error
             }
           }
 
           if (statusData) {
             if (statusData.status === "failed" || statusData.status === "cancelled") {
-              // Clean up the storage intent, update status, and enable retrying.
               clearIntent(debateId);
               intentRef.current = null;
               idempotencyKeyRef.current = null;
               setIsContinuing(false);
               setOutcomeUnknown(false);
             } else {
-              // Succeeded or in progress, update intent to tracking and keep polling/syncing
               const updatedIntent: PersistedContinuationIntent = {
                 ...persisted,
                 phase: "tracking",
@@ -294,7 +368,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
               await fetchDebateAndTimeline(debateId);
             }
           } else {
-            // No info, clean up
             clearIntent(debateId);
             intentRef.current = null;
             idempotencyKeyRef.current = null;
@@ -303,7 +376,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
           }
         } catch (err) {
           console.error("Continuation recovery failed:", err);
-          // If transient error, keep states as is to let polling/user retry
         }
       };
 
@@ -311,7 +383,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     }
   }, [debateId, fetchDebateAndTimeline]);
 
-  // Clear intent ONLY on terminal or confirmed paused
   useEffect(() => {
     if (debateId) {
       if (isTerminal) {
@@ -337,7 +408,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setIsContinuing(true);
       setOutcomeUnknown(false);
 
-      // If previous continuation failed/cancelled, clear key to force a new one
       if (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") {
         idempotencyKeyRef.current = null;
       }
@@ -349,7 +419,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       const now = new Date().toISOString();
       const expiresAt = new Date(Date.now() + CONTINUATION_TTL_MS).toISOString();
 
-      // Phase: intent_created
       const intent: PersistedContinuationIntent = {
         debateId,
         idempotencyKey: idempotencyKeyRef.current,
@@ -361,7 +430,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       persistIntent(debateId, intent);
       intentRef.current = intent;
 
-      // Phase: request_sent
       const sentIntent: PersistedContinuationIntent = { ...intent, phase: "request_sent", updatedAt: new Date().toISOString() };
       persistIntent(debateId, sentIntent);
       intentRef.current = sentIntent;
@@ -372,7 +440,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
       const response = await continueDebate(debateId, idempotencyKeyRef.current, retryOfId);
 
-      // Phase: server_acknowledged — store continuationId
       const ackIntent: PersistedContinuationIntent = {
         ...sentIntent,
         phase: "server_acknowledged",
@@ -384,7 +451,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
       await fetchDebateAndTimeline(debateId);
 
-      // Phase: tracking — intent stays until terminal
       const trackIntent: PersistedContinuationIntent = {
         ...ackIntent,
         phase: "tracking",
@@ -396,7 +462,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       console.error("[useRunWorkspace] Continue failed:", err);
       setError(err?.message || "Failed to continue debate");
       setIsContinuing(false);
-      // Keep outcomeUnknown if POST might have been accepted
       if (intentRef.current?.phase === "request_sent") {
         setOutcomeUnknown(true);
       }
@@ -445,5 +510,8 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     retryRun: handleRetry,
     refetch: handleRefetch,
     isContinuing,
+    hydrationQuality,
+    timelineError,
+    eventsError,
   };
 }

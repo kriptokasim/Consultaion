@@ -113,6 +113,8 @@ class AppSettings(BaseSettings):
     # Patchset 50.3: Beta Access Control
     ENABLE_BETA_ACCESS: bool = Field(False, description="Enable beta access restrictions")
     BETA_WHITELIST: str = Field("", description="Comma-separated list of beta user emails")
+    JIT_AUTH_ENABLED: bool = Field(False, description="Enable just-in-time authentication flow")
+    MOBILE_REPORT_V2: bool = Field(False, description="Enable mobile-optimized report v2")
     
     # Conversation Mode Limits
     CONVERSATION_MAX_ROUNDS: int = Field(4, ge=1, description="Maximum number of conversation rounds")

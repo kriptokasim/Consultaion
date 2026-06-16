@@ -138,6 +138,17 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
   - **Schema Contract E2E Tests**: Added comprehensive database table existence checks inside `tests/test_schema_contract.py`.
 - **Tests & Verification**: Verified that all new automated test suites (`test_schema_contract.py`, `test_continue_api.py`, `test_continuations_service.py`) pass 100% successfully.
 
+## Run Recovery & Operational Hardening (FH51–FH56) (2026-06-16)
+- **Goal**: Restore historical Run rendering, make enrichment fail-safe, fix Alembic migration length limits, add production schema diagnostics and /readyz.
+- **Key Enhancements**:
+  - **FH51** — Frontend timeline fallback: staged loading (debate first, then timeline), `RunHydrationQuality` type, degraded-mode banner in `RunDetailClient.tsx`
+  - **FH52** — Runs list-first rendering: table shows before profile completes, `normalizeRunStatus()` for historical status mapping
+  - **FH53** — Backend enrichment fail-safe: `schema_capabilities.py` runtime PG inspection, `debate_enrichment.py` try/except isolation, `require_schema_current()` guard, mutation guards on POST/continue/retry
+  - **FH54** — Safe migration runner: `migration_safety.py` + `migrate_database.py` (12-phase, break-glass `--allow-stamp`)
+  - **FH55** — Alembic revision policy audit: `audit_alembic_revisions.py`, `test_alembic_revision_policy.py`
+  - **FH56** — Schema verification scripts and runbook: diagnostic, verification, `/readyz` integrity check
+- **Tests & Verification**: Frontend 127 tests pass; backend module imports validate.
+
 
 
 

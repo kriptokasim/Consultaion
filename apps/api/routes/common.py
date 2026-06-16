@@ -254,6 +254,35 @@ def champion_for_debate(session: Session, debate_id: str) -> tuple[Optional[str]
     return champion_persona, champion_score, runner_up
 
 
+def require_schema_current(session: Session) -> None:
+    """
+    Guard mutation endpoints against running when schema is behind.
+
+    Raises a 503 Service Unavailable with retryable=true when the DB schema
+    has not reached the expected Alembic head revision.
+    """
+    from fastapi import HTTPException, status
+
+    try:
+        from services.schema_capabilities import get_schema_capabilities, get_registry
+
+        caps = get_schema_capabilities(session, get_registry())
+        if not caps.is_at_alembic_head or caps.missing_capabilities:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "schema_upgrade_required",
+                    "retryable": True,
+                    "message": "Database schema is behind the application version. "
+                               "Mutations are blocked until the schema is upgraded.",
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("schema_current_check_failed error=%s", exc)
+
+
 def excerpt(text: Optional[str], limit: int = 220) -> Optional[str]:
     if not text:
         return None

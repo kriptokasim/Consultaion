@@ -8,6 +8,10 @@ vi.mock("@/lib/api", () => ({
   continueDebate: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
   retryDebate: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
   resolveContinuationByKey: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
+  requestWithTimeout: vi.fn().mockResolvedValue([]),
+  extractEventItems: vi.fn((data: unknown) => Array.isArray(data) ? data : []),
+  TimeoutError: class TimeoutError extends Error { name = "TimeoutError" },
+  REQUEST_TIMEOUT: "REQUEST_TIMEOUT",
 }));
 
 vi.mock("@/lib/auth", () => ({

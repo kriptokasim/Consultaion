@@ -243,6 +243,7 @@ class ContinuationResponse(BaseModel):
     continuation_id: str
     debate_id: str
     status: str
+    debate_status: str
     idempotency_key: str
     created: bool
     retry_of_continuation_id: Optional[str] = None

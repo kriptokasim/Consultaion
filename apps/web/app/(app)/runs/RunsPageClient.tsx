@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getMe } from "@/lib/auth";
 import { ApiError, getRateLimitInfo, isAuthError, getTeams } from "@/lib/api";
 import { redirect, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useI18n } from "@/lib/i18n/client";
 
@@ -33,34 +33,59 @@ export default function RunsPageClient({ initialQuery, initialStatus }: RunsPage
         queryKey: ['me'],
         queryFn: getMe,
         retry: false,
+        staleTime: 30000,
     });
 
     const { data: teams } = useQuery({
         queryKey: ['teams'],
         queryFn: () => getTeams().catch(() => []),
+        staleTime: 60000,
     });
+
+    const [profileState, setProfileState] = useState<"loading" | "loaded" | "unavailable">("loading");
+    const profileTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const profileResolvedRef = useRef(false);
+
+    useEffect(() => {
+        if (profileResolvedRef.current) return;
+        if (isLoadingProfile) {
+            profileTimeoutRef.current = setTimeout(() => {
+                if (!profileResolvedRef.current) {
+                    setProfileState("unavailable");
+                    profileResolvedRef.current = true;
+                }
+            }, 5000);
+        } else {
+            profileResolvedRef.current = true;
+            setProfileState(profile ? "loaded" : "unavailable");
+            if (profileTimeoutRef.current) {
+                clearTimeout(profileTimeoutRef.current);
+                profileTimeoutRef.current = null;
+            }
+        }
+        return () => {
+            if (profileTimeoutRef.current) {
+                clearTimeout(profileTimeoutRef.current);
+            }
+        };
+    }, [isLoadingProfile, profile]);
 
     useEffect(() => {
         if (debatesError && isAuthError(debatesError)) {
-            // Handle auth redirect if needed, or let the interceptor handle it
-            // For now, we can redirect manually
             router.push('/login');
         }
     }, [debatesError, router]);
 
-    if (isLoadingDebates || isLoadingProfile) {
-        return <div className="flex h-screen items-center justify-center text-slate-600 dark:text-slate-300">Loading...</div>;
-    }
+    const debatesListReady = !!debatesData && !isLoadingDebates;
+    const showContent = debatesListReady || isLoadingDebates;
 
-    // Handle rate limit from error if possible, but useDebatesList might not expose the error object directly in a way we can parse easily if it's wrapped.
-    // Assuming debatesError is the ApiError.
     let rateLimitNotice: { detail: string; resetAt?: string } | null = null;
     if (debatesError instanceof ApiError) {
         const info = getRateLimitInfo(debatesError);
         if (info) rateLimitNotice = info;
     }
 
-    const items = rateLimitNotice ? [] : debatesData?.items ?? [];
+    const items = rateLimitNotice ? [] : (debatesData?.items ?? []);
     const searchItems = items.map((item) => ({
       id: item.id,
       prompt: item.prompt ?? "",
@@ -69,6 +94,13 @@ export default function RunsPageClient({ initialQuery, initialStatus }: RunsPage
       title: null,
       createdAt: item.created_at ?? null,
     }));
+
+    const effectiveProfile = profileState === "loaded" ? profile : null;
+    const effectiveTeams = teams ?? [];
+
+    if (!showContent) {
+        return <div className="flex h-screen items-center justify-center text-slate-600 dark:text-slate-300">Loading...</div>;
+    }
 
     return (
         <main id="main" className="h-full space-y-8 py-6">
@@ -123,10 +155,13 @@ export default function RunsPageClient({ initialQuery, initialStatus }: RunsPage
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-[0_18px_40px_#1e3a5f14] dark:border-slate-700 dark:bg-slate-800">
+                {profileState === "loading" && (
+                    <div className="text-xs text-amber-600 mb-2">Loading profile...</div>
+                )}
                 <RunsTable
                     items={items}
-                    teams={teams || []}
-                    profile={profile}
+                    teams={effectiveTeams}
+                    profile={effectiveProfile}
                     initialQuery={initialQuery}
                     initialStatus={initialStatus || null}
                 />

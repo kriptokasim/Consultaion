@@ -895,14 +895,16 @@ async def synthesize(
         prompt,
         extra_context=f"Top candidates with judge scores:\n{candidate_block}\n\nProduce the final response. Include a short summary and numbered plan or bullet list.",
     )
-    text, call_usage = await _call_llm(
-        messages,
-        role="Synthesizer",
-        temperature=0.35,
-        max_tokens=700,
-        model_id=model_id,
-        debate_id=debate_id,
-    )
+    from observability.tracing import traced_span
+    with traced_span("llm.synthesis", {"debate_id": str(debate_id), "model_id": str(model_id)}):
+        text, call_usage = await _call_llm(
+            messages,
+            role="Synthesizer",
+            temperature=0.35,
+            max_tokens=700,
+            model_id=model_id,
+            debate_id=debate_id,
+        )
     usage = UsageAccumulator()
     usage.add_call(call_usage)
     return text, usage

@@ -21,7 +21,6 @@ import { deriveWorkspaceStage } from "@/lib/workspace/deriveWorkspaceStage";
 import type { WorkspaceModelSlot } from "@/lib/workspace/types";
 import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
 
-// Lazy-load heavy view components
 const DebateArena = dynamic(() => import("@/components/debate/DebateArena"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const ParliamentRunView = dynamic(() => import("@/components/parliament/ParliamentRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const CompareRunView = dynamic(() => import("@/components/compare/CompareRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
@@ -29,12 +28,17 @@ const ConversationRunView = dynamic(() => import("@/components/conversation/Conv
 const ArenaRunView = dynamic(() => import("@/components/arena/ArenaRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const VotingRunView = dynamic(() => import("@/components/voting/VotingRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 
-/** Statuses that indicate a debate has finished and results should be shown */
 const COMPLETED_STATUSES = new Set(["completed", "success", "completed_budget"]);
 const TERMINAL_STATUSES = new Set(["completed", "success", "completed_budget", "failed"]);
-
-/** Polling interval for non-completed debates (fallback for SSE) */
 const POLL_INTERVAL_MS = 4000;
+const HARD_LOADING_CEILING_MS = 15000;
+
+type CompletedRunLoadState =
+  | "loading_core"
+  | "loading_enrichment"
+  | "ready"
+  | "ready_degraded"
+  | "failed";
 
 export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   const params = useParams();
@@ -53,32 +57,39 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     retryRun,
     refetch,
     isContinuing,
+    hydrationQuality,
+    timelineError,
+    eventsError,
   } = useRunWorkspace(id);
 
-  // --- Results data for completed debates (ParliamentRunView) ---
   const [resultsEvents, setResultsEvents] = useState<DebateEvent[]>([]);
   const [resultsMembers, setResultsMembers] = useState<Member[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsFetched, setResultsFetched] = useState(false);
+  const [completedLoadState, setCompletedLoadState] = useState<CompletedRunLoadState>("loading_core");
 
   const isCompleted = !!debate && COMPLETED_STATUSES.has(debate.status);
+  const isDebateLoaded = !!debate;
   const isLoading = workspaceStatus === "loading" || (!debate && workspaceStatus !== "failed" && workspaceStatus !== "error");
   const debateError = workspaceError ? new Error(workspaceError) : null;
 
-  // --- Elapsed time tracking ---
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number | null>(null);
 
-  // Fetch profile to know if user is authenticated for PLG CTAs
   const [profile, setProfile] = useState<any>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileState, setProfileState] = useState<"loading" | "loaded" | "unavailable">("loading");
 
   useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+
     fetchWithAuth('/me')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         setProfile(data);
         setProfileLoaded(true);
+        setProfileState("loaded");
         if (!data) {
           import("@/lib/analytics").then(({ trackEvent }) => {
             trackEvent("public_run_viewed", { debate_id: id, is_authenticated: false, referrer: document.referrer });
@@ -88,7 +99,11 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
       .catch(() => {
         setProfile(null);
         setProfileLoaded(true);
-      });
+        setProfileState("unavailable");
+      })
+      .finally(() => clearTimeout(timer));
+
+    return () => clearTimeout(timer);
   }, [id]);
 
   const { pushToast } = useToast();
@@ -107,27 +122,51 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     }
   }, [id, isContinuing, continueRun, pushToast]);
 
-  // Fetch events + members for completed debates
   useEffect(() => {
     if (!isCompleted || !id || resultsFetched) return;
     setResultsLoading(true);
+    setCompletedLoadState("loading_enrichment");
 
-    Promise.all([
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    Promise.allSettled([
       fetchWithAuth(`/debates/${id}/events`).then((r) => (r.ok ? r.json() : { items: [] })),
       fetchWithAuth(`/debates/${id}/members`).then((r) => (r.ok ? r.json() : { members: [] })),
     ])
-      .then(([eventsData, membersData]) => {
-        setResultsEvents((eventsData.items || []).map(normalizeEvent));
-        setResultsMembers(membersData.members || []);
+      .then(([eventsResult, membersResult]) => {
+        if (eventsResult.status === "fulfilled") {
+          const eventsData = eventsResult.value;
+          setResultsEvents((eventsData.items || []).map(normalizeEvent));
+        } else {
+          console.warn("[RunDetailClient] Events fetch failed:", eventsResult.reason);
+        }
+        if (membersResult.status === "fulfilled") {
+          setResultsMembers(membersResult.value.members || []);
+        } else {
+          console.warn("[RunDetailClient] Members fetch failed:", membersResult.reason);
+        }
         setResultsFetched(true);
+        setCompletedLoadState(
+          eventsResult.status === "fulfilled" ? "ready" : "ready_degraded"
+        );
       })
       .catch((err) => {
         console.error("Failed to fetch results data:", err);
+        setResultsFetched(true);
+        setCompletedLoadState("ready_degraded");
       })
       .finally(() => setResultsLoading(false));
+
+    return () => clearTimeout(timeout);
   }, [isCompleted, id, resultsFetched]);
 
-  // Derive scores, judgeVotes, and vote from events
+  useEffect(() => {
+    if (debate && isCompleted && !resultsLoading) {
+      setCompletedLoadState("ready");
+    }
+  }, [debate, isCompleted, resultsLoading]);
+
   const { scores, judgeVotes, vote } = useMemo(() => {
     const scoreMap = new Map<string, { total: number; count: number; rationale?: string }>();
     const jv: JudgeVoteFlow[] = [];
@@ -157,7 +196,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
       rationale: data.rationale,
     }));
 
-    // Derive vote ranking from sorted scores
     const sorted = s.slice().sort((a, b) => b.score - a.score);
     const v: VotePayload | undefined = sorted.length
       ? { method: "borda", ranking: sorted.map((si) => si.persona) }
@@ -166,7 +204,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     return { scores: s, judgeVotes: jv, vote: v };
   }, [resultsEvents]);
 
-  // --- Initialize start time from debate.created_at ---
   useEffect(() => {
     if (debate?.created_at && !startTimeRef.current) {
       const parsedStart = new Date(debate.created_at).getTime();
@@ -177,7 +214,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     }
   }, [debate?.created_at]);
 
-  // Elapsed time tracking
   useEffect(() => {
     if (isCompleted || debate?.status === "failed") return;
 
@@ -269,10 +305,24 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     });
   }, [debate, events, currentWorkspaceStage]);
 
-  if (isLoading) {
+  const [, setHardCeilingReached] = useState(false);
+
+  useEffect(() => {
+    if (isDebateLoaded) {
+      setHardCeilingReached(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setHardCeilingReached(true);
+    }, HARD_LOADING_CEILING_MS);
+
+    return () => clearTimeout(timer);
+  }, [isDebateLoaded, id]);
+
+  if (isLoading && !isDebateLoaded) {
     return (
       <div className="container max-w-[1400px] py-6 space-y-6">
-        {/* Header Skeleton */}
         <div className="flex items-center justify-between">
           <div className="space-y-2">
             <div className="h-6 w-32 bg-slate-200 dark:bg-slate-800 rounded-md" />
@@ -281,7 +331,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           <div className="h-9 w-24 bg-slate-200 dark:bg-slate-800 rounded-md" />
         </div>
 
-        {/* Question Banner Skeleton */}
         <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-card p-6 space-y-3">
           <div className="flex items-start gap-3">
             <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
@@ -293,10 +342,8 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           </div>
         </div>
 
-        {/* Pipeline Progress Skeleton */}
         <div className="h-14 w-full bg-slate-105 dark:bg-slate-900/60 rounded-2xl animate-pulse" />
 
-        {/* Model Cards Grid Skeleton */}
         <div className="space-y-3 animate-pulse">
           <div className="h-4.5 w-36 bg-slate-200 dark:bg-slate-800 rounded-md" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -310,7 +357,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  if (debateError) {
+  if (debateError && !isDebateLoaded) {
     return (
       <div className="container py-8">
         <Alert variant="destructive">
@@ -327,7 +374,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  // Handle explicitly failed debates
   if (debate?.status === "failed") {
     const errorReason = debate?.final_meta?.error || debate?.error_reason || "Run encountered a terminal error and failed.";
     return (
@@ -346,35 +392,40 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  // Completed debates → rich results view (ParliamentRunView or CompareRunView)
-  if (isCompleted && resultsFetched && profileLoaded) {
-    if (debate?.mode === "arena") {
+  if (isCompleted && isDebateLoaded) {
+    const showArenaView = debate?.mode === "arena";
+    const showVotingView = debate?.mode === "voting";
+
+    if (showArenaView) {
       return (
         <div className="container max-w-[1400px] py-6">
-          <ArenaRunView debate={debate} events={resultsEvents} profile={profile} onRefetch={refetch} />
+          {hydrationQuality !== "complete" && (
+            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Run loaded in recovery mode</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                The core Run and stored report are available, but some timeline events could not be retrieved. Refresh or retry event loading.
+              </p>
+            </div>
+          )}
+          <ArenaRunView debate={debate} events={resultsEvents.length > 0 ? resultsEvents : events} profile={profile} onRefetch={refetch} />
         </div>
       );
     }
-    if (debate?.mode === "compare") {
-      return (
-        <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
-          <CompareRunView debate={debate} events={resultsEvents} />
-        </div>
-      );
-    }
-    if (debate?.mode === "conversation") {
-      return (
-        <div className="container max-w-5xl h-[calc(100vh-4rem)] py-6">
-          <ConversationRunView debate={debate} events={resultsEvents} />
-        </div>
-      );
-    }
-    if (debate?.mode === "voting") {
+
+    if (showVotingView) {
       return (
         <div className="container max-w-6xl py-6">
+          {hydrationQuality !== "complete" && (
+            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Run loaded in recovery mode</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                The core Run and stored report are available, but some timeline events could not be retrieved.
+              </p>
+            </div>
+          )}
           <VotingRunView
             debate={debate}
-            events={resultsEvents}
+            events={resultsEvents.length > 0 ? resultsEvents : events}
             isCompleted={true}
             resultsMembers={resultsMembers}
             judgeVotes={judgeVotes}
@@ -384,14 +435,23 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
         </div>
       );
     }
+
     return (
       <div className="container max-w-6xl py-6">
+        {hydrationQuality !== "complete" && (
+          <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+            <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Run loaded in recovery mode</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              The core Run is available, but some optional data could not be retrieved.
+            </p>
+          </div>
+        )}
         <ParliamentRunView
           id={id}
           debate={debate}
           scores={scores}
           vote={vote}
-          events={resultsEvents}
+          events={resultsEvents.length > 0 ? resultsEvents : events}
           members={resultsMembers}
           judgeVotes={judgeVotes}
           threshold={0.5}
@@ -402,52 +462,8 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  // Still loading results for completed debate
-  if (isCompleted && resultsLoading) {
-    return (
-      <div className="container max-w-[1400px] py-6 space-y-6">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <div className="h-6 w-32 bg-slate-200 dark:bg-slate-800 rounded-md" />
-            <div className="h-4 w-64 bg-slate-100 dark:bg-slate-900 rounded-md" />
-          </div>
-          <div className="h-9 w-24 bg-slate-200 dark:bg-slate-800 rounded-md" />
-        </div>
-
-        {/* Question Banner Skeleton */}
-        <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-card p-6 space-y-3">
-          <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0" />
-            <div className="flex-1 space-y-2">
-              <div className="h-3.5 w-24 bg-slate-200 dark:bg-slate-800 rounded-md" />
-              <div className="h-5 w-full bg-slate-100 dark:bg-slate-900 rounded-md" />
-              <div className="h-5 w-3/4 bg-slate-100 dark:bg-slate-900 rounded-md" />
-            </div>
-          </div>
-        </div>
-
-        {/* Pipeline Progress Skeleton */}
-        <div className="h-14 w-full bg-slate-105 dark:bg-slate-900/60 rounded-2xl animate-pulse" />
-
-        {/* Model Cards Grid Skeleton */}
-        <div className="space-y-3 animate-pulse">
-          <div className="h-4.5 w-36 bg-slate-200 dark:bg-slate-800 rounded-md" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <SkeletonCard index={0} />
-            <SkeletonCard index={1} />
-            <SkeletonCard index={2} />
-            <SkeletonCard index={3} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Running / queued debates → live stream view with pipeline progress
   const liveEvents = events.map((e: any) => e.payload || e);
 
-  // Show pipeline progress for arena mode running debates
   if (debate?.mode === "arena" && !isCompleted) {
     return (
       <FeatureGate flag="unifiedWorkspace" fallback={
@@ -471,7 +487,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Sidebar for Progress on Desktop */}
             <div className="hidden lg:block lg:col-span-1">
               <DesktopStageRail
                 currentStage={currentWorkspaceStage}
@@ -479,9 +494,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               />
             </div>
 
-            {/* Main workspace area */}
             <div className="col-span-1 lg:col-span-3 space-y-6">
-              {/* Mobile progress bar */}
               <div className="block lg:hidden">
                 <FeatureGate flag="mobileWorkspaceV2" fallback={
                   <div className="text-xs text-muted-foreground px-2 py-1 text-center border-b">
@@ -499,7 +512,6 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
                 </FeatureGate>
               </div>
 
-              {/* Perspectives Action when ready */}
               <FeatureGate flag="stagedDecisionPipelinePublic">
                 {currentWorkspaceStage === "perspectives_ready" && (
                   <PerspectivesReadyAction
@@ -512,11 +524,9 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
                 )}
               </FeatureGate>
 
-              {/* Perspectives Grid during collecting/streaming */}
               {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
                 <PerspectivesGrid modelSlots={modelSlots} />
               ) : (
-                /* Once past perspectives generation, show the standard synthesis/arena view */
                 <ArenaRunView debate={debate as any} events={liveEvents as any} onRefetch={refetch} />
               )}
 

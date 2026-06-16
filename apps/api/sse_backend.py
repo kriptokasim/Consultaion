@@ -376,45 +376,51 @@ class StreamLeaseManager:
     def _lease_key(self, debate_id: str) -> str:
         return f"sse:leases:{debate_id}"
 
-    async def try_acquire(self, debate_id: str, subscriber_id: str) -> bool:
+    @staticmethod
+    def _subscriber_identity(debate_id: str, user_id: str) -> str:
+        """Build a per-user+per-debate lease identity."""
+        return f"{debate_id}:{user_id}"
+
+    async def try_acquire(self, debate_id: str, subscriber_id: str, user_id: str | None = None) -> bool:
         """Try to acquire a streaming lease. Returns True if acquired."""
+        identity = self._subscriber_identity(debate_id, user_id or subscriber_id)
         try:
             from redis_pool import get_async_redis_client
             client = get_async_redis_client()
             if client is not None:
+                from services.lease import atomic_acquire_lease_async, LockAcquireResult
                 key = self._lease_key(debate_id)
-                now = time.time()
-                await client.zremrangebyscore(key, "-inf", now - self._lease_ttl)
-                count = await client.zcard(key)
-                if count is not None and count >= self._max_streams:
+                result = await atomic_acquire_lease_async(client, key, identity, self._lease_ttl)
+                if result == LockAcquireResult.ACQUIRED:
+                    return True
+                if result == LockAcquireResult.HELD:
                     return False
-                await client.zadd(key, {subscriber_id: now})
-                await client.expire(key, self._lease_ttl * 2)
-                return True
         except Exception:
             logger.warning("Redis lease acquire failed, falling back to memory")
 
         memory_set = self._memory_leases.setdefault(debate_id, set())
         if len(memory_set) >= self._max_streams:
             return False
-        memory_set.add(subscriber_id)
+        memory_set.add(identity)
         return True
 
-    async def release(self, debate_id: str, subscriber_id: str) -> None:
+    async def release(self, debate_id: str, subscriber_id: str, user_id: str | None = None) -> None:
         """Release a streaming lease."""
+        identity = self._subscriber_identity(debate_id, user_id or subscriber_id)
         try:
             from redis_pool import get_async_redis_client
             client = get_async_redis_client()
             if client is not None:
+                from services.lease import atomic_release_lease_async
                 key = self._lease_key(debate_id)
-                await client.zrem(key, subscriber_id)
+                await atomic_release_lease_async(client, key, identity)
                 return
         except Exception:
             pass
 
         memory_set = self._memory_leases.get(debate_id)
         if memory_set:
-            memory_set.discard(subscriber_id)
+            memory_set.discard(identity)
 
     async def active_count(self, debate_id: str) -> int:
         """Return the number of active leases for a debate."""

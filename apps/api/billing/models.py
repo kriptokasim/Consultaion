@@ -85,7 +85,10 @@ class BillingWebhookEvent(SQLModel, table=True):
 class BillingReconciliationRun(SQLModel, table=True):
     """Records each reconciliation execution for audit trail."""
     __tablename__ = "billing_reconciliation_runs"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        UniqueConstraint("run_key", name="uq_billing_reconciliation_runs_run_key"),
+        {"extend_existing": True},
+    )
     model_config = ConfigDict(protected_namespaces=())
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
@@ -99,6 +102,9 @@ class BillingReconciliationRun(SQLModel, table=True):
     started_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     error_message: Optional[str] = Field(default=None, sa_column=Column(String(500), nullable=True))
+    run_key: Optional[str] = Field(default=None, nullable=True, index=True)
+    window_start: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    window_end: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
 
 class BillingReconciliationDiscrepancy(SQLModel, table=True):

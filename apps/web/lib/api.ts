@@ -12,6 +12,15 @@ type ListParams = {
   q?: string;
 };
 
+export const REQUEST_TIMEOUT = "REQUEST_TIMEOUT";
+
+export class TimeoutError extends Error {
+  constructor(message = "Request timed out") {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
 export type ErrorBody = {
   detail?: string;
   code?: string;
@@ -51,6 +60,59 @@ export class ApiError extends Error {
     this.status = status;
     this.body = body ?? null;
   }
+}
+
+export async function requestWithTimeout<T>(
+  pathOrUrl: string,
+  timeoutMs: number,
+  init?: RequestInit,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API}${pathOrUrl}`;
+  try {
+    const res = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      let body: ErrorBody | string | null = null;
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        body = (await res.json().catch(() => null)) as ErrorBody | null;
+      } else {
+        body = await res.text().catch(() => null);
+      }
+      const error = new ApiError(`Request failed: ${res.status}`, res.status, body);
+      handleClientAuthRedirect(error.status);
+      throw error;
+    }
+    if (res.status === 204) return undefined as T;
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      return (await res.json()) as T;
+    }
+    return undefined as T;
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      throw new TimeoutError(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function extractEventItems(payload: unknown): unknown[] {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (typeof payload === "object" && payload !== null) {
+    const obj = payload as Record<string, unknown>;
+    if (Array.isArray(obj.items)) return obj.items;
+    if (Array.isArray(obj.events)) return obj.events;
+  }
+  return [];
 }
 
 const handleClientAuthRedirect = (status: number | undefined) => {
@@ -318,6 +380,24 @@ export async function getLeaderboardPersona(persona: string, category?: string) 
   const suffix =
     category !== undefined ? `?category=${encodeURIComponent(category ?? "")}` : "";
   return request<LeaderboardEntry>(`/leaderboard/persona/${encodeURIComponent(persona)}${suffix}`);
+}
+
+const STATUS_MAP: Record<string, string> = {
+  complete: "completed",
+  done: "completed",
+  success: "completed",
+  completed_budget: "completed",
+  error: "failed",
+  errored: "failed",
+  in_progress: "running",
+  processing: "running",
+  pending: "queued",
+};
+
+export function normalizeRunStatus(status: string | null | undefined): string {
+  if (!status) return "unknown";
+  const mapped = STATUS_MAP[status.toLowerCase()];
+  return mapped || status;
 }
 
 export function isAuthError(error: unknown): error is ApiError {

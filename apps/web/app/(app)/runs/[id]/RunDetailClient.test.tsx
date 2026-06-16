@@ -72,6 +72,9 @@ describe("RunDetailClient Hydration", () => {
       continueRun: vi.fn(),
       isContinuing: false,
       refetch: vi.fn(),
+      hydrationQuality: "complete",
+      timelineError: null,
+      eventsError: null,
     });
 
     const { container } = render(<RunDetailClient />);
@@ -89,6 +92,9 @@ describe("RunDetailClient Hydration", () => {
       continueRun: vi.fn(),
       isContinuing: false,
       refetch: vi.fn(),
+      hydrationQuality: "failed",
+      timelineError: null,
+      eventsError: null,
     });
 
     render(<RunDetailClient />);
@@ -114,6 +120,9 @@ describe("RunDetailClient Hydration", () => {
       continueRun: vi.fn(),
       isContinuing: false,
       refetch: vi.fn(),
+      hydrationQuality: "complete",
+      timelineError: null,
+      eventsError: null,
     });
 
     render(<RunDetailClient />);

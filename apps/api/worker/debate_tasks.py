@@ -56,14 +56,16 @@ def run_debate_task(
 ) -> None:
     """Celery task that executes a debate orchestration by ID."""
     try:
-        asyncio.run(
-            _execute_debate_run(
-                debate_id,
-                trace_id=trace_id,
-                is_resume=is_resume,
-                continuation_id=continuation_id,
+        from observability.tracing import traced_span
+        with traced_span("pipeline.run", {"debate_id": debate_id, "is_resume": str(is_resume)}):
+            asyncio.run(
+                _execute_debate_run(
+                    debate_id,
+                    trace_id=trace_id,
+                    is_resume=is_resume,
+                    continuation_id=continuation_id,
+                )
             )
-        )
     except Exception as exc:  # pragma: no cover - Celery handles retries/logging
         logger.exception("Error while running debate %s", debate_id)
         raise self.retry(exc=exc, countdown=10) from exc

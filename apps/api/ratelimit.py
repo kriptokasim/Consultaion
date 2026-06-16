@@ -222,25 +222,20 @@ local max_active = tonumber(ARGV[2])
 local ttl = tonumber(ARGV[3])
 local now = tonumber(ARGV[4])
 
--- Clean expired leases
 redis.call('zremrangebyscore', key, '-inf', now)
 
--- Check if member already exists
 local score = redis.call('zscore', key, lease_id)
 if score then
-    -- Refresh lease
     redis.call('zadd', key, now + ttl, lease_id)
     redis.call('expire', key, ttl + 10)
     return 1
 end
 
--- Check current active count
 local count = redis.call('zcard', key)
 if count >= max_active then
     return 0
 end
 
--- Add new lease
 redis.call('zadd', key, now + ttl, lease_id)
 redis.call('expire', key, ttl + 10)
 return 1
@@ -253,10 +248,11 @@ return 1
             return self._fallback.acquire_sse_lease(key, lease_id, max_active, ttl)
 
     def release_sse_lease(self, key: str, lease_id: str) -> None:
-        """Release SSE lease from Redis sorted set."""
+        """Release SSE lease from Redis sorted set using atomic Lua."""
         redis_key = f"sse:active:{key}"
         try:
-            self._client.zrem(redis_key, lease_id)
+            from services.lease import atomic_release_lease
+            atomic_release_lease(self._client, redis_key, lease_id)
         except Exception as exc:
             logger.warning("Redis release_sse_lease failed (%s), falling back to memory", exc)
             self._fallback.release_sse_lease(key, lease_id)

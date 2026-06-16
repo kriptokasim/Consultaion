@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { ApiError, assignDebateTeam, TeamSummary, getDebates } from "@/lib/api"
+import { ApiError, assignDebateTeam, TeamSummary, getDebates, normalizeRunStatus } from "@/lib/api"
 import SearchFilter from "@/components/ui/search-filter"
 import EmptyState from "@/components/ui/empty-state"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -44,8 +44,7 @@ type RunsTableProps = {
 }
 
 function normalizeStatus(status?: string) {
-  if (!status) return "queued"
-  return status
+  return normalizeRunStatus(status ?? null)
 }
 
 function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () => void) {

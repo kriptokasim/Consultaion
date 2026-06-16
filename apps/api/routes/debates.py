@@ -55,6 +55,7 @@ from routes.common import (
     require_debate_access,
     require_debate_mutation_access,
     require_debate_owner,
+    require_schema_current,
     serialize_rating_persona,
     track_metric,
     user_is_team_member,
@@ -191,6 +192,7 @@ async def create_debate(
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    require_schema_current(session)
     # OT-12: Track debate creation via PostHog
     try:
         from integrations.posthog import track_event as _ph_track
@@ -620,6 +622,7 @@ async def continue_debate_run(
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    require_schema_current(session)
     # Load debate and verify mutation access
     debate = session.get(Debate, debate_id)
     if not debate:
@@ -658,6 +661,7 @@ async def continue_debate_run(
                     continuation_id=str(continuation_record.id),
                     debate_id=debate_id,
                     status=continuation_record.status,
+                    debate_status=debate.status,
                     idempotency_key=continuation_record.idempotency_key,
                     created=False,
                     retry_of_continuation_id=continuation_record.retry_of_continuation_id,
@@ -690,6 +694,7 @@ async def continue_debate_run(
                         continuation_id=str(continuation_record.id),
                         debate_id=debate_id,
                         status=continuation_record.status,
+                        debate_status=debate.status,
                         idempotency_key=continuation_record.idempotency_key,
                         created=False,
                         retry_of_continuation_id=continuation_record.retry_of_continuation_id,
@@ -879,6 +884,7 @@ async def continue_debate_run(
         continuation_id=str(continuation_record.id),
         debate_id=debate_id,
         status="scheduled",
+        debate_status=debate.status,
         idempotency_key=continuation_record.idempotency_key,
         created=True,
         retry_of_continuation_id=continuation_record.retry_of_continuation_id,
@@ -914,6 +920,7 @@ async def get_debate_continuation(
         continuation_id=str(continuation.id),
         debate_id=str(continuation.debate_id),
         status=continuation.status,
+        debate_status=debate.status,
         idempotency_key=continuation.idempotency_key,
         created=False,
         retry_of_continuation_id=continuation.retry_of_continuation_id,
@@ -951,6 +958,7 @@ async def resolve_continuation_by_key(
         continuation_id=str(continuation.id),
         debate_id=str(continuation.debate_id),
         status=continuation.status,
+        debate_status=debate.status,
         idempotency_key=continuation.idempotency_key,
         created=False,
         retry_of_continuation_id=continuation.retry_of_continuation_id,
@@ -971,6 +979,7 @@ async def retry_debate_run(
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    require_schema_current(session)
     # Load debate and verify mutation access
     debate = session.get(Debate, debate_id)
     if not debate:
@@ -1175,8 +1184,10 @@ async def list_debates(
             except Exception:
                 pass
 
-    items_stmt = base_query.order_by(sa.desc(Debate.created_at)).offset(offset).limit(limit)
-    debates = session.exec(items_stmt).all()
+    from observability.tracing import traced_span
+    with traced_span("debate.list", {"limit": str(limit), "offset": str(offset), "status": str(status)}):
+        items_stmt = base_query.order_by(sa.desc(Debate.created_at)).offset(offset).limit(limit)
+        debates = session.exec(items_stmt).all()
     
     has_more = offset + len(debates) < total
     return {
@@ -1195,10 +1206,12 @@ async def get_debate(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    from repositories.debate_repository import DebateRepository
-    repo = DebateRepository(session)
-    debate = repo.get_by_id(debate_id)
-    debate = require_debate_access(debate, current_user, session)
+    from observability.tracing import traced_span
+    with traced_span("debate.read", {"debate_id": debate_id, "mode": "api"}):
+        from repositories.debate_repository import DebateRepository
+        repo = DebateRepository(session)
+        debate = repo.get_by_id(debate_id)
+        debate = require_debate_access(debate, current_user, session)
 
     # Fetch latest continuation status
     from models import DebateContinuation
@@ -1297,18 +1310,38 @@ async def get_debate_events(
     
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
 
-    # Patchset 107: Using single transaction block / thread safety optimization
-    messages = session.exec(
-        select(Message).where(Message.debate_id == debate_id).order_by(sa.asc(Message.created_at))
-    ).all()
-    scores = session.exec(
-        select(Score).where(Score.debate_id == debate_id).order_by(sa.asc(Score.created_at))
-    ).all()
-    pairwise_votes = session.exec(
-        select(PairwiseVote)
-        .where(PairwiseVote.debate_id == debate_id)
-        .order_by(sa.asc(PairwiseVote.created_at))
-    ).all()
+    from services.schema_capabilities import get_schema_capabilities, get_registry
+    caps = get_schema_capabilities(session, get_registry())
+
+    messages: list[Message] = []
+    scores: list[Score] = []
+    pairwise_votes: list[PairwiseVote] = []
+
+    if caps.has_message_table:
+        try:
+            messages = session.exec(
+                select(Message).where(Message.debate_id == debate_id).order_by(sa.asc(Message.created_at))
+            ).all()
+        except Exception as exc:
+            logger.warning("events_messages_failed debate_id=%s error=%s", debate_id, exc)
+
+    if caps.has_score_table:
+        try:
+            scores = session.exec(
+                select(Score).where(Score.debate_id == debate_id).order_by(sa.asc(Score.created_at))
+            ).all()
+        except Exception as exc:
+            logger.warning("events_scores_failed debate_id=%s error=%s", debate_id, exc)
+
+    if caps.has_pairwise_vote_table:
+        try:
+            pairwise_votes = session.exec(
+                select(PairwiseVote)
+                .where(PairwiseVote.debate_id == debate_id)
+                .order_by(sa.asc(PairwiseVote.created_at))
+            ).all()
+        except Exception as exc:
+            logger.warning("events_pairwise_failed debate_id=%s error=%s", debate_id, exc)
 
     events: list[dict[str, Any]] = []
     for message in messages:

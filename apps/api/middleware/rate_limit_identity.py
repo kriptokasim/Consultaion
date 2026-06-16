@@ -24,9 +24,30 @@ from api_key_utils import verify_api_key, extract_prefix
 
 logger = logging.getLogger(__name__)
 
-# Cache of verified tokens (User JWT or API Keys) to avoid heavy operations
+# Bounded cache of verified tokens (User JWT or API Keys) to avoid heavy operations
 # Format: {token_sha256: (resolved_id, resolved_type, expires_at)}
-_VERIFIED_TOKENS_CACHE: dict[str, tuple[Optional[str], str, float]] = {}
+# Max 10K entries, LRU eviction via OrderedDict on access
+_MAX_CACHE_SIZE = 10000
+
+from collections import OrderedDict
+
+_VERIFIED_TOKENS_CACHE: OrderedDict[str, tuple[Optional[str], str, float]] = OrderedDict()
+
+
+def _cache_put(key: str, value: tuple[Optional[str], str, float]) -> None:
+    """Add entry with LRU eviction at max capacity."""
+    if len(_VERIFIED_TOKENS_CACHE) >= _MAX_CACHE_SIZE:
+        _VERIFIED_TOKENS_CACHE.popitem(last=False)
+    _VERIFIED_TOKENS_CACHE[key] = value
+
+
+def _cache_get(key: str) -> tuple[Optional[str], str, float] | None:
+    """Get entry and move to end (most recently used)."""
+    if key in _VERIFIED_TOKENS_CACHE:
+        val = _VERIFIED_TOKENS_CACHE.pop(key)
+        _VERIFIED_TOKENS_CACHE[key] = val
+        return val
+    return None
 
 
 def resolve_identity(request: Request) -> tuple[str, str]:
@@ -83,14 +104,13 @@ def _validate_user_jwt(token: str) -> Optional[str]:
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
     now = time.time()
 
-    # Check cache
-    if token_hash in _VERIFIED_TOKENS_CACHE:
-        resolved_id, rtype, exp = _VERIFIED_TOKENS_CACHE[token_hash]
+    cached = _cache_get(token_hash)
+    if cached:
+        resolved_id, rtype, exp = cached
         if now < exp and rtype == "user":
             return resolved_id
 
     try:
-        # Perform real signature check
         payload = jwt.decode(
             token,
             settings.JWT_SECRET,
@@ -99,12 +119,10 @@ def _validate_user_jwt(token: str) -> Optional[str]:
         )
         uid = payload.get("sub")
         if uid:
-            # Cache successful validation for 60 seconds
-            _VERIFIED_TOKENS_CACHE[token_hash] = (uid, "user", now + 60)
+            _cache_put(token_hash, (uid, "user", now + 60))
             return uid
     except Exception:
-        # Cache negative result for 10 seconds to avoid repeating signature decode
-        _VERIFIED_TOKENS_CACHE[token_hash] = (None, "user", now + 10)
+        _cache_put(token_hash, (None, "user", now + 10))
 
     return None
 
@@ -120,13 +138,12 @@ def _validate_api_key(token: str) -> Optional[str]:
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
     now = time.time()
 
-    # Check cache
-    if token_hash in _VERIFIED_TOKENS_CACHE:
-        resolved_id, rtype, exp = _VERIFIED_TOKENS_CACHE[token_hash]
+    cached = _cache_get(token_hash)
+    if cached:
+        resolved_id, rtype, exp = cached
         if now < exp and rtype == "api_key":
             return resolved_id
 
-    # Verify key against database
     try:
         prefix = extract_prefix(token)
         with Session(engine) as session:
@@ -136,28 +153,23 @@ def _validate_api_key(token: str) -> Optional[str]:
             )
             record = session.exec(stmt).first()
             if record:
-                # Check expiration
                 if record.expires_at and record.expires_at.timestamp() < now:
-                    _VERIFIED_TOKENS_CACHE[token_hash] = (None, "api_key", now + 10)
+                    _cache_put(token_hash, (None, "api_key", now + 10))
                     return None
 
-                # Verify bcrypt hash
                 if verify_api_key(token, record.hashed_key):
-                    # Cache successful validation for 60 seconds using prefix as safe key ID
-                    _VERIFIED_TOKENS_CACHE[token_hash] = (record.prefix, "api_key", now + 60)
+                    _cache_put(token_hash, (record.prefix, "api_key", now + 60))
                     return record.prefix
     except Exception as e:
         logger.error(f"Error validating API key in rate-limit middleware: {e}")
 
-    # Fallback for testing / local environments to allow mock keys
     if settings.ENV == "test" or settings.IS_LOCAL_ENV:
         if token.startswith("sk-") or token.startswith("pk_"):
             fake_id = extract_prefix(token)
-            _VERIFIED_TOKENS_CACHE[token_hash] = (fake_id, "api_key", now + 60)
+            _cache_put(token_hash, (fake_id, "api_key", now + 60))
             return fake_id
 
-    # Cache negative result for 10 seconds
-    _VERIFIED_TOKENS_CACHE[token_hash] = (None, "api_key", now + 10)
+    _cache_put(token_hash, (None, "api_key", now + 10))
     return None
 
 

@@ -49,14 +49,16 @@ async def dispatch_debate_run(
             run_debate_task.delay(debate_id, trace_id, is_resume=resume, continuation_id=continuation_id)
         return
 
-    await run_debate(
-        debate_id,
-        prompt,
-        channel_id,
-        config_data,
-        model_id,
-        trace_id=trace_id,
-        is_resume=resume,
-        continuation_id=continuation_id,
-    )
+    from observability.tracing import traced_span
+    with traced_span("debate.run", {"debate_id": debate_id, "resume": str(resume)}):
+        await run_debate(
+            debate_id,
+            prompt,
+            channel_id,
+            config_data,
+            model_id,
+            trace_id=trace_id,
+            is_resume=resume,
+            continuation_id=continuation_id,
+        )
 
