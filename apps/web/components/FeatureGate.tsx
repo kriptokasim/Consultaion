@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect } from "react"
 import { isFeatureEnabled, FeatureFlag } from "../lib/feature-flags"
 
 interface FeatureGateProps {
@@ -9,18 +9,31 @@ interface FeatureGateProps {
   fallback?: React.ReactNode
 }
 
-/**
- * Gates a component behind a feature flag.
- * Renders children when flag is enabled, fallback when disabled.
- */
+function trackFeatureGate(flag: string, enabled: boolean, usedFallback: boolean) {
+  try {
+    if (typeof window !== "undefined" && (window as any).posthog) {
+      (window as any).posthog.capture("feature_gate_evaluated", {
+        flag,
+        enabled,
+        used_fallback: usedFallback,
+      })
+    }
+  } catch {
+    // analytics best-effort
+  }
+}
+
 export function FeatureGate({ flag, children, fallback = null }: FeatureGateProps) {
   const enabled = isFeatureEnabled(flag)
+  const usedFallback = !enabled && fallback !== null
+
+  useEffect(() => {
+    trackFeatureGate(flag, enabled, usedFallback)
+  }, [flag, enabled, usedFallback])
+
   return <>{enabled ? children : fallback}</>
 }
 
-/**
- * Hook version for conditional logic in components.
- */
 export function useFeatureFlag(flag: FeatureFlag): boolean {
   return isFeatureEnabled(flag)
 }

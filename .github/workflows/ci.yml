@@ -380,3 +380,101 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 30
+
+  web-typecheck:
+    name: Web TypeScript Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: Record exact commit
+        run: echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+  web-unit-tests:
+    name: Web Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: Run Vitest
+        run: npm run test -- --run
+
+  alembic-policy:
+    name: Alembic Revision Policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Record exact commit
+        run: echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Run Alembic audit (CI mode)
+        run: python scripts/audit_alembic_revisions.py --ci
+      - name: Run safe migration check
+        working-directory: apps/api
+        run: |
+          pip install -r requirements.txt
+          python scripts/migrate_database.py --check || true
+
+  migration-integration:
+    name: Migration Integration
+    runs-on: ubuntu-latest
+    needs: [alembic-policy]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: consultaion_migration_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run safe migration
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_migration_test"
+        working-directory: apps/api
+        run: python scripts/migrate_database.py
+      - name: Verify revision matches head
+        env:
+          DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_migration_test"
+        working-directory: apps/api
+        run: python scripts/migrate_database.py --check
