@@ -8,50 +8,80 @@ Uses Redis distributed lock to prevent duplicate concurrent executions.
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
+from enum import Enum
 
 from worker.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
 RECONCILIATION_LOCK_TTL = 600  # 10 minutes
+RECONCILIATION_LOCK_RENEW_INTERVAL = 120  # renew every 2 minutes
+
+# Lua script for atomic compare-and-delete release
+_RELEASE_LUA = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+end
+return 0
+"""
 
 
-def _acquire_reconciliation_lock(run_key: str) -> Optional[object]:
+class LockAcquireResult(Enum):
+    ACQUIRED = "acquired"
+    HELD = "held"
+    BACKEND_UNAVAILABLE = "backend_unavailable"
+
+
+def _acquire_reconciliation_lock(run_key: str) -> tuple[LockAcquireResult, object | None]:
     """Acquire a Redis distributed lock for reconciliation.
 
-    Returns a lock object (or truthy token) if acquired, None if locked.
+    Returns (ACQUIRED, lock_info) if acquired, (HELD, None) if already held,
+    or (BACKEND_UNAVAILABLE, None) if Redis is unavailable.
     """
     try:
         from redis_pool import get_sync_redis_client
         client = get_sync_redis_client()
         if client is None:
-            return None
+            return (LockAcquireResult.BACKEND_UNAVAILABLE, None)
         lock_key = f"lock:billing-reconciliation:{run_key}"
-        import os
         owner = f"{os.getpid()}:{uuid.uuid4().hex}"
         acquired = client.set(lock_key, owner, nx=True, ex=RECONCILIATION_LOCK_TTL)
         if acquired:
-            return (client, lock_key, owner)
+            return (LockAcquireResult.ACQUIRED, (client, lock_key, owner))
         logger.info("Reconciliation lock already held: run_key=%s", run_key)
-        return None
+        return (LockAcquireResult.HELD, None)
     except Exception as exc:
         logger.warning("Failed to acquire reconciliation lock: %s", exc)
-        return None
+        return (LockAcquireResult.BACKEND_UNAVAILABLE, None)
 
 
 def _release_reconciliation_lock(lock: object) -> None:
-    """Release a Redis distributed lock if we own it."""
+    """Release a Redis distributed lock atomically if we own it."""
     if lock is None:
         return
     try:
         client, lock_key, owner = lock
-        current = client.get(lock_key)
-        if current and current.decode() == owner:
-            client.delete(lock_key)
+        client.eval(_RELEASE_LUA, 1, lock_key, owner)
     except Exception as exc:
         logger.warning("Failed to release reconciliation lock: %s", exc)
+
+
+def _renew_lock(lock: object) -> bool:
+    """Renew a Redis distributed lock if we still own it."""
+    if lock is None:
+        return False
+    try:
+        client, lock_key, owner = lock
+        current = client.get(lock_key)
+        if current and current.decode() == owner:
+            client.expire(lock_key, RECONCILIATION_LOCK_TTL)
+            return True
+        return False
+    except Exception:
+        return False
 
 
 @celery_app.task(name="billing.reconcile_previous_day", bind=True, max_retries=3)
@@ -76,10 +106,13 @@ def reconcile_previous_day(self):
     window = ReconciliationWindow.previous_utc_day()
     run_key = window.run_key("daily")
 
-    lock = _acquire_reconciliation_lock(run_key)
-    if lock is None:
+    lock_result, lock = _acquire_reconciliation_lock(run_key)
+    if lock_result == LockAcquireResult.HELD:
         logger.info("Skipping daily reconciliation: lock held for run_key=%s", run_key)
         return
+    if lock_result == LockAcquireResult.BACKEND_UNAVAILABLE:
+        logger.error("Daily reconciliation: Redis unavailable for run_key=%s — retrying", run_key)
+        raise self.retry(exc=RuntimeError("Redis unavailable"), countdown=60)
 
     try:
         start = time.monotonic()
@@ -125,10 +158,13 @@ def reconcile_current_period(self):
     window = ReconciliationWindow.closed_month(last_month.year, last_month.month)
     run_key = window.run_key("monthly")
 
-    lock = _acquire_reconciliation_lock(run_key)
-    if lock is None:
+    lock_result, lock = _acquire_reconciliation_lock(run_key)
+    if lock_result == LockAcquireResult.HELD:
         logger.info("Skipping monthly reconciliation: lock held for run_key=%s", run_key)
         return
+    if lock_result == LockAcquireResult.BACKEND_UNAVAILABLE:
+        logger.error("Monthly reconciliation: Redis unavailable for run_key=%s — retrying", run_key)
+        raise self.retry(exc=RuntimeError("Redis unavailable"), countdown=60)
 
     try:
         start = time.monotonic()
@@ -172,10 +208,13 @@ def reconcile_closed_period(self, period: str):
     window = ReconciliationWindow.from_period(period)
     run_key = window.run_key("manual")
 
-    lock = _acquire_reconciliation_lock(run_key)
-    if lock is None:
+    lock_result, lock = _acquire_reconciliation_lock(run_key)
+    if lock_result == LockAcquireResult.HELD:
         logger.info("Skipping manual reconciliation: lock held for run_key=%s", run_key)
         return
+    if lock_result == LockAcquireResult.BACKEND_UNAVAILABLE:
+        logger.error("Manual reconciliation: Redis unavailable for run_key=%s — retrying", run_key)
+        raise self.retry(exc=RuntimeError("Redis unavailable"), countdown=60)
 
     try:
         start = time.monotonic()

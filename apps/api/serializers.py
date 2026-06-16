@@ -228,6 +228,15 @@ def _get_models_expected(debate) -> int:
     return len(agents) if agents else 3
 
 
+def merge_non_null(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    """Merge incoming into base, only overwriting keys where incoming has a non-None value."""
+    merged = dict(base)
+    for key, value in incoming.items():
+        if value is not None:
+            merged[key] = value
+    return merged
+
+
 def _get_debate_extra_fields(debate, session=None, continuation_status: Optional[str] = None) -> dict:
     """Fetch enrichment fields with schema capability gating and savepoint isolation."""
     from services.schema_capabilities import get_schema_capabilities, get_registry
@@ -256,7 +265,7 @@ def _get_debate_extra_fields(debate, session=None, continuation_status: Optional
         if caps:
             from services.debate_enrichment import safe_query_extra_fields
             safe_extra = safe_query_extra_fields(debate.id, session, caps)
-            res.update(safe_extra)
+            res = merge_non_null(res, safe_extra)
 
             if caps.missing_capabilities:
                 logger.info(
@@ -415,14 +424,19 @@ def serialize_debate_public(debate, continuation_status: Optional[str] = None, s
 
 
 def _get_missing_capabilities(debate, extra: dict) -> list[str]:
+    """Detect genuinely missing schema capabilities, not just empty result sets.
+
+    A Debate with zero rows in a table is a valid empty result, not a missing
+    capability. Only query failures or schema absence count as missing.
+    """
     missing = []
-    if extra.get("stage_checkpoints") is None:
+    if extra.get("stage_checkpoints") is None and extra.get("_checkpoint_query_failed"):
         missing.append("stage_checkpoints")
-    if extra.get("continuation_id") is None:
+    if extra.get("continuation_id") is None and extra.get("_continuation_query_failed"):
         missing.append("continuations")
-    if extra.get("responses_received") is None:
+    if extra.get("responses_received") is None and extra.get("_message_query_failed"):
         missing.append("message_counts")
-    if extra.get("scores_received") is None:
+    if extra.get("scores_received") is None and extra.get("_score_query_failed"):
         missing.append("score_counts")
     return missing
 

@@ -4,6 +4,7 @@ import logging
 from typing import Any, Optional
 
 from sqlmodel import Session, select
+from sqlalchemy import func
 
 from services.schema_capabilities import SchemaCapabilities, get_registry
 
@@ -30,20 +31,37 @@ def safe_query_extra_fields(
         "models_expected": None,
         "scores_received": None,
         "verification_status": None,
+        "_checkpoint_query_failed": False,
+        "_continuation_query_failed": False,
+        "_message_query_failed": False,
+        "_score_query_failed": False,
     }
 
     if capabilities.has_stage_checkpoint_table:
-        extra.update(_safe_query_checkpoints(debate_id, session))
+        ck_result = _safe_query_checkpoints(debate_id, session)
+        if not ck_result and capabilities.has_stage_checkpoint_table:
+            pass  # Table exists but no rows — valid empty result
+        extra.update(ck_result)
+    else:
+        extra["_checkpoint_query_failed"] = True
 
     if capabilities.has_continuation_table:
-        extra.update(_safe_query_continuation(debate_id, session))
+        cont_result = _safe_query_continuation(debate_id, session)
+        extra.update(cont_result)
+    else:
+        extra["_continuation_query_failed"] = True
 
     if capabilities.has_message_table and capabilities.has_score_table:
         extra.update(_safe_query_counts(debate_id, session, capabilities))
     elif capabilities.has_message_table:
         extra.update(_safe_query_message_count(debate_id, session))
-    elif capabilities.has_score_table:
+    else:
+        extra["_message_query_failed"] = True
+
+    if capabilities.has_score_table:
         extra.update(_safe_query_score_count(debate_id, session))
+    else:
+        extra["_score_query_failed"] = True
 
     return extra
 
@@ -114,12 +132,11 @@ def _safe_query_counts(
 def _safe_query_message_count(debate_id: str, session: Session) -> dict[str, Any]:
     try:
         from models import Message
+        from sqlalchemy import func, select as sa_select
 
-        stmt = select(Message).where(Message.debate_id == debate_id)
-        messages = list(session.execute(stmt).scalars().all())
-        if messages:
-            result = {"responses_received": len(messages)}
-            return result
+        stmt = sa_select(func.count()).where(Message.debate_id == debate_id)
+        count = session.execute(stmt).scalar() or 0
+        return {"responses_received": count}
     except Exception as exc:
         logger.warning("message_count_query_failed debate_id=%s error=%s", debate_id, exc)
     return {}
@@ -128,11 +145,11 @@ def _safe_query_message_count(debate_id: str, session: Session) -> dict[str, Any
 def _safe_query_score_count(debate_id: str, session: Session) -> dict[str, Any]:
     try:
         from models import Score
+        from sqlalchemy import func, select as sa_select
 
-        stmt = select(Score).where(Score.debate_id == debate_id)
-        scores = list(session.execute(stmt).scalars().all())
-        if scores:
-            return {"scores_received": len(scores)}
+        stmt = sa_select(func.count()).where(Score.debate_id == debate_id)
+        count = session.execute(stmt).scalar() or 0
+        return {"scores_received": count}
     except Exception as exc:
         logger.warning("score_count_query_failed debate_id=%s error=%s", debate_id, exc)
     return {}

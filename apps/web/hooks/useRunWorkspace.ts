@@ -84,6 +84,13 @@ function clearIntent(debateId: string): void {
   }
 }
 
+type TimelineHydrationResult = {
+  events: TimelineEvent[];
+  quality: "complete" | "events_fallback" | "debate_only";
+  timelineError: string | null;
+  eventsError: string | null;
+};
+
 export interface UseRunWorkspaceResult {
   debate: any | null;
   events: TimelineEvent[];
@@ -116,8 +123,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
+  const pollInFlightRef = useRef(false);
   const intentRef = useRef<PersistedContinuationIntent | null>(null);
   const debateSetOnceRef = useRef(false);
+  const requestGenerationRef = useRef(0);
 
   const isTerminal = debate
     ? ["completed", "success", "completed_budget", "failed"].includes(debate.status)
@@ -125,9 +134,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   const isPaused = debate?.status === "perspectives_ready";
 
-  const loadTimelineWithFallback = useCallback(async (id: string) => {
-    setTimelineError(null);
-    setEventsError(null);
+  const loadTimelineWithFallback = useCallback(async (id: string): Promise<TimelineHydrationResult> => {
     let timelineEvents: unknown[] | null = null;
 
     try {
@@ -138,7 +145,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       timelineEvents = extractEventItems(data);
     } catch (err: any) {
       const msg = err?.message || "Timeline fetch failed";
-      setTimelineError(msg);
       console.warn("[useRunWorkspace] Timeline failed, falling back to /events:", msg);
 
       try {
@@ -147,13 +153,21 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
           EVENTS_TIMEOUT_MS,
         );
         timelineEvents = extractEventItems(eventsData);
-        setHydrationQuality("events_fallback");
+        return {
+          events: [],
+          quality: "events_fallback",
+          timelineError: msg,
+          eventsError: null,
+        };
       } catch (err2: any) {
         const msg2 = err2?.message || "Events fetch failed";
-        setEventsError(msg2);
         console.warn("[useRunWorkspace] Both timeline and events failed:", msg2);
-        setHydrationQuality("debate_only");
-        return [];
+        return {
+          events: [],
+          quality: "debate_only",
+          timelineError: msg,
+          eventsError: msg2,
+        };
       }
     }
 
@@ -167,9 +181,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         seat: raw.seat,
         payload: raw.payload || raw,
       }));
-      return normalized;
+      return { events: normalized, quality: "complete", timelineError: null, eventsError: null };
     }
-    return [];
+    return { events: [], quality: "complete", timelineError: null, eventsError: null };
   }, []);
 
   const fetchDebateOnly = useCallback(async (id: string) => {
@@ -184,15 +198,22 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const fetchDebateAndTimeline = useCallback(async (id: string) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
+    const generation = requestGenerationRef.current;
     try {
       const debateData = await fetchDebateOnly(id);
 
-      const timelineData = await loadTimelineWithFallback(id);
-      setEvents(timelineData);
+      if (generation !== requestGenerationRef.current) return;
 
-      if (hydrationQuality === "complete") {
-      }
+      const result = await loadTimelineWithFallback(id);
+
+      if (generation !== requestGenerationRef.current) return;
+
+      setEvents(result.events);
+      setHydrationQuality(result.quality);
+      setTimelineError(result.timelineError);
+      setEventsError(result.eventsError);
     } catch (err: any) {
+      if (generation !== requestGenerationRef.current) return;
       console.error("[useRunWorkspace] Fetch error:", err);
       setError(err?.message || "Failed to load workspace data");
       if (!debateSetOnceRef.current) {
@@ -201,10 +222,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     } finally {
       isFetchingRef.current = false;
     }
-  }, [fetchDebateOnly, loadTimelineWithFallback, hydrationQuality]);
+  }, [fetchDebateOnly, loadTimelineWithFallback]);
 
   useEffect(() => {
     if (debateId) {
+      requestGenerationRef.current += 1;
       setIsLoading(true);
       setHydrationQuality("complete");
       setTimelineError(null);
@@ -216,6 +238,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         setIsLoading(false);
       });
     } else {
+      requestGenerationRef.current += 1;
       setDebate(null);
       setEvents([]);
       setError(null);
@@ -277,20 +300,29 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     if (pollTimerRef.current) return;
     setIsPollingFallback(true);
     const tick = async () => {
+      if (pollInFlightRef.current) {
+        pollTimerRef.current = setTimeout(tick, 3000) as unknown as NodeJS.Timeout;
+        return;
+      }
+      pollInFlightRef.current = true;
       try {
         await fetchDebateAndTimeline(id);
       } catch (err) {
         console.error("[useRunWorkspace] Polling fetch error:", err);
+      } finally {
+        pollInFlightRef.current = false;
+        pollTimerRef.current = setTimeout(tick, 3000) as unknown as NodeJS.Timeout;
       }
     };
-    pollTimerRef.current = setInterval(tick, 3000);
+    pollTimerRef.current = setTimeout(tick, 3000) as unknown as NodeJS.Timeout;
   }, [fetchDebateAndTimeline]);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
+      clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
+    pollInFlightRef.current = false;
     setIsPollingFallback(false);
   }, []);
 
@@ -309,7 +341,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   useEffect(() => {
     return () => {
       if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
+        clearTimeout(pollTimerRef.current);
       }
     };
   }, []);

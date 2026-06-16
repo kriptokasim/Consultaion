@@ -143,7 +143,6 @@ def reconcile_usage(
         BillingReconciliationRun,
         BillingReconciliationDiscrepancy,
     )
-    from billing.service import _current_period
     from models import LLMUsageLog, Debate
 
     if window is None:
@@ -153,18 +152,16 @@ def reconcile_usage(
     run_id = uuid.uuid4()
     run_key = window.run_key(run_type)
 
-    # Check for existing run with same key to prevent duplicates
+    # Check for existing run with same run_key to prevent duplicates
     existing = db.exec(
         select(BillingReconciliationRun).where(
-            BillingReconciliationRun.period == target_period,
-            BillingReconciliationRun.run_type == run_type,
-            BillingReconciliationRun.status == "completed",
+            BillingReconciliationRun.run_key == run_key,
         )
     ).first()
     if existing:
         logger.info(
-            "Skipping duplicate reconciliation: period=%s run_type=%s existing_run=%s",
-            target_period, run_type, existing.id,
+            "Skipping duplicate reconciliation: run_key=%s existing_run=%s status=%s",
+            run_key, existing.id, existing.status,
         )
         return {
             "run_id": str(existing.id),
@@ -183,9 +180,38 @@ def reconcile_usage(
         period=target_period,
         run_type=run_type,
         status="running",
+        run_key=run_key,
+        window_start=window.start_at,
+        window_end=window.end_at,
     )
-    db.add(run)
-    db.commit()
+    try:
+        db.add(run)
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Concurrent insert — re-query
+        existing = db.exec(
+            select(BillingReconciliationRun).where(
+                BillingReconciliationRun.run_key == run_key,
+            )
+        ).first()
+        if existing:
+            logger.info(
+                "Concurrent reconciliation resolved: run_key=%s existing_run=%s",
+                run_key, existing.id,
+            )
+            return {
+                "run_id": str(existing.id),
+                "version": RECONCILIATION_VERSION,
+                "period": target_period,
+                "run_type": run_type,
+                "skipped": True,
+                "users_checked": existing.users_checked,
+                "discrepancies": [],
+                "total_tokens_internal": existing.total_tokens_internal,
+                "total_tokens_usage": existing.total_tokens_usage,
+            }
+        raise
 
     report: Dict[str, object] = {
         "run_id": str(run_id),
@@ -239,8 +265,8 @@ def reconcile_usage(
             completed_debates = db.exec(
                 select(func.coalesce(func.count(), 0))
                 .where(Debate.user_id == usage.user_id)
-                .where(Debate.created_at >= _period_start(target_period))
-                .where(Debate.created_at < _period_end(target_period))
+                .where(Debate.created_at >= window.start_at)
+                .where(Debate.created_at < window.end_at)
             ).one()
 
             disc = _check_debate_count(usage.user_id, usage.debates_created, completed_debates)
@@ -313,6 +339,9 @@ def reconcile_usage(
         run.status = "failed"
         run.error_message = str(exc)[:500]
         run.completed_at = datetime.now(timezone.utc)
+        run.run_key = run_key
+        run.window_start = window.start_at
+        run.window_end = window.end_at
         db.commit()
         logger.error(
             "Reconciliation failed: period=%s run_id=%s error=%s",

@@ -8,7 +8,7 @@ import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { useQuery } from "@tanstack/react-query";
 import { getMe } from "@/lib/auth";
 import { ApiError, getRateLimitInfo, isAuthError, getTeams } from "@/lib/api";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useI18n } from "@/lib/i18n/client";

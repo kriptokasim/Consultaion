@@ -34,7 +34,7 @@ def ensure_alembic_version_table(session: Session) -> None:
         session.execute(
             text(
                 "CREATE TABLE alembic_version ("
-                "    version_num VARCHAR(32) NOT NULL"
+                "    version_num VARCHAR(128) NOT NULL"
                 ")"
             )
         )

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlmodel import Session
+
+API_ROOT = Path(__file__).resolve().parents[1]
+ALEMBIC_DIR = API_ROOT / "alembic"
 
 
 @dataclass
@@ -17,6 +22,7 @@ class SchemaCapabilities:
     has_score_table: bool = True
     has_message_table: bool = True
     is_at_alembic_head: bool = True
+    inspection_succeeded: bool = True
 
     missing_capabilities: list[str] = field(default_factory=list)
 
@@ -45,6 +51,18 @@ class SchemaCapabilityRegistry:
             self._cache.clear()
 
 
+def _build_cache_key(session: Session) -> str:
+    """Build a cache key from stable database identity information."""
+    try:
+        bind = session.get_bind()
+        dialect = bind.dialect.name
+        url = str(bind.url)
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+        return f"{dialect}:{url_hash}"
+    except Exception:
+        return "default"
+
+
 def _check_table_exists(session: Session, table_name: str) -> bool:
     inspector = inspect(session.get_bind())
     return table_name in inspector.get_table_names()
@@ -64,17 +82,15 @@ def _check_alembic_head(session: Session) -> bool:
         from alembic.config import Config
         from alembic.script import ScriptDirectory
 
-        from config import settings
-
         alembic_cfg = Config()
-        alembic_cfg.set_main_option("script_location", "alembic")
+        alembic_cfg.set_main_option("script_location", str(ALEMBIC_DIR))
         script = ScriptDirectory.from_config(alembic_cfg)
         heads = script.get_heads()
         if len(heads) != 1:
             return False
 
         result = session.execute(
-            "SELECT version_num FROM alembic_version"
+            text("SELECT version_num FROM alembic_version")
         ).scalar()
         if not result:
             return False
@@ -87,20 +103,32 @@ def get_schema_capabilities(
     session: Session,
     registry: Optional[SchemaCapabilityRegistry] = None,
 ) -> SchemaCapabilities:
-    cache_key = "default"
+    cache_key = _build_cache_key(session)
     if registry:
         cached = registry.get_cached(cache_key)
         if cached:
             return cached
 
-    caps = SchemaCapabilities(
-        has_stage_checkpoint_table=_check_table_exists(session, "debate_stage_checkpoint"),
-        has_continuation_table=_check_table_exists(session, "debate_continuation"),
-        has_pairwise_vote_table=_check_table_exists(session, "pairwise_vote"),
-        has_score_table=_check_table_exists(session, "score"),
-        has_message_table=_check_table_exists(session, "message"),
-        is_at_alembic_head=_check_alembic_head(session),
-    )
+    try:
+        has_checkpoint_table = _check_table_exists(session, "debate_stage_checkpoint")
+        has_checkpoint_attempt = False
+        if has_checkpoint_table:
+            has_checkpoint_attempt = _check_column_exists(
+                session, "debate_stage_checkpoint", "attempt"
+            )
+
+        caps = SchemaCapabilities(
+            has_stage_checkpoint_table=has_checkpoint_table,
+            has_stage_checkpoint_attempt_column=has_checkpoint_attempt,
+            has_continuation_table=_check_table_exists(session, "debate_continuation"),
+            has_pairwise_vote_table=_check_table_exists(session, "pairwise_vote"),
+            has_score_table=_check_table_exists(session, "score"),
+            has_message_table=_check_table_exists(session, "message"),
+            is_at_alembic_head=_check_alembic_head(session),
+            inspection_succeeded=True,
+        )
+    except Exception:
+        caps = SchemaCapabilities(inspection_succeeded=False)
 
     missing = []
     if not caps.has_stage_checkpoint_table:

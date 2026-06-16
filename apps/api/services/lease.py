@@ -31,14 +31,6 @@ if holder == ARGV[1] then
     redis.call('del', KEYS[1])
     return 1
 end
-
--- Also handle sorted set based leases (SSE streams)
-local score = redis.call('zscore', KEYS[1], ARGV[1])
-if score ~= false then
-    redis.call('zrem', KEYS[1], ARGV[1])
-    return 1
-end
-
 return 0
 """
 
@@ -60,11 +52,49 @@ end
 return 0
 """
 
+# Sorted-set SSE lease Lua scripts
+# KEYS[1] = lease key (sorted set)
+# ARGV[1] = subscriber identity (user_id:subscriber_id)
+# ARGV[2] = lease expiry (Unix timestamp)
+# ARGV[3] = max concurrent streams
+# ARGV[4] = current time (Unix timestamp)
+SSE_LEASE_ACQUIRE_LUA = """
+-- Remove expired members
+redis.call('zremrangebyscore', KEYS[1], '-inf', ARGV[4])
+
+-- Check if this subscriber already has a lease (refresh)
+local existing_score = redis.call('zscore', KEYS[1], ARGV[1])
+if existing_score ~= false then
+    redis.call('zadd', KEYS[1], ARGV[2], ARGV[1])
+    redis.call('expire', KEYS[1], tonumber(ARGV[2]) - tonumber(ARGV[4]) + 60)
+    return 2
+end
+
+-- Count active members
+local count = redis.call('zcard', KEYS[1])
+if count >= tonumber(ARGV[3]) then
+    return 0
+end
+
+-- Acquire new lease
+redis.call('zadd', KEYS[1], ARGV[2], ARGV[1])
+redis.call('expire', KEYS[1], tonumber(ARGV[2]) - tonumber(ARGV[4]) + 60)
+return 1
+"""
+
+SSE_LEASE_RELEASE_LUA = """
+-- Remove specific member
+redis.call('zrem', KEYS[1], ARGV[1])
+-- Set expiry on the key itself
+redis.call('expire', KEYS[1], 300)
+return 1
+"""
+
 
 def atomic_release_lease(redis_client, key: str, holder: str) -> bool:
     """Atomically release a lease using Lua. Returns True if released."""
     try:
-        result = redis_client.eval(LEASE_RELEASE_LUA, 1, key, holder, str(time.time()))
+        result = redis_client.eval(LEASE_RELEASE_LUA, 1, key, holder)
         return bool(result)
     except Exception as exc:
         logger.warning("atomic_release_lease failed: %s", exc)
@@ -74,7 +104,7 @@ def atomic_release_lease(redis_client, key: str, holder: str) -> bool:
 def atomic_acquire_lease(redis_client, key: str, holder: str, ttl: int = 60) -> LockAcquireResult:
     """Atomically acquire a lease using Lua."""
     try:
-        result = redis_client.eval(LEASE_ACQUIRE_LUA, 1, key, holder, ttl, str(time.time()))
+        result = redis_client.eval(LEASE_ACQUIRE_LUA, 1, key, holder, ttl)
         if result:
             return LockAcquireResult.ACQUIRED
         return LockAcquireResult.HELD
@@ -86,7 +116,7 @@ def atomic_acquire_lease(redis_client, key: str, holder: str, ttl: int = 60) -> 
 async def atomic_release_lease_async(redis_client, key: str, holder: str) -> bool:
     """Async version of atomic lease release."""
     try:
-        result = await redis_client.eval(LEASE_RELEASE_LUA, 1, key, holder, str(time.time()))
+        result = await redis_client.eval(LEASE_RELEASE_LUA, 1, key, holder)
         return bool(result)
     except Exception as exc:
         logger.warning("atomic_release_lease_async failed: %s", exc)
@@ -96,10 +126,44 @@ async def atomic_release_lease_async(redis_client, key: str, holder: str) -> boo
 async def atomic_acquire_lease_async(redis_client, key: str, holder: str, ttl: int = 60) -> LockAcquireResult:
     """Async version of atomic lease acquire."""
     try:
-        result = await redis_client.eval(LEASE_ACQUIRE_LUA, 1, key, holder, ttl, str(time.time()))
+        result = await redis_client.eval(LEASE_ACQUIRE_LUA, 1, key, holder, ttl)
         if result:
             return LockAcquireResult.ACQUIRED
         return LockAcquireResult.HELD
     except Exception as exc:
         logger.warning("atomic_acquire_lease_async failed: %s", exc)
         return LockAcquireResult.BACKEND_UNAVAILABLE
+
+
+async def sse_acquire_lease_async(
+    redis_client, key: str, identity: str, max_streams: int, ttl: int = 300
+) -> int:
+    """Acquire an SSE sorted-set lease atomically.
+
+    Returns:
+        1 = acquired
+        2 = refreshed (existing connection)
+        0 = limit reached
+        -1 = backend error
+    """
+    try:
+        now = time.time()
+        expiry = now + ttl
+        result = await redis_client.eval(
+            SSE_LEASE_ACQUIRE_LUA, 1, key, identity, str(expiry),
+            str(max_streams), str(now),
+        )
+        return int(result)
+    except Exception as exc:
+        logger.warning("sse_acquire_lease_async failed: %s", exc)
+        return -1
+
+
+async def sse_release_lease_async(redis_client, key: str, identity: str) -> bool:
+    """Release an SSE sorted-set lease atomically."""
+    try:
+        await redis_client.eval(SSE_LEASE_RELEASE_LUA, 1, key, identity)
+        return True
+    except Exception as exc:
+        logger.warning("sse_release_lease_async failed: %s", exc)
+        return False

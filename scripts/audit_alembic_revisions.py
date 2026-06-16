@@ -97,16 +97,21 @@ def main() -> None:
                 f"not found in migration graph"
             )
 
-    # Check 4: Multiple heads
+    # Check 4: Multiple heads (error in CI mode)
     heads = [rev_id for rev_id, info in revisions.items()
              if not any(
                  other_info.get("down_revision") == rev_id
                  for other_info in revisions.values()
              )]
     if len(heads) != 1:
-        warnings.append(
-            f"Expected 1 head, found {len(heads)}: {heads}"
-        )
+        if args.ci:
+            errors.append(
+                f"Expected exactly 1 head in CI mode, found {len(heads)}: {heads}"
+            )
+        else:
+            warnings.append(
+                f"Expected 1 head, found {len(heads)}: {heads}"
+            )
 
     # Check 5: Cycles (detect via DFS)
     visited: set[str] = set()
@@ -187,14 +192,14 @@ def _extract_revision_info(tree: ast.AST, fpath: str) -> dict | None:
                 if isinstance(target, ast.Name):
                     if target.id == "revision" and isinstance(node.value, ast.Constant):
                         info["revision"] = node.value.value
-                    elif target.id == "down_revision" and isinstance(node.value, (ast.Constant, ast.Name)):
-                        if isinstance(node.value, ast.Constant):
-                            info["down_revision"] = node.value.value
-                        elif isinstance(node.value, ast.Name) and node.value.id == "None":
-                            info["down_revision"] = None
-                elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
-                    if target.value.id == "branch_labels" and isinstance(node.value, ast.Constant):
-                        info["branch_labels"] = node.value.value
+                    elif target.id == "down_revision":
+                        info["down_revision"] = _extract_down_revision(node.value)
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                if node.target.id == "revision" and node.value and isinstance(node.value, ast.Constant):
+                    info["revision"] = node.value.value
+                elif node.target.id == "down_revision" and node.value:
+                    info["down_revision"] = _extract_down_revision(node.value)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             if isinstance(node, ast.Import):
                 for alias in node.names:
@@ -205,6 +210,31 @@ def _extract_revision_info(tree: ast.AST, fpath: str) -> dict | None:
     if not info["revision"]:
         return None
     return info
+
+
+def _extract_down_revision(value: ast.expr) -> str | tuple | None:
+    """Extract a down_revision value from various AST forms.
+
+    Supports:
+    - None (ast.Constant with value None, or ast.Name with id "None")
+    - String literal
+    - Tuple of string literals
+    """
+    if isinstance(value, ast.Constant) and value.value is None:
+        return None
+    if isinstance(value, ast.Name) and value.id == "None":
+        return None
+    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+        return value.value
+    if isinstance(value, ast.Tuple):
+        elements = []
+        for elt in value.elts:
+            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                elements.append(elt.value)
+            else:
+                return None
+        return tuple(elements) if elements else None
+    return None
 
 
 if __name__ == "__main__":

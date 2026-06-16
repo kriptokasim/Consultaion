@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from checks import check_db_readiness, check_sse_readiness
@@ -7,6 +8,9 @@ from config import settings
 from fastapi import APIRouter, Response, status
 
 router = APIRouter(tags=["ops"])
+
+_GIT_SHA = os.environ.get("GIT_SHA", "unknown")
+_BUILD_TIMESTAMP = os.environ.get("BUILD_TIMESTAMP", "unknown")
 
 
 @router.get("/healthz")
@@ -17,7 +21,12 @@ async def healthz() -> dict[str, str]:
     Always 200 if the app process is running and accepting requests.
     Used by load balancers to determine if the pod is alive.
     """
-    return {"status": "ok", "version": settings.APP_VERSION}
+    return {
+        "status": "ok",
+        "version": settings.APP_VERSION,
+        "git_sha": _GIT_SHA,
+        "build_timestamp": _BUILD_TIMESTAMP,
+    }
 
 
 @router.get("/readyz")
@@ -45,6 +54,8 @@ async def readyz(response: Response) -> dict[str, Any]:
         "meta": {
             "env": settings.ENV,
             "version": settings.APP_VERSION,
+            "git_sha": _GIT_SHA,
+            "build_timestamp": _BUILD_TIMESTAMP,
         }
     }
 

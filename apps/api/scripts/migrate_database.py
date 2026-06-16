@@ -118,27 +118,97 @@ def main() -> None:
                     )
                     sys.exit(1)
 
+        # ---------- Phase 3: Break-glass stamping ----------
+        if args.allow_stamp:
+            if not args.expected_current or not args.stamp:
+                logger.error(
+                    "--allow-stamp requires both --expected-current and --stamp"
+                )
+                sys.exit(1)
+
+            if args.stamp not in all_revisions:
+                logger.error(
+                    "Target stamp %s is not in the migration graph", args.stamp
+                )
+                sys.exit(1)
+
+            actual_current = current_revisions[0] if current_revisions else None
+            if actual_current != args.expected_current:
+                logger.error(
+                    "Current revision %s does not match expected %s — aborting stamp",
+                    actual_current, args.expected_current,
+                )
+                sys.exit(1)
+
+            logger.warning(
+                "BREAK-GLASS STAMP: %s -> %s (requested by operator)",
+                actual_current, args.stamp,
+            )
+
+            from alembic.config import Config as AlembicConfig
+            from alembic.command import stamp
+
+            alembic_cfg = AlembicConfig()
+            alembic_cfg.set_main_option("script_location", "alembic")
+            alembic_cfg.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+
+            try:
+                stamp(alembic_cfg, args.stamp)
+                logger.info("Stamp completed")
+            except Exception as exc:
+                logger.error("Stamp failed: %s", exc)
+                sys.exit(1)
+
+            # Re-verify after stamp
+            session.commit()
+            post_stamps = get_current_revisions(session)
+            if post_stamps and post_stamps[0] == args.stamp:
+                logger.info("Post-stamp verification passed: %s", post_stamps[0])
+            else:
+                logger.error(
+                    "Post-stamp verification failed: got %s, expected %s",
+                    post_stamps, args.stamp,
+                )
+                sys.exit(1)
+
+            logger.info("Break-glass stamp complete")
+            sys.exit(0)
+
         # ---------- Phase 4: Check-only mode ----------
         if args.check:
+            exit_code = 0
             if current_revisions:
                 head_match = current_revisions[0] == expected_head
                 logger.info(
                     "CHECK: current=%s expected=%s match=%s",
                     current_revisions[0], expected_head, head_match,
                 )
+                if not head_match:
+                    logger.error("CHECK FAILED: revision mismatch")
+                    exit_code = 1
             else:
-                logger.info("CHECK: no current revision found")
+                logger.warning("CHECK: no current revision found")
+                exit_code = 1
 
             missing_tables = verify_required_tables(session)
             if missing_tables:
-                logger.warning("CHECK: missing tables: %s", missing_tables)
+                logger.error("CHECK FAILED: missing tables: %s", missing_tables)
+                exit_code = 1
 
             missing_cols = verify_critical_columns(session)
             if missing_cols:
-                logger.warning("CHECK: missing columns: %s", missing_cols)
+                logger.error("CHECK FAILED: missing columns: %s", missing_cols)
+                exit_code = 1
 
-            logger.info("Read-only check complete")
-            sys.exit(0)
+            if len(heads) != 1:
+                logger.error("CHECK FAILED: expected exactly one head, found %d", len(heads))
+                exit_code = 1
+
+            if exit_code:
+                logger.error("Read-only check failed")
+            else:
+                logger.info("Read-only check passed")
+            sys.exit(exit_code)
 
         # ---------- Phase 5: Execute upgrade ----------
         if current_revisions and current_revisions[0] == expected_head:

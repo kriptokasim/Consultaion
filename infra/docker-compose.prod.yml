@@ -3,7 +3,7 @@ services:
   api:
     build: ../apps/api
     # NOTE: SSE queues are process-local; keep a single worker until a shared backend is added.
-    command: ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "1", "main:app", "-b", "0.0.0.0:8000"]
+    command: ["bash", "-c", "python scripts/migrate_database.py && exec gunicorn -k uvicorn.workers.UvicornWorker -w 1 main:app -b 0.0.0.0:8000"]
     env_file: ../.env
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/consultaion}

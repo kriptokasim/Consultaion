@@ -305,7 +305,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     });
   }, [debate, events, currentWorkspaceStage]);
 
-  const [, setHardCeilingReached] = useState(false);
+  const [hardCeilingReached, setHardCeilingReached] = useState(false);
 
   useEffect(() => {
     if (isDebateLoaded) {
@@ -319,6 +319,33 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
 
     return () => clearTimeout(timer);
   }, [isDebateLoaded, id]);
+
+  if (hardCeilingReached && !isDebateLoaded) {
+    return (
+      <div className="container py-8 max-w-2xl">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Run is taking longer than expected</AlertTitle>
+          <AlertDescription>
+            <p className="mt-2 text-sm">This Run is taking longer than expected to load.</p>
+            <div className="mt-4 flex gap-3">
+              <Button variant="outline" onClick={() => refetch()}>
+                Retry
+              </Button>
+              <Button variant="ghost" onClick={() => router.push("/runs")}>
+                Back to Runs
+              </Button>
+            </div>
+            {process.env.NODE_ENV === "development" && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Debate ID: {id} | Workspace status: {workspaceStatus}
+              </p>
+            )}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (isLoading && !isDebateLoaded) {
     return (
@@ -407,7 +434,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               </p>
             </div>
           )}
-          <ArenaRunView debate={debate} events={resultsEvents.length > 0 ? resultsEvents : events} profile={profile} onRefetch={refetch} />
+          <ArenaRunView debate={debate} events={resultsEvents.length > 0 ? resultsEvents : (events as unknown as DebateEvent[])} profile={profile} onRefetch={refetch} />
         </div>
       );
     }
@@ -425,7 +452,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           )}
           <VotingRunView
             debate={debate}
-            events={resultsEvents.length > 0 ? resultsEvents : events}
+            events={resultsEvents.length > 0 ? resultsEvents : (events as unknown as DebateEvent[])}
             isCompleted={true}
             resultsMembers={resultsMembers}
             judgeVotes={judgeVotes}
@@ -451,7 +478,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           debate={debate}
           scores={scores}
           vote={vote}
-          events={resultsEvents.length > 0 ? resultsEvents : events}
+          events={resultsEvents.length > 0 ? resultsEvents : (events as unknown as DebateEvent[])}
           members={resultsMembers}
           judgeVotes={judgeVotes}
           threshold={0.5}

@@ -38,7 +38,7 @@ const SCOPE_KEYS: Record<Scope, string> = {
 type RunsTableProps = {
   items: Run[]
   teams: TeamSummary[]
-  profile: { id: string; role: string }
+  profile?: { id: string; role: string } | null
   initialQuery?: string
   initialStatus?: string | null
 }
@@ -60,7 +60,10 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () =
 
 export default function RunsTable({ items, teams, profile, initialQuery = "", initialStatus = null }: RunsTableProps) {
   const { t } = useI18n()
-  const [scope, setScope] = useState<Scope>(profile.role === "admin" ? "all" : "mine")
+  const profileId = profile?.id ?? null
+  const isAdmin = profile?.role === "admin"
+  const hasProfile = Boolean(profileId)
+  const [scope, setScope] = useState<Scope>(isAdmin ? "all" : "mine")
   const [rows, setRows] = useState(items)
   const [search, setSearch] = useState(initialQuery)
   const [statusFilter, setStatusFilter] = useState<string | null>(initialStatus)
@@ -87,12 +90,13 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map((team) => [team.id, team.name])), [teams])
 
-  const availableScopes: Scope[] = profile.role === "admin" ? ["mine", "team", "all"] : ["mine", "team"]
+  const availableScopes: Scope[] = isAdmin ? ["mine", "team", "all"] : ["mine", "team"]
 
   const filteredRuns = useMemo(() => {
     const lowerQuery = debouncedSearch.trim().toLowerCase()
     return rows.filter((run) => {
-      if (scope === "mine" && run.user_id !== profile.id && run.user_id) return false
+      if (scope === "mine" && profileId && run.user_id !== profileId && run.user_id) return false
+      if (scope === "mine" && !profileId) return false
       if (scope === "team" && !run.team_id) return false
       if (statusFilter && run.status !== statusFilter) return false
       if (lowerQuery) {
@@ -104,7 +108,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
       }
       return true
     })
-  }, [rows, scope, profile.id, debouncedSearch, statusFilter])
+  }, [rows, scope, profileId, debouncedSearch, statusFilter])
 
   const paginatedRuns = filteredRuns
 
@@ -294,7 +298,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                         <Eye className="h-4 w-4" />
                       </Button>
                     </Link>
-                    {teams.length > 0 ? (
+                    {hasProfile && teams.length > 0 ? (
                       <SharePopover
                         currentTeamId={run.team_id}
                         teams={teams}
