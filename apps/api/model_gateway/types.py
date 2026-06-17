@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict
-from typing import List, Dict, Optional, Any
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Any, AsyncIterator, Callable, Awaitable
 
 class GatewayRequest(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
@@ -48,6 +49,21 @@ class GatewayModelCallResult(BaseModel):
     fallback_reason: Optional[str] = None
     retry_count: int = 0
     user_plan: Optional[str] = None
+    error_code: Optional[str] = None
+    ttft_ms: Optional[float] = None
+
+
+@dataclass
+class ModelDelta:
+    """A single streaming delta from an LLM provider."""
+    text: str
+    sequence: int
+    accumulated_chars: int
+
+
+# Callback type for streaming deltas
+OnDeltaCallback = Callable[[ModelDelta], Awaitable[None]]
+
 
 class GatewayError(Exception):
     """Base exception for gateway errors."""

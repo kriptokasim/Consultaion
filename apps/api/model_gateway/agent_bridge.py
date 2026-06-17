@@ -98,7 +98,8 @@ async def call_model_via_gateway(
     # 4. Check gateway execution success
     if not gw_res.success:
         raise TransientLLMError(
-            gw_res.error_message or "LLM response contained no content"
+            gw_res.error_message or "LLM response contained no content",
+            error_code=gw_res.error_code
         )
 
     # 5. Map GatewayModelCallResult back to Agent-compatible UsageCall object

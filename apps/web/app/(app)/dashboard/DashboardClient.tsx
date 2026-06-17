@@ -51,11 +51,18 @@ export default function DashboardClient({ email, authToken }: { email?: string; 
     queryFn: getBillingMe
   });
 
+  // FH109: Direct first-run activation — redirect zero-runs users to live composer
   useEffect(() => {
     if (!debatesLoading && debates.length === 0) {
+      const redirectEnabled = process.env.NEXT_PUBLIC_FIRST_RUN_LIVE_REDIRECT_ENABLED !== "false";
+      if (redirectEnabled) {
+        trackEvent("first_run_redirect_to_live");
+        router.replace("/live?focus=prompt");
+        return;
+      }
       setShowOnboarding(true);
     }
-  }, [debatesLoading, debates.length]);
+  }, [debatesLoading, debates.length, router]);
 
   const maxDebates = billing?.plan?.limits?.debates_per_month;
   const debatesUsed = billing?.usage?.debates_created ?? 0;

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Sparkles, Bot, CheckCircle2 } from "lucide-react";
+import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield } from "lucide-react";
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
 import { ModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
@@ -11,6 +11,7 @@ import { PublicRunCTATop, PublicRunCTAFooter } from "./CTABanner";
 import { DivergenceMeter } from "./DivergenceMeter";
 import { SynthesisReveal } from "./SynthesisReveal";
 import { fetchWithAuth } from "@/lib/auth";
+import { useCardKeyboardNav } from "@/hooks/useCardKeyboardNav";
 
 /* ─── Main component ─── */
 interface ArenaRunViewProps {
@@ -121,7 +122,9 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
     const isLoading = modelResponses.length === 0 && !synthesis;
     const expectedModels = debate.final_meta?.models?.length || 4;
     const [activeTab, setActiveTab] = useState<number>(0);
+    const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
+    const { containerRef: cardContainerRef } = useCardKeyboardNav(modelResponses.length || expectedModels);
 
     const handleTouchStart = (e: React.TouchEvent) => {
         setTouchStartX(e.touches[0].clientX);
@@ -196,6 +199,30 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         ))}
                     </div>
                 )}
+            </div>
+
+            {/* Mobile Segment Switcher — FH110 */}
+            <div className="flex sm:hidden items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border" role="tablist" aria-label="Run sections">
+                {([
+                    { key: "perspectives", label: "Perspectives", icon: Eye },
+                    { key: "decision", label: "Decision", icon: MessageSquare },
+                    { key: "verification", label: "Verification", icon: Shield },
+                ] as const).map(({ key, label, icon: Icon }) => (
+                    <button
+                        key={key}
+                        role="tab"
+                        aria-selected={mobileSegment === key}
+                        onClick={() => setMobileSegment(key)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
+                            mobileSegment === key
+                                ? "bg-card text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                        }`}
+                    >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                    </button>
+                ))}
             </div>
 
             {/* Model Response Cards */}
@@ -294,19 +321,25 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     })()}
                 </div>
 
-                {/* Desktop View: Render grid of all cards */}
-                <div className="hidden sm:grid grid-cols-2 xl:grid-cols-4 gap-4">
+                {/* Desktop View: Render grid of all cards with keyboard navigation */}
+                <div
+                    ref={cardContainerRef}
+                    className="hidden sm:grid grid-cols-2 xl:grid-cols-4 gap-4"
+                    role="group"
+                    aria-label="Model responses (use arrow keys to navigate)"
+                >
                     {Array.from({ length: expectedModels }).map((_, i) => {
                         const resp = modelResponses[i];
                         if (!resp) {
                             return <SkeletonCard key={`skeleton-card-${i}`} index={i} />;
                         }
                         return (
-                            <ModelCard 
-                                key={resp.model_id || i} 
-                                resp={resp} 
-                                onRetry={handleRetryAgent}
-                            />
+                            <div key={resp.model_id || i} data-model-card tabIndex={0}>
+                                <ModelCard
+                                    resp={resp}
+                                    onRetry={handleRetryAgent}
+                                />
+                            </div>
                         );
                     })}
                 </div>

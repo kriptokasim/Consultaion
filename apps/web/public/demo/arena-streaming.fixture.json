@@ -1,0 +1,255 @@
+[
+  {
+    "type": "run_accepted",
+    "debate_id": "demo-deterministic-001",
+    "timestamp": "2026-01-01T00:00:00Z",
+    "payload": { "mode": "arena", "prompt": "Should a SaaS startup prioritize growth or profitability in 2026?" }
+  },
+  {
+    "type": "model_response_connecting",
+    "response_id": "resp-demo-gpt4o",
+    "model_id": "gpt4o-deep",
+    "display_name": "GPT-4o",
+    "provider": "openai",
+    "timestamp": "2026-01-01T00:00:01Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_started",
+    "response_id": "resp-demo-gpt4o",
+    "model_id": "gpt4o-deep",
+    "display_name": "GPT-4o",
+    "timestamp": "2026-01-01T00:00:02Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-gpt4o",
+    "model_id": "gpt4o-deep",
+    "text": "Growth remains ",
+    "delta_sequence": 1,
+    "accumulated_chars": 11,
+    "timestamp": "2026-01-01T00:00:03Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-gpt4o",
+    "model_id": "gpt4o-deep",
+    "text": "paramount for SaaS startups in 2026 ",
+    "delta_sequence": 2,
+    "accumulated_chars": 47,
+    "timestamp": "2026-01-01T00:00:03Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-gpt4o",
+    "model_id": "gpt4o-deep",
+    "text": "because the AI-native market is winner-take-most. Companies that slow down to optimize margins risk losing distribution to faster-moving competitors.",
+    "delta_sequence": 3,
+    "accumulated_chars": 172,
+    "timestamp": "2026-01-01T00:00:04Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_persisting",
+    "response_id": "resp-demo-gpt4o",
+    "model_id": "gpt4o-deep",
+    "timestamp": "2026-01-01T00:00:05Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_completed",
+    "response_id": "resp-demo-gpt4o",
+    "model_id": "gpt4o-deep",
+    "display_name": "GPT-4o",
+    "timestamp": "2026-01-01T00:00:06Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_connecting",
+    "response_id": "resp-demo-claude",
+    "model_id": "claude-sonnet",
+    "display_name": "Claude Sonnet",
+    "provider": "anthropic",
+    "timestamp": "2026-01-01T00:00:02Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_started",
+    "response_id": "resp-demo-claude",
+    "model_id": "claude-sonnet",
+    "display_name": "Claude Sonnet",
+    "timestamp": "2026-01-01T00:00:03Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-claude",
+    "model_id": "claude-sonnet",
+    "text": "Profitability provides a stronger foundation in 2026. ",
+    "delta_sequence": 1,
+    "accumulated_chars": 54,
+    "timestamp": "2026-01-01T00:00:04Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-claude",
+    "model_id": "claude-sonnet",
+    "text": "With rising capital costs and AI compute expenses, efficient growth beats growth-at-all-costs. Sustainable unit economics attract better investors and enable compounding advantages.",
+    "delta_sequence": 2,
+    "accumulated_chars": 212,
+    "timestamp": "2026-01-01T00:00:05Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_persisting",
+    "response_id": "resp-demo-claude",
+    "model_id": "claude-sonnet",
+    "timestamp": "2026-01-01T00:00:06Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_completed",
+    "response_id": "resp-demo-claude",
+    "model_id": "claude-sonnet",
+    "display_name": "Claude Sonnet",
+    "timestamp": "2026-01-01T00:00:07Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_connecting",
+    "response_id": "resp-demo-gemini",
+    "model_id": "gemini-2-5-pro",
+    "display_name": "Gemini 2.5 Pro",
+    "provider": "gemini",
+    "timestamp": "2026-01-01T00:00:02Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_started",
+    "response_id": "resp-demo-gemini",
+    "model_id": "gemini-2-5-pro",
+    "display_name": "Gemini 2.5 Pro",
+    "timestamp": "2026-01-01T00:00:03Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-gemini",
+    "model_id": "gemini-2-5-pro",
+    "text": "The answer depends on your market position. ",
+    "delta_sequence": 1,
+    "accumulated_chars": 44,
+    "timestamp": "2026-01-01T00:00:04Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-gemini",
+    "model_id": "gemini-2-5-pro",
+    "text": "If you're in a land-grab market with network effects, grow fast. If you're in an enterprise market with long sales cycles, optimize for retention and margins. Context matters more than ideology.",
+    "delta_sequence": 2,
+    "accumulated_chars": 213,
+    "timestamp": "2026-01-01T00:00:06Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_persisting",
+    "response_id": "resp-demo-gemini",
+    "model_id": "gemini-2-5-pro",
+    "timestamp": "2026-01-01T00:00:07Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_completed",
+    "response_id": "resp-demo-gemini",
+    "model_id": "gemini-2-5-pro",
+    "display_name": "Gemini 2.5 Pro",
+    "timestamp": "2026-01-01T00:00:08Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_connecting",
+    "response_id": "resp-demo-deepseek",
+    "model_id": "deepseek-r1",
+    "display_name": "DeepSeek R1",
+    "provider": "deepseek",
+    "timestamp": "2026-01-01T00:00:03Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_started",
+    "response_id": "resp-demo-deepseek",
+    "model_id": "deepseek-r1",
+    "display_name": "DeepSeek R1",
+    "timestamp": "2026-01-01T00:00:04Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-deepseek",
+    "model_id": "deepseek-r1",
+    "text": "Neither growth nor profitability alone is optimal. ",
+    "delta_sequence": 1,
+    "accumulated_chars": 52,
+    "timestamp": "2026-01-01T00:00:05Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_delta",
+    "response_id": "resp-demo-deepseek",
+    "model_id": "deepseek-r1",
+    "text": "The meta-strategy is efficient growth: pursue growth that improves unit economics over time. Use AI-native tooling to reduce marginal costs. Target markets where growth and profitability are correlated, not opposed.",
+    "delta_sequence": 2,
+    "accumulated_chars": 253,
+    "timestamp": "2026-01-01T00:00:07Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_persisting",
+    "response_id": "resp-demo-deepseek",
+    "model_id": "deepseek-r1",
+    "timestamp": "2026-01-01T00:00:08Z",
+    "payload": {}
+  },
+  {
+    "type": "model_response_completed",
+    "response_id": "resp-demo-deepseek",
+    "model_id": "deepseek-r1",
+    "display_name": "DeepSeek R1",
+    "timestamp": "2026-01-01T00:00:09Z",
+    "payload": {}
+  },
+  {
+    "type": "perspectives_ready",
+    "debate_id": "demo-deterministic-001",
+    "count": 4,
+    "timestamp": "2026-01-01T00:00:10Z",
+    "payload": {}
+  },
+  {
+    "type": "synthesis_started",
+    "debate_id": "demo-deterministic-001",
+    "timestamp": "2026-01-01T00:00:11Z",
+    "payload": {}
+  },
+  {
+    "type": "synthesis_completed",
+    "debate_id": "demo-deterministic-001",
+    "timestamp": "2026-01-01T00:00:14Z",
+    "payload": { "status": "succeeded" }
+  },
+  {
+    "type": "debate_completed",
+    "debate_id": "demo-deterministic-001",
+    "timestamp": "2026-01-01T00:00:15Z",
+    "payload": {
+      "final_answer": "The optimal strategy for a SaaS startup in 2026 is **efficient growth** — pursuing market expansion while improving unit economics over time. GPT-4o argues for prioritizing growth due to winner-take-most dynamics, while Claude Sonnet emphasizes the importance of sustainable unit economics in a high-cost environment. Gemini 2.5 Pro suggests context-dependent strategy, and DeepSeek R1 synthesizes both views into a meta-strategy of growth that improves margins. The consensus: don't choose between growth and profitability — find markets where they reinforce each other.",
+      "model_count": 4,
+      "successful_count": 4
+    }
+  }
+]

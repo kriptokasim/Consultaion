@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
-import { CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp, Loader2, Wifi, WifiOff, Save } from "lucide-react";
 import Image from "next/image";
 
 import { sanitizeMarkdown } from "@/lib/sanitize";
+import type { ModelState } from "@/lib/streaming/types";
 
 /* ─── provider accent colours ─── */
 const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string; accent: string; glow: string }> = {
@@ -220,6 +221,44 @@ export function ErrorCardBody({
     );
 }
 
+/* ─── Streaming state badge ─── */
+function StreamingStateBadge({ state }: { state: ModelState }) {
+    switch (state) {
+        case "queued":
+            return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" /> Queued
+                </span>
+            );
+        case "connecting":
+            return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                    <Wifi className="h-2.5 w-2.5 animate-pulse" /> Connecting
+                </span>
+            );
+        case "streaming":
+            return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" /> Streaming
+                </span>
+            );
+        case "persisting":
+            return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-300">
+                    <Save className="h-2.5 w-2.5" /> Saving
+                </span>
+            );
+        case "failed":
+            return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
+                    <WifiOff className="h-2.5 w-2.5" /> Failed
+                </span>
+            );
+        default:
+            return null;
+    }
+}
+
 /* ─── Model response card ─── */
 interface ModelCardProps {
     resp: ModelResponse;
@@ -275,10 +314,138 @@ export function ModelCard({ resp, className = "", onRetry }: ModelCardProps) {
             ) : (
                 <div className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
                     {resp.content ? (
-                        <div 
+                        <div
                             className="text-sm leading-relaxed text-foreground/90"
                             dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(resp.content) }}
                         />
+                    ) : (
+                        <span className="italic text-muted-foreground">No response received.</span>
+                    )}
+                </div>
+            )}
+        </article>
+    );
+}
+
+/* ─── Streaming model card (FH103) ─── */
+interface StreamingModelCardProps {
+    displayName: string;
+    provider?: string;
+    logoUrl?: string;
+    personaTagline?: string;
+    state: ModelState;
+    accumulatedText: string;
+    errorCode?: string;
+    errorMessage?: string;
+    className?: string;
+    onRetry?: (displayName: string) => Promise<void>;
+}
+
+const BUFFER_FLUSH_INTERVAL_MS = 40;
+
+export function StreamingModelCard({
+    displayName,
+    provider,
+    logoUrl,
+    personaTagline,
+    state,
+    accumulatedText,
+    errorCode,
+    errorMessage,
+    className = "",
+    onRetry,
+}: StreamingModelCardProps) {
+    const colors = getColors(provider);
+    const bodyRef = useRef<HTMLDivElement>(null);
+    const [displayedText, setDisplayedText] = useState("");
+    const lastFlushRef = useRef(0);
+    const animFrameRef = useRef<number>(0);
+
+    // Buffered rendering: flush every BUFFER_FLUSH_INTERVAL_MS
+    useEffect(() => {
+        const now = Date.now();
+        if (now - lastFlushRef.current >= BUFFER_FLUSH_INTERVAL_MS || state === "completed" || state === "failed") {
+            setDisplayedText(accumulatedText);
+            lastFlushRef.current = now;
+        } else {
+            animFrameRef.current = requestAnimationFrame(() => {
+                setDisplayedText(accumulatedText);
+                lastFlushRef.current = Date.now();
+            });
+        }
+        return () => cancelAnimationFrame(animFrameRef.current);
+    }, [accumulatedText, state]);
+
+    // Auto-scroll only when near bottom
+    useEffect(() => {
+        const el = bodyRef.current;
+        if (!el) return;
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        if (nearBottom) {
+            el.scrollTop = el.scrollHeight;
+        }
+    }, [displayedText]);
+
+    const isTerminal = state === "completed" || state === "failed";
+    const isError = state === "failed";
+
+    return (
+        <article
+            className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm hover:shadow-md ${colors.glow} transition-all duration-200 overflow-hidden min-h-[350px] sm:min-h-[400px] ${className}`}
+            aria-label={`Response from ${displayName}`}
+            aria-live="polite"
+            aria-atomic="false"
+        >
+            {/* Card Header */}
+            <div className={`p-4 border-b ${colors.border} flex items-center gap-3`}>
+                <div className={`shrink-0 rounded-xl ${colors.accent} p-2`}>
+                    <ModelLogo logoUrl={logoUrl} displayName={displayName} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                        <p className={`font-semibold text-sm truncate ${colors.text}`}>
+                            {displayName}
+                        </p>
+                        <StreamingStateBadge state={state} />
+                    </div>
+                    {personaTagline && (
+                        <p className="text-xs text-muted-foreground truncate">{personaTagline}</p>
+                    )}
+                </div>
+            </div>
+
+            {/* Card Body */}
+            {isError ? (
+                <ErrorCardBody
+                    friendly={errorMessage || "This model failed to respond."}
+                    technical={errorCode || null}
+                    displayName={displayName}
+                    onRetry={onRetry ? () => onRetry(displayName) : undefined}
+                />
+            ) : (
+                <div
+                    ref={bodyRef}
+                    className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar"
+                >
+                    {displayedText ? (
+                        isTerminal ? (
+                            // Rendered markdown after completion
+                            <div
+                                className="text-sm leading-relaxed text-foreground/90"
+                                dangerouslySetInnerHTML={{ __html: sanitizeMarkdown(displayedText) }}
+                            />
+                        ) : (
+                            // Plain text during streaming
+                            <pre className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap font-sans">
+                                {displayedText}
+                                <span className="inline-block h-4 w-0.5 bg-foreground/40 animate-pulse ml-0.5 align-middle" />
+                            </pre>
+                        )
+                    ) : state === "queued" || state === "connecting" ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Waiting for model...</span>
+                        </div>
                     ) : (
                         <span className="italic text-muted-foreground">No response received.</span>
                     )}

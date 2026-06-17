@@ -166,12 +166,37 @@ async def route_llm_call(
         available_direct_models = [request.model_id]
 
     last_error = None
+    last_error_code = None
     fallback_used = False
     fallback_reason = None
     retry_count = 0
     successful_result = None
 
-    for idx, model_to_call in enumerate(available_direct_models):
+    # Filter out models with open circuits
+    from model_gateway.provider_health import is_circuit_open, record_success, record_failure
+    filtered_direct_models = []
+    for m in available_direct_models:
+        # Resolve provider
+        provider = "unknown"
+        if m in MODEL_MAP:
+            provider = MODEL_MAP[m]["provider"]
+        elif "-" in m:
+            provider = m.split("-")[0]
+            
+        if is_circuit_open(provider):
+            last_error = f"Circuit open for provider: {provider}"
+            last_error_code = "no_healthy_provider_route"
+        else:
+            filtered_direct_models.append(m)
+
+    for idx, model_to_call in enumerate(filtered_direct_models):
+        # Resolve provider
+        provider = "unknown"
+        if model_to_call in MODEL_MAP:
+            provider = MODEL_MAP[model_to_call]["provider"]
+        elif "-" in model_to_call:
+            provider = model_to_call.split("-")[0]
+
         try:
             adapter = DirectProviderAdapter()
             result = await adapter.call_llm(
@@ -189,49 +214,69 @@ async def route_llm_call(
             )
             if result.success:
                 successful_result = result
+                record_success(provider)
                 # If we had to switch to an alternative model in the same pool, mark it
                 if model_to_call != request.model_id:
                     successful_result.fallback_used = True
                     successful_result.fallback_reason = f"Primary model {request.model_id} failed. Switched to alternative {model_to_call} in same pool."
                 break
+            else:
+                last_error = result.error_message
+                last_error_code = result.error_code
+                record_failure(provider, result.error_code or "unknown", result.error_message or "")
+                retry_count += 1
         except Exception as e:
             logger.warning(f"Direct provider call failed for {model_to_call}: {e}")
-            last_error = e
+            last_error = str(e)
+            last_error_code = "unknown"
+            record_failure(provider, "unknown", str(e))
             retry_count += 1
 
     # Check if we should fall back to OpenRouter
     if not successful_result and (request.gateway_policy in ("auto", "fallback")):
         if is_provider_available("openrouter"):
-            logger.warning(
-                f"All direct provider routes failed. Last error: {last_error}. "
-                "Triggering OpenRouter Fallback Route..."
-            )
-            fallback_used = True
-            fallback_reason = f"All direct models failed. Last error: {last_error}"
-            
-            try:
-                fallback_adapter = OpenRouterAdapter()
-                result = await fallback_adapter.call_llm(
-                    messages=request.messages,
-                    model_id="openrouter_fallback",
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                    gateway_policy=request.gateway_policy,
-                    model_pool=model_pool,
-                    routing_policy=routing_policy + "-fallback",
-                    user_id=request.user_id,
-                    response_format=request.response_format,
-                    tools=request.tools,
-                    tool_choice=request.tool_choice,
+            if is_circuit_open("openrouter"):
+                last_error = "OpenRouter circuit is open. Fallback route bypassed."
+                last_error_code = "no_healthy_provider_route"
+            else:
+                logger.warning(
+                    f"All direct provider routes failed. Last error: {last_error}. "
+                    "Triggering OpenRouter Fallback Route..."
                 )
-                if result.success:
-                    successful_result = result
-                    successful_result.fallback_used = True
-                    successful_result.fallback_reason = fallback_reason
-                    successful_result.retry_count = retry_count
-            except Exception as fallback_error:
-                logger.error(f"Fallback model gateway route also failed: {fallback_error}")
-                last_error = f"Direct failed ({last_error}) and Fallback failed ({fallback_error})"
+                fallback_used = True
+                fallback_reason = f"All direct models failed. Last error: {last_error}"
+                
+                try:
+                    fallback_adapter = OpenRouterAdapter()
+                    result = await fallback_adapter.call_llm(
+                        messages=request.messages,
+                        model_id="openrouter_fallback",
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                        gateway_policy=request.gateway_policy,
+                        model_pool=model_pool,
+                        routing_policy=routing_policy + "-fallback",
+                        user_id=request.user_id,
+                        response_format=request.response_format,
+                        tools=request.tools,
+                        tool_choice=request.tool_choice,
+                    )
+                    if result.success:
+                        successful_result = result
+                        successful_result.fallback_used = True
+                        successful_result.fallback_reason = fallback_reason
+                        successful_result.retry_count = retry_count
+                        record_success("openrouter")
+                    else:
+                        last_error = result.error_message
+                        last_error_code = result.error_code
+                        record_failure("openrouter", result.error_code or "unknown", result.error_message or "")
+                        last_error_reason = f"Direct failed ({last_error}) and Fallback failed ({result.error_message})"
+                except Exception as fallback_error:
+                    logger.error(f"Fallback model gateway route also failed: {fallback_error}")
+                    last_error = f"Direct failed ({last_error}) and Fallback failed ({fallback_error})"
+                    last_error_code = "unknown"
+                    record_failure("openrouter", "unknown", str(fallback_error))
 
     # Handle completion or friendly error
     if successful_result:
@@ -241,13 +286,14 @@ async def route_llm_call(
     else:
         # All failed - friendly error
         logger.error(f"Model gateway call failed. Internal details: {last_error}")
-        friendly_error_message = "The model service is temporarily unavailable. Please try again later."
+        friendly_error_message = last_error or "The model service is temporarily unavailable. Please try again later."
         result = GatewayModelCallResult(
             content="",
             model_used=request.model_id,
             provider="failed",
             success=False,
             error_message=friendly_error_message,
+            error_code=last_error_code or "unknown",
             model_pool=model_pool,
             routing_policy=routing_policy,
             fallback_used=True if fallback_used else False,
@@ -257,3 +303,64 @@ async def route_llm_call(
         )
         log_gateway_call_metrics(result, user_id=request.user_id)
         return result
+
+
+async def route_llm_stream(
+    *,
+    messages: list[dict[str, str]],
+    model_id: str,
+    temperature: float = 0.7,
+    max_tokens: int = 1200,
+    on_delta=None,
+    debate_id: str | None = None,
+) -> GatewayModelCallResult:
+    """Stream LLM tokens via the gateway, calling on_delta for each chunk.
+
+    Simpler than route_llm_call — no quota checks, no fallback chains.
+    Used by the arena streaming path (FH101/FH102).
+    """
+    from model_gateway.types import OnDeltaCallback
+    from model_gateway.provider_health import is_circuit_open
+
+    export_api_keys()
+
+    adapter_cls: type = DirectProviderAdapter
+    provider = "direct"
+
+    from model_gateway.model_map import MODEL_MAP
+    if model_id in MODEL_MAP:
+        provider = MODEL_MAP[model_id]["provider"]
+    elif model_id.startswith("openrouter/"):
+        adapter_cls = OpenRouterAdapter
+        provider = "openrouter"
+
+    if is_circuit_open(provider):
+        return GatewayModelCallResult(
+            content="",
+            model_used=model_id,
+            provider=provider,
+            success=False,
+            error_message=f"Provider {provider} circuit is open.",
+            error_code="no_healthy_provider_route",
+            model_pool="default",
+            routing_policy="stream",
+        )
+
+    adapter = adapter_cls()
+    result = await adapter.stream_llm(
+        messages=messages,
+        model_id=model_id,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        gateway_policy="auto",
+        model_pool="default",
+        routing_policy="stream",
+        on_delta=on_delta or (lambda d: None),
+    )
+
+    if result.success:
+        record_success(provider)
+    else:
+        record_failure(provider, result.error_code or "unknown", result.error_message or "")
+
+    return result

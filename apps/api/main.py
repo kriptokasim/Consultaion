@@ -1,5 +1,6 @@
 import asyncio
 import logging.config
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
@@ -247,6 +248,18 @@ async def lifespan(app: FastAPI):
         settings.COOKIE_DOMAIN,
         settings.CORS_ORIGINS,
     )
+    # Startup fingerprint: provider key presence (booleans only, no secrets)
+    logger.info(
+        "Startup fingerprint: git_sha=%s providers={openai=%s anthropic=%s gemini=%s "
+        "openrouter=%s groq=%s mistral=%s}",
+        os.environ.get("GIT_SHA", "unknown"),
+        bool(settings.OPENAI_API_KEY),
+        bool(settings.ANTHROPIC_API_KEY),
+        bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY),
+        bool(settings.OPENROUTER_API_KEY),
+        bool(settings.GROQ_API_KEY),
+        bool(settings.MISTRAL_API_KEY),
+    )
 
     try:
         ensure_rate_limiter_ready(raise_on_failure=settings.RATE_LIMIT_BACKEND == "redis")
@@ -281,6 +294,14 @@ async def lifespan(app: FastAPI):
             with suppress(asyncio.CancelledError):
                 await cleanup_task
         await sse_backend.stop()
+
+        # FH106: Close shared HTTP client pool
+        try:
+            from model_gateway.http_clients import close_all_clients
+            await close_all_clients()
+            logger.info("Shared HTTP clients closed during lifespan shutdown.")
+        except Exception as exc:
+            logger.warning("Error closing shared HTTP clients: %s", exc)
 
         # Centralized Redis connection pool shutdown
         try:

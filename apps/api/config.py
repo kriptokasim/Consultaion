@@ -163,6 +163,12 @@ class AppSettings(BaseSettings):
     DEBATE_MAX_SEAT_FAIL_RATIO: float = Field(0.4, ge=0.0, le=1.0)
     DEBATE_MIN_REQUIRED_SEATS: int = Field(1, ge=0)
     DEBATE_FAIL_FAST: bool = Field(True, description="Abort debates when too many seats fail.")
+    MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS: int = Field(1, ge=1, description="Minimum successful model responses required to proceed with synthesis.")
+
+    # FH107: Stage-specific max_tokens limits
+    ARENA_MAX_TOKENS: int = Field(1200, ge=100, description="Max tokens per arena model response")
+    SYNTHESIS_MAX_TOKENS: int = Field(2000, ge=100, description="Max tokens for synthesis step")
+    STREAMING_RESPONSES_ENABLED: bool = Field(False, description="Enable streaming deltas via SSE (FH101/FH102)")
 
     # Patchset 66.0: Stale debate cleanup settings
     DEBATE_STALE_RUNNING_SECONDS: int = Field(3600, description="Max seconds a debate can stay 'running' before cleanup")
@@ -176,13 +182,16 @@ class AppSettings(BaseSettings):
     PROVIDER_HEALTH_MIN_CALLS: int = Field(10, ge=0, description="Minimum calls before circuit can open")
     PROVIDER_HEALTH_COOLDOWN_SECONDS: int = Field(60, ge=0, description="How long to keep circuit open (seconds)")
 
-    # Celery queues (Patchset 28.0)
+    # Celery queues (Patchset 28.0 + FH105 interactive fast lane)
     DEBATE_DISPATCH_MODE: Literal["inline", "celery"] = "inline"
-    DEBATE_FAST_QUEUE_NAME: str = "debates_fast"
-    DEBATE_DEEP_QUEUE_NAME: str = "debates_deep"
-    DEBATE_DEFAULT_QUEUE: str = "debates_fast"
+    DEBATE_FAST_QUEUE_NAME: str = "interactive"
+    DEBATE_DEEP_QUEUE_NAME: str = "default"
+    DEBATE_DEFAULT_QUEUE: str = "interactive"
     CELERY_BROKER_URL: str | None = None
     CELERY_RESULT_BACKEND: str | None = None
+    CELERY_INTERACTIVE_QUEUE: str = "interactive"
+    CELERY_INTERACTIVE_CONCURRENCY: int = Field(4, ge=1, description="Max concurrent interactive worker processes")
+    CELERY_INTERACTIVE_PREFETCH: int = Field(1, ge=0, description="Prefetch count for interactive queue")
 
     # Patchset 53.0: Auth Debug Mode
     AUTH_DEBUG: bool = Field(False, description="Enable verbose auth logging & debug endpoint")

@@ -8,13 +8,16 @@ from dataclasses import dataclass, field
 from typing import Any, List
 
 from agents import UsageAccumulator, call_llm_for_role
-from arena.prompts import ARENA_MODEL_SYSTEM_PROMPT, ARENA_SYNTHESIS_PROMPT
+from arena.prompts import ARENA_MODEL_SYSTEM_PROMPT, ARENA_SYNTHESIS_PROMPT, get_compiled_model_prompt
 from database_async import async_session_scope
 from models import Debate, Message
 from parliament.model_registry import get_arena_models
 from sse_backend import get_sse_backend
+from streaming_types import StreamEventType, build_envelope, ModelResponseDelta
 
 logger = logging.getLogger(__name__)
+
+MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
 
 
 @dataclass
@@ -28,6 +31,70 @@ class ArenaModelResponse:
     logo_url: str | None = None
     persona_type: str | None = None
     persona_tagline: str | None = None
+    error: str | None = None
+    error_code: str | None = None
+
+
+async def persist_and_publish_arena_response(
+    session,
+    backend,
+    debate_id: str,
+    response: ArenaModelResponse,
+) -> None:
+    """Persist the arena model response to the database with idempotency check, and stream it to SSE."""
+    from sqlmodel import select
+    # 1. Idempotency check: load existing messages for this debate and role 'arena_response'
+    stmt = select(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_response")
+    res = await session.execute(stmt)
+    existing_messages = res.scalars().all()
+    
+    already_exists = False
+    for msg in existing_messages:
+        if msg.meta and msg.meta.get("model_id") == response.model_id:
+            already_exists = True
+            break
+            
+    if not already_exists:
+        session.add(
+            Message(
+                debate_id=debate_id,
+                round_index=1,
+                role="arena_response",
+                persona=response.display_name,
+                content=response.content,
+                meta={
+                    "model_id": response.model_id,
+                    "provider": response.provider,
+                    "mode": "arena",
+                    "logo_url": response.logo_url,
+                    "persona_type": response.persona_type,
+                    "persona_tagline": response.persona_tagline,
+                    "success": response.success,
+                    "error": response.error or (None if response.success else "Model failed to respond"),
+                    "error_code": response.error_code,
+                },
+            )
+        )
+        await session.commit()
+    
+    # 2. Publish to SSE
+    await backend.publish(
+        f"debate:{debate_id}",
+        {
+            "type": "arena_response",
+            "debate_id": str(debate_id),
+            "model_id": response.model_id,
+            "display_name": response.display_name,
+            "provider": response.provider,
+            "content": response.content,
+            "logo_url": response.logo_url,
+            "persona_type": response.persona_type,
+            "persona_tagline": response.persona_tagline,
+            "success": response.success,
+            "error": response.error or (None if response.success else "Model failed to respond"),
+            "error_code": response.error_code,
+        },
+    )
 
 
 @dataclass
@@ -94,6 +161,8 @@ async def run_arena(
                 logo_url=msg.meta.get("logo_url") if msg.meta else None,
                 persona_type=msg.meta.get("persona_type") if msg.meta else None,
                 persona_tagline=msg.meta.get("persona_tagline") if msg.meta else None,
+                error=msg.meta.get("error") if msg.meta else None,
+                error_code=msg.meta.get("error_code") if msg.meta else None,
             )
             for msg in existing
         ]
@@ -125,23 +194,120 @@ async def run_arena(
             locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
 
         async def _call_model(model_info):
-            """Call a single SOTA model and return its response."""
-            system_prompt = ARENA_MODEL_SYSTEM_PROMPT.format(
+            """Call a single SOTA model and return its response.
+
+            Uses streaming when available: publishes model_response_delta events
+            via SSE as tokens arrive, then persists the final response.
+            """
+            from config import settings as _settings
+            stream_enabled = getattr(_settings, "STREAMING_RESPONSES_ENABLED", False)
+
+            system_prompt = get_compiled_model_prompt(
                 model_display_name=model_info.display_name,
                 provider_name=model_info.provider.capitalize(),
-            ) + locale_instruction
+                locale=locale,
+            )
 
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ]
 
+            response_id = f"resp-{debate_id}-{model_info.id}"
+
+            if stream_enabled:
+                # Streaming path: publish deltas via SSE
+                seq_counter = {"seq": 0}
+
+                async def on_delta(delta):
+                    seq_counter["seq"] += 1
+                    await backend.publish(
+                        f"debate:{debate_id}",
+                        {
+                            "type": "model_response_delta",
+                            "response_id": response_id,
+                            "model_id": model_info.id,
+                            "display_name": model_info.display_name,
+                            "text": delta.text,
+                            "delta_sequence": delta.sequence,
+                            "accumulated_chars": delta.accumulated_chars,
+                        },
+                    )
+
+                try:
+                    await backend.publish(
+                        f"debate:{debate_id}",
+                        {
+                            "type": "model_response_connecting",
+                            "response_id": response_id,
+                            "model_id": model_info.id,
+                            "display_name": model_info.display_name,
+                        },
+                    )
+                    await backend.publish(
+                        f"debate:{debate_id}",
+                        {
+                            "type": "model_response_started",
+                            "response_id": response_id,
+                            "model_id": model_info.id,
+                            "display_name": model_info.display_name,
+                        },
+                    )
+
+                    from model_gateway import route_llm_stream
+                    arena_max = getattr(_settings, "ARENA_MAX_TOKENS", 1200)
+                    result = await route_llm_stream(
+                        messages=messages,
+                        model_id=model_info.litellm_model or model_info.id,
+                        temperature=0.7,
+                        max_tokens=arena_max,
+                        on_delta=on_delta,
+                        debate_id=debate_id,
+                    )
+
+                    await backend.publish(
+                        f"debate:{debate_id}",
+                        {
+                            "type": "model_response_persisting",
+                            "response_id": response_id,
+                            "model_id": model_info.id,
+                        },
+                    )
+
+                    if result.success:
+                        return ArenaModelResponse(
+                            model_id=model_info.id,
+                            display_name=model_info.display_name,
+                            provider=model_info.provider,
+                            content=result.content,
+                            success=True,
+                            logo_url=model_info.logo_url,
+                            persona_type=model_info.persona_type,
+                            persona_tagline=model_info.persona_tagline,
+                        ), None
+                    else:
+                        raise Exception(result.error_message or "Stream call failed")
+                except Exception as e:
+                    await backend.publish(
+                        f"debate:{debate_id}",
+                        {
+                            "type": "model_response_failed",
+                            "response_id": response_id,
+                            "model_id": model_info.id,
+                            "display_name": model_info.display_name,
+                            "error": str(e)[:200],
+                        },
+                    )
+                    raise
+
+            # Non-streaming fallback
             try:
+                arena_max = getattr(settings, "ARENA_MAX_TOKENS", 1200)
                 content, call_usage = await call_llm_for_role(
                     messages,
                     role=f"Arena:{model_info.display_name}",
                     temperature=0.7,
-                    max_tokens=1200,
+                    max_tokens=arena_max,
                     model_override=model_info.litellm_model,
                     debate_id=debate_id,
                     extra_tags={"mode": "arena", "arena_model": model_info.id},
@@ -158,15 +324,38 @@ async def run_arena(
                 ), call_usage
             except Exception as e:
                 logger.error(f"Arena model {model_info.id} failed: {e}")
+                err_code = "unknown"
+                if hasattr(e, "error_code"):
+                    err_code = e.error_code
+
+                from llm_errors import classify_provider_exception, ProviderFailureCode
+                classified_code = classify_provider_exception(e)
+                if classified_code:
+                    err_code = classified_code.value
+
+                friendly_message = f"⚠️ This model failed to respond: {e}"
+                if err_code == ProviderFailureCode.INVALID_CREDENTIALS.value:
+                    friendly_message = "⚠️ This model provider configuration is invalid (invalid credentials)."
+                elif err_code == ProviderFailureCode.INSUFFICIENT_BALANCE.value:
+                    friendly_message = "⚠️ This model provider has run out of credits."
+                elif err_code == ProviderFailureCode.RATE_LIMIT_EXCEEDED.value:
+                    friendly_message = "⚠️ Rate limit exceeded for this model provider. Please try again in 1 minute."
+                elif err_code == ProviderFailureCode.MODEL_TIMEOUT.value:
+                    friendly_message = "⚠️ The model provider request timed out."
+                elif err_code == ProviderFailureCode.API_ERROR.value:
+                    friendly_message = "⚠️ The model provider API returned an error."
+
                 return ArenaModelResponse(
                     model_id=model_info.id,
                     display_name=model_info.display_name,
                     provider=model_info.provider,
-                    content=f"⚠️ This model failed to respond: {e}",
+                    content=friendly_message,
                     success=False,
                     logo_url=model_info.logo_url,
                     persona_type=model_info.persona_type,
                     persona_tagline=model_info.persona_tagline,
+                    error=str(e),
+                    error_code=err_code,
                 ), None
 
         # Fan-out: call all models in parallel
@@ -181,15 +370,40 @@ async def run_arena(
             if isinstance(result, Exception):
                 logger.error(f"Arena model task exception: {result}")
                 model_info = arena_models[i]
+                
+                err_code = "unknown"
+                from llm_errors import classify_provider_exception, ProviderFailureCode
+                classified_code = classify_provider_exception(result)
+                if classified_code:
+                    err_code = classified_code.value
+                    
+                friendly_message = f"⚠️ This model encountered an error: {result}"
+                if err_code == ProviderFailureCode.INVALID_CREDENTIALS.value:
+                    friendly_message = "⚠️ This model provider configuration is invalid (invalid credentials)."
+                elif err_code == ProviderFailureCode.INSUFFICIENT_BALANCE.value:
+                    friendly_message = "⚠️ This model provider has run out of credits."
+                elif err_code == ProviderFailureCode.RATE_LIMIT_EXCEEDED.value:
+                    friendly_message = "⚠️ Rate limit exceeded for this model provider. Please try again in 1 minute."
+                elif err_code == ProviderFailureCode.MODEL_TIMEOUT.value:
+                    friendly_message = "⚠️ The model provider request timed out."
+                elif err_code == ProviderFailureCode.API_ERROR.value:
+                    friendly_message = "⚠️ The model provider API returned an error."
+
                 response = ArenaModelResponse(
                     model_id=model_info.id,
                     display_name=model_info.display_name,
                     provider=model_info.provider,
-                    content=f"⚠️ This model encountered an error.",
+                    content=friendly_message,
                     success=False,
                     logo_url=model_info.logo_url,
+                    persona_type=model_info.persona_type,
+                    persona_tagline=model_info.persona_tagline,
+                    error=str(result),
+                    error_code=err_code,
                 )
                 responses.append(response)
+                async with async_session_scope() as session:
+                    await persist_and_publish_arena_response(session, backend, debate_id, response)
                 continue
 
             response, call_usage = result
@@ -198,44 +412,8 @@ async def run_arena(
             if call_usage:
                 usage.add_call(call_usage)
 
-            # Persist message
             async with async_session_scope() as session:
-                session.add(
-                    Message(
-                        debate_id=debate_id,
-                        round_index=1,
-                        role="arena_response",
-                        persona=response.display_name,
-                        content=response.content,
-                        meta={
-                            "model_id": response.model_id,
-                            "provider": response.provider,
-                            "mode": "arena",
-                            "logo_url": response.logo_url,
-                            "persona_type": response.persona_type,
-                            "persona_tagline": response.persona_tagline,
-                            "success": response.success,
-                        },
-                    )
-                )
-                await session.commit()
-
-            # Stream response event
-            await backend.publish(
-                f"debate:{debate_id}",
-                {
-                    "type": "arena_response",
-                    "debate_id": str(debate_id),
-                    "model_id": response.model_id,
-                    "display_name": response.display_name,
-                    "provider": response.provider,
-                    "content": response.content,
-                    "logo_url": response.logo_url,
-                    "persona_type": response.persona_type,
-                    "persona_tagline": response.persona_tagline,
-                    "success": response.success,
-                },
-            )
+                await persist_and_publish_arena_response(session, backend, debate_id, response)
         return responses
 
     from orchestration.checkpoints import run_with_checkpoint
@@ -247,9 +425,18 @@ async def run_arena(
         load_perspectives_fn
     )
 
-    # Check if we have any successful responses
+    # Check if we have enough successful responses for synthesis
     successful = [r for r in model_responses if r.success]
-    if not successful:
+    min_required = getattr(settings, "MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS", MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS)
+    if len(successful) < min_required:
+        await backend.publish(
+            f"debate:{debate_id}",
+            {
+                "type": "debate_failed",
+                "debate_id": str(debate_id),
+                "reason": "all_models_failed",
+            },
+        )
         return ArenaResult(
             final_answer="All models failed to respond. Please try again.",
             final_meta={"mode": "arena", "error": "all_models_failed"},
@@ -483,11 +670,17 @@ async def _synthesize_verdict(
         return report.executive_summary or report.title, report.model_dump(), meta_updates
     except StructuredSynthesisError as e:
         logger.error(f"Arena synthesis failed with StructuredSynthesisError: {e}")
-        fallback_model_name = f"{model_responses[0].display_name} ({model_responses[0].provider.capitalize() if model_responses[0].provider else ''})"
-        fallback_content = (
-            f"⚠️ Synthesis unavailable. Here is the top response:\n\n"
-            f"**{model_responses[0].display_name}:**\n{model_responses[0].content}"
-        )
+        successful_responses = [r for r in model_responses if r.success]
+        if successful_responses:
+            fallback_resp = successful_responses[0]
+            fallback_model_name = f"{fallback_resp.display_name} ({fallback_resp.provider.capitalize() if fallback_resp.provider else ''})"
+            fallback_content = (
+                f"⚠️ Synthesis unavailable. Here is the top response:\n\n"
+                f"**{fallback_resp.display_name}:**\n{fallback_resp.content}"
+            )
+        else:
+            fallback_model_name = "Synthesizer"
+            fallback_content = "⚠️ Synthesis unavailable. All model calls failed."
         meta_updates = {
             "synthesis_status": "failed",
             "synthesis_error": sanitize_synthesis_error(str(e)),
@@ -495,7 +688,7 @@ async def _synthesize_verdict(
             "fallback_reason": "Top model response shown because structured synthesis failed",
             "fallback_response": {
                 "model": fallback_model_name,
-                "content": model_responses[0].content,
+                "content": fallback_content,
             },
             "semantic_analysis": e.semantic_analysis,
             "divergence_breakdown": e.semantic_analysis,
@@ -503,11 +696,17 @@ async def _synthesize_verdict(
         return fallback_content, None, meta_updates
     except Exception as e:
         logger.error(f"Arena synthesis failed with general exception: {e}")
-        fallback_model_name = f"{model_responses[0].display_name} ({model_responses[0].provider.capitalize() if model_responses[0].provider else ''})"
-        fallback_content = (
-            f"⚠️ Synthesis unavailable. Here is the top response:\n\n"
-            f"**{model_responses[0].display_name}:**\n{model_responses[0].content}"
-        )
+        successful_responses = [r for r in model_responses if r.success]
+        if successful_responses:
+            fallback_resp = successful_responses[0]
+            fallback_model_name = f"{fallback_resp.display_name} ({fallback_resp.provider.capitalize() if fallback_resp.provider else ''})"
+            fallback_content = (
+                f"⚠️ Synthesis unavailable. Here is the top response:\n\n"
+                f"**{fallback_resp.display_name}:**\n{fallback_resp.content}"
+            )
+        else:
+            fallback_model_name = "Synthesizer"
+            fallback_content = "⚠️ Synthesis unavailable. All model calls failed."
         meta_updates = {
             "synthesis_status": "failed",
             "synthesis_error": sanitize_synthesis_error(str(e)),
@@ -515,7 +714,7 @@ async def _synthesize_verdict(
             "fallback_reason": "Top model response shown because structured synthesis failed",
             "fallback_response": {
                 "model": fallback_model_name,
-                "content": model_responses[0].content,
+                "content": fallback_content,
             },
             "semantic_analysis": None,
             "divergence_breakdown": None,

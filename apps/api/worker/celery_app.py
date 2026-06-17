@@ -1,6 +1,16 @@
 from __future__ import annotations
 
+import json
+import logging
+import os
+import time
+
 from config import settings
+
+logger = logging.getLogger(__name__)
+
+_GIT_SHA = os.environ.get("GIT_SHA", "unknown")
+_WORKER_ID = os.environ.get("CELERY_WORKER_HOSTNAME", os.environ.get("HOSTNAME", "unknown"))
 
 try:
     from celery import Celery
@@ -56,6 +66,36 @@ celery_app = Celery(
     backend=result_backend,
 )
 
+
+def _write_worker_heartbeat():
+    """Write worker heartbeat to Redis for ops visibility."""
+    try:
+        from redis_pool import get_sync_redis_client
+        redis_client = get_sync_redis_client()
+        if not redis_client:
+            return
+        heartbeat = {
+            "timestamp": time.time(),
+            "git_sha": _GIT_SHA,
+            "worker_id": _WORKER_ID,
+            "providers": {
+                "openai": bool(settings.OPENAI_API_KEY),
+                "anthropic": bool(settings.ANTHROPIC_API_KEY),
+                "gemini": bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY),
+                "openrouter": bool(settings.OPENROUTER_API_KEY),
+                "groq": bool(settings.GROQ_API_KEY),
+                "mistral": bool(settings.MISTRAL_API_KEY),
+            },
+        }
+        redis_client.set(
+            f"worker:heartbeat:{_WORKER_ID}",
+            json.dumps(heartbeat),
+            ex=120,
+        )
+    except Exception as e:
+        logger.warning("Failed to write worker heartbeat: %s", e)
+
+
 if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
     beat_schedule = {}
     if crontab is not None:
@@ -68,6 +108,10 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
                 "task": "billing.reconcile_current_period",
                 "schedule": crontab(hour=4, minute=0, day_of_month=1),
             },
+            "worker-heartbeat": {
+                "task": "worker.heartbeat_tick",
+                "schedule": 30.0,
+            },
         }
     else:
         beat_schedule = {
@@ -79,6 +123,10 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
                 "task": "billing.reconcile_current_period",
                 "schedule": {"day_of_month": 1, "hour": 4, "minute": 0},
             },
+            "worker-heartbeat": {
+                "task": "worker.heartbeat_tick",
+                "schedule": 30.0,
+            },
         }
 
     celery_app.conf.update(
@@ -89,4 +137,23 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
         enable_utc=True,
         task_track_started=True,
         beat_schedule=beat_schedule,
+        # FH105: Three-queue routing
+        task_routes={
+            "arena.*": {"queue": "interactive"},
+            "debate.*": {"queue": "interactive"},
+            "voting.*": {"queue": "interactive"},
+            "billing.*": {"queue": "maintenance"},
+            "maintenance.*": {"queue": "maintenance"},
+        },
+        task_default_queue="default",
     )
+
+
+# Register heartbeat task
+if hasattr(celery_app, "task"):
+    @celery_app.task(name="worker.heartbeat_tick", bind=False)
+    def heartbeat_tick():
+        _write_worker_heartbeat()
+
+# Write initial heartbeat on import
+_write_worker_heartbeat()
