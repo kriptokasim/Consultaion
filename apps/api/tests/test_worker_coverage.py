@@ -5,7 +5,7 @@ from models import Debate
 from worker.debate_tasks import _execute_debate_run, run_debate_task
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_execute_debate_run_success():
     debate_id = "test-debate-id"
     
@@ -31,7 +31,7 @@ async def test_execute_debate_run_success():
         mock_backend.create_channel.assert_called()
         mock_run_debate.assert_called_with(debate_id, "Test prompt", f"debate:{debate_id}", {}, "gpt-4", trace_id=None, is_resume=False, continuation_id=None)
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_execute_debate_run_not_found():
     debate_id = "test-debate-id"
     

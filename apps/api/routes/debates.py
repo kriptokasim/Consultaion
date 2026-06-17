@@ -1633,6 +1633,24 @@ async def stream_events(
     require_debate_access(session.get(Debate, debate_id), user, session)
     channel_id = debate_channel_id(debate_id)
     await sse_backend.create_channel(channel_id)
+
+    # FH125: Resolve reconnect cursor BEFORE any code reads it.
+    # Precedence: query parameter → Last-Event-ID header → None
+    last_seq_val: int | None = last_sequence
+    if last_seq_val is None:
+        last_event_id = request.headers.get("last-event-id")
+        if last_event_id:
+            try:
+                last_seq_val = int(last_event_id)
+            except (TypeError, ValueError):
+                track_metric("sse_invalid_last_event_id")
+                last_seq_val = None
+
+    # FH125: Reject negative sequence values
+    if last_seq_val is not None and last_seq_val < 0:
+        last_seq_val = None
+
+    # Record metrics after cursor is resolved
     track_metric("sse_stream_open")
     if last_seq_val is not None:
         from observability.metrics import record_sse_reconnect
@@ -1651,14 +1669,6 @@ async def stream_events(
             headers={"Retry-After": "30"},
         )
 
-    # Determine last sequence from query param or Last-Event-ID header
-    last_seq_val = last_sequence
-    if last_seq_val is None and "last-event-id" in request.headers:
-        try:
-            last_seq_val = int(request.headers["last-event-id"])
-        except ValueError:
-            pass
-
     async def eventgen():
         try:
             async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
@@ -1672,6 +1682,9 @@ async def stream_events(
                 payload_type = payload.get("type") if isinstance(payload, dict) else None
                 if evt_type == "final" or payload_type == "final":
                     break
+        except asyncio.CancelledError:
+            # FH126: Do not swallow cancellation — let it propagate after cleanup
+            raise
         finally:
             await lease_mgr.release(debate_id, subscriber_id)
             logger.debug("Released stream lease: debate=%s subscriber=%s", debate_id, subscriber_id)

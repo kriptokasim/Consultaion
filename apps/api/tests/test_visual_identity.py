@@ -5,7 +5,7 @@ from models import User
 from routes.auth import _profile_payload
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_giphy_disabled():
     with patch("integrations.giphy.settings") as mock_settings:
         mock_settings.giphy.enable_giphy = False

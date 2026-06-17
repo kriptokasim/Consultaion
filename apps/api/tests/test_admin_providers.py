@@ -27,7 +27,7 @@ def test_admin_providers_health(authenticated_client, db_session: Session):
     assert "openai" in data["providers"]
     assert "status" in data["providers"]["openai"]
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_admin_test_provider_missing_key(authenticated_client, db_session: Session):
     _setup_admin(db_session, authenticated_client)
     
@@ -38,7 +38,7 @@ async def test_admin_test_provider_missing_key(authenticated_client, db_session:
         assert data["success"] is False
         assert "API key is not configured" in data["error"]
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_admin_test_provider_success(authenticated_client, db_session: Session):
     _setup_admin(db_session, authenticated_client)
     

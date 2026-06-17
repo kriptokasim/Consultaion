@@ -280,3 +280,9 @@ def authenticated_client(client, db_session):
     access_token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     client.cookies.set(COOKIE_NAME, access_token)
     return client
+
+
+@pytest.fixture
+def anyio_backend():
+    """Canonical backend for all anyio-marked tests."""
+    return "asyncio"

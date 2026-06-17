@@ -23,7 +23,7 @@ def test_validate_user_access():
     with pytest.raises(GatewayModelRestrictedError):
         validate_user_access_to_model("gpt4o-deep", "free")
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_credit_and_cost_safety():
     # Inside cap -> ok
     await check_credit_and_cost_safety(user_id="test-user", user_plan="free", estimated_cost_usd=0.01)
@@ -57,7 +57,7 @@ def test_determine_routing_strategy():
     assert adapter_cls == DirectProviderAdapter
     assert policy == "direct-smart-pro"
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_route_llm_call_success():
     req = GatewayRequest(
         messages=[{"role": "user", "content": "hello"}],
@@ -72,7 +72,7 @@ async def test_route_llm_call_success():
     assert "[Mock response from mimo-v2-free]" in res.content
     assert res.model_pool == "free_hosted_pool"
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_route_llm_call_fallback_loop():
     req = GatewayRequest(
         messages=[{"role": "user", "content": "hello"}],

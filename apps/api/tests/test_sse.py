@@ -101,6 +101,7 @@ async def test_stream_events_uses_backend():
             debate_id, 
             request=mock_request,
             token=token,
+            last_sequence=None,
             session=session, 
             sse_backend=backend
         )

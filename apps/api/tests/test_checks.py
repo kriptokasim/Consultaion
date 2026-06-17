@@ -40,7 +40,7 @@ def test_check_db_readiness_failure(monkeypatch):
         assert ok is False
         assert "DB Down" in details["error"]
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_check_sse_readiness_success():
     # uses get_sse_backend()
     # conftest resets backend to Memory
@@ -50,7 +50,7 @@ async def test_check_sse_readiness_success():
     # Actually SSEBackend is likely MemoryChannelBackend.
     # checks.py calls type(backend).__name__
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_check_sse_readiness_failure():
     # Mock get_sse_backend to return a backend whose ping fails
     

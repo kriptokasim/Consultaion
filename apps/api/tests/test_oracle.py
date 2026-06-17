@@ -64,7 +64,7 @@ def test_get_oracle_session_endpoint(authenticated_client, db_session: Session):
     assert data["branches"][0]["nodes"][0]["title"] == "First Step"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_oracle_background_reasoning_tasks(authenticated_client, db_session: Session):
     user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
     sess = OracleSession(

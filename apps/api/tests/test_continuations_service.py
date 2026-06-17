@@ -95,7 +95,7 @@ def test_transition_validates_canonical_map(db_session):
         transition_continuation_sync(db_session, cont.id, ["requested"], "running")
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_transition_continuation_async(db_session):
     user = User(email="normal@example.com", password_hash=hash_password("password"))
     db_session.add(user)

@@ -198,7 +198,7 @@ def test_transition_map_completeness():
 
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_async_transitions_with_paused(db_session: Session):
     user = User(email="sm_async_paused@example.com", password_hash=hash_password("password"))
     db_session.add(user)

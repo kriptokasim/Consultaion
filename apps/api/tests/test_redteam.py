@@ -57,7 +57,7 @@ def test_get_red_team_session_endpoint(authenticated_client, db_session: Session
     assert data["issues"][0]["severity"] == "high"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_red_team_analysis_background_task(authenticated_client, db_session: Session):
     user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
     rt = RedTeamSession(

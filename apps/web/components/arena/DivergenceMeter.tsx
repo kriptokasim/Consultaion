@@ -262,169 +262,34 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
         </p>
       </div>
 
+import { DivergenceClaimList } from "./DivergenceClaimList";
+
+// ... previous code ...
+
       {/* Claims Lists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-border/60">
         
         {/* Consensus / Agreement */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-emerald-500">
-            <CheckCircle2 className="h-5 w-5" />
-            <h3 className="text-sm font-bold uppercase tracking-wider">Consensus Claims</h3>
-          </div>
-          
-          {consensus_claims.claims.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic bg-muted/20 rounded-xl p-4 border border-dashed border-border">
-              No overlapping claims detected. The models have entirely disjoint viewpoints.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {consensus_claims.claims.map((item, idx) => {
-                const isSelected = votedClaim === item.claim;
-                const isAnySelected = votedClaim !== null;
-                const isVotingThis = votingFor === item.claim;
-                
-                return (
-                  <div 
-                    key={idx} 
-                    className={`group relative flex flex-col justify-between gap-3 p-4 rounded-xl border transition-all ${
-                      isSelected
-                        ? "border-emerald-500 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
-                        : "border-border bg-card/50 hover:bg-card hover:shadow-sm"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm text-foreground/90 leading-relaxed font-medium">
-                        {item.claim}
-                      </p>
-                      
-                      {/* Vote Button */}
-                      <button
-                        onClick={() => handleVote(item.claim, item.models?.[0] || "Model", true)}
-                        disabled={isAnySelected || isVotingThis}
-                        className={`shrink-0 flex items-center justify-center h-8 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                          isSelected
-                            ? "bg-emerald-500 text-white border-emerald-500"
-                            : isAnySelected
-                            ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border"
-                            : "bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-                        }`}
-                        title={isSelected ? "You voted for this claim" : "Upvote this consensus point"}
-                      >
-                        {isVotingThis ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : isSelected ? (
-                          <Check className="h-3.5 w-3.5" />
-                        ) : (
-                          <span className="flex items-center gap-1">
-                            <ThumbsUp className="h-3 w-3" /> Agree
-                          </span>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Model identity pills */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40">
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wide mr-1">
-                        Supported by:
-                      </span>
-                      {item.models?.map((model) => {
-                        const colors = getColors(model);
-                        return (
-                          <span 
-                            key={model}
-                            className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 border ${colors.border} ${colors.bg} ${colors.text}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${colors.accent}`} />
-                            {model}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <DivergenceClaimList
+          title="Consensus Claims"
+          type="consensus"
+          claims={consensus_claims.claims}
+          emptyMessage="No overlapping claims detected. The models have entirely disjoint viewpoints."
+          votedClaim={votedClaim}
+          votingFor={votingFor}
+          onVote={handleVote}
+        />
 
         {/* Contested / Disagreements */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-rose-500">
-            <AlertTriangle className="h-5 w-5" />
-            <h3 className="text-sm font-bold uppercase tracking-wider">Contested Claims</h3>
-          </div>
-
-          {contested_claims.claims.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic bg-muted/20 rounded-xl p-4 border border-dashed border-border">
-              No contested claims. The models reached complete agreement.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {contested_claims.claims.map((item, idx) => {
-                const isSelected = votedClaim === item.claim;
-                const isAnySelected = votedClaim !== null;
-                const isVotingThis = votingFor === item.claim;
-                
-                return (
-                  <div 
-                    key={idx} 
-                    className={`group relative flex flex-col justify-between gap-3 p-4 rounded-xl border transition-all ${
-                      isSelected
-                        ? "border-rose-500 bg-rose-500/5 shadow-sm shadow-rose-500/10"
-                        : "border-border bg-card/50 hover:bg-card hover:shadow-sm"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm text-foreground/90 leading-relaxed font-medium">
-                        {item.claim}
-                      </p>
-
-                      {/* Vote Button */}
-                      <button
-                        onClick={() => handleVote(item.claim, item.model || "Model", false)}
-                        disabled={isAnySelected || isVotingThis}
-                        className={`shrink-0 flex items-center justify-center h-8 px-3 rounded-lg text-xs font-semibold border transition-all ${
-                          isSelected
-                            ? "bg-rose-500 text-white border-rose-500"
-                            : isAnySelected
-                            ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border"
-                            : "bg-rose-500/10 hover:bg-rose-500 hover:text-white border-rose-500/30 text-rose-600 dark:text-rose-400"
-                        }`}
-                        title={isSelected ? "You voted for this claim" : "Upvote this unique claim"}
-                      >
-                        {isVotingThis ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : isSelected ? (
-                          <Check className="h-3.5 w-3.5" />
-                        ) : (
-                          <span className="flex items-center gap-1">
-                            <ThumbsUp className="h-3 w-3" /> Agree
-                          </span>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Model identity pill */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40">
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wide mr-1">
-                        Proposed by:
-                      </span>
-                      {(() => {
-                        const colors = getColors(item.model);
-                        return (
-                          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 border ${colors.border} ${colors.bg} ${colors.text}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${colors.accent}`} />
-                            {item.model}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <DivergenceClaimList
+          title="Contested Claims"
+          type="contested"
+          claims={contested_claims.claims}
+          emptyMessage="No contested claims. The models reached complete agreement."
+          votedClaim={votedClaim}
+          votingFor={votingFor}
+          onVote={handleVote}
+        />
 
       </div>
     </div>

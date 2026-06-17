@@ -37,7 +37,7 @@ def test_redact_model_names():
     assert "Model_A" in redacted2
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_evaluate_models_blind():
     prompt = "Which approach is better for high-throughput messaging?"
     responses = [
@@ -79,7 +79,7 @@ async def test_evaluate_models_blind():
             assert scores[1]["overall_score"] == 0.82
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_classify_contradiction():
     claim_a = "Use asynchronous tasks for performance."
     claim_b = "Do not use asynchronous tasks, use sync execution."
@@ -99,7 +99,7 @@ async def test_classify_contradiction():
             assert "Explicit contradiction" in res["explanation"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_verify_synthesis_report():
     prompt = "Kafka vs Redis Streams"
     responses = [{"persona": "M1", "content": "Kafka is persistent"}]
@@ -124,7 +124,7 @@ async def test_verify_synthesis_report():
             assert res["needs_revision"] is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_run_semantic_claims_analysis():
     prompt = "Kafka vs Redis"
     responses = [
@@ -154,7 +154,7 @@ async def test_run_semantic_claims_analysis():
         assert analysis["divergence_score"] > 0.0
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generate_decision_report_and_repair():
     prompt = "Should we adopt Kafka?"
     responses = [{"persona": "M1", "content": "Adopt Kafka for horizontal scaling."}]
@@ -234,7 +234,7 @@ async def test_generate_decision_report_and_repair():
         assert report.quality_meta.needs_revision is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_embedding_failure_sets_fallback_mode():
     prompt = "Test prompt"
     responses = [
@@ -258,7 +258,7 @@ async def test_embedding_failure_sets_fallback_mode():
         assert analysis["embedding_success"] is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_contradiction_pair_cap():
     prompt = "Test prompt"
     # Create 10 responses -> 10 claims -> 45 total candidate pairs
@@ -296,7 +296,7 @@ async def test_contradiction_pair_cap():
         assert analysis["contradictions_count"] == 25
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_critic_failure_metadata():
     prompt = "Test prompt"
     responses = [{"persona": "M1", "content": "Claim 1"}]
@@ -340,7 +340,7 @@ async def test_critic_failure_metadata():
         assert report.quality_meta.verification_status == "failed"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_provider_structured_output_adapter_path():
     # Verify that passing response_format works without crashing and passes variables down
     from agents import call_llm_for_role
@@ -383,7 +383,7 @@ async def test_provider_structured_output_adapter_path():
             assert gateway_req.response_format == response_format
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_critic_failure_sets_unverified():
     """When the critic/verifier call itself fails, verification_status must be 'unverified'
     and verification_error must be True, not fake 'verified' with 0.9 scores."""
@@ -440,7 +440,7 @@ async def test_critic_failure_sets_unverified():
                 assert report.quality_meta.critic_feedback == "Verifier service temporarily unavailable."
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_unique_insights_in_divergence_breakdown():
     """Divergence breakdown should contain unique_insights key, not just contested_claims."""
     prompt = "Test prompt"
@@ -472,7 +472,7 @@ async def test_unique_insights_in_divergence_breakdown():
         assert "active_contradictions" in analysis
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_generic_report_sets_high_genericity_risk():
     """When the critic returns genericity_risk='high', verification_status should be 'unverified'."""
     from reporting.synthesis_critic import verify_synthesis_report

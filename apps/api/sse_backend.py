@@ -431,7 +431,12 @@ class StreamLeaseManager:
         return StreamLeaseResult.ERROR_FAIL_CLOSED
 
     async def release(self, debate_id: str, subscriber_id: str, user_id: str | None = None) -> None:
-        """Release a streaming lease."""
+        """Release a streaming lease.
+
+        Idempotent: calling release multiple times is harmless.
+        Both Redis ZREM and in-memory dict.pop(key, None) are no-ops
+        when the entry does not exist.
+        """
         identity = self._subscriber_identity(debate_id, user_id or "anon", subscriber_id)
         try:
             from redis_pool import get_async_redis_client

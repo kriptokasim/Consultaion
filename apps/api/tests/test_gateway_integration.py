@@ -10,7 +10,7 @@ from agents import UsageCall
 from auth import COOKIE_NAME
 from tests.utils import settings_context
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_gateway_result_mapping_success():
     """Verify call_model_via_gateway maps success result to UsageCall correctly."""
     mock_result = GatewayModelCallResult(
@@ -54,7 +54,7 @@ async def test_gateway_result_mapping_success():
         assert call_usage.estimated_cost_usd == 0.0015
         assert call_usage.retry_count == 0
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_gateway_exceptions_wrapped_correctly():
     """Verify that GatewayQuotaExceededError and GatewayModelRestrictedError are mapped to TransientLLMError."""
     with patch("model_gateway.route_llm_call", side_effect=GatewayQuotaExceededError("Quota exceeded cap")):
@@ -137,7 +137,7 @@ def test_pro_user_not_blocked_by_credits(authenticated_client: TestClient, db_se
         db_session.refresh(user)
         assert user.hosted_credits_used == 10
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_failed_run_refunds_credits(db_session: Session):
     """Verify that a failed debate runner triggers a hosted credit refund for free users."""
     from orchestrator import run_debate
@@ -224,7 +224,7 @@ def test_public_dto_safeguard(client: TestClient, authenticated_client: TestClie
     assert "user_plan" not in data
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_used_equals_limit_gateway_block(db_session: Session):
     """Verify that when user's hosted_credits_used equals hosted_credits_limit, has_credits is False and pro pool is restricted."""
     from model_gateway import route_llm_call

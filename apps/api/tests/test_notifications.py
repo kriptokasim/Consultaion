@@ -6,7 +6,7 @@ from integrations.slack import send_slack_alert
 from schemas import DebateSummary
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_send_debate_summary_email_enabled():
     with patch("integrations.email.settings") as mock_settings, \
          patch("integrations.email.httpx.AsyncClient") as mock_client_cls:
@@ -35,7 +35,7 @@ async def test_send_debate_summary_email_enabled():
         assert call_args[1]["json"]["to"] == ["test@example.com"]
         assert "Test Debate" in call_args[1]["json"]["subject"]
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_send_debate_summary_email_disabled():
     with patch("integrations.email.settings") as mock_settings, \
          patch("integrations.email.httpx.AsyncClient") as mock_client_cls:
@@ -59,7 +59,7 @@ async def test_send_debate_summary_email_disabled():
         
         mock_client.post.assert_not_called()
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_send_slack_alert_enabled():
     with patch("integrations.slack.settings") as mock_settings, \
          patch("integrations.slack.httpx.AsyncClient") as mock_client_cls:

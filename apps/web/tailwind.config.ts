@@ -55,7 +55,6 @@ const config: Config = {
           success: '#22C55E',
           border: '#E5E7EB',
         },
-        amberParliament: {
           amber: '#F59E0B',
           accent: '#3B82F6',
           sepiaDark: '#1E293B',      // Parliament slate

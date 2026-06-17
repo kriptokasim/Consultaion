@@ -6,7 +6,7 @@ import pytest
 from sse_backend import MemoryChannelBackend
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 class TestSSEMemoryLimits:
     """Tests for memory backend bounded queues and idle timeout."""
     

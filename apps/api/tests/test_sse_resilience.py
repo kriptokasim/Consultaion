@@ -7,7 +7,7 @@ import redis.asyncio as real_redis
 from sse_backend import RedisChannelBackend
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 class TestSSEResilience:
     @patch("sse_backend.redis.from_url")
     async def test_publish_retry_success(self, mock_from_url):

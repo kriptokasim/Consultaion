@@ -34,7 +34,7 @@ def create_test_debate(session, debate_id="test-debate-lease"):
     session.commit()
     return debate
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_lease_acquisition():
     with session_scope() as session:
         debate = create_test_debate(session, "test-acq")
@@ -56,7 +56,7 @@ async def test_lease_acquisition():
     # Attempt 3: Success (Re-acquire by A)
     assert await _try_acquire_lease(debate_id, TEST_RUNNER_A, lease_seconds=10) is True
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_lease_expiration_takeover():
     debate_id = "test-expire"
     with session_scope() as session:
@@ -76,7 +76,7 @@ async def test_lease_expiration_takeover():
         debate = session.get(Debate, debate_id)
         assert debate.runner_id == TEST_RUNNER_B
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_heartbeat_updates():
     debate_id = "test-heartbeat"
     with session_scope() as session:
@@ -97,7 +97,7 @@ async def test_heartbeat_updates():
         assert new_expiry > old_expiry
         assert (new_expiry - datetime.now(timezone.utc)).total_seconds() > 15
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_release_lease():
     debate_id = "test-release"
     with session_scope() as session:
@@ -111,7 +111,7 @@ async def test_release_lease():
         assert debate.runner_id is None
         assert debate.lease_expires_at is None
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_cleanup_requeue():
     debate_id = "test-debate-requeue"
     runner_id = "crashed-runner"

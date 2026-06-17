@@ -80,7 +80,7 @@ def test_get_argument_tree_endpoint(authenticated_client, db_session: Session):
     assert c2_node["rebuts_target"] == "ModelA_c1"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_extract_debate_turn_analysis_helper(authenticated_client, db_session: Session):
     user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
     debate = Debate(id=str(uuid4()), prompt='Test prompt for analysis helper', user_id=user.id, status='queued')
