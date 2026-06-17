@@ -1670,6 +1670,15 @@ async def stream_events(
         )
 
     async def eventgen():
+        # Periodically check if client disconnected to forcefully release lease
+        async def check_disconnect(task: asyncio.Task):
+            while True:
+                if await request.is_disconnected():
+                    task.cancel()
+                    break
+                await asyncio.sleep(2)
+                
+        monitor_task = asyncio.create_task(check_disconnect(asyncio.current_task()))
         try:
             async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
                 seq = event.get("sequence")
@@ -1686,6 +1695,7 @@ async def stream_events(
             # FH126: Do not swallow cancellation — let it propagate after cleanup
             raise
         finally:
+            monitor_task.cancel()
             await lease_mgr.release(debate_id, subscriber_id)
             logger.debug("Released stream lease: debate=%s subscriber=%s", debate_id, subscriber_id)
 
