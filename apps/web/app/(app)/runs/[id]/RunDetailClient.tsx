@@ -52,6 +52,8 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     responses,
     responsesState,
     responsesError,
+    streamingState,
+    mergedStreamingResponses,
     status: workspaceStatus,
     sseStatus,
     error: workspaceError,
@@ -461,7 +463,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
 
           {/* Render the ArenaRunView with persisted responses */}
           {debate?.mode === "arena" ? (
-            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} profile={profile} onRefetch={refetch} />
+            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} profile={profile} onRefetch={refetch} />
           ) : (
             <ParliamentRunView
               id={id}
@@ -540,7 +542,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
             </div>
           )}
-          <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} profile={profile} onRefetch={refetch} />
+          <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} profile={profile} onRefetch={refetch} />
         </div>
       );
     }
@@ -680,7 +682,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
                 <PerspectivesGrid modelSlots={modelSlots} />
               ) : (
-                <ArenaRunView debate={debate as any} events={liveEvents as any} responses={responses} onRefetch={refetch} />
+                <ArenaRunView debate={debate as any} events={liveEvents as any} responses={responses} streamingBuffers={streamingState.buffers} onRefetch={refetch} />
               )}
 
               {isPollingFallback && (

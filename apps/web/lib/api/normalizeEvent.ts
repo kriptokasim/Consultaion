@@ -148,6 +148,28 @@ export function normalizeEvent(raw: RawEvent): DebateEvent {
                 at,
             };
 
+        // FH100: Streaming lifecycle events — pass through with full payload
+        case "model_response_queued":
+        case "model_response_connecting":
+        case "model_response_started":
+        case "model_response_delta":
+        case "model_response_persisting":
+        case "model_response_completed":
+        case "model_response_failed":
+            return {
+                type,
+                response_id: (flat.response_id as string) ?? undefined,
+                model_id: (flat.model_id as string) ?? undefined,
+                display_name: (flat.display_name as string) ?? undefined,
+                provider: (flat.provider as string) ?? undefined,
+                text: (flat.text as string) ?? undefined,
+                delta_sequence: (flat.delta_sequence as number) ?? undefined,
+                accumulated_chars: (flat.accumulated_chars as number) ?? undefined,
+                error: (flat.error as string) ?? undefined,
+                error_code: (flat.error_code as string) ?? undefined,
+                at,
+            };
+
         case "notice":
         default:
             return {

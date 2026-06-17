@@ -17,7 +17,10 @@ import sys
 import os
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure the api/ directory is on sys.path so sibling packages resolve.
+_api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _api_dir not in sys.path:
+    sys.path.insert(0, _api_dir)
 
 from sqlmodel import Session, select, func
 from models import Debate, Message, Score, DebateCheckpoint, DebateStageCheckpoint, LLMUsageLog

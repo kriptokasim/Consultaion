@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useReducer, useState } from "react";
 import { fetchWithAuth } from "@/lib/auth";
 import { getDebate, getDebateResponses, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, REQUEST_TIMEOUT } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
@@ -8,6 +8,9 @@ import { useEventSource, type SSEStatus } from "@/lib/sse";
 import { normalizeEvent, normalizeTimelineItems } from "@/lib/api/normalizeEvent";
 import type { TimelineEvent } from "@/lib/timeline/types";
 import type { PersistedModelResponse, PersistedResponsesResponse } from "@/lib/api/types";
+import { streamingReducer, INITIAL_STREAMING_STATE, selectMergedResponses } from "@/lib/workspace/streamReducer";
+import type { StreamingState } from "@/lib/workspace/streamReducer";
+import type { StreamEnvelope } from "@/lib/streaming/types";
 
 export type RunWorkspaceStatus =
   | "idle"
@@ -105,6 +108,8 @@ export interface UseRunWorkspaceResult {
   responses: PersistedModelResponse[];
   responsesState: ResponsesState;
   responsesError: string | null;
+  streamingState: StreamingState;
+  mergedStreamingResponses: ReturnType<typeof selectMergedResponses>;
   status: RunWorkspaceStatus;
   sseStatus: SSEStatus;
   error: string | null;
@@ -134,6 +139,12 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [responses, setResponses] = useState<PersistedModelResponse[]>([]);
   const [responsesState, setResponsesState] = useState<ResponsesState>("idle");
   const [responsesError, setResponsesError] = useState<string | null>(null);
+  const [streamingState, dispatchStreaming] = useReducer(streamingReducer, INITIAL_STREAMING_STATE);
+
+  const mergedStreamingResponses = useMemo(
+    () => selectMergedResponses(streamingState),
+    [streamingState.buffers, streamingState.persisted],
+  );
 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
@@ -311,12 +322,67 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const handleStreamEvent = useCallback((lastEvent: any) => {
     if (!lastEvent || !debateId) return;
     try {
+      const eventType = lastEvent.type;
+
+      // FH104: Dispatch streaming reducer actions for model response lifecycle events
+      const STREAMING_EVENT_TYPES = new Set([
+        "model_response_queued",
+        "model_response_connecting",
+        "model_response_started",
+        "model_response_delta",
+        "model_response_persisting",
+        "model_response_completed",
+        "model_response_failed",
+      ]);
+
+      if (STREAMING_EVENT_TYPES.has(eventType)) {
+        const p = lastEvent.payload || lastEvent;
+        switch (eventType) {
+          case "model_response_queued":
+            dispatchStreaming({ type: "RESPONSE_QUEUED", payload: p });
+            break;
+          case "model_response_connecting":
+            dispatchStreaming({ type: "RESPONSE_CONNECTING", payload: p });
+            break;
+          case "model_response_started":
+            dispatchStreaming({ type: "RESPONSE_STARTED", payload: p });
+            break;
+          case "model_response_delta":
+            dispatchStreaming({ type: "RESPONSE_DELTA", payload: p });
+            break;
+          case "model_response_persisting":
+            dispatchStreaming({ type: "RESPONSE_PERSISTING", payload: p });
+            break;
+          case "model_response_completed":
+            dispatchStreaming({ type: "RESPONSE_COMPLETED", payload: p });
+            break;
+          case "model_response_failed":
+            dispatchStreaming({ type: "RESPONSE_FAILED", payload: p });
+            break;
+        }
+        // Also add to events for backward compatibility
+        const newEvent: TimelineEvent = {
+          id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
+          debate_id: debateId,
+          ts: lastEvent.ts || new Date().toISOString(),
+          type: eventType,
+          round: lastEvent.round || 0,
+          seat: lastEvent.seat,
+          payload: normalizeEvent(lastEvent) as unknown as Record<string, unknown>,
+        };
+        setEvents((prev) => {
+          if (prev.some((e) => e.id === newEvent.id)) return prev;
+          return [...prev, newEvent];
+        });
+        return;
+      }
+
       const normalized = normalizeEvent(lastEvent);
       const newEvent: TimelineEvent = {
         id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
         debate_id: debateId,
         ts: lastEvent.ts || new Date().toISOString(),
-        type: lastEvent.type,
+        type: eventType,
         round: lastEvent.round || 0,
         seat: lastEvent.seat,
         payload: normalized as unknown as Record<string, unknown>,
@@ -327,16 +393,28 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         return [...prev, newEvent];
       });
 
-      const eventType = newEvent.type;
+      // Refetch debate on terminal/state-change events
       if (
         [
           "arena_response", "message", "seat_message", "model_response",
           "score", "stage_checkpoint", "final", "debate_failed",
+          "perspectives_ready", "debate_completed",
         ].includes(eventType)
       ) {
         getDebate(debateId)
           .then((updated) => setDebate(updated))
           .catch((err) => console.error("[useRunWorkspace] Refetch details failed:", err));
+      }
+
+      // Sync persisted responses when terminal events arrive
+      if (["debate_completed", "debate_failed", "arena_response"].includes(eventType)) {
+        getDebateResponses(debateId)
+          .then((data) => {
+            setResponses(data.items);
+            setResponsesState(data.items.length > 0 ? "ready" : "empty");
+            dispatchStreaming({ type: "MERGE_PERSISTED", payloads: data.items });
+          })
+          .catch(() => {});
       }
     } catch (err) {
       console.error("[useRunWorkspace] Error processing stream event:", err);
@@ -590,6 +668,8 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     responses,
     responsesState,
     responsesError,
+    streamingState,
+    mergedStreamingResponses,
     status,
     sseStatus,
     error,

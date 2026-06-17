@@ -12,8 +12,8 @@ type GoogleButtonProps = {
 
 export default function GoogleButton({ nextPath = "/live", label = "Continue with Google", className, ...props }: GoogleButtonProps) {
   const handleClick = () => {
-    // Patchset 105: Use relative path to ensure we stay on same origin (web.consultaion.com)
-    // and let Next.js rewrite handle the proxy to backend.
+    // FH112: Server-side OAuth flow — state cookie is set by the route,
+    // then browser redirects to Google consent screen.
     const target = `/api/auth/google/login?next=${encodeURIComponent(nextPath)}`;
     if (typeof window !== "undefined") {
       window.location.href = target;

@@ -12,6 +12,7 @@ const ENV_FLAGS = {
   statusPage: process.env.NEXT_PUBLIC_STATUS_PAGE === "1",
   changelog: process.env.NEXT_PUBLIC_CHANGELOG === "1",
   offlineRecovery: process.env.NEXT_PUBLIC_OFFLINE_RECOVERY === "1",
+  streamingResponses: process.env.NEXT_PUBLIC_STREAMING_RESPONSES_ENABLED === "1",
 } as const;
 
 export type FeatureFlag = keyof typeof ENV_FLAGS;

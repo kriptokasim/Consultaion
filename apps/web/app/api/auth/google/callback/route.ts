@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Set HttpOnly/Secure/SameSite cookie
-    const redirectUrl = new URL("/dashboard", request.url);
+    const nextPath = request.cookies.get("oauth_next")?.value || "/dashboard";
+    const redirectUrl = new URL(nextPath, request.url);
     const responseNext = NextResponse.redirect(redirectUrl);
 
     responseNext.cookies.set("consultaion_token", token, {
@@ -74,8 +75,15 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30, // 30 days
     });
 
-    // Clear the OAuth state cookie
+    // Clear the OAuth state and next cookies
     responseNext.cookies.set("oauth_state", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+    responseNext.cookies.set("oauth_next", "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

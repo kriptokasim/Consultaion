@@ -315,6 +315,63 @@ export type DebateEvent =
         debate_id?: string;
         status?: string;
         at?: string;
+    }
+    // FH100: Streaming lifecycle events
+    | {
+        type: "model_response_queued";
+        response_id?: string;
+        model_id?: string;
+        display_name?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_connecting";
+        response_id?: string;
+        model_id?: string;
+        display_name?: string;
+        provider?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_started";
+        response_id?: string;
+        model_id?: string;
+        display_name?: string;
+        provider?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_delta";
+        response_id?: string;
+        model_id?: string;
+        text?: string;
+        delta_sequence?: number;
+        accumulated_chars?: number;
+        at?: string;
+    }
+    | {
+        type: "model_response_persisting";
+        response_id?: string;
+        model_id?: string;
+        provider?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_completed";
+        response_id?: string;
+        model_id?: string;
+        display_name?: string;
+        provider?: string;
+        at?: string;
+    }
+    | {
+        type: "model_response_failed";
+        response_id?: string;
+        model_id?: string;
+        display_name?: string;
+        error?: string;
+        error_code?: string;
+        at?: string;
     };
 
 export interface LeaderboardEntry {

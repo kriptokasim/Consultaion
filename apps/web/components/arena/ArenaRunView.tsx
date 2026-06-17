@@ -4,8 +4,9 @@ import React, { useMemo, useState } from "react";
 import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield } from "lucide-react";
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
-import { ModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
+import { ModelCard, StreamingModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
 import type { ModelResponse } from "./ModelCard";
+import type { StreamingModelBuffer, ModelState } from "@/lib/streaming/types";
 import { SynthesisCard, SynthesisLoading } from "./SynthesisCard";
 import { PublicRunCTATop, PublicRunCTAFooter } from "./CTABanner";
 import { DivergenceMeter } from "./DivergenceMeter";
@@ -18,11 +19,12 @@ interface ArenaRunViewProps {
     debate: DebateDetail;
     events: DebateEvent[];
     responses?: PersistedModelResponse[];
+    streamingBuffers?: Map<string, StreamingModelBuffer>;
     profile?: any;
     onRefetch?: () => Promise<any> | void;
 }
 
-export default function ArenaRunView({ debate, events, responses: persistedResponses, profile, onRefetch }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, profile, onRefetch }: ArenaRunViewProps) {
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
         const eventResponses: Array<ModelResponse> = [];
@@ -311,10 +313,29 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     {(() => {
                         const resp = modelResponses[activeTab];
                         if (!resp) return <SkeletonCard index={activeTab} />;
+
+                        const streamBuf = streamingBuffers?.get(`resp-${debate.id}-${resp.model_id}`);
+                        if (streamBuf) {
+                            return (
+                                <StreamingModelCard
+                                    displayName={resp.display_name}
+                                    provider={resp.provider}
+                                    logoUrl={resp.logo_url}
+                                    personaTagline={resp.persona_tagline}
+                                    state={streamBuf.state}
+                                    accumulatedText={streamBuf.accumulatedText}
+                                    errorCode={streamBuf.errorCode}
+                                    errorMessage={streamBuf.errorMessage}
+                                    className="min-h-[350px]"
+                                    onRetry={handleRetryAgent}
+                                />
+                            );
+                        }
+
                         return (
-                            <ModelCard 
-                                resp={resp} 
-                                className="min-h-[350px]" 
+                            <ModelCard
+                                resp={resp}
+                                className="min-h-[350px]"
                                 onRetry={handleRetryAgent}
                             />
                         );
@@ -333,6 +354,27 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         if (!resp) {
                             return <SkeletonCard key={`skeleton-card-${i}`} index={i} />;
                         }
+
+                        // FH103: Use StreamingModelCard when a streaming buffer exists for this model
+                        const streamBuf = streamingBuffers?.get(`resp-${debate.id}-${resp.model_id}`);
+                        if (streamBuf) {
+                            return (
+                                <div key={resp.model_id || i} data-model-card tabIndex={0}>
+                                    <StreamingModelCard
+                                        displayName={resp.display_name}
+                                        provider={resp.provider}
+                                        logoUrl={resp.logo_url}
+                                        personaTagline={resp.persona_tagline}
+                                        state={streamBuf.state}
+                                        accumulatedText={streamBuf.accumulatedText}
+                                        errorCode={streamBuf.errorCode}
+                                        errorMessage={streamBuf.errorMessage}
+                                        onRetry={handleRetryAgent}
+                                    />
+                                </div>
+                            );
+                        }
+
                         return (
                             <div key={resp.model_id || i} data-model-card tabIndex={0}>
                                 <ModelCard
