@@ -74,10 +74,24 @@ def _write_worker_heartbeat():
         redis_client = get_sync_redis_client()
         if not redis_client:
             return
+
+        queue_names = []
+        task_routes = getattr(celery_app.conf, "task_routes", None) or {}
+        if isinstance(task_routes, dict):
+            seen = set()
+            for route in task_routes.values():
+                q = route.get("queue") if isinstance(route, dict) else None
+                if q and q not in seen:
+                    seen.add(q)
+                    queue_names.append(q)
+        if not queue_names:
+            queue_names = [getattr(celery_app.conf, "task_default_queue", "default")]
+
         heartbeat = {
             "timestamp": time.time(),
             "git_sha": _GIT_SHA,
             "worker_id": _WORKER_ID,
+            "queue_names": queue_names,
             "providers": {
                 "openai": bool(settings.OPENAI_API_KEY),
                 "anthropic": bool(settings.ANTHROPIC_API_KEY),

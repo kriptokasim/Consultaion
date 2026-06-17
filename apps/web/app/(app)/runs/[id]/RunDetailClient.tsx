@@ -50,18 +50,23 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     debate,
     events,
     responses,
+    coreState,
     responsesState,
     responsesError,
+    timelineState,
     streamingState,
     mergedStreamingResponses,
     status: workspaceStatus,
     sseStatus,
     error: workspaceError,
+    coreErrorCode,
+    coreHttpStatus,
     outcomeUnknown,
     isPollingFallback,
     continueRun,
     retryRun,
     refetch,
+    retryResponses,
     isContinuing,
     hydrationQuality,
     timelineError,
@@ -404,17 +409,31 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  if (debateError && !isDebateLoaded) {
+  // FH116: Typed core error cards — distinguish timeout, 404, 401, 403, 500, network
+  if (coreState === "failed" && coreErrorCode && !isDebateLoaded) {
     return (
-      <div className="container py-8">
+      <div className="container py-8 max-w-2xl">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error loading debate</AlertTitle>
+          <AlertTitle>
+            {coreErrorCode === "not_found" && "Run Not Found"}
+            {coreErrorCode === "unauthorized" && "Sign-In Required"}
+            {coreErrorCode === "forbidden" && "Access Denied"}
+            {coreErrorCode === "timeout" && "Request Timed Out"}
+            {coreErrorCode === "server_error" && "Server Error"}
+            {coreErrorCode === "network_error" && "Connection Failed"}
+            {coreErrorCode === "cancelled" && "Request Cancelled"}
+          </AlertTitle>
           <AlertDescription>
-            {debateError.message}
-            <Button variant="outline" className="mt-4 block" onClick={() => window.location.reload()}>
-              Retry
-            </Button>
+            <p className="mt-2 text-sm">{workspaceError}</p>
+            {coreHttpStatus && (
+              <p className="mt-1 text-xs text-muted-foreground">HTTP {coreHttpStatus}</p>
+            )}
+            {coreErrorCode !== "cancelled" && (
+              <Button variant="outline" className="mt-4" onClick={() => refetch()}>
+                Retry
+              </Button>
+            )}
           </AlertDescription>
         </Alert>
       </div>
@@ -463,7 +482,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
 
           {/* Render the ArenaRunView with persisted responses */}
           {debate?.mode === "arena" ? (
-            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} profile={profile} onRefetch={refetch} />
+            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isCompleted} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
           ) : (
             <ParliamentRunView
               id={id}
@@ -542,7 +561,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
             </div>
           )}
-          <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} profile={profile} onRefetch={refetch} />
+          <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isCompleted} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
         </div>
       );
     }
@@ -682,7 +701,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
                 <PerspectivesGrid modelSlots={modelSlots} />
               ) : (
-                <ArenaRunView debate={debate as any} events={liveEvents as any} responses={responses} streamingBuffers={streamingState.buffers} onRefetch={refetch} />
+                <ArenaRunView debate={debate as any} events={liveEvents as any} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isCompleted} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} onRefetch={refetch} />
               )}
 
               {isPollingFallback && (

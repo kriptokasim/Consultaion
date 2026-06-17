@@ -4,6 +4,7 @@
 Usage:
     python -m scripts.diagnose_run --debate-id <id>
     python scripts/diagnose_run.py --debate-id <id>
+    python scripts/diagnose_run.py --debate-id <id> --format json
 
 Admin-only diagnostic: reads DB state and outputs a human-readable decision tree.
 No secrets, no raw prompts, no user emails.
@@ -31,6 +32,125 @@ def _fmt_ts(dt: datetime | None) -> str:
     if dt is None:
         return "N/A"
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _fmt_ts_iso(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    return dt.isoformat()
+
+
+def diagnose_json(debate_id: str) -> dict:
+    """Produce structured JSON diagnostic for a debate run."""
+    db_ok, db_info = check_db_readiness()
+    rev = db_info.get("revision", {})
+
+    result = {
+        "debate": {
+            "exists": False,
+            "id": debate_id,
+            "status": None,
+            "mode": None,
+            "created_at": None,
+            "updated_at": None,
+        },
+        "content": {
+            "has_final_content": False,
+            "has_synthesis_report": False,
+            "has_final_meta": False,
+        },
+        "responses": {
+            "total_message_rows": 0,
+            "canonical_response_rows": 0,
+            "roles": {},
+            "successful": 0,
+            "failed": 0,
+        },
+        "events": {
+            "count": 0,
+            "response_like_events": 0,
+        },
+        "schema": {
+            "current_revision": rev.get("current", None),
+            "expected_head": rev.get("head", None),
+            "at_head": rev.get("current") == rev.get("head") if rev.get("current") and rev.get("head") else None,
+        },
+        "runtime": {
+            "git_sha": os.environ.get("GIT_SHA", "unknown"),
+            "service_role": "api",
+        },
+        "diagnosis": "unknown",
+    }
+
+    from database import session_scope
+    try:
+        with session_scope() as session:
+            debate = session.get(Debate, debate_id)
+            if not debate:
+                result["diagnosis"] = "debate_not_found"
+                return result
+
+            result["debate"]["exists"] = True
+            result["debate"]["status"] = debate.status
+            result["debate"]["mode"] = debate.mode
+            result["debate"]["created_at"] = _fmt_ts_iso(debate.created_at)
+            result["debate"]["updated_at"] = _fmt_ts_iso(debate.updated_at)
+
+            result["content"]["has_final_content"] = debate.final_content is not None
+            result["content"]["has_final_meta"] = debate.final_meta is not None
+
+            has_synthesis = False
+            if debate.final_meta:
+                has_synthesis = bool(debate.final_meta.get("synthesis_report"))
+            result["content"]["has_synthesis_report"] = has_synthesis
+
+            msg_total = session.exec(
+                select(func.count(Message.id)).where(Message.debate_id == debate_id)
+            ).one()
+            result["responses"]["total_message_rows"] = msg_total
+
+            msg_by_role: dict[str, int] = {}
+            for role_row in session.exec(
+                select(Message.role, func.count(Message.id)).where(Message.debate_id == debate_id).group_by(Message.role)
+            ).all():
+                msg_by_role[role_row[0]] = role_row[1]
+            result["responses"]["roles"] = msg_by_role
+
+            responses = session.exec(
+                select(Message).where(Message.debate_id == debate_id, Message.role == "arena_response")
+            ).all()
+            successful = sum(1 for m in responses if m.meta and m.meta.get("success", True))
+            failed = len(responses) - successful
+            result["responses"]["canonical_response_rows"] = len(responses)
+            result["responses"]["successful"] = successful
+            result["responses"]["failed"] = failed
+
+            result["events"]["count"] = msg_total
+            result["events"]["response_like_events"] = len(responses)
+
+            if not db_ok:
+                result["diagnosis"] = "schema_behind_head"
+            elif not result["schema"]["at_head"]:
+                result["diagnosis"] = "schema_behind_head"
+            elif len(responses) == 0 and msg_total == 0:
+                result["diagnosis"] = "responses_irrecoverably_missing"
+            elif len(responses) == 0 and msg_total > 0:
+                result["diagnosis"] = "serializer_failure_suspected"
+            elif successful > 0:
+                result["diagnosis"] = "responses_available"
+            elif failed > 0 and len(responses) > 0:
+                if result["content"]["has_final_meta"] and result["content"]["has_synthesis_report"]:
+                    result["diagnosis"] = "responses_available"
+                else:
+                    result["diagnosis"] = "responses_missing_final_meta_recoverable"
+            else:
+                result["diagnosis"] = "responses_irrecoverably_missing"
+
+    except Exception as exc:
+        result["diagnosis"] = "message_query_failed"
+        result["_error"] = str(exc)
+
+    return result
 
 
 def diagnose(debate_id: str) -> str:
@@ -116,13 +236,13 @@ def diagnose(debate_id: str) -> str:
         ).one()
         lines.append(f"[6] CHECKPOINTS: {ckpt_count} global, {stage_ckpt_count} stage")
 
-        stage_names = []
+        stage_keys = []
         for sc in session.exec(
             select(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id == debate_id)
         ).all():
-            stage_names.append(sc.stage_name)
-        if stage_names:
-            lines.append(f"    Stages: {', '.join(stage_names)}")
+            stage_keys.append(sc.stage_key)
+        if stage_keys:
+            lines.append(f"    Stages: {', '.join(stage_keys)}")
         lines.append("")
 
         # 7. Provider failures from LLMUsageLog
@@ -188,8 +308,20 @@ def diagnose(debate_id: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Diagnose a Consultaion debate run")
     parser.add_argument("--debate-id", required=True, help="Debate UUID to diagnose")
+    parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        dest="output_format",
+        help="Output format (default: text)",
+    )
     args = parser.parse_args()
-    print(diagnose(args.debate_id))
+
+    if args.output_format == "json":
+        result = diagnose_json(args.debate_id)
+        print(json.dumps(result, indent=2))
+    else:
+        print(diagnose(args.debate_id))
 
 
 if __name__ == "__main__":

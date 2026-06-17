@@ -67,3 +67,6 @@ MEMORY.md
 *.bak
 scratch_user_request.md
 scratch_user_request_prev.md
+
+# Render CLI
+.render-service-map.local.json

@@ -86,6 +86,7 @@ class PublicDebateDTO(BaseModel):
 
     # Degradation metadata (public-safe generic indicator)
     read_quality: str = "full"
+    query_failures: list[str] = []
 
 
 class PrivateDebateDTO(BaseModel):
@@ -135,6 +136,7 @@ class PrivateDebateDTO(BaseModel):
     # Degradation metadata (private — includes missing capabilities)
     read_quality: str = "full"
     missing_capabilities: list[str] = []
+    query_failures: list[str] = []
 
 
 class PublicDebateEventDTO(BaseModel):
@@ -323,7 +325,10 @@ def serialize_debate_public(debate, continuation_status: Optional[str] = None, s
     final_meta = debate.final_meta or {}
     safe_meta = _safe_final_meta(final_meta)
     extra = _get_debate_extra_fields(debate, session=session, continuation_status=continuation_status)
+    query_failures = _get_query_failures(extra)
     read_quality = _detect_read_quality(extra)
+    if query_failures:
+        read_quality = "degraded"
 
     return PublicDebateDTO(
         id=debate.id,
@@ -358,6 +363,7 @@ def serialize_debate_public(debate, continuation_status: Optional[str] = None, s
         scores_received=extra["scores_received"],
         verification_status=extra["verification_status"],
         read_quality=read_quality,
+        query_failures=query_failures,
     ).model_dump()
 
 
@@ -380,6 +386,20 @@ def _get_missing_capabilities(debate, extra: dict) -> list[str]:
     return missing
 
 
+def _get_query_failures(extra: dict) -> list[str]:
+    """Return names of enrichment queries that failed at runtime."""
+    failures = []
+    if extra.get("_checkpoint_query_failed"):
+        failures.append("checkpoints")
+    if extra.get("_continuation_query_failed"):
+        failures.append("continuations")
+    if extra.get("_message_query_failed"):
+        failures.append("message_counts")
+    if extra.get("_score_query_failed"):
+        failures.append("score_counts")
+    return failures
+
+
 def serialize_debate_private(debate, continuation_status: Optional[str] = None, session=None) -> dict:
     """
     Serialize a Debate ORM object into a full private dictionary.
@@ -389,7 +409,8 @@ def serialize_debate_private(debate, continuation_status: Optional[str] = None, 
     config = debate.config or {}
     extra = _get_debate_extra_fields(debate, session=session, continuation_status=continuation_status)
     missing_capabilities = _get_missing_capabilities(debate, extra)
-    read_quality = "degraded" if missing_capabilities else "full"
+    query_failures = _get_query_failures(extra)
+    read_quality = "degraded" if (missing_capabilities or query_failures) else "full"
 
     return PrivateDebateDTO(
         id=debate.id,
@@ -423,6 +444,7 @@ def serialize_debate_private(debate, continuation_status: Optional[str] = None, 
         verification_status=extra["verification_status"],
         read_quality=read_quality,
         missing_capabilities=missing_capabilities,
+        query_failures=query_failures,
     ).model_dump()
 
 

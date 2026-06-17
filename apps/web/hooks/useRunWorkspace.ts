@@ -2,15 +2,39 @@
 
 import { useCallback, useEffect, useMemo, useRef, useReducer, useState } from "react";
 import { fetchWithAuth } from "@/lib/auth";
-import { getDebate, getDebateResponses, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, REQUEST_TIMEOUT } from "@/lib/api";
+import { getDebate, getDebateResponses, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, ApiError } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { useEventSource, type SSEStatus } from "@/lib/sse";
 import { normalizeEvent, normalizeTimelineItems } from "@/lib/api/normalizeEvent";
 import type { TimelineEvent } from "@/lib/timeline/types";
-import type { PersistedModelResponse, PersistedResponsesResponse } from "@/lib/api/types";
+import type { PersistedModelResponse } from "@/lib/api/types";
 import { streamingReducer, INITIAL_STREAMING_STATE, selectMergedResponses } from "@/lib/workspace/streamReducer";
 import type { StreamingState } from "@/lib/workspace/streamReducer";
-import type { StreamEnvelope } from "@/lib/streaming/types";
+
+// ── FH116: Core load failure taxonomy ────────────────────────────────────
+
+export type CoreLoadFailure =
+  | "timeout"
+  | "not_found"
+  | "unauthorized"
+  | "forbidden"
+  | "server_error"
+  | "network_error"
+  | "cancelled";
+
+// ── FH117: Decoupled hydration states ────────────────────────────────────
+
+export type CoreState = "idle" | "loading" | "ready" | "failed";
+
+export type ResponsesState =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "empty"
+  | "failed"
+  | "deployment_mismatch";
+
+export type TimelineState = "idle" | "loading" | "ready" | "degraded" | "failed";
 
 export type RunWorkspaceStatus =
   | "idle"
@@ -27,12 +51,7 @@ export type RunHydrationQuality =
   | "debate_only"
   | "failed";
 
-export type ResponsesState =
-  | "idle"
-  | "loading"
-  | "ready"
-  | "empty"
-  | "failed";
+// ── Continuation intent persistence ──────────────────────────────────────
 
 export interface PersistedContinuationIntent {
   debateId: string;
@@ -54,6 +73,7 @@ const STORAGE_KEY_PREFIX = "consultaion:continuation";
 const DEBATE_TIMEOUT_MS = 12000;
 const TIMELINE_TIMEOUT_MS = 6000;
 const EVENTS_TIMEOUT_MS = 8000;
+const RESPONSES_TIMEOUT_MS = 8000;
 
 function getStorageKey(debateId: string): string {
   return `${STORAGE_KEY_PREFIX}:${debateId}`;
@@ -67,8 +87,7 @@ function persistIntent(debateId: string, intent: PersistedContinuationIntent): v
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(getStorageKey(debateId), JSON.stringify(intent));
-  } catch {
-  }
+  } catch {}
 }
 
 function loadIntent(debateId: string): PersistedContinuationIntent | null {
@@ -91,9 +110,48 @@ function clearIntent(debateId: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(getStorageKey(debateId));
-  } catch {
+  } catch {}
+}
+
+// ── FH116: Classify errors into CoreLoadFailure ──────────────────────────
+
+function classifyCoreError(err: any): { code: CoreLoadFailure; httpStatus: number | null } {
+  if (err instanceof TimeoutError) {
+    return { code: "timeout", httpStatus: null };
+  }
+  if (err?.name === "AbortError") {
+    return { code: "cancelled", httpStatus: null };
+  }
+  if (err instanceof ApiError) {
+    const status = err.status ?? 0;
+    switch (status) {
+      case 401: return { code: "unauthorized", httpStatus: 401 };
+      case 403: return { code: "forbidden", httpStatus: 403 };
+      case 404: return { code: "not_found", httpStatus: 404 };
+      default:
+        if (status >= 500) return { code: "server_error", httpStatus: status };
+        return { code: "network_error", httpStatus: status };
+    }
+  }
+  if (err?.message?.includes("Failed to fetch") || err?.message?.includes("NetworkError")) {
+    return { code: "network_error", httpStatus: null };
+  }
+  return { code: "network_error", httpStatus: null };
+}
+
+function coreFailureMessage(code: CoreLoadFailure): string {
+  switch (code) {
+    case "timeout": return "The Run detail request timed out.";
+    case "not_found": return "Run not found.";
+    case "unauthorized": return "Sign-in required to view this Run.";
+    case "forbidden": return "You do not have access to this Run.";
+    case "server_error": return "The server could not load this Run.";
+    case "network_error": return "The API could not be reached.";
+    case "cancelled": return "Request was cancelled.";
   }
 }
+
+// ── Timeline hydration ───────────────────────────────────────────────────
 
 type TimelineHydrationResult = {
   events: TimelineEvent[];
@@ -102,32 +160,87 @@ type TimelineHydrationResult = {
   eventsError: string | null;
 };
 
+async function loadTimelineWithFallback(id: string, signal?: AbortSignal): Promise<TimelineHydrationResult> {
+  let timelineEvents: unknown[] | null = null;
+
+  try {
+    const data = await requestWithTimeout<unknown>(
+      `/debates/${id}/timeline`,
+      TIMELINE_TIMEOUT_MS,
+      { signal }
+    );
+    timelineEvents = extractEventItems(data);
+  } catch (err: any) {
+    const msg = err?.message || "Timeline fetch failed";
+    console.warn("[useRunWorkspace] Timeline failed, falling back to /events:", msg);
+
+    try {
+      const eventsData = await requestWithTimeout<unknown>(
+        `/debates/${id}/events`,
+        EVENTS_TIMEOUT_MS,
+        { signal }
+      );
+      timelineEvents = extractEventItems(eventsData);
+      const fallbackEvents = normalizeTimelineItems(timelineEvents, id);
+      return {
+        events: fallbackEvents,
+        quality: "events_fallback",
+        timelineError: msg,
+        eventsError: null,
+      };
+    } catch (err2: any) {
+      const msg2 = err2?.message || "Events fetch failed";
+      console.warn("[useRunWorkspace] Both timeline and events failed:", msg2);
+      return {
+        events: [],
+        quality: "debate_only",
+        timelineError: msg,
+        eventsError: msg2,
+      };
+    }
+  }
+
+  if (timelineEvents && timelineEvents.length > 0) {
+    const normalized: TimelineEvent[] = normalizeTimelineItems(timelineEvents, id);
+    return { events: normalized, quality: "complete", timelineError: null, eventsError: null };
+  }
+  return { events: [], quality: "complete", timelineError: null, eventsError: null };
+}
+
+// ── Hook return type ─────────────────────────────────────────────────────
+
 export interface UseRunWorkspaceResult {
   debate: any | null;
   events: TimelineEvent[];
   responses: PersistedModelResponse[];
+  coreState: CoreState;
   responsesState: ResponsesState;
   responsesError: string | null;
+  timelineState: TimelineState;
   streamingState: StreamingState;
   mergedStreamingResponses: ReturnType<typeof selectMergedResponses>;
   status: RunWorkspaceStatus;
   sseStatus: SSEStatus;
   error: string | null;
+  coreErrorCode: CoreLoadFailure | null;
+  coreHttpStatus: number | null;
   outcomeUnknown: boolean;
   isPollingFallback: boolean;
   continueRun: () => Promise<void>;
   retryRun: (stageKey?: string) => Promise<void>;
   refetch: () => Promise<void>;
+  retryResponses: () => Promise<void>;
   isContinuing: boolean;
   hydrationQuality: RunHydrationQuality;
   timelineError: string | null;
   eventsError: string | null;
 }
 
+// ── Main hook ────────────────────────────────────────────────────────────
+
 export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult {
   const [debate, setDebate] = useState<any | null>(null);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPollingFallback, setIsPollingFallback] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
@@ -135,10 +248,19 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [hydrationQuality, setHydrationQuality] = useState<RunHydrationQuality>("complete");
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
-  const [debateSetOnce, setDebateSetOnce] = useState(false);
   const [responses, setResponses] = useState<PersistedModelResponse[]>([]);
+
+  // FH117: Decoupled states
+  const [coreState, setCoreState] = useState<CoreState>("idle");
   const [responsesState, setResponsesState] = useState<ResponsesState>("idle");
   const [responsesError, setResponsesError] = useState<string | null>(null);
+  const [timelineState, setTimelineState] = useState<TimelineState>("idle");
+
+  // FH116: Core error classification
+  const [coreErrorCode, setCoreErrorCode] = useState<CoreLoadFailure | null>(null);
+  const [coreHttpStatus, setCoreHttpStatus] = useState<number | null>(null);
+
+  // FH104: Streaming reducer
   const [streamingState, dispatchStreaming] = useReducer(streamingReducer, INITIAL_STREAMING_STATE);
 
   const mergedStreamingResponses = useMemo(
@@ -146,177 +268,205 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     [streamingState.buffers, streamingState.persisted],
   );
 
+  // ── FH117: Independent abort controllers ───────────────────────────────
+  const coreAbortRef = useRef<AbortController | null>(null);
+  const responsesAbortRef = useRef<AbortController | null>(null);
+  const timelineAbortRef = useRef<AbortController | null>(null);
+  const enrichmentAbortRef = useRef<AbortController | null>(null);
+
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isFetchingRef = useRef(false);
   const pollInFlightRef = useRef(false);
   const intentRef = useRef<PersistedContinuationIntent | null>(null);
   const debateSetOnceRef = useRef(false);
   const requestGenerationRef = useRef(0);
+  const coreGenerationRef = useRef(0);
+  const responsesGenerationRef = useRef(0);
+  const timelineGenerationRef = useRef(0);
 
   const isTerminal = debate
     ? ["completed", "success", "completed_budget", "failed"].includes(debate.status)
     : false;
-
   const isPaused = debate?.status === "perspectives_ready";
 
-  const loadTimelineWithFallback = useCallback(async (id: string, signal?: AbortSignal): Promise<TimelineHydrationResult> => {
-    let timelineEvents: unknown[] | null = null;
+  // ── FH117: Abort all controllers ───────────────────────────────────────
+  const abortAll = useCallback((reason?: string) => {
+    [coreAbortRef, responsesAbortRef, timelineAbortRef, enrichmentAbortRef].forEach((ref) => {
+      if (ref.current) {
+        ref.current.abort(reason || "navigated");
+        ref.current = null;
+      }
+    });
+  }, []);
+
+  // ── FH116+FH117: Fetch core debate with timeout and error classification ──
+  const fetchCoreDebate = useCallback(async (id: string, signal?: AbortSignal) => {
+    const gen = coreGenerationRef.current;
+    setCoreState("loading");
+    setCoreErrorCode(null);
+    setCoreHttpStatus(null);
 
     try {
-      const data = await requestWithTimeout<unknown>(
-        `/debates/${id}/timeline`,
-        TIMELINE_TIMEOUT_MS,
-        { signal }
-      );
-      timelineEvents = extractEventItems(data);
+      const debateData = await getDebate(id, { signal, timeoutMs: DEBATE_TIMEOUT_MS });
+      if (gen !== coreGenerationRef.current) return null;
+
+      setDebate(debateData);
+      debateSetOnceRef.current = true;
+      setError(null);
+      setCoreState("ready");
+      return debateData;
     } catch (err: any) {
-      const msg = err?.message || "Timeline fetch failed";
-      console.warn("[useRunWorkspace] Timeline failed, falling back to /events:", msg);
+      if (gen !== coreGenerationRef.current) return null;
 
-      try {
-        const eventsData = await requestWithTimeout<unknown>(
-          `/debates/${id}/events`,
-          EVENTS_TIMEOUT_MS,
-          { signal }
-        );
-        timelineEvents = extractEventItems(eventsData);
-        const fallbackEvents = normalizeTimelineItems(timelineEvents, id);
-        return {
-          events: fallbackEvents,
-          quality: "events_fallback",
-          timelineError: msg,
-          eventsError: null,
-        };
-      } catch (err2: any) {
-        const msg2 = err2?.message || "Events fetch failed";
-        console.warn("[useRunWorkspace] Both timeline and events failed:", msg2);
-        return {
-          events: [],
-          quality: "debate_only",
-          timelineError: msg,
-          eventsError: msg2,
-        };
+      // Don't show errors for intentional navigation aborts
+      if (err?.name === "AbortError" && coreAbortRef.current?.signal?.aborted) {
+        setCoreState("idle");
+        return null;
       }
-    }
 
-    if (timelineEvents && timelineEvents.length > 0) {
-      const normalized: TimelineEvent[] = normalizeTimelineItems(timelineEvents, id);
-      return { events: normalized, quality: "complete", timelineError: null, eventsError: null };
+      const { code, httpStatus } = classifyCoreError(err);
+      setCoreErrorCode(code);
+      setCoreHttpStatus(httpStatus);
+      setError(coreFailureMessage(code));
+      setCoreState("failed");
+      if (!debateSetOnceRef.current) {
+        setHydrationQuality("failed");
+      }
+      return null;
     }
-    return { events: [], quality: "complete", timelineError: null, eventsError: null };
   }, []);
 
-  const fetchDebateOnly = useCallback(async (id: string, signal?: AbortSignal) => {
-    const debateData = await getDebate(id, { signal });
-    setDebate(debateData);
-    setDebateSetOnce(true);
-    debateSetOnceRef.current = true;
-    setError(null);
-    return debateData;
-  }, []);
-
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const fetchDebateAndTimeline = useCallback(async (id: string) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
-    const generation = requestGenerationRef.current;
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort("navigated");
-    }
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+  // ── FH117: Fetch responses independently ───────────────────────────────
+  const fetchResponses = useCallback(async (id: string, signal?: AbortSignal) => {
+    const gen = responsesGenerationRef.current;
+    setResponsesState("loading");
+    setResponsesError(null);
 
     try {
-      // Step 1: Fetch debate core DTO immediately
-      const debateData = await fetchDebateOnly(id, signal);
+      const responsesData = await getDebateResponses(id, { signal, timeoutMs: RESPONSES_TIMEOUT_MS });
+      if (gen !== responsesGenerationRef.current) return;
 
-      if (generation !== requestGenerationRef.current) return;
+      setResponses(responsesData.items);
+      setResponsesState(responsesData.items.length > 0 ? "ready" : "empty");
+      setResponsesError(null);
+    } catch (err: any) {
+      if (gen !== responsesGenerationRef.current) return;
 
-      // Step 2: Fetch canonical /responses (FH90 — first-class response state)
-      setResponsesState("loading");
-      try {
-        const responsesData = await getDebateResponses(id, { signal });
-        if (generation !== requestGenerationRef.current) return;
-        setResponses(responsesData.items);
-        setResponsesState(responsesData.items.length > 0 ? "ready" : "empty");
-        setResponsesError(null);
-      } catch (respErr: any) {
-        if (generation !== requestGenerationRef.current) return;
-        console.warn("[useRunWorkspace] /responses fetch failed:", respErr?.message);
+      // FH119: Distinguish 404 (deployment mismatch) from other failures
+      if (err instanceof ApiError && err.status === 404) {
+        setResponsesState("deployment_mismatch");
+        setResponsesError("Backend contract mismatch — /responses endpoint unavailable");
+      } else {
+        console.warn("[useRunWorkspace] /responses fetch failed:", err?.message);
         setResponsesState("failed");
-        setResponsesError(respErr?.message || "Failed to load persisted responses");
-        // Responses failure does not block the rest of hydration
+        setResponsesError(err?.message || "Failed to load persisted responses");
       }
+    }
+  }, []);
 
-      // Step 3: Fetch timeline as optional enrichment
+  // ── FH117: Fetch timeline independently ────────────────────────────────
+  const fetchTimeline = useCallback(async (id: string, signal?: AbortSignal) => {
+    const gen = timelineGenerationRef.current;
+    setTimelineState("loading");
+
+    try {
       const result = await loadTimelineWithFallback(id, signal);
-
-      if (generation !== requestGenerationRef.current) return;
+      if (gen !== timelineGenerationRef.current) return;
 
       setEvents(result.events);
       setHydrationQuality(result.quality);
       setTimelineError(result.timelineError);
       setEventsError(result.eventsError);
+      setTimelineState(result.quality === "debate_only" ? "failed" : result.quality === "events_fallback" ? "degraded" : "ready");
     } catch (err: any) {
-      if (generation !== requestGenerationRef.current) return;
-      console.error("[useRunWorkspace] Fetch error:", err);
-      setError(err?.message || "Failed to load workspace data");
-      if (!debateSetOnceRef.current) {
-        setHydrationQuality("failed");
-      }
-    } finally {
-      isFetchingRef.current = false;
+      if (gen !== timelineGenerationRef.current) return;
+      console.error("[useRunWorkspace] Timeline fetch error:", err);
+      setTimelineState("failed");
     }
-  }, [fetchDebateOnly, loadTimelineWithFallback]);
+  }, []);
 
+  // ── FH117: Full hydration — core first, then concurrent enrichment ─────
+  const hydrate = useCallback(async (id: string) => {
+    requestGenerationRef.current += 1;
+    coreGenerationRef.current += 1;
+    responsesGenerationRef.current += 1;
+    timelineGenerationRef.current += 1;
+
+    // Reset all states
+    setError(null);
+    setCoreErrorCode(null);
+    setCoreHttpStatus(null);
+    setResponsesState("idle");
+    setResponsesError(null);
+    setTimelineState("idle");
+    setTimelineError(null);
+    setEventsError(null);
+    setHydrationQuality("complete");
+    debateSetOnceRef.current = false;
+
+    // Abort any in-flight requests
+    abortAll("new_hydration");
+
+    // Step 1: Fetch core debate with timeout
+    coreAbortRef.current = new AbortController();
+    const coreData = await fetchCoreDebate(id, coreAbortRef.current.signal);
+
+    if (coreGenerationRef.current !== coreGenerationRef.current) return;
+    if (!coreData) return; // Failed or aborted
+
+    // Step 2: Fire responses and timeline concurrently (don't await each other)
+    responsesAbortRef.current = new AbortController();
+    timelineAbortRef.current = new AbortController();
+
+    void fetchResponses(id, responsesAbortRef.current.signal);
+    void fetchTimeline(id, timelineAbortRef.current.signal);
+  }, [fetchCoreDebate, fetchResponses, fetchTimeline, abortAll]);
+
+  // ── Retry responses independently ──────────────────────────────────────
+  const retryResponses = useCallback(async () => {
+    if (!debateId) return;
+    if (responsesAbortRef.current) {
+      responsesAbortRef.current.abort("retry");
+    }
+    responsesGenerationRef.current += 1;
+    responsesAbortRef.current = new AbortController();
+    await fetchResponses(debateId, responsesAbortRef.current.signal);
+  }, [debateId, fetchResponses]);
+
+  // ── Main effect: hydrate on debateId change ────────────────────────────
   useEffect(() => {
     if (debateId) {
-      requestGenerationRef.current += 1;
-      setIsLoading(true);
-      setHydrationQuality("complete");
-      setTimelineError(null);
-      setEventsError(null);
-      setResponsesState("idle");
-      setResponsesError(null);
-      setResponses([]);
-      debateSetOnceRef.current = false;
-      setDebateSetOnce(false);
-
-      fetchDebateAndTimeline(debateId).finally(() => {
-        setIsLoading(false);
-      });
+      hydrate(debateId);
     } else {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort("navigated");
-        abortControllerRef.current = null;
-      }
+      abortAll("cleared");
       requestGenerationRef.current += 1;
+      coreGenerationRef.current += 1;
+      responsesGenerationRef.current += 1;
+      timelineGenerationRef.current += 1;
       setDebate(null);
       setEvents([]);
       setResponses([]);
+      setCoreState("idle");
       setResponsesState("idle");
       setResponsesError(null);
+      setTimelineState("idle");
       setError(null);
+      setCoreErrorCode(null);
+      setCoreHttpStatus(null);
       setIsPollingFallback(false);
       setIsContinuing(false);
       setHydrationQuality("complete");
       setTimelineError(null);
       setEventsError(null);
       debateSetOnceRef.current = false;
-      setDebateSetOnce(false);
     }
-  }, [debateId, fetchDebateAndTimeline]);
+  }, [debateId, hydrate, abortAll]);
 
+  // ── Cleanup on unmount ─────────────────────────────────────────────────
   useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort("unmount");
-      }
-    };
-  }, []);
+    return () => { abortAll("unmount"); };
+  }, [abortAll]);
 
+  // ── SSE stream ─────────────────────────────────────────────────────────
   const streamUrl = debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
 
   const handleStreamEvent = useCallback((lastEvent: any) => {
@@ -324,89 +474,51 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     try {
       const eventType = lastEvent.type;
 
-      // FH104: Dispatch streaming reducer actions for model response lifecycle events
+      // FH104: Dispatch streaming reducer actions
       const STREAMING_EVENT_TYPES = new Set([
-        "model_response_queued",
-        "model_response_connecting",
-        "model_response_started",
-        "model_response_delta",
-        "model_response_persisting",
-        "model_response_completed",
+        "model_response_queued", "model_response_connecting", "model_response_started",
+        "model_response_delta", "model_response_persisting", "model_response_completed",
         "model_response_failed",
       ]);
 
       if (STREAMING_EVENT_TYPES.has(eventType)) {
         const p = lastEvent.payload || lastEvent;
         switch (eventType) {
-          case "model_response_queued":
-            dispatchStreaming({ type: "RESPONSE_QUEUED", payload: p });
-            break;
-          case "model_response_connecting":
-            dispatchStreaming({ type: "RESPONSE_CONNECTING", payload: p });
-            break;
-          case "model_response_started":
-            dispatchStreaming({ type: "RESPONSE_STARTED", payload: p });
-            break;
-          case "model_response_delta":
-            dispatchStreaming({ type: "RESPONSE_DELTA", payload: p });
-            break;
-          case "model_response_persisting":
-            dispatchStreaming({ type: "RESPONSE_PERSISTING", payload: p });
-            break;
-          case "model_response_completed":
-            dispatchStreaming({ type: "RESPONSE_COMPLETED", payload: p });
-            break;
-          case "model_response_failed":
-            dispatchStreaming({ type: "RESPONSE_FAILED", payload: p });
-            break;
+          case "model_response_queued": dispatchStreaming({ type: "RESPONSE_QUEUED", payload: p }); break;
+          case "model_response_connecting": dispatchStreaming({ type: "RESPONSE_CONNECTING", payload: p }); break;
+          case "model_response_started": dispatchStreaming({ type: "RESPONSE_STARTED", payload: p }); break;
+          case "model_response_delta": dispatchStreaming({ type: "RESPONSE_DELTA", payload: p }); break;
+          case "model_response_persisting": dispatchStreaming({ type: "RESPONSE_PERSISTING", payload: p }); break;
+          case "model_response_completed": dispatchStreaming({ type: "RESPONSE_COMPLETED", payload: p }); break;
+          case "model_response_failed": dispatchStreaming({ type: "RESPONSE_FAILED", payload: p }); break;
         }
-        // Also add to events for backward compatibility
         const newEvent: TimelineEvent = {
           id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
-          debate_id: debateId,
-          ts: lastEvent.ts || new Date().toISOString(),
-          type: eventType,
-          round: lastEvent.round || 0,
-          seat: lastEvent.seat,
+          debate_id: debateId, ts: lastEvent.ts || new Date().toISOString(),
+          type: eventType, round: lastEvent.round || 0, seat: lastEvent.seat,
           payload: normalizeEvent(lastEvent) as unknown as Record<string, unknown>,
         };
-        setEvents((prev) => {
-          if (prev.some((e) => e.id === newEvent.id)) return prev;
-          return [...prev, newEvent];
-        });
+        setEvents((prev) => prev.some((e) => e.id === newEvent.id) ? prev : [...prev, newEvent]);
         return;
       }
 
       const normalized = normalizeEvent(lastEvent);
       const newEvent: TimelineEvent = {
         id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
-        debate_id: debateId,
-        ts: lastEvent.ts || new Date().toISOString(),
-        type: eventType,
-        round: lastEvent.round || 0,
-        seat: lastEvent.seat,
+        debate_id: debateId, ts: lastEvent.ts || new Date().toISOString(),
+        type: eventType, round: lastEvent.round || 0, seat: lastEvent.seat,
         payload: normalized as unknown as Record<string, unknown>,
       };
+      setEvents((prev) => prev.some((e) => e.id === newEvent.id) ? prev : [...prev, newEvent]);
 
-      setEvents((prev) => {
-        if (prev.some((e) => e.id === newEvent.id)) return prev;
-        return [...prev, newEvent];
-      });
-
-      // Refetch debate on terminal/state-change events
-      if (
-        [
-          "arena_response", "message", "seat_message", "model_response",
-          "score", "stage_checkpoint", "final", "debate_failed",
-          "perspectives_ready", "debate_completed",
-        ].includes(eventType)
-      ) {
+      // Refetch debate on state-change events
+      if (["arena_response", "message", "seat_message", "model_response", "score", "stage_checkpoint", "final", "debate_failed", "perspectives_ready", "debate_completed"].includes(eventType)) {
         getDebate(debateId)
           .then((updated) => setDebate(updated))
-          .catch((err) => console.error("[useRunWorkspace] Refetch details failed:", err));
+          .catch(() => {});
       }
 
-      // Sync persisted responses when terminal events arrive
+      // Sync persisted responses on terminal events
       if (["debate_completed", "debate_failed", "arena_response"].includes(eventType)) {
         getDebateResponses(debateId)
           .then((data) => {
@@ -428,6 +540,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     onEvent: handleStreamEvent,
   });
 
+  // ── Polling fallback ───────────────────────────────────────────────────
   const startPolling = useCallback((id: string) => {
     if (pollTimerRef.current) return;
     setIsPollingFallback(true);
@@ -438,7 +551,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       }
       pollInFlightRef.current = true;
       try {
-        await fetchDebateAndTimeline(id);
+        await hydrate(id);
       } catch (err) {
         console.error("[useRunWorkspace] Polling fetch error:", err);
       } finally {
@@ -447,7 +560,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       }
     };
     pollTimerRef.current = setTimeout(tick, 3000) as unknown as NodeJS.Timeout;
-  }, [fetchDebateAndTimeline]);
+  }, [hydrate]);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -471,186 +584,116 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   }, [sseStatus, debateId, isTerminal, startPolling, stopPolling]);
 
   useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearTimeout(pollTimerRef.current);
-      }
-    };
+    return () => { if (pollTimerRef.current) clearTimeout(pollTimerRef.current); };
   }, []);
 
+  // ── Continuation recovery ──────────────────────────────────────────────
   const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!debateId || typeof window === "undefined") return;
-
     const persisted = loadIntent(debateId);
     if (persisted) {
       intentRef.current = persisted;
       idempotencyKeyRef.current = persisted.idempotencyKey;
-
       if (persisted.phase === "server_acknowledged" || persisted.phase === "tracking" || persisted.phase === "request_sent") {
         setOutcomeUnknown(true);
         setIsContinuing(true);
       } else {
         setIsContinuing(true);
       }
-
       const recover = async () => {
         try {
           let statusData = null;
           if (persisted.continuationId) {
             const res = await fetchWithAuth(`/debates/${debateId}/continuations/${persisted.continuationId}`);
-            if (res.ok) {
-              statusData = await res.json();
-            }
+            if (res.ok) statusData = await res.json();
           }
           if (!statusData && persisted.idempotencyKey) {
-            try {
-              statusData = await resolveContinuationByKey(debateId, persisted.idempotencyKey);
-            } catch {
-            }
+            try { statusData = await resolveContinuationByKey(debateId, persisted.idempotencyKey); } catch {}
           }
-
           if (statusData) {
             if (statusData.status === "failed" || statusData.status === "cancelled") {
-              clearIntent(debateId);
-              intentRef.current = null;
-              idempotencyKeyRef.current = null;
-              setIsContinuing(false);
-              setOutcomeUnknown(false);
+              clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
+              setIsContinuing(false); setOutcomeUnknown(false);
             } else {
-              const updatedIntent: PersistedContinuationIntent = {
-                ...persisted,
-                phase: "tracking",
-                continuationId: statusData.continuation_id || statusData.id,
-                updatedAt: new Date().toISOString(),
-              };
-              persistIntent(debateId, updatedIntent);
-              intentRef.current = updatedIntent;
-              setIsContinuing(true);
-              setOutcomeUnknown(false);
-              await fetchDebateAndTimeline(debateId);
+              const updatedIntent: PersistedContinuationIntent = { ...persisted, phase: "tracking", continuationId: statusData.continuation_id || statusData.id, updatedAt: new Date().toISOString() };
+              persistIntent(debateId, updatedIntent); intentRef.current = updatedIntent;
+              setIsContinuing(true); setOutcomeUnknown(false);
+              await hydrate(debateId);
             }
           } else {
-            clearIntent(debateId);
-            intentRef.current = null;
-            idempotencyKeyRef.current = null;
-            setIsContinuing(false);
-            setOutcomeUnknown(false);
+            clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
+            setIsContinuing(false); setOutcomeUnknown(false);
           }
-        } catch (err) {
-          console.error("Continuation recovery failed:", err);
-        }
+        } catch (err) { console.error("Continuation recovery failed:", err); }
       };
-
       recover();
     }
-  }, [debateId, fetchDebateAndTimeline]);
+  }, [debateId, hydrate]);
 
   useEffect(() => {
     if (debateId) {
       if (isTerminal) {
-        clearIntent(debateId);
-        intentRef.current = null;
-        idempotencyKeyRef.current = null;
-        setIsContinuing(false);
-        setOutcomeUnknown(false);
+        clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
+        setIsContinuing(false); setOutcomeUnknown(false);
       } else if (isPaused && intentRef.current?.phase === "tracking") {
-        clearIntent(debateId);
-        intentRef.current = null;
-        idempotencyKeyRef.current = null;
-        setIsContinuing(false);
-        setOutcomeUnknown(false);
+        clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
+        setIsContinuing(false); setOutcomeUnknown(false);
       }
     }
   }, [isTerminal, isPaused, debateId]);
 
+  // ── Continue / Retry / Refetch ─────────────────────────────────────────
   const handleContinue = useCallback(async () => {
     if (!debateId) return;
     try {
-      setError(null);
-      setIsContinuing(true);
-      setOutcomeUnknown(false);
-
+      setError(null); setIsContinuing(true); setOutcomeUnknown(false);
       if (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") {
         idempotencyKeyRef.current = null;
       }
-
-      if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = crypto.randomUUID();
-      }
-
+      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
       const now = new Date().toISOString();
       const expiresAt = new Date(Date.now() + CONTINUATION_TTL_MS).toISOString();
-
-      const intent: PersistedContinuationIntent = {
-        debateId,
-        idempotencyKey: idempotencyKeyRef.current,
-        createdAt: now,
-        updatedAt: now,
-        phase: "intent_created",
-        expiresAt,
-      };
-      persistIntent(debateId, intent);
-      intentRef.current = intent;
-
-      const sentIntent: PersistedContinuationIntent = { ...intent, phase: "request_sent", updatedAt: new Date().toISOString() };
-      persistIntent(debateId, sentIntent);
-      intentRef.current = sentIntent;
-
-      const retryOfId = (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled")
-        ? debate.continuation_id
-        : undefined;
-
+      const intent: PersistedContinuationIntent = { debateId, idempotencyKey: idempotencyKeyRef.current, createdAt: now, updatedAt: now, phase: "intent_created", expiresAt };
+      persistIntent(debateId, intent); intentRef.current = intent;
+      const sentIntent = { ...intent, phase: "request_sent" as const, updatedAt: new Date().toISOString() };
+      persistIntent(debateId, sentIntent); intentRef.current = sentIntent;
+      const retryOfId = (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") ? debate.continuation_id : undefined;
       const response = await continueDebate(debateId, idempotencyKeyRef.current, retryOfId);
-
-      const ackIntent: PersistedContinuationIntent = {
-        ...sentIntent,
-        phase: "server_acknowledged",
-        continuationId: response?.continuation_id,
-        updatedAt: new Date().toISOString(),
-      };
-      persistIntent(debateId, ackIntent);
-      intentRef.current = ackIntent;
-
-      await fetchDebateAndTimeline(debateId);
-
-      const trackIntent: PersistedContinuationIntent = {
-        ...ackIntent,
-        phase: "tracking",
-        updatedAt: new Date().toISOString(),
-      };
-      persistIntent(debateId, trackIntent);
-      intentRef.current = trackIntent;
+      const ackIntent = { ...sentIntent, phase: "server_acknowledged" as const, continuationId: response?.continuation_id, updatedAt: new Date().toISOString() };
+      persistIntent(debateId, ackIntent); intentRef.current = ackIntent;
+      await hydrate(debateId);
+      const trackIntent = { ...ackIntent, phase: "tracking" as const, updatedAt: new Date().toISOString() };
+      persistIntent(debateId, trackIntent); intentRef.current = trackIntent;
     } catch (err: any) {
       console.error("[useRunWorkspace] Continue failed:", err);
       setError(err?.message || "Failed to continue debate");
       setIsContinuing(false);
-      if (intentRef.current?.phase === "request_sent") {
-        setOutcomeUnknown(true);
-      }
+      if (intentRef.current?.phase === "request_sent") setOutcomeUnknown(true);
     }
-  }, [debateId, debate?.continuation_status, debate?.continuation_id, fetchDebateAndTimeline]);
+  }, [debateId, debate?.continuation_status, debate?.continuation_id, hydrate]);
 
   const handleRetry = useCallback(async (stageKey?: string) => {
     if (!debateId) return;
     try {
       setError(null);
       await retryDebate(debateId, stageKey);
-      await fetchDebateAndTimeline(debateId);
+      await hydrate(debateId);
     } catch (err: any) {
       console.error("[useRunWorkspace] Retry failed:", err);
       setError(err?.message || "Failed to retry stage");
     }
-  }, [debateId, fetchDebateAndTimeline]);
+  }, [debateId, hydrate]);
 
   const handleRefetch = useCallback(async () => {
     if (!debateId) return;
-    await fetchDebateAndTimeline(debateId);
-  }, [debateId, fetchDebateAndTimeline]);
+    await hydrate(debateId);
+  }, [debateId, hydrate]);
 
+  // ── Status derivation ──────────────────────────────────────────────────
   let status: RunWorkspaceStatus = "idle";
-  if (isLoading) {
+  if (coreState === "loading") {
     status = "loading";
   } else if (isTerminal) {
     status = debate?.status === "failed" ? "failed" : "completed";
@@ -666,18 +709,23 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     debate,
     events,
     responses,
+    coreState,
     responsesState,
     responsesError,
+    timelineState,
     streamingState,
     mergedStreamingResponses,
     status,
     sseStatus,
     error,
+    coreErrorCode,
+    coreHttpStatus,
     outcomeUnknown,
     isPollingFallback,
     continueRun: handleContinue,
     retryRun: handleRetry,
     refetch: handleRefetch,
+    retryResponses,
     isContinuing,
     hydrationQuality,
     timelineError,

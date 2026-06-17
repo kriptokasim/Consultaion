@@ -173,6 +173,19 @@ async def api_status() -> dict[str, Any]:
     }
 
 
+@router.get("/meta/contracts")
+async def get_contracts() -> dict[str, Any]:
+    return {
+        "git_sha": _GIT_SHA,
+        "contracts": {
+            "debate_detail": 2,
+            "persisted_responses": settings.RESPONSES_CONTRACT_VERSION,
+            "timeline": 1,
+            "stream_events": 1,
+        },
+    }
+
+
 def get_active_workers() -> list[dict[str, Any]]:
     from redis_pool import get_sync_redis_client
     redis_client = get_sync_redis_client()
@@ -246,6 +259,53 @@ def get_provider_circuit_status(provider: str) -> dict[str, Any]:
             "ttl": None,
             "redis_connected": False
         }
+
+
+@router.get("/ops/runtime-parity")
+async def get_runtime_parity(
+    current_admin: User = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """Compare API git_sha against all active worker heartbeats."""
+    from redis_pool import get_sync_redis_client
+    redis_client = get_sync_redis_client()
+    workers = []
+    all_match = True
+
+    if redis_client:
+        try:
+            keys = redis_client.keys("worker:heartbeat:*")
+            for key in keys:
+                val = redis_client.get(key)
+                if val:
+                    try:
+                        data = json.loads(val)
+                        key_str = key.decode("utf-8") if isinstance(key, bytes) else key
+                        worker_name = key_str.replace("worker:heartbeat:", "")
+                        last_seen = data.get("timestamp", 0)
+                        age = time.time() - last_seen
+
+                        worker_sha = data.get("git_sha", "unknown")
+                        if worker_sha != _GIT_SHA:
+                            all_match = False
+
+                        workers.append({
+                            "name": worker_name,
+                            "git_sha": worker_sha,
+                            "last_seen": last_seen,
+                            "age_seconds": round(age, 2),
+                            "queue_names": data.get("queue_names", []),
+                            "status": "healthy" if age < 30 else "stale",
+                        })
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning("Error scanning worker heartbeats for parity: %s", e)
+
+    return {
+        "api_git_sha": _GIT_SHA,
+        "workers": workers,
+        "parity": all_match,
+    }
 
 
 @router.get("/ops/debates/{debate_id}/diagnostics")

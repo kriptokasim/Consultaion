@@ -170,6 +170,8 @@ class AppSettings(BaseSettings):
     SYNTHESIS_MAX_TOKENS: int = Field(2000, ge=100, description="Max tokens for synthesis step")
     STREAMING_RESPONSES_ENABLED: bool = Field(False, description="Enable streaming deltas via SSE (FH101/FH102)")
 
+    RESPONSES_CONTRACT_VERSION: int = 1
+
     # Patchset 66.0: Stale debate cleanup settings
     DEBATE_STALE_RUNNING_SECONDS: int = Field(3600, description="Max seconds a debate can stay 'running' before cleanup")
     DEBATE_STALE_QUEUED_SECONDS: int = Field(1800, description="Max seconds a debate can stay 'queued' before cleanup")

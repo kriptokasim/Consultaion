@@ -94,6 +94,7 @@ def _safe_query_checkpoints(debate_id: str, session: Session) -> dict[str, Any]:
             }
     except Exception as exc:
         logger.warning("checkpoint_query_failed debate_id=%s error=%s", debate_id, exc)
+        return {"_checkpoint_query_failed": True}
     return {}
 
 
@@ -115,6 +116,7 @@ def _safe_query_continuation(debate_id: str, session: Session) -> dict[str, Any]
             }
     except Exception as exc:
         logger.warning("continuation_query_failed debate_id=%s error=%s", debate_id, exc)
+        return {"_continuation_query_failed": True}
     return {}
 
 
@@ -142,6 +144,7 @@ def _safe_query_message_count(debate_id: str, session: Session) -> dict[str, Any
         return {"responses_received": count}
     except Exception as exc:
         logger.warning("message_count_query_failed debate_id=%s error=%s", debate_id, exc)
+        return {"_message_query_failed": True}
     return {}
 
 
@@ -156,4 +159,5 @@ def _safe_query_score_count(debate_id: str, session: Session) -> dict[str, Any]:
         return {"scores_received": count}
     except Exception as exc:
         logger.warning("score_count_query_failed debate_id=%s error=%s", debate_id, exc)
+        return {"_score_query_failed": True}
     return {}

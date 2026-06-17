@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield } from "lucide-react";
+import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle, RefreshCw } from "lucide-react";
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
 import { ModelCard, StreamingModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
 import type { ModelResponse } from "./ModelCard";
 import type { StreamingModelBuffer, ModelState } from "@/lib/streaming/types";
+import type { ResponsesState, TimelineState } from "@/hooks/useRunWorkspace";
 import { SynthesisCard, SynthesisLoading } from "./SynthesisCard";
 import { PublicRunCTATop, PublicRunCTAFooter } from "./CTABanner";
 import { DivergenceMeter } from "./DivergenceMeter";
@@ -20,11 +21,15 @@ interface ArenaRunViewProps {
     events: DebateEvent[];
     responses?: PersistedModelResponse[];
     streamingBuffers?: Map<string, StreamingModelBuffer>;
+    isTerminal?: boolean;
+    responsesState?: ResponsesState;
+    responsesError?: string | null;
+    timelineState?: TimelineState;
     profile?: any;
     onRefetch?: () => Promise<any> | void;
 }
 
-export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, profile, onRefetch }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, isTerminal, responsesState, responsesError, timelineState, profile, onRefetch }: ArenaRunViewProps) {
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
         const eventResponses: Array<ModelResponse> = [];
@@ -121,7 +126,9 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
         }
     };
 
-    const isLoading = modelResponses.length === 0 && !synthesis;
+    // FH121: Correct loading formula — terminal Runs never show skeletons
+    const showResponseSkeletons = !isTerminal && (responsesState === "idle" || responsesState === "loading");
+    const isLoading = showResponseSkeletons && modelResponses.length === 0 && !synthesis;
     const expectedModels = debate.final_meta?.models?.length || 4;
     const [activeTab, setActiveTab] = useState<number>(0);
     const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
@@ -226,6 +233,45 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     </button>
                 ))}
             </div>
+
+            {/* FH121: Terminal empty/failed response states */}
+            {isTerminal && responsesState === "empty" && modelResponses.length === 0 && (
+                <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-6 text-center">
+                    <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        This Run reached a terminal state, but no persisted model responses were found.
+                    </p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        Run ID: {debate.id} · Status: {debate.status}
+                    </p>
+                    <button
+                        onClick={() => onRefetch?.()}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-800/50 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-700/50 transition-colors"
+                    >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry response loading
+                    </button>
+                </div>
+            )}
+
+            {isTerminal && responsesState === "failed" && modelResponses.length === 0 && (
+                <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6 text-center">
+                    <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                        The Run loaded, but its stored model responses could not be retrieved.
+                    </p>
+                    {responsesError && (
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1 font-mono">{responsesError}</p>
+                    )}
+                    <button
+                        onClick={() => onRefetch?.()}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-800/50 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors"
+                    >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry loading responses
+                    </button>
+                </div>
+            )}
 
             {/* Model Response Cards */}
             <div>
