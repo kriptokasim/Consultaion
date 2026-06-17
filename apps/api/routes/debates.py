@@ -1478,6 +1478,39 @@ async def get_debate_events(
     return {"items": events}
 
 
+@router.get("/debates/{debate_id}/responses")
+@router.get("/api/v1/debates/{debate_id}/responses")
+async def get_debate_responses(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """Canonical persisted model responses (PR-FH89).
+
+    Independent of timeline / events / scores. Returns the persisted
+    Message rows for a debate normalized into a single DTO. A database
+    failure becomes a non-2xx response — never a successful empty list.
+    """
+    from services.debate_responses import (
+        ResponsesQueryError,
+        fetch_persisted_responses,
+    )
+
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    public_view = (not current_user) and is_debate_public(debate)
+
+    try:
+        payload = fetch_persisted_responses(session, debate, is_public=public_view)
+    except ResponsesQueryError as exc:
+        logger.error("persisted_responses_query_failed debate_id=%s error=%s", debate_id, exc)
+        raise AppError(
+            message="Failed to read persisted model responses.",
+            code="debate.responses_query_failed",
+        ) from exc
+
+    return payload
+
+
 @router.get("/debates/{debate_id}/judges")
 async def get_debate_judges(
     debate_id: str,

@@ -11,10 +11,11 @@ import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 import { useToast } from "@/components/ui/toast";
 import { TimelineEvent } from "@/lib/timeline/types";
 import { fetchWithAuth } from "@/lib/auth";
+import { fetchJsonOrThrow } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
-import { normalizeEvent } from "@/lib/api/normalizeEvent";
+import { normalizeEvent, timelineEventsToDebateEvents } from "@/lib/api/normalizeEvent";
 import { PipelineProgress, derivePipelineStage } from "@/components/arena/PipelineProgress";
-import type { DebateEvent, ScoreItem, Member, JudgeVoteFlow, VotePayload } from "@/lib/api/types";
+import type { DebateEvent, ScoreItem, Member, JudgeVoteFlow, VotePayload, PersistedModelResponse } from "@/lib/api/types";
 import { WorkspaceHeader, DesktopStageRail, MobileStageBar, PerspectivesGrid, PerspectivesReadyAction } from "@/components/workspace";
 import { FeatureGate, useFeatureFlag } from "@/components/FeatureGate";
 import { deriveWorkspaceStage } from "@/lib/workspace/deriveWorkspaceStage";
@@ -48,6 +49,9 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   const {
     debate,
     events,
+    responses,
+    responsesState,
+    responsesError,
     status: workspaceStatus,
     sseStatus,
     error: workspaceError,
@@ -130,25 +134,31 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
+    // FH91: Use fetchJsonOrThrow so non-2xx is never converted to empty success
     Promise.allSettled([
-      fetchWithAuth(`/debates/${id}/events`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : { items: [] })),
-      fetchWithAuth(`/debates/${id}/members`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : { members: [] })),
+      fetchJsonOrThrow<{ items: any[] }>(`/debates/${id}/events`, { signal: controller.signal, timeoutMs: 10000 }),
+      fetchJsonOrThrow<{ members: Member[] }>(`/debates/${id}/members`, { signal: controller.signal, timeoutMs: 10000 }),
     ])
       .then(([eventsResult, membersResult]) => {
+        let eventsDegraded = false;
+        let membersDegraded = false;
+
         if (eventsResult.status === "fulfilled") {
           const eventsData = eventsResult.value;
           setResultsEvents((eventsData.items || []).map(normalizeEvent));
         } else {
+          eventsDegraded = true;
           console.warn("[RunDetailClient] Events fetch failed:", eventsResult.reason);
         }
         if (membersResult.status === "fulfilled") {
           setResultsMembers(membersResult.value.members || []);
         } else {
+          membersDegraded = true;
           console.warn("[RunDetailClient] Members fetch failed:", membersResult.reason);
         }
         setResultsFetched(true);
         setCompletedLoadState(
-          eventsResult.status === "fulfilled" ? "ready" : "ready_degraded"
+          eventsDegraded || membersDegraded ? "ready_degraded" : "ready"
         );
       })
       .catch((err) => {
@@ -167,6 +177,13 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     setResultsMembers([]);
     setCompletedLoadState("loading_enrichment");
   }, []);
+
+  // FH92: Canonical flattened events — never use `as unknown as DebateEvent[]`
+  const normalizedResultsEvents = useMemo<DebateEvent[]>(() => {
+    if (resultsEvents.length > 0) return resultsEvents;
+    // Fall back to flattening timeline events via the canonical function
+    return timelineEventsToDebateEvents(events);
+  }, [resultsEvents, events]);
 
   const { scores, judgeVotes, vote } = useMemo(() => {
     const scoreMap = new Map<string, { total: number; count: number; rationale?: string }>();
@@ -402,8 +419,86 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
+  // FH93: Render failed Runs with their persisted responses instead of
+  // a generic error card. Only show the simple failure when NO persisted
+  // responses could be retrieved.
   if (debate?.status === "failed") {
     const errorReason = debate?.final_meta?.error || debate?.error_reason || "Run encountered a terminal error and failed.";
+    const hasPersistedResponses = responsesState === "ready" && responses.length > 0;
+    const responsesQueryFailed = responsesState === "failed";
+    const noResponsesPersisted = responsesState === "empty" || (responsesState === "ready" && responses.length === 0);
+
+    if (hasPersistedResponses) {
+      // FH93: Show model cards even for failed Runs
+      const successCount = responses.filter(r => r.success).length;
+      const failedCount = responses.filter(r => !r.success).length;
+      const totalCount = responses.length;
+
+      // Derive a safe failure summary from responses
+      const primaryFailure = responses.find(r => !r.success);
+      const failureSummary = primaryFailure?.error_message || errorReason;
+
+      return (
+        <div className="container max-w-[1400px] py-6 space-y-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>
+              {successCount === 0
+                ? "Run could not produce a final decision"
+                : "Run completed with errors"}
+            </AlertTitle>
+            <AlertDescription>
+              <p className="mt-2 text-sm">
+                {successCount} of {totalCount} models responded successfully.
+                {failedCount > 0 && ` ${failedCount} provider${failedCount > 1 ? "s" : ""} failed.`}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{failureSummary}</p>
+              <Button variant="outline" className="mt-3" onClick={() => window.location.reload()}>
+                Retry Run
+              </Button>
+            </AlertDescription>
+          </Alert>
+
+          {/* Render the ArenaRunView with persisted responses */}
+          {debate?.mode === "arena" ? (
+            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} profile={profile} onRefetch={refetch} />
+          ) : (
+            <ParliamentRunView
+              id={id}
+              debate={debate}
+              scores={scores}
+              vote={vote}
+              events={normalizedResultsEvents}
+              members={resultsMembers}
+              judgeVotes={judgeVotes}
+              threshold={0.5}
+              voteBasis="threshold"
+              apiBase={API_ORIGIN}
+            />
+          )}
+        </div>
+      );
+    }
+
+    if (responsesQueryFailed) {
+      return (
+        <div className="container py-8 max-w-2xl">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Run Failed</AlertTitle>
+            <AlertDescription>
+              <p className="mt-2 text-sm">Run failed, and stored responses could not be retrieved.</p>
+              <p className="mt-1 text-xs text-muted-foreground">{responsesError}</p>
+              <Button variant="outline" className="mt-4" onClick={() => refetch()}>
+                Retry Loading Responses
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      );
+    }
+
+    // noResponsesPersisted: simple generic failure
     return (
       <div className="container py-8 max-w-2xl">
         <Alert variant="destructive">
@@ -445,7 +540,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
             </div>
           )}
-          <ArenaRunView debate={debate} events={resultsEvents.length > 0 ? resultsEvents : (events as unknown as DebateEvent[])} profile={profile} onRefetch={refetch} />
+          <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} profile={profile} onRefetch={refetch} />
         </div>
       );
     }
@@ -473,7 +568,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           )}
           <VotingRunView
             debate={debate}
-            events={resultsEvents.length > 0 ? resultsEvents : (events as unknown as DebateEvent[])}
+            events={normalizedResultsEvents}
             isCompleted={true}
             resultsMembers={resultsMembers}
             judgeVotes={judgeVotes}
@@ -509,7 +604,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           debate={debate}
           scores={scores}
           vote={vote}
-          events={resultsEvents.length > 0 ? resultsEvents : (events as unknown as DebateEvent[])}
+          events={normalizedResultsEvents}
           members={resultsMembers}
           judgeVotes={judgeVotes}
           threshold={0.5}
@@ -585,7 +680,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
                 <PerspectivesGrid modelSlots={modelSlots} />
               ) : (
-                <ArenaRunView debate={debate as any} events={liveEvents as any} onRefetch={refetch} />
+                <ArenaRunView debate={debate as any} events={liveEvents as any} responses={responses} onRefetch={refetch} />
               )}
 
               {isPollingFallback && (

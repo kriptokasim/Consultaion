@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithAuth } from "@/lib/auth";
-import { getDebate, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, REQUEST_TIMEOUT } from "@/lib/api";
+import { getDebate, getDebateResponses, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, REQUEST_TIMEOUT } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { useEventSource, type SSEStatus } from "@/lib/sse";
 import { normalizeEvent, normalizeTimelineItems } from "@/lib/api/normalizeEvent";
 import type { TimelineEvent } from "@/lib/timeline/types";
+import type { PersistedModelResponse, PersistedResponsesResponse } from "@/lib/api/types";
 
 export type RunWorkspaceStatus =
   | "idle"
@@ -21,6 +22,13 @@ export type RunHydrationQuality =
   | "complete"
   | "events_fallback"
   | "debate_only"
+  | "failed";
+
+export type ResponsesState =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "empty"
   | "failed";
 
 export interface PersistedContinuationIntent {
@@ -94,6 +102,9 @@ type TimelineHydrationResult = {
 export interface UseRunWorkspaceResult {
   debate: any | null;
   events: TimelineEvent[];
+  responses: PersistedModelResponse[];
+  responsesState: ResponsesState;
+  responsesError: string | null;
   status: RunWorkspaceStatus;
   sseStatus: SSEStatus;
   error: string | null;
@@ -120,6 +131,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [debateSetOnce, setDebateSetOnce] = useState(false);
+  const [responses, setResponses] = useState<PersistedModelResponse[]>([]);
+  const [responsesState, setResponsesState] = useState<ResponsesState>("idle");
+  const [responsesError, setResponsesError] = useState<string | null>(null);
 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
@@ -204,10 +218,28 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     const signal = abortControllerRef.current.signal;
 
     try {
+      // Step 1: Fetch debate core DTO immediately
       const debateData = await fetchDebateOnly(id, signal);
 
       if (generation !== requestGenerationRef.current) return;
 
+      // Step 2: Fetch canonical /responses (FH90 — first-class response state)
+      setResponsesState("loading");
+      try {
+        const responsesData = await getDebateResponses(id, { signal });
+        if (generation !== requestGenerationRef.current) return;
+        setResponses(responsesData.items);
+        setResponsesState(responsesData.items.length > 0 ? "ready" : "empty");
+        setResponsesError(null);
+      } catch (respErr: any) {
+        if (generation !== requestGenerationRef.current) return;
+        console.warn("[useRunWorkspace] /responses fetch failed:", respErr?.message);
+        setResponsesState("failed");
+        setResponsesError(respErr?.message || "Failed to load persisted responses");
+        // Responses failure does not block the rest of hydration
+      }
+
+      // Step 3: Fetch timeline as optional enrichment
       const result = await loadTimelineWithFallback(id, signal);
 
       if (generation !== requestGenerationRef.current) return;
@@ -235,6 +267,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setHydrationQuality("complete");
       setTimelineError(null);
       setEventsError(null);
+      setResponsesState("idle");
+      setResponsesError(null);
+      setResponses([]);
       debateSetOnceRef.current = false;
       setDebateSetOnce(false);
 
@@ -249,6 +284,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       requestGenerationRef.current += 1;
       setDebate(null);
       setEvents([]);
+      setResponses([]);
+      setResponsesState("idle");
+      setResponsesError(null);
       setError(null);
       setIsPollingFallback(false);
       setIsContinuing(false);
@@ -549,6 +587,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   return {
     debate,
     events,
+    responses,
+    responsesState,
+    responsesError,
     status,
     sseStatus,
     error,

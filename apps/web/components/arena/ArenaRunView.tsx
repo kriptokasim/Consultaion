@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Sparkles, Bot, CheckCircle2 } from "lucide-react";
-import type { DebateDetail, DebateEvent } from "@/lib/api/types";
+import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
 import { ModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
 import type { ModelResponse } from "./ModelCard";
@@ -16,30 +16,54 @@ import { fetchWithAuth } from "@/lib/auth";
 interface ArenaRunViewProps {
     debate: DebateDetail;
     events: DebateEvent[];
+    responses?: PersistedModelResponse[];
     profile?: any;
     onRefetch?: () => Promise<any> | void;
 }
 
-export default function ArenaRunView({ debate, events, profile, onRefetch }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, responses: persistedResponses, profile, onRefetch }: ArenaRunViewProps) {
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
-        const responses: Array<ModelResponse> = [];
+        const eventResponses: Array<ModelResponse> = [];
         let synthesisText = "";
 
-        for (const evt of events) {
-            if (evt.type === "arena_response") {
-                const e = evt as any;
-                responses.push({
-                    model_id: e.model_id || "",
-                    display_name: e.display_name || e.seat_name || "Model",
-                    provider: e.provider || "",
-                    content: e.content || e.text || "",
-                    logo_url: e.logo_url,
-                    persona_type: e.persona_type,
-                    persona_tagline: e.persona_tagline,
-                    success: e.success !== false,
+        // FH92: If persisted responses are available, use them as the
+        // canonical model-answer source. Events are only used for synthesis.
+        if (persistedResponses && persistedResponses.length > 0) {
+            for (const r of persistedResponses) {
+                eventResponses.push({
+                    model_id: r.model_id,
+                    display_name: r.display_name,
+                    provider: r.provider,
+                    content: r.content || "",
+                    logo_url: r.metadata?.logo_url || undefined,
+                    persona_type: r.metadata?.persona_type || undefined,
+                    persona_tagline: r.metadata?.persona_tagline || undefined,
+                    success: r.success,
                 });
-            } else if (evt.type === "arena_synthesis") {
+            }
+        } else {
+            // Fallback: derive from events (legacy path)
+            for (const evt of events) {
+                if (evt.type === "arena_response") {
+                    const e = evt as any;
+                    eventResponses.push({
+                        model_id: e.model_id || "",
+                        display_name: e.display_name || e.seat_name || "Model",
+                        provider: e.provider || "",
+                        content: e.content || e.text || "",
+                        logo_url: e.logo_url,
+                        persona_type: e.persona_type,
+                        persona_tagline: e.persona_tagline,
+                        success: e.success !== false,
+                    });
+                }
+            }
+        }
+
+        // Extract synthesis from events (always event-based)
+        for (const evt of events) {
+            if (evt.type === "arena_synthesis") {
                 synthesisText = (evt as any).text || (evt as any).content || "";
             } else if (evt.type === "final" && !synthesisText) {
                 synthesisText = (evt as any).text || "";
@@ -52,15 +76,14 @@ export default function ArenaRunView({ debate, events, profile, onRefetch }: Are
         }
 
         // Fallback: try to extract model responses from final_meta
-        if (responses.length === 0 && debate.final_meta?.models) {
-            // Models info is in final_meta but content is in seat_message events
+        if (eventResponses.length === 0 && debate.final_meta?.models) {
             const seatMessages = events.filter((e: any) => e.type === "seat_message");
             for (const model of debate.final_meta.models) {
                 const matching = seatMessages.find((e: any) =>
                     (e as any).display_name === model.display_name ||
                     (e as any).seat_name === model.display_name
                 );
-                responses.push({
+                eventResponses.push({
                     model_id: model.model_id,
                     display_name: model.display_name,
                     provider: model.provider,
@@ -73,8 +96,8 @@ export default function ArenaRunView({ debate, events, profile, onRefetch }: Are
             }
         }
 
-        return { modelResponses: responses, synthesis: synthesisText };
-    }, [events, debate]);
+        return { modelResponses: eventResponses, synthesis: synthesisText };
+    }, [events, debate, persistedResponses]);
 
     const handleRetryAgent = async (personaName: string) => {
         const res = await fetchWithAuth(`/debates/${debate.id}/retry-agent`, {

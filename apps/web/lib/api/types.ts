@@ -351,3 +351,51 @@ export interface UserParticipationResponse {
     created_at: string;
   }[];
 }
+
+// ---------------------------------------------------------------------------
+// PR-FH89: Canonical persisted model response contract.
+// ---------------------------------------------------------------------------
+
+export type PersistedResponseRole =
+  | "arena_response"
+  | "seat"
+  | "delegate"
+  | "candidate"
+  | "revised";
+
+export interface PersistedModelResponseMetadata {
+  logo_url?: string | null;
+  persona_type?: string | null;
+  persona_tagline?: string | null;
+  attempt_count?: number;
+}
+
+export interface PersistedModelResponse {
+  id: string;
+  debate_id: string;
+  response_type: string;
+  role: string;
+  round: number;
+  model_id: string;
+  display_name: string;
+  provider: string;
+  content: string;
+  success: boolean;
+  error_code: string | null;
+  error_message: string | null;
+  retryable: boolean;
+  created_at: string | null;
+  metadata: PersistedModelResponseMetadata;
+}
+
+export interface PersistedResponsesSummary {
+  expected: number;
+  persisted: number;
+  successful: number;
+  failed: number;
+}
+
+export interface PersistedResponsesResponse {
+  items: PersistedModelResponse[];
+  summary: PersistedResponsesSummary;
+}

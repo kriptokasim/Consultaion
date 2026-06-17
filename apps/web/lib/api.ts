@@ -2,7 +2,7 @@ import { apiRequest } from "@/lib/apiClient";
 import { fetchWithAuth } from "@/lib/auth";
 import type { PanelConfigPayload } from "@/lib/panels";
 import { API_ORIGIN } from "@/lib/config/runtime";
-import type { RequestOptions } from "@/lib/api/types";
+import type { PersistedResponsesResponse, RequestOptions } from "@/lib/api/types";
 
 const API = API_ORIGIN;
 
@@ -477,3 +477,79 @@ export async function sendTestAlert() {
     path: "/admin/test-alert",
   });
 }
+
+// ---------------------------------------------------------------------------
+// PR-FH89 / PR-FH91: Canonical responses endpoint + strict fetchJsonOrThrow.
+// ---------------------------------------------------------------------------
+
+/**
+ * Strict JSON fetcher.
+ *
+ *  - Executes an authenticated request.
+ *  - Parses JSON when available.
+ *  - Throws a typed `ApiError` for every non-2xx response.
+ *  - Preserves status code, body, error code and retryability.
+ *  - Never returns a fake empty payload for an HTTP error.
+ *
+ * Use this helper everywhere we need to distinguish "no rows persisted" (HTTP
+ * 200 + items:[]) from "endpoint failed" (non-2xx). The legacy
+ * `r.ok ? r.json() : { items: [] }` pattern was the root cause of empty
+ * success states being shown to users in FH-89.
+ */
+export async function fetchJsonOrThrow<T>(
+  path: string,
+  options?: RequestOptions,
+): Promise<T> {
+  const { signal, cleanup } = composeAbortSignal(options?.timeoutMs, options?.signal);
+  const url = path.startsWith("http") ? path : `${API}${path}`;
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      let body: ErrorBody | string | null = null;
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        body = (await res.json().catch(() => null)) as ErrorBody | null;
+      } else {
+        body = await res.text().catch(() => null);
+      }
+      const code =
+        (body && typeof body === "object" && (body.code || body.error?.code)) || undefined;
+      const message =
+        (body && typeof body === "object" && (body.detail || body.message)) ||
+        `Request failed: ${res.status}`;
+      const error = new ApiError(message, res.status, body);
+      if (code) (error as ApiError & { code?: string }).code = code;
+      handleClientAuthRedirect(res.status);
+      throw error;
+    }
+    if (res.status === 204) return undefined as T;
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      return (await res.json()) as T;
+    }
+    return undefined as T;
+  } catch (err: any) {
+    if (err.name === "AbortError" && !options?.signal?.aborted) {
+      throw new TimeoutError(`Request timed out after ${options?.timeoutMs ?? 0}ms`);
+    }
+    throw err;
+  } finally {
+    cleanup();
+  }
+}
+
+export async function getDebateResponses(
+  debateId: string,
+  options?: RequestOptions,
+): Promise<PersistedResponsesResponse> {
+  return fetchJsonOrThrow<PersistedResponsesResponse>(
+    `/debates/${debateId}/responses`,
+    options,
+  );
+}
+

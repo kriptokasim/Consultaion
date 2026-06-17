@@ -210,3 +210,31 @@ export function normalizeTimelineItems(items: unknown[], debateId: string): Time
 
     return events;
 }
+
+// ---------------------------------------------------------------------------
+// PR-FH92: Canonical TimelineEvent → DebateEvent flatten.
+// ---------------------------------------------------------------------------
+
+/**
+ * Flatten a TimelineEvent (envelope shape) into a DebateEvent (flat shape)
+ * by merging `payload` over the top-level fields and routing through the
+ * existing `normalizeEvent` so the discriminated union is correct.
+ *
+ * Use this everywhere a component needs a `DebateEvent[]` and currently
+ * falls back to `events as unknown as DebateEvent[]`. The cast was the
+ * root cause of empty model IDs / providers / content on Arena cards.
+ */
+export function timelineEventToDebateEvent(event: TimelineEvent): DebateEvent {
+    return normalizeEvent({
+        ...event,
+        ...(event.payload ?? {}),
+        type: event.payload?.type ?? event.type,
+    });
+}
+
+/**
+ * Convenience wrapper for `TimelineEvent[]` → `DebateEvent[]`.
+ */
+export function timelineEventsToDebateEvents(events: TimelineEvent[]): DebateEvent[] {
+    return events.map(timelineEventToDebateEvent);
+}
