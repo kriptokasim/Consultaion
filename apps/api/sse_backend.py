@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import deque
 from collections.abc import AsyncIterator
 from enum import Enum
 from typing import Optional, Protocol
@@ -16,6 +17,48 @@ except ImportError:  # pragma: no cover - redis optional for memory backend
     redis = None
 
 logger = logging.getLogger(__name__)
+
+# ── Patchset 132: Event priority classification ──────────────────────────
+
+# Critical events must never be dropped — they terminate or complete a stream
+CRITICAL_EVENT_TYPES = frozenset({
+    "final", "error", "debate_completed", "debate_failed",
+})
+
+# Important state transitions should be preserved when possible
+IMPORTANT_EVENT_TYPES = frozenset({
+    "arena_response", "model_response_completed", "model_response_failed",
+    "perspectives_ready", "stage_checkpoint",
+})
+
+# Loss-tolerant events can be dropped or coalesced under pressure
+# (deltas, heartbeats, progress notices, repeated diagnostics)
+
+_DELTA_EVENT_TYPES = frozenset({
+    "model_response_delta",
+})
+
+
+def _event_priority(event: dict) -> int:
+    """Return event priority: 0=critical, 1=important, 2=loss-tolerant."""
+    payload = event.get("payload", {})
+    evt_type = event.get("type", payload.get("type", ""))
+    if evt_type in CRITICAL_EVENT_TYPES:
+        return 0
+    if evt_type in IMPORTANT_EVENT_TYPES:
+        return 1
+    return 2
+
+
+def _is_delta(event: dict) -> bool:
+    payload = event.get("payload", {})
+    return payload.get("type", "") in _DELTA_EVENT_TYPES or event.get("type", "") in _DELTA_EVENT_TYPES
+
+
+def _delta_key(event: dict) -> str | None:
+    """Extract coalescing key for deltas (response_id)."""
+    payload = event.get("payload", {})
+    return payload.get("response_id") or event.get("response_id")
 
 
 class StreamLeaseResult(Enum):
@@ -59,16 +102,21 @@ class MemoryChannelBackend:
     - Receiving 'final' or 'error' event types
     - Idle timeout (no events received within timeout period)
     - External cancellation
+    
+    Heartbeats are emitted every heartbeat_interval_seconds (default 5) to
+    allow clients to detect connected-but-silent streams.
     """
     def __init__(
         self, 
         ttl_seconds: int = 900, 
         max_queue_size: int = 1000,
-        idle_timeout_seconds: int = 3600
+        idle_timeout_seconds: int = 3600,
+        heartbeat_interval_seconds: float = 5.0,
     ) -> None:
         self._ttl_seconds = ttl_seconds
         self._max_queue_size = max_queue_size
         self._idle_timeout_seconds = idle_timeout_seconds
+        self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._channels: dict[str, asyncio.Queue[dict]] = {}
         self._subscribers: dict[str, list[asyncio.Queue[dict]]] = {}
         self._last_seen: dict[str, float] = {}
@@ -134,18 +182,65 @@ class MemoryChannelBackend:
             self._last_seen[channel_id] = time.time()
 
             # FH125 F-4: Fan out to all per-subscriber queues
+            # Patchset 132: Priority-based backpressure — never drop critical events
             subscribers = list(self._subscribers.get(channel_id, []))
 
+        new_priority = _event_priority(envelope)
         for sub_queue in subscribers:
             try:
                 if sub_queue.full():
-                    try:
-                        sub_queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        pass
+                    # Try to drop a loss-tolerant event to make room
+                    dropped = False
+                    if new_priority == 0:
+                        # Critical event: must make room by dropping oldest loss-tolerant
+                        dropped = self._drop_from_queue(sub_queue, max_priority_to_drop=2)
+                        if not dropped:
+                            # No loss-tolerant to drop; try important
+                            dropped = self._drop_from_queue(sub_queue, max_priority_to_drop=1)
+                    elif new_priority == 1:
+                        # Important event: only drop loss-tolerant
+                        dropped = self._drop_from_queue(sub_queue, max_priority_to_drop=2)
+
+                    if not dropped and sub_queue.full():
+                        from metrics import increment_metric
+                        increment_metric("sse.backpressure.overflow")
+                        if new_priority == 0:
+                            logger.error(
+                                "CRITICAL: Cannot enqueue terminal event — queue full with only critical/important events"
+                            )
+                            increment_metric("sse.backpressure.critical_enqueue_failed")
+                        continue  # Skip this subscriber rather than blocking
+
                 await sub_queue.put(envelope)
             except Exception as e:
                 logger.error(f"Error publishing to subscriber queue for {channel_id}: {e}")
+
+    def _drop_from_queue(self, queue: asyncio.Queue[dict], max_priority_to_drop: int) -> bool:
+        """Try to drop the oldest event with priority <= max_priority_to_drop from a queue.
+        
+        Returns True if an event was dropped.
+        """
+        # asyncio.Queue doesn't support iteration, so we need to drain and re-enqueue
+        temp: list[dict] = []
+        dropped = False
+        while not queue.empty():
+            try:
+                item = queue.get_nowait()
+                if not dropped and _event_priority(item) <= max_priority_to_drop:
+                    dropped = True
+                    from metrics import increment_metric
+                    increment_metric("sse.backpressure.dropped")
+                    continue  # Drop this event
+                temp.append(item)
+            except asyncio.QueueEmpty:
+                break
+        # Re-enqueue remaining events
+        for item in temp:
+            try:
+                queue.put_nowait(item)
+            except asyncio.QueueFull:
+                break
+        return dropped
 
     async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
         """Subscribe to a channel and yield events.
@@ -197,6 +292,7 @@ class MemoryChannelBackend:
 
         poll_timeout = getattr(settings, "SSE_POLL_TIMEOUT_SECONDS", 1.0)
         idle_start = time.time()
+        last_heartbeat = time.time()
         try:
             while True:
                 async with self._lock:
@@ -209,16 +305,33 @@ class MemoryChannelBackend:
                 try:
                     envelope = await asyncio.wait_for(sub_queue.get(), timeout=poll_timeout)
                     idle_start = time.time()
+                    last_heartbeat = time.time()
                     yield envelope
                     payload = envelope.get("payload", {})
                     if payload.get("type") in ("final", "error"):
                         break
                 except asyncio.TimeoutError:
+                    # Emit heartbeat if no events for heartbeat interval
+                    if self._heartbeat_interval_seconds > 0:
+                        elapsed = time.time() - last_heartbeat
+                        if elapsed >= self._heartbeat_interval_seconds:
+                            heartbeat_envelope = {
+                                "id": f"hb-{channel_id}-{int(time.time())}",
+                                "type": "heartbeat",
+                                "event": "heartbeat",
+                                "session_id": channel_id,
+                                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                "sequence": 0,
+                                "payload": {"type": "heartbeat"},
+                            }
+                            try:
+                                yield heartbeat_envelope
+                            except Exception:
+                                pass
+                            last_heartbeat = time.time()
                     continue
-        except asyncio.CancelledError:
-            pass
         finally:
-            # Remove subscriber queue on disconnect
+            # Remove subscriber queue on disconnect — cancellation propagates via finally
             async with self._lock:
                 subs = self._subscribers.get(channel_id, [])
                 if sub_queue in subs:
@@ -395,6 +508,8 @@ class RedisChannelBackend:
                 break
 
         # 5. Continue live consumption from Pub/Sub
+        last_heartbeat = time.time()
+        heartbeat_interval = getattr(self, "_heartbeat_interval_seconds", 5.0)
         try:
             while True:
                 try:
@@ -404,10 +519,29 @@ class RedisChannelBackend:
                         if data:
                             envelope = json.loads(data)
                             yield envelope
+                            last_heartbeat = time.time()
                             payload = envelope.get("payload", {})
                             if payload.get("type") in ("final", "error"):
                                 break
                     else:
+                        # Emit heartbeat if no events for heartbeat interval
+                        if heartbeat_interval > 0:
+                            elapsed = time.time() - last_heartbeat
+                            if elapsed >= heartbeat_interval:
+                                heartbeat_envelope = {
+                                    "id": f"hb-{channel_id}-{int(time.time())}",
+                                    "type": "heartbeat",
+                                    "event": "heartbeat",
+                                    "session_id": channel_id,
+                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                    "sequence": 0,
+                                    "payload": {"type": "heartbeat"},
+                                }
+                                try:
+                                    yield heartbeat_envelope
+                                except Exception:
+                                    pass
+                                last_heartbeat = time.time()
                         await asyncio.sleep(0.01)
                 except (redis.ConnectionError, redis.TimeoutError) as e:
                     logger.warning(f"Redis connection lost in subscribe ({e}), retrying...")
@@ -471,8 +605,12 @@ class StreamLeaseManager:
                 key = self._lease_key(debate_id)
                 result = await sse_acquire_lease_async(client, key, identity, self._max_streams, self._lease_ttl)
                 if result in (1, 2):
+                    from metrics import increment_metric
+                    increment_metric("sse.lease.acquired")
                     return StreamLeaseResult.ACQUIRED
                 if result == 0:
+                    from metrics import increment_metric
+                    increment_metric("sse.lease.denied")
                     return StreamLeaseResult.DENIED
                 # result == -1 (backend error) — fall through to memory
         except Exception as exc:
@@ -485,9 +623,15 @@ class StreamLeaseManager:
                 expired = [k for k, v in memory_set.items() if v < now]
                 for k in expired:
                     del memory_set[k]
+                    from metrics import increment_metric
+                    increment_metric("sse.lease.expired")
                 if len(memory_set) >= self._max_streams:
+                    from metrics import increment_metric
+                    increment_metric("sse.lease.denied")
                     return StreamLeaseResult.DENIED
                 memory_set[identity] = now + self._lease_ttl
+                from metrics import increment_metric
+                increment_metric("sse.lease.acquired")
                 return StreamLeaseResult.ACQUIRED
         except Exception as exc:
             logger.error("Memory lease acquire failed: %s", exc)
@@ -551,6 +695,78 @@ def get_stream_lease_manager() -> StreamLeaseManager:
         lease_ttl = getattr(settings, "SSE_LEASE_TTL_SECONDS", 300)
         _stream_lease_manager = StreamLeaseManager(max_streams=max_streams, lease_ttl=lease_ttl)
     return _stream_lease_manager
+
+
+# ── Patchset 132: Exactly-once lease lifecycle ──────────────────────────
+
+LEASE_RELEASE_TIMEOUT_SECONDS = 5.0
+
+
+class AcquiredStreamLease:
+    """Async context manager that ensures a stream lease is released exactly once.
+    
+    Handles:
+    - Normal completion (final/error event)
+    - Client disconnect
+    - Backend exception
+    - Server cancellation
+    - Serialization failure
+    - Duplicate cleanup (idempotent)
+    """
+
+    def __init__(
+        self,
+        lease_manager: StreamLeaseManager,
+        debate_id: str,
+        subscriber_id: str,
+    ) -> None:
+        self._lease_manager = lease_manager
+        self._debate_id = debate_id
+        self._subscriber_id = subscriber_id
+        self._released = False
+
+    async def __aenter__(self) -> "AcquiredStreamLease":
+        return self
+
+    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        if self._released:
+            return
+        self._released = True
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(
+                    self._lease_manager.release(self._debate_id, self._subscriber_id)
+                ),
+                timeout=LEASE_RELEASE_TIMEOUT_SECONDS,
+            )
+            from metrics import increment_metric
+            increment_metric("sse.lease.released")
+        except asyncio.TimeoutError:
+            from metrics import increment_metric
+            increment_metric("sse.lease.release_failed")
+            logger.error(
+                "Lease release timed out: debate=%s subscriber=%s",
+                self._debate_id,
+                self._subscriber_id,
+            )
+        except Exception as exc:
+            from metrics import increment_metric
+            increment_metric("sse.lease.release_failed")
+            logger.error(
+                "Lease release failed: debate=%s subscriber=%s error=%s",
+                self._debate_id,
+                self._subscriber_id,
+                exc,
+            )
+
+
+def acquired_stream_lease(
+    lease_manager: StreamLeaseManager,
+    debate_id: str,
+    subscriber_id: str,
+) -> AcquiredStreamLease:
+    """Create an async context manager for exactly-once stream lease cleanup."""
+    return AcquiredStreamLease(lease_manager, debate_id, subscriber_id)
 
 
 def _is_strict() -> bool:

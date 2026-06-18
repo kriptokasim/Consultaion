@@ -34,6 +34,19 @@ from typing import Dict
 # Timeline/hydration:
 # - timeline.fetch.slow  (>500ms)
 # - timeline.fetch.ok
+#
+# Patchset 132 — SSE lease lifecycle:
+# - sse.lease.acquired
+# - sse.lease.denied
+# - sse.lease.released
+# - sse.lease.release_failed
+# - sse.lease.expired
+# - sse.heartbeat.emitted
+# - sse.backpressure.dropped
+# - sse.backpressure.coalesced
+# - sse.backpressure.overflow
+# - sse.backpressure.slow_subscriber
+# - sse.backpressure.critical_enqueue_failed
 
 _metrics: Dict[str, int] = defaultdict(int)
 _lock = Lock()

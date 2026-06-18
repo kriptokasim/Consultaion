@@ -1681,34 +1681,46 @@ async def stream_events(
         )
 
     async def eventgen():
-        # Periodically check if client disconnected to forcefully release lease
-        async def check_disconnect(task: asyncio.Task):
-            while True:
-                if await request.is_disconnected():
-                    task.cancel()
-                    break
-                await asyncio.sleep(2)
-                
-        monitor_task = asyncio.create_task(check_disconnect(asyncio.current_task()))
-        try:
-            async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
-                seq = event.get("sequence")
-                id_prefix = f"id: {seq}\n" if seq is not None else ""
-                yield f"{id_prefix}data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                
-                # Check either top-level or payload type
-                evt_type = event.get("type")
-                payload = event.get("payload")
-                payload_type = payload.get("type") if isinstance(payload, dict) else None
-                if evt_type == "final" or payload_type == "final":
-                    break
-        except asyncio.CancelledError:
-            # FH126: Do not swallow cancellation — let it propagate after cleanup
-            raise
-        finally:
-            monitor_task.cancel()
-            await lease_mgr.release(debate_id, subscriber_id)
-            logger.debug("Released stream lease: debate=%s subscriber=%s", debate_id, subscriber_id)
+        # Patchset 132: Use exactly-once lease context manager
+        from sse_backend import get_stream_lease_manager, StreamLeaseResult, acquired_stream_lease
+        from metrics import increment_metric
+
+        lease_mgr = get_stream_lease_manager()
+
+        async with acquired_stream_lease(lease_mgr, debate_id, subscriber_id):
+            # Periodically check if client disconnected to forcefully release lease
+            async def check_disconnect(task: asyncio.Task):
+                while True:
+                    if await request.is_disconnected():
+                        task.cancel()
+                        break
+                    await asyncio.sleep(2)
+
+            monitor_task = asyncio.create_task(check_disconnect(asyncio.current_task()))
+            try:
+                async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
+                    # Skip heartbeat events from being serialized to the client
+                    # Heartbeats are used internally for silence detection
+                    evt_type = event.get("type")
+                    payload = event.get("payload")
+                    payload_type = payload.get("type") if isinstance(payload, dict) else None
+                    if evt_type == "heartbeat" or payload_type == "heartbeat":
+                        increment_metric("sse.heartbeat.emitted")
+                        continue
+
+                    seq = event.get("sequence")
+                    id_prefix = f"id: {seq}\n" if seq is not None else ""
+                    yield f"{id_prefix}data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+                    # Check either top-level or payload type
+                    if evt_type == "final" or payload_type == "final":
+                        break
+            finally:
+                # Patchset 132: Cancel and await monitor task
+                monitor_task.cancel()
+                from contextlib import suppress
+                with suppress(asyncio.CancelledError):
+                    await monitor_task
 
     # Explicit CORS headers — CORSMiddleware does not reliably inject on streaming responses
     allowed_origin = settings.WEB_APP_ORIGIN or "*"

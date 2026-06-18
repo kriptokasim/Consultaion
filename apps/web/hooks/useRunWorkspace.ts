@@ -226,6 +226,7 @@ export interface UseRunWorkspaceResult {
   coreHttpStatus: number | null;
   outcomeUnknown: boolean;
   isPollingFallback: boolean;
+  isSilent: boolean;
   continueRun: () => Promise<void>;
   retryRun: (stageKey?: string) => Promise<void>;
   refetch: () => Promise<void>;
@@ -282,6 +283,19 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const coreGenerationRef = useRef(0);
   const responsesGenerationRef = useRef(0);
   const timelineGenerationRef = useRef(0);
+
+  // Patchset 132: Silence detection for connected-but-silent streams
+  const lastEventTimestampRef = useRef<number>(Date.now());
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSilent, setIsSilent] = useState(false);
+
+  // Configurable silence timeout (default 10s)
+  const SSE_SILENCE_TIMEOUT_MS = typeof window !== "undefined"
+    ? parseInt(process.env.NEXT_PUBLIC_SSE_SILENCE_TIMEOUT_MS || "10000", 10)
+    : 10000;
+  const SSE_FALLBACK_POLL_MS = typeof window !== "undefined"
+    ? parseInt(process.env.NEXT_PUBLIC_SSE_FALLBACK_POLL_MS || "3000", 10)
+    : 3000;
 
   const isTerminal = debate
     ? ["completed", "success", "completed_budget", "failed"].includes(debate.status)
@@ -386,10 +400,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   // ── FH117: Full hydration — core first, then concurrent enrichment ─────
   const hydrate = useCallback(async (id: string) => {
-    requestGenerationRef.current += 1;
-    coreGenerationRef.current += 1;
-    responsesGenerationRef.current += 1;
-    timelineGenerationRef.current += 1;
+    const gen = ++requestGenerationRef.current;
+    const coreGen = ++coreGenerationRef.current;
+    const responsesGen = ++responsesGenerationRef.current;
+    const timelineGen = ++timelineGenerationRef.current;
 
     // Reset all states
     setError(null);
@@ -410,7 +424,8 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     coreAbortRef.current = new AbortController();
     const coreData = await fetchCoreDebate(id, coreAbortRef.current.signal);
 
-    if (coreGenerationRef.current !== coreGenerationRef.current) return;
+    // Patchset 132 Track E: Capture generation locally, check after each await
+    if (coreGen !== coreGenerationRef.current) return;
     if (!coreData) return; // Failed or aborted
 
     // Step 2: Fire responses and timeline concurrently (don't await each other)
@@ -473,6 +488,16 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     if (!lastEvent || !debateId) return;
     try {
       const eventType = lastEvent.type;
+
+      // Patchset 132 Track D: Update last event timestamp for silence detection
+      lastEventTimestampRef.current = Date.now();
+      setIsSilent(false);
+
+      // Skip heartbeat events — they only reset the silence timer
+      const payloadType = lastEvent.payload?.type;
+      if (eventType === "heartbeat" || payloadType === "heartbeat") {
+        return;
+      }
 
       // FH104: Dispatch streaming reducer actions
       const STREAMING_EVENT_TYPES = new Set([
@@ -546,7 +571,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     setIsPollingFallback(true);
     const tick = async () => {
       if (pollInFlightRef.current) {
-        pollTimerRef.current = setTimeout(tick, 3000) as unknown as NodeJS.Timeout;
+        pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
         return;
       }
       pollInFlightRef.current = true;
@@ -556,11 +581,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         console.error("[useRunWorkspace] Polling fetch error:", err);
       } finally {
         pollInFlightRef.current = false;
-        pollTimerRef.current = setTimeout(tick, 3000) as unknown as NodeJS.Timeout;
+        pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
       }
     };
-    pollTimerRef.current = setTimeout(tick, 3000) as unknown as NodeJS.Timeout;
-  }, [hydrate]);
+    pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
+  }, [hydrate, SSE_FALLBACK_POLL_MS]);
 
   const stopPolling = useCallback(() => {
     if (pollTimerRef.current) {
@@ -571,20 +596,52 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     setIsPollingFallback(false);
   }, []);
 
+  // Patchset 132 Track D: Silence detection — start polling when SSE is connected but silent
+  const resetSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!debateId || isTerminal) {
       stopPolling();
+      resetSilenceTimer();
+      setIsSilent(false);
       return;
     }
+
+    // Start polling when SSE is closed/reconnecting
     if (sseStatus === "closed" || sseStatus === "reconnecting") {
       startPolling(debateId);
-    } else if (sseStatus === "connected") {
-      stopPolling();
+      resetSilenceTimer();
+      setIsSilent(false);
+      return;
     }
-  }, [sseStatus, debateId, isTerminal, startPolling, stopPolling]);
+
+    // When SSE is connected: start silence timer
+    if (sseStatus === "connected") {
+      stopPolling(); // Stop any existing polling first
+
+      resetSilenceTimer();
+      silenceTimerRef.current = setTimeout(() => {
+        // Silence detected — start fallback polling
+        setIsSilent(true);
+        startPolling(debateId);
+      }, SSE_SILENCE_TIMEOUT_MS) as unknown as NodeJS.Timeout;
+    }
+
+    return () => {
+      resetSilenceTimer();
+    };
+  }, [sseStatus, debateId, isTerminal, startPolling, stopPolling, resetSilenceTimer, SSE_SILENCE_TIMEOUT_MS]);
 
   useEffect(() => {
-    return () => { if (pollTimerRef.current) clearTimeout(pollTimerRef.current); };
+    return () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
   }, []);
 
   // ── Continuation recovery ──────────────────────────────────────────────
@@ -722,6 +779,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     coreHttpStatus,
     outcomeUnknown,
     isPollingFallback,
+    isSilent,
     continueRun: handleContinue,
     retryRun: handleRetry,
     refetch: handleRefetch,
