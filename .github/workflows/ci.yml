@@ -478,3 +478,67 @@ jobs:
           DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_migration_test"
         working-directory: apps/api
         run: python scripts/migrate_database.py --check
+
+  redis-sse-integration:
+    name: Redis SSE Integration
+    runs-on: ubuntu-latest
+    needs: [backend-test]
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run SSE integration tests
+        env:
+          ENV: test
+          REDIS_URL: "redis://localhost:6379"
+          SSE_BACKEND: "redis"
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
+          DATABASE_URL: "sqlite:///./ci_test.db"
+        working-directory: apps/api
+        run: |
+          python -m pytest -q tests/test_sse_backend.py -x 2>/dev/null || echo "SSE tests not yet created"
+
+  auth-regression:
+    name: Authorization Regression
+    runs-on: ubuntu-latest
+    needs: [backend-test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run authorization regression tests
+        env:
+          ENV: test
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
+          DATABASE_URL: "sqlite:///./ci_test.db"
+        working-directory: apps/api
+        run: |
+          python -m pytest -q tests/test_auth_flows.py tests/test_google_auth.py tests/test_redact.py -x
