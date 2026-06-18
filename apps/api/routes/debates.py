@@ -1308,6 +1308,9 @@ async def export_debate_report(
     increment_export_usage(session, current_user.id)
     from usage_limits import increment_export_usage_daily
     increment_export_usage_daily(session, current_user.id)
+    # FH125 Track G: Record export in usage ledger
+    from services.usage_ledger import record_export
+    record_export(session, user_id=current_user.id, debate_id=debate_id)
     session.commit()
     
     track_metric("exports_generated")

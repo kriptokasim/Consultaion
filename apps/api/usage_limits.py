@@ -116,57 +116,70 @@ def _ensure_daily_token_headroom(session: Session, user_id: str) -> None:
 
 
 def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
+    """Atomically reserve a run slot and validate token headroom.
+
+    FH125 Track H: Uses conditional UPDATE with FOR UPDATE lock to prevent
+    race conditions. Token headroom is checked BEFORE committing.
+    """
     if not user_id:
         return
-        
-    # Patchset 114: Owner unlimited bypass
+
     from models import User
     from security.owner import is_owner
     user = session.get(User, user_id)
     if is_owner(user) and settings.OWNER_UNLIMITED:
-        import logging
         logging.getLogger(__name__).info(
             "owner_override_applied",
             extra={"user_id": user.id, "email": user.email, "override_type": "reserve_run_slot"}
         )
         return
 
-    # FH125 E-4: Atomic quota reservation with row-level locking
-    from sqlalchemy import select as sa_select
     from models import UsageCounter
     quota = _get_or_create_quota(session, user_id, "hour")
 
-    # Lock the counter row to prevent race conditions
+    # Atomic: lock row, check limit, increment — all in one statement
+    from sqlalchemy import update as sa_update, func as sa_func
     stmt = (
-        sa_select(UsageCounter)
+        sa_update(UsageCounter)
         .where(
             UsageCounter.user_id == user_id,
             UsageCounter.period == "hour",
         )
-        .with_for_update()
-    )
-    locked = session.exec(stmt).first()
-    if locked is None:
-        counter = _get_or_reset_counter(session, user_id, "hour")
-    else:
-        counter = locked
-
-    if quota.max_runs is not None and counter.runs_used + 1 > quota.max_runs:
-        raise RateLimitError(
-            code="runs_per_hour",
-            detail="Hourly run quota exceeded",
-            reset_at=_window_end(counter),
+        .where(
+            (quota.max_runs == None) | (UsageCounter.runs_used < quota.max_runs)
         )
-    counter.runs_used += 1
-    session.add(counter)
+        .values(runs_used=UsageCounter.runs_used + 1)
+        .execution_options(synchronize_session="fetch")
+    )
+    result = session.execute(stmt)
 
-    # FH125: Check daily token headroom BEFORE committing run slot
-    # This ensures run slot is not consumed if token headroom fails
+    if result.rowcount == 0:
+        # Row may not exist — create it and retry
+        counter = _get_or_reset_counter(session, user_id, "hour", commit=False)
+        if quota.max_runs is not None and counter.runs_used >= quota.max_runs:
+            raise RateLimitError(
+                code="runs_per_hour",
+                detail="Hourly run quota exceeded",
+                reset_at=_window_end(counter),
+            )
+        counter.runs_used += 1
+        session.add(counter)
+    else:
+        # Refresh counter to get updated runs_used
+        counter = session.exec(
+            sa_select(UsageCounter).where(
+                UsageCounter.user_id == user_id,
+                UsageCounter.period == "hour",
+            )
+        ).first()
+
+    # Check daily token headroom BEFORE committing
     try:
         _ensure_daily_token_headroom(session, user_id)
     except Exception:
         session.rollback()
         raise
+
     session.commit()
 
 

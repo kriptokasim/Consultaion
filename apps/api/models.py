@@ -205,6 +205,7 @@ class Debate(SQLModel, table=True):
 class DebateRound(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    attempt_id: Optional[str] = Field(default=None, foreign_key="debate_attempt.id", nullable=True, index=True)
     index: int
     label: str
     note: Optional[str] = None
@@ -215,6 +216,7 @@ class DebateRound(SQLModel, table=True):
 class Message(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    attempt_id: Optional[str] = Field(default=None, foreign_key="debate_attempt.id", nullable=True, index=True)
     round_index: int = Field(index=True)
     role: str
     persona: Optional[str] = None
@@ -226,6 +228,7 @@ class Message(SQLModel, table=True):
 class Score(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    attempt_id: Optional[str] = Field(default=None, foreign_key="debate_attempt.id", nullable=True, index=True)
     persona: str = Field(index=True)
     judge: str = Field(index=True)
     score: float = Field(index=True)
@@ -634,13 +637,13 @@ class DebateStageCheckpoint(SQLModel, table=True):
 
 
 class DebateAttempt(SQLModel, table=True):
-    """FH125 G-7: Non-destructive retry — each retry creates a new attempt.
-
-    Preserves previous evidence (scores, messages) while allowing fresh execution.
-    """
+    """FH125 G-7: Non-destructive retry — each retry creates a new attempt."""
     model_config = SQLModel.model_config.copy()
     model_config["protected_namespaces"] = ()
     __tablename__ = "debate_attempt"
+    __table_args__ = (
+        UniqueConstraint("debate_id", "attempt_number", name="uq_debate_attempt_debate_number"),
+    )
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
     attempt_number: int = Field(nullable=False)
