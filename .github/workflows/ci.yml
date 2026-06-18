@@ -60,7 +60,6 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -78,7 +77,6 @@ jobs:
       - name: Run pip-audit (Python Dependency Scan)
         run: |
           pip-audit -r apps/api/requirements.txt
-        continue-on-error: true
 
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
@@ -89,7 +87,6 @@ jobs:
         run: |
           cd apps/web
           npm audit --audit-level=high
-        continue-on-error: true
 
   sbom-generation:
     name: SBOM Generation
@@ -436,7 +433,7 @@ jobs:
         working-directory: apps/api
         run: |
           pip install -r requirements.txt
-          python scripts/migrate_database.py --check || true
+          python scripts/migrate_database.py --check
 
   migration-integration:
     name: Migration Integration
