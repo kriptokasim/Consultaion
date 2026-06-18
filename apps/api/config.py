@@ -99,11 +99,14 @@ class AppSettings(BaseSettings):
     ENABLE_METRICS: bool = True
     ENABLE_CONVERSATION_MODE: bool = Field(True, description="Enable new conversation mode")
     ENABLE_GIPHY: bool = Field(False, description="Enable Giphy integration visual delights")
+    GIPHY_API_KEY: str | None = Field(None, description="Giphy API key for GIF integration")
 
     # Deployment target for topology-aware configuration
     DEPLOY_TARGET: Literal["local", "render", "docker", "ecs", "fly", "railway", "other"] = "local"
     ENABLE_EMAIL_SUMMARIES: bool = Field(False, description="Enable email summary notifications")
+    RESEND_API_KEY: str | None = Field(None, description="Resend API key for email summaries")
     ENABLE_SLACK_ALERTS: bool = Field(False, description="Enable Slack webhook alerts")
+    SLACK_WEBHOOK_URL: str | None = Field(None, description="Slack webhook URL for alerts")
     
     # Patchset 76: Enhanced conversation UX with delayed voting
     ENABLE_CONVERSATION_V2: bool = Field(False, description="Enable enhanced conversation UX with delayed voting and structured vote reasons")
@@ -230,6 +233,11 @@ class AppSettings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: str | None = None
     LANGFUSE_SECRET_KEY: str | None = None
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+
+    # PostHog Analytics
+    ENABLE_POSTHOG: bool = Field(default=False, description="Enable PostHog analytics")
+    POSTHOG_API_KEY: str | None = None
+    POSTHOG_HOST: str | None = None
 
     WEB_CONCURRENCY: int | None = None
     GUNICORN_WORKERS: int | None = None

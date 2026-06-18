@@ -1,13 +1,12 @@
 import httpx
-from core.settings import settings
+from config import settings
 from loguru import logger
 from schemas import DebateSummary
 
 RESEND_API_BASE = "https://api.resend.com"
 
 def is_email_summaries_enabled() -> bool:
-    cfg = settings.notifications
-    return cfg.enable_email_summaries and bool(cfg.resend_api_key)
+    return settings.ENABLE_EMAIL_SUMMARIES and bool(settings.RESEND_API_KEY)
 
 async def send_debate_summary_email(
     user_email: str,
@@ -17,7 +16,7 @@ async def send_debate_summary_email(
         logger.debug("Email summaries disabled; skipping send.")
         return
 
-    api_key = settings.notifications.resend_api_key
+    api_key = settings.RESEND_API_KEY
     if not api_key:
         logger.warning("Email summaries enabled but RESEND_API_KEY missing; skipping send.")
         return

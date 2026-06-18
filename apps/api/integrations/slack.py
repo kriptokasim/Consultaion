@@ -1,14 +1,13 @@
 from typing import Literal
 
 import httpx
-from core.settings import settings
+from config import settings
 from loguru import logger
 
 AlertLevel = Literal["info", "warning", "error"]
 
 def is_slack_enabled() -> bool:
-    cfg = settings.notifications
-    return cfg.enable_slack_alerts and bool(cfg.slack_webhook_url)
+    return settings.ENABLE_SLACK_ALERTS and bool(settings.SLACK_WEBHOOK_URL)
 
 async def send_slack_alert(
     message: str,
@@ -20,7 +19,7 @@ async def send_slack_alert(
     if not is_slack_enabled():
         return
 
-    webhook_url = settings.notifications.slack_webhook_url
+    webhook_url = settings.SLACK_WEBHOOK_URL
     if not webhook_url:
         logger.warning("Slack alerts enabled but SLACK_WEBHOOK_URL missing; skipping.")
         return

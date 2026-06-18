@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Consultaion Codebase Architecture Graph Viewer</title>
+  <link rel="stylesheet" href="viewer.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Cytoscape.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+</head>
+<body class="dark-mode">
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>Consultaion</h1>
+        <span class="badge" id="profile-badge">Code Graph</span>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="sidebar-tabs">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="search">Search & Filter</button>
+        <button class="tab-btn" data-tab="rankings">Rankings</button>
+        <button class="tab-btn" data-tab="path-tracer">Path Tracer</button>
+        <button class="tab-btn" data-tab="diagnostics">Diagnostics</button>
+      </nav>
+
+      <!-- Sidebar Content Areas -->
+      <div class="tab-content active" id="tab-overview">
+        <div class="card">
+          <h3>Topological Statistics</h3>
+          <div class="metric-grid">
+            <div class="metric-item">
+              <span class="metric-value" id="stat-nodes">-</span>
+              <span class="metric-label">Nodes</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value" id="stat-edges">-</span>
+              <span class="metric-label">Edges</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value" id="stat-communities">-</span>
+              <span class="metric-label">Communities</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-value" id="stat-sccs">-</span>
+              <span class="metric-label">SCCs</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Metadata</h3>
+          <table class="meta-table">
+            <tr><td>Repository SHA</td><td id="meta-sha" class="mono">-</td></tr>
+            <tr><td>Graphify Version</td><td id="meta-version">-</td></tr>
+            <tr><td>Build Timestamp</td><td id="meta-time">-</td></tr>
+            <tr><td>Validation Status</td><td id="meta-status">-</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-search">
+        <div class="card">
+          <h3>Search Node</h3>
+          <input type="text" id="search-input" placeholder="Type node name (e.g. settings)..." class="form-control">
+          <ul id="search-results" class="results-list"></ul>
+        </div>
+
+        <div class="card">
+          <h3>Filters</h3>
+          <div class="filter-group">
+            <label>Symbol Kind</label>
+            <div class="checkbox-grid">
+              <label><input type="checkbox" class="filter-kind" value="module" checked> Module</label>
+              <label><input type="checkbox" class="filter-kind" value="class" checked> Class</label>
+              <label><input type="checkbox" class="filter-kind" value="function" checked> Function</label>
+              <label><input type="checkbox" class="filter-kind" value="variable" checked> Variable</label>
+              <label><input type="checkbox" class="filter-kind" value="export" checked> TS Export</label>
+              <label><input type="checkbox" class="filter-kind" value="config" checked> Config File</label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <label>Subsystem/Layer</label>
+            <div class="checkbox-grid">
+              <label><input type="checkbox" class="filter-layer" value="frontend" checked> Frontend</label>
+              <label><input type="checkbox" class="filter-layer" value="backend" checked> Backend</label>
+              <label><input type="checkbox" class="filter-layer" value="tests" checked> Tests</label>
+              <label><input type="checkbox" class="filter-layer" value="migrations" checked> Migrations</label>
+              <label><input type="checkbox" class="filter-layer" value="scripts" checked> Scripts</label>
+              <label><input type="checkbox" class="filter-layer" value="configuration" checked> Config</label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <label>Community</label>
+            <select id="filter-community" class="form-control">
+              <option value="all">All Communities</option>
+            </select>
+          </div>
+
+          <button id="apply-filters-btn" class="btn btn-primary">Apply Filters</button>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-rankings">
+        <div class="card">
+          <h3>Top Fan-In (Most Imported)</h3>
+          <ol class="rank-list" id="rank-fan-in"></ol>
+        </div>
+        <div class="card">
+          <h3>Top Fan-Out (Largest Dependency)</h3>
+          <ol class="rank-list" id="rank-fan-out"></ol>
+        </div>
+        <div class="card">
+          <h3>Orphan / Dead-Code Candidates</h3>
+          <ol class="rank-list" id="rank-orphans"></ol>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-path-tracer">
+        <div class="card">
+          <h3>Dependency Path Tracer</h3>
+          <div class="form-group">
+            <label>Source Node</label>
+            <input type="text" id="path-source" class="form-control" placeholder="Select or type source FQN...">
+          </div>
+          <div class="form-group">
+            <label>Target Node</label>
+            <input type="text" id="path-target" class="form-control" placeholder="Select or type target FQN...">
+          </div>
+          <button id="trace-path-btn" class="btn btn-primary">Trace Path</button>
+          <button id="clear-path-btn" class="btn btn-secondary">Clear Tracer</button>
+          <div id="path-result" class="path-steps"></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-diagnostics">
+        <div class="card">
+          <h3>Strongly Connected Components (Cycles)</h3>
+          <div class="diag-summary" id="cycle-summary">0 cycles detected.</div>
+          <ul class="diag-list" id="cycle-list"></ul>
+        </div>
+        <div class="card">
+          <h3>Ambiguous Symbol Resolutions</h3>
+          <ul class="diag-list" id="ambiguous-list"></ul>
+        </div>
+        <div class="card">
+          <h3>Unresolved Imports</h3>
+          <ul class="diag-list" id="unresolved-list"></ul>
+        </div>
+        <div class="card">
+          <h3>Boundary Violations</h3>
+          <ul class="diag-list" id="violations-list"></ul>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="main-workspace">
+      <!-- Network Viewer Container -->
+      <div id="cy-container"></div>
+
+      <!-- Detail Info Overlay Panel -->
+      <div class="details-panel" id="details-panel">
+        <div class="details-header">
+          <h3>Symbol Details</h3>
+          <button class="close-btn" id="details-close">&times;</button>
+        </div>
+        <div class="details-body" id="details-content">
+          <p class="placeholder-text">Select a node in the graph to inspect properties, metrics, and relationships.</p>
+        </div>
+      </div>
+
+      <!-- Controls Overlay -->
+      <div class="graph-controls">
+        <button class="control-btn" id="ctrl-fit" title="Fit Graph">⛶</button>
+        <button class="control-btn" id="ctrl-layout" title="Re-Layout">↻</button>
+        <button class="control-btn" id="ctrl-incoming" title="Highlight Incoming">⤓</button>
+        <button class="control-btn" id="ctrl-outgoing" title="Highlight Outgoing">⤒</button>
+      </div>
+
+      <!-- Legend Panel -->
+      <div class="legend-panel">
+        <h4>Legend</h4>
+        <div class="legend-grid">
+          <div class="legend-item"><span class="legend-node node-module"></span> Module</div>
+          <div class="legend-item"><span class="legend-node node-class"></span> Class</div>
+          <div class="legend-item"><span class="legend-node node-function"></span> Function</div>
+          <div class="legend-item"><span class="legend-node node-variable"></span> Variable</div>
+          <div class="legend-item"><span class="legend-node node-export"></span> TS Export</div>
+          <div class="legend-item"><span class="legend-node node-config"></span> Config File</div>
+          <div class="legend-item"><span class="legend-edge edge-imports"></span> Code Import</div>
+          <div class="legend-item"><span class="legend-edge edge-contains"></span> Containment</div>
+          <div class="legend-item"><span class="legend-edge edge-references"></span> Config Reference</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="viewer.js"></script>
+</body>
+</html>

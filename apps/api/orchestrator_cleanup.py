@@ -63,8 +63,8 @@ async def check_api_key_rotations() -> int:
                 )
                 
                 # Best-effort email reminder if Resend API key is configured
-                from core.settings import settings as core_settings
-                if user and getattr(core_settings.notifications, "resend_api_key", None):
+                from config import settings as _settings
+                if user and _settings.RESEND_API_KEY:
                     try:
                         from integrations.email import RESEND_API_BASE
                         import httpx
@@ -77,7 +77,7 @@ async def check_api_key_rotations() -> int:
                         async with httpx.AsyncClient(timeout=5) as client:
                             resp = await client.post(
                                 f"{RESEND_API_BASE}/emails",
-                                headers={"Authorization": f"Bearer {core_settings.notifications.resend_api_key}"},
+                                headers={"Authorization": f"Bearer {_settings.RESEND_API_KEY}"},
                                 json={
                                     "from": __import__("os").environ.get("EMAIL_FROM", "security@consultaion.com"),
                                     "to": [user_email],

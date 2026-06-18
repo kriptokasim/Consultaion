@@ -70,3 +70,6 @@ scratch_user_request_prev.md
 
 # Render CLI
 .render-service-map.local.json
+
+# Graphify generated artifacts and caches
+graphify-out/

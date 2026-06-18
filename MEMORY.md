@@ -89,14 +89,14 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
 - `docs/pricing-strategy.md` — 3-tier pricing
 - `docs/defensibility.md` — moat strategy
 
-## Known Issues (as of 2026-06-16)
+## Known Issues (as of 2026-06-18)
 - `orchestrator.py` (814 lines) — monolithic, mixes sync/async, needs refactoring
 - API client consolidation needed (3 overlapping modules: apiClient.ts, api.ts, auth.ts)
 - No E2E tests (Playwright) despite playwright.config.ts existing
 - Terms/Privacy are product-specific but not legal-grade (P1: lawyer review before paid launch)
 - `core/settings.py` and `config.py` coexist (potential confusion)
 - LLM guard NOT wired into `POST /debates` and `POST /debates/{id}/start` (rate-limited already)
-- No API versioning (/api/v1/) despite routes living under `/api/v1/` prefix
+- ~~No API versioning (/api/v1/) despite routes living under `/api/v1/` prefix~~ — FIXED: root routes now emit Deprecation/Sunset headers
 
 ## User Context
 - Solo founder building Consultaion
@@ -121,12 +121,14 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
 - **Test fixture engine imports:** Dynamic database engine updates in conftest can lead to stale references; use `db_session` fixture or import engine inside functions. [2026-06-12]
 - **StreamingResponse charset:** Next.js test assertions should use `.startswith()` for content-type checks due to inconsistent `charset=utf-8` appending. [2026-06-12]
 - **SQLite text-JSON:** SQLite stores JSON as text; test assertions must account for text-JSON representation. [2026-06-10]
+- **APIRouter has no `.middleware()`:** FastAPI's `APIRouter` does not support `@router.middleware("http")` — only `app.middleware("http")` works. For per-router middleware, use app-level middleware with path-based dispatch. [2026-06-18]
+- **`crypto.subtle.digest` requires secure context:** Frontend SHA-256 via `crypto.subtle` only works over HTTPS or localhost. DivergenceClaimList.tsx uses it for claim_id generation. [2026-06-18]
 
-## Current Status (2026-06-16)
-- **Blocker:** OpenRouter credits exhausted — 402 errors on all LLM calls
-- **Completed:** FH51–FH62 (Run recovery, enrichment fail-safe, migration safety, schema verification)
-- **In Progress:** FH63–FH76 (Final Release Recovery & Runtime Correctness) — started but interrupted
-- **Remaining:** FH57–FH62 items, FH63–FH76 completion, E2E tests, API client consolidation, orchestrator refactor
+## Current Status (2026-06-18)
+- **Completed:** FH125 Phases 1–2 (Green Baseline + Security Containment) — 16 items total
+- **Phase 2 Security Fixes:** IDORs fixed (challenge, arena vote), JWT removed from OAuth URLs, host-only cookies, route-level CSRF, API namespace deprecation headers, progressive account lockout, OAuth state requires Redis in prod
+- **Next:** Phase 3 (Runtime Correctness — encryption, billing, SSE), Phase 4 (Contracts & Operations)
+- **Remaining:** E2E tests, API client consolidation, orchestrator refactor
 
 ## SaaS Readiness & PLG Activation Polish (2026-06-12)
 - **Goal**: Hardened SaaS readiness, added BYOK integrations, audit logs JSON/CSV streaming, data retention policies, dynamic team invites, pricing strategy, interactive PLG simulation, and completed visual sticky scrolling fixes.
@@ -177,4 +179,26 @@ Consultaion is a multi-agent AI debate platform — users submit one prompt and 
   - **FH55** — Alembic revision policy audit: `audit_alembic_revisions.py`, `test_alembic_revision_policy.py`
   - **FH56** — Schema verification scripts and runbook: diagnostic, verification, `/readyz` integrity check
 - **Tests & Verification**: Frontend 127 tests pass; backend module imports validate.
+
+## FH125 Production Stabilization — Phases 1–2 (2026-06-18)
+- **Goal**: Execute the 4-phase FH125 stabilization plan from `~/Desktop/implementation_plan.md`. Phase 1 (Green Baseline) restored build/test health. Phase 2 (Security Containment) fixed all IDORs, CSRF, OAuth, cookie, and lockout issues.
+- **Phase 1 (Track A)**: Tailwind orphaned keys removed, DivergenceMeter import fixed, test files rewritten for real APIs, schema readiness test bypass implemented. Verified: tsc ✅, build ✅, 568 pytest collected ✅.
+- **Phase 2 (Tracks B+C)** — all 10 items complete:
+  - **B-1**: `dependencies/access.py` — added `get_debate_with_mutable_access` (editor-level access)
+  - **B-2**: Challenge IDOR fixed — `require_debate_access` added to `start_challenge_session`
+  - **B-3**: Argument-tree IDOR fixed — debate access checks added to `get_challenge_session` and `submit_challenge_round`
+  - **B-4**: Arena vote — `require_debate_access` added, client-trusted `model_name`/`is_consensus` replaced with server-validated `claim_id` (SHA-256), per-claim deduplication. Frontend updated (`DivergenceClaimList.tsx`, `DivergenceMeter.tsx`). **Breaking API change** (approved).
+  - **C-1**: JWT removed from OAuth redirect URLs — token only in HttpOnly cookie
+  - **C-2**: COOKIE_DOMAIN auto-derivation removed — defaults to host-only
+  - **C-3**: CSRF path exemptions replaced with `csrf_exempt` route decorator
+  - **C-4**: API namespace — root routes get `Deprecation`/`Sunset` headers via app middleware
+  - **C-5**: Progressive account lockout (5→15min, 10→1h, 20→24h) on User model + login handler
+  - **C-6**: OAuth state requires Redis in prod, atomic `getdel`, memory fallback local-only
+- **Files modified**: `dependencies/access.py`, `routes/challenge.py`, `routes/arena.py`, `routes/auth.py`, `main.py`, `config.py`, `core/router_registry.py`, `models.py`, `security/state_store.py`, `DivergenceClaimList.tsx`, `DivergenceMeter.tsx`
+
+## Graphify Codebase Knowledge Graph (2026-06-18)
+- **Goal**: Build and configure the `graphify` knowledge graph for codebase navigation and architectural queries.
+- **Configured `.graphifyignore`**: Set up a custom ignore file to filter out non-code assets (markdown documentation, text configs, PNG/SVG/WebP images). This enabled building a code-only corpus.
+- **Graph Built**: Executed `graphify .` followed by `graphify cluster-only . --no-label` to construct the graph (`graphify-out/graph.json`) containing **5,361 nodes**, **11,140 edges**, and **361 communities** without requiring external LLM API keys for community naming.
+- **Key Insight**: Identified a high-centrality name resolution collision on the node `Config`. Imports of the `config` module (e.g., `from config import settings`) are parsed as references to the Alembic `Config` class inside `dev_db.py` (which has ID `config`). This collision structurally reflects the global dependency of all backend components on system settings.
 

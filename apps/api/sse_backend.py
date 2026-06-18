@@ -84,6 +84,13 @@ class BaseSSEBackend(Protocol):
     async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
         ...
 
+    async def replay(self, channel_id: str, after_sequence: Optional[int] = None) -> list[dict]:
+        """Return cached events after the given sequence number."""
+        ...
+
+    async def cleanup(self) -> None:
+        ...
+
     async def cleanup(self) -> None:
         ...
 
@@ -337,6 +344,14 @@ class MemoryChannelBackend:
                 if sub_queue in subs:
                     subs.remove(sub_queue)
 
+    async def replay(self, channel_id: str, after_sequence: Optional[int] = None) -> list[dict]:
+        """Return cached events after the given sequence number (public contract)."""
+        async with self._lock:
+            history = list(self._history.get(channel_id, []))
+        if after_sequence is None:
+            return history
+        return [env for env in history if env.get("sequence", 0) > after_sequence]
+
     async def cleanup(self) -> None:
         now = time.time()
         async with self._lock:
@@ -554,6 +569,19 @@ class RedisChannelBackend:
         finally:
             await pubsub.unsubscribe(channel_id)
             await pubsub.close()
+
+    async def replay(self, channel_id: str, after_sequence: Optional[int] = None) -> list[dict]:
+        """Return cached events after the given sequence number (public contract)."""
+        history_key = f"sse:history:{channel_id}"
+        try:
+            events_str = await self._redis.lrange(history_key, 0, -1)
+            events = [json.loads(evt_str) for evt_str in events_str]
+            if after_sequence is not None:
+                events = [e for e in events if e.get("sequence", 0) > after_sequence]
+            return events
+        except Exception as e:
+            logger.error(f"Failed to replay Redis SSE history for {channel_id}: {e}")
+            return []
 
     async def cleanup(self) -> None:
         # Redis handles TTL automatically

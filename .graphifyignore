@@ -1,0 +1,23 @@
+# Ignore all document and media files to process as code-only
+*.md
+*.MD
+*.txt
+*.TXT
+*.yaml
+*.YAML
+*.yml
+*.YML
+*.png
+*.PNG
+*.svg
+*.SVG
+*.webp
+*.WEBP
+*.jpg
+*.JPG
+*.jpeg
+*.JPEG
+*.gif
+*.GIF
+LICENSE
+requirements*.txt

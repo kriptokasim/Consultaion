@@ -1,19 +1,18 @@
 from typing import Optional
 
 import httpx
-from core.settings import settings
+from config import settings
 from loguru import logger
 
 GIPHY_EMPTY_STATE_TAG = "thinking"
 GIPHY_CELEBRATION_TAG = "celebration"
 
 async def fetch_giphy_gif(tag: str) -> Optional[str]:
-    cfg = settings.giphy
-    if not cfg.enable_giphy or not cfg.giphy_api_key:
+    if not settings.ENABLE_GIPHY or not settings.GIPHY_API_KEY:
         return None
 
     params = {
-        "api_key": cfg.giphy_api_key,
+        "api_key": settings.GIPHY_API_KEY,
         "tag": tag,
         "rating": "g",
     }

@@ -1594,23 +1594,7 @@ async def replay_events(
     require_debate_access(session.get(Debate, debate_id), current_user, session)
     channel_id = debate_channel_id(debate_id)
     
-    events = []
-    if hasattr(sse_backend, "_history"):
-        async with sse_backend._lock:
-            history = list(sse_backend._history.get(channel_id, []))
-        for env in history:
-            if from_sequence is None or env.get("sequence", 0) > from_sequence:
-                events.append(env)
-    elif hasattr(sse_backend, "_redis"):
-        history_key = f"sse:history:{channel_id}"
-        try:
-            events_str = await sse_backend._redis.lrange(history_key, 0, -1)
-            for evt_str in events_str:
-                evt = json.loads(evt_str)
-                if from_sequence is None or evt.get("sequence", 0) > from_sequence:
-                    events.append(evt)
-        except Exception as e:
-            logger.error(f"Failed to fetch Redis SSE history for replay: {e}")
+    events = await sse_backend.replay(channel_id, after_sequence=from_sequence)
             
     return {"events": events}
 
