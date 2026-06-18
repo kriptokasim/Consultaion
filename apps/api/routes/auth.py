@@ -382,8 +382,6 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
         raise ValidationError(message="Password too short; minimum 8 characters", code="auth.password_too_short")
     user = User(email=email, password_hash=hash_password(body.password))
     session.add(user)
-    session.commit()
-    session.refresh(user)
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
     if ENABLE_CSRF:
@@ -397,6 +395,7 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
         meta={"email": user.email},
         session=session,
     )
+    session.commit()
     return serialize_user(user)
 
 
@@ -483,6 +482,7 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
     
     if ENABLE_CSRF:
         set_csrf_cookie(response, generate_csrf_token())
+    # FH125: Login is read-only — use standalone audit session
     record_audit(
         "login",
         user_id=user.id,
@@ -490,7 +490,6 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
         target_id=user.id,
         ip_address=ip,
         meta={"email": user.email},
-        session=session,
     )
     return serialize_user(user)
 
