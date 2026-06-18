@@ -157,20 +157,43 @@ class MemoryChannelBackend:
         """
         await self.create_channel(channel_id)
 
-        # FH125: Replay all history for new subscribers (events published before registration)
-        async with self._lock:
-            history_copy = list(self._history.get(channel_id, []))
-            replay_seq = max((env.get("sequence", 0) for env in history_copy), default=0)
-        for env in history_copy:
-            if last_sequence is None or env.get("sequence", 0) > last_sequence:
-                yield env
-
-        # FH125 F-4: Create per-subscriber queue
+        # FH125: Atomic replay-to-live handoff — no event lost between history and subscription
         sub_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=self._max_queue_size)
         async with self._lock:
+            # 1. Register subscriber queue FIRST (before snapshotting history)
             if channel_id not in self._subscribers:
                 self._subscribers[channel_id] = []
             self._subscribers[channel_id].append(sub_queue)
+            # 2. Snapshot history and high-watermark under the same lock
+            history_copy = list(self._history.get(channel_id, []))
+            replay_high_watermark = max((env.get("sequence", 0) for env in history_copy), default=0)
+
+        # 3. Replay eligible history
+        for env in history_copy:
+            seq = env.get("sequence", 0)
+            if last_sequence is None or seq > last_sequence:
+                yield env
+                # If replay contained a terminal event, stop immediately
+                payload = env.get("payload", {})
+                if payload.get("type") in ("final", "error"):
+                    async with self._lock:
+                        if sub_queue in self._subscribers.get(channel_id, []):
+                            self._subscribers[channel_id].remove(sub_queue)
+                    return
+
+        # 4. Drain and discard queued duplicates (events that were in history)
+        while not sub_queue.empty():
+            try:
+                queued = sub_queue.get_nowait()
+                if queued.get("sequence", 0) <= replay_high_watermark:
+                    continue  # Duplicate from history — discard
+                # This is a live event that arrived during replay — re-queue it
+                await sub_queue.put(queued)
+                break
+            except asyncio.QueueEmpty:
+                break
+
+        # 5. Continue live consumption
 
         poll_timeout = getattr(settings, "SSE_POLL_TIMEOUT_SECONDS", 1.0)
         idle_start = time.time()
@@ -323,20 +346,55 @@ class RedisChannelBackend:
                 return
 
     async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
-        # 1. Replay cached history if requested
-        if last_sequence is not None:
-            history_key = f"sse:history:{channel_id}"
-            try:
-                events_str = await self._redis.lrange(history_key, 0, -1)
-                for evt_str in events_str:
-                    evt = json.loads(evt_str)
-                    if evt.get("sequence", 0) > last_sequence:
-                        yield evt
-            except Exception as e:
-                logger.error(f"Failed to fetch Redis SSE history: {e}")
-
+        # FH125: Race-safe replay-to-live handoff for Redis
+        # 1. Subscribe to Pub/Sub FIRST (before reading history)
         pubsub = self._redis.pubsub()
         await pubsub.subscribe(channel_id)
+
+        # 2. Read history and capture high-watermark
+        replay_high_watermark = 0
+        history_key = f"sse:history:{channel_id}"
+        try:
+            events_str = await self._redis.lrange(history_key, 0, -1)
+            history_events = [json.loads(evt_str) for evt_str in events_str]
+            replay_high_watermark = max((evt.get("sequence", 0) for evt in history_events), default=0)
+        except Exception as e:
+            logger.error(f"Failed to fetch Redis SSE history: {e}")
+            history_events = []
+
+        # 3. Replay eligible history
+        for evt in history_events:
+            seq = evt.get("sequence", 0)
+            if last_sequence is None or seq > last_sequence:
+                yield evt
+                payload = evt.get("payload", {})
+                if payload.get("type") in ("final", "error"):
+                    await pubsub.unsubscribe(channel_id)
+                    await pubsub.close()
+                    return
+
+        # 4. Drain Pub/Sub messages that arrived during history read (duplicates)
+        while True:
+            try:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.1)
+                if not message:
+                    break
+                data = message.get("data")
+                if data:
+                    envelope = json.loads(data)
+                    if envelope.get("sequence", 0) <= replay_high_watermark:
+                        continue  # Duplicate from history — discard
+                    # Live event — yield it
+                    yield envelope
+                    payload = envelope.get("payload", {})
+                    if payload.get("type") in ("final", "error"):
+                        await pubsub.unsubscribe(channel_id)
+                        await pubsub.close()
+                        return
+            except Exception:
+                break
+
+        # 5. Continue live consumption from Pub/Sub
         try:
             while True:
                 try:
@@ -344,19 +402,16 @@ class RedisChannelBackend:
                     if message:
                         data = message.get("data")
                         if data:
-                             envelope = json.loads(data)
-                             yield envelope
-                             
-                             # Exit on final/error event types inside payload
-                             payload = envelope.get("payload", {})
-                             if payload.get("type") in ("final", "error"):
-                                 break
+                            envelope = json.loads(data)
+                            yield envelope
+                            payload = envelope.get("payload", {})
+                            if payload.get("type") in ("final", "error"):
+                                break
                     else:
                         await asyncio.sleep(0.01)
                 except (redis.ConnectionError, redis.TimeoutError) as e:
                     logger.warning(f"Redis connection lost in subscribe ({e}), retrying...")
                     await asyncio.sleep(1)
-                    # Attempt to re-subscribe
                     try:
                         await pubsub.subscribe(channel_id)
                     except Exception:

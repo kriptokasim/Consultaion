@@ -196,13 +196,13 @@ function ArenaPageContent() {
       if (payload.type === 'final') {
         if (payload.meta?.ranking) {
           setVote({
-            method: msg.meta?.vote?.method ?? 'borda',
-            ranking: msg.meta.ranking,
+            method: payload.meta?.vote?.method ?? 'borda',
+            ranking: payload.meta.ranking,
           })
         }
-        if (msg.meta?.truncated) {
+        if (payload.meta?.truncated) {
           setTruncated(true)
-          setTruncateReason(msg.meta.truncate_reason)
+          setTruncateReason(payload.meta.truncate_reason)
         }
         track('debate_completed', {
           debate_id: currentDebateIdRef.current,

@@ -1593,19 +1593,6 @@ async def export_scores_csv(
     )
 
 
-@router.post("/debates/{debate_id}/stream-token")
-async def get_stream_token(
-    debate_id: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-):
-    """Generate a short-lived token scoped only to this debate stream."""
-    require_debate_access(session.get(Debate, debate_id), current_user, session)
-    from auth import create_stream_token
-    token = create_stream_token(current_user.id, debate_id)
-    return {"token": token, "expires_in": 300}
-
-
 @router.get("/debates/{debate_id}/replay")
 async def replay_events(
     debate_id: str,
