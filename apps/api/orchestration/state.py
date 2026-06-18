@@ -131,12 +131,13 @@ class DebateStateManager:
                 try:
                     import asyncio
                     from usage_limits import record_token_usage
-                    tokens = getattr(self, "_final_tokens", 0) or 0
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(
-                        None,
-                        lambda: record_token_usage(None, self.user_id, tokens),
-                    )
+                    tokens = max(int(tokens_total), 0)
+                    if tokens > 0:
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(
+                            None,
+                            lambda: record_token_usage(None, self.user_id, tokens),
+                        )
                 except Exception:
                     logger.exception("Failed to record token usage for debate %s", self.debate_id)
             await session.commit()

@@ -291,18 +291,14 @@ def refund_hosted_credit(db: Session, user_id: UserID) -> None:
 
 def consume_hosted_credit(db: Session, user_id: UserID) -> None:
     """
-    Finalize hosted credit consumption after successful debate completion.
-    Decrements hosted_credits_used for free plan users.
-    """
-    uid = _normalize_user_id(user_id)
-    user = db.get(User, uid)
-    if not user:
-        return
+    FH125: Finalize hosted credit consumption after successful debate completion.
 
-    plan = get_active_plan(db, uid)
-    if plan.is_default_free:
-        used = getattr(user, "hosted_credits_used", 0)
-        user.hosted_credits_used = max(0, used - 1)
-        db.add(user)
-        db.commit()
+    The credit lifecycle is:
+    1. reserve_hosted_credit() — increments hosted_credits_used
+    2. consume_hosted_credit() — settlement marker (no-op; usage already incremented)
+    3. refund_hosted_credit() — decrements hosted_credits_used on failure
+
+    Successful settlement does NOT decrement — the reservation already consumed the credit.
+    """
+    pass
 

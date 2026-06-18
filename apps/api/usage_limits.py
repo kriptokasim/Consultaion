@@ -96,6 +96,7 @@ def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit
         counter.window_start = now
         counter.runs_used = 0
         counter.tokens_used = 0
+        counter.exports_used = 0
         session.add(counter)
         if commit:
             session.commit()

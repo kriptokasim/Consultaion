@@ -155,8 +155,13 @@ async def test_google_callback_creates_user_and_sets_cookie(client: AsyncClient,
     assert state
     res = await client.get(f"/auth/google/callback?code=abc&state={state}", follow_redirects=False)
     assert res.status_code in (302, 303, 307)
-    # The new callback flow sets redirect URL token, not cookie
-    assert "?token=" in res.headers["location"]
+    # FH125: OAuth callback no longer puts JWT in URL — uses HttpOnly cookie only
+    redirect_url = res.headers["location"]
+    assert "?token=" not in redirect_url
+    # Session cookie should be set
+    set_cookie_headers = res.headers.get_list("set-cookie")
+    cookie_names = [h.split("=")[0] for h in set_cookie_headers]
+    assert any("consultaion" in name.lower() for name in cookie_names), f"Expected session cookie, got: {cookie_names}"
 
 
 async def test_get_me_requires_cookie(client: AsyncClient):

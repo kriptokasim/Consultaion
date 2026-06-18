@@ -550,40 +550,72 @@ async def update_privacy_settings(
 
 @router.post("/me/delete-account")
 async def delete_my_account(
+    response: Response,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     """
     Soft-delete user account and anonymize their data (FH125 H-1).
-    
+
     Classification:
-    - DELETE: api_keys, user_provider_keys, support_notes, user_interactions, user_predictions
-    - ANONYMIZE: debates (prompt→[DELETED]), messages (content→[DELETED]), scores, votes
-    - RETAIN: audit_log (for compliance)
+    - DELETE: api_keys, user_provider_keys, support_notes, user_interactions,
+      user_predictions, challenge_sessions, challenge_rounds, oracle_sessions,
+      oracle_branches, team_memberships, usage_counters, usage_quotas,
+      debate_attempts, vote_records
+    - ANONYMIZE: user (email→deleted@invalid.local, name, avatar, bio, password),
+      debates (prompt→[DELETED]), messages (content→[DELETED])
+    - RETAIN: audit_log (for compliance, PII removed)
     """
     from models import (
-        Debate, Message, Score, Vote, PairwiseVote, UserInteraction,
-        UserPrediction, APIKey, UserProviderKey, SupportNote, utcnow
+        Debate, Message, DebateRound, DebateTurn, Score, Vote, PairwiseVote,
+        VoteRecord, UserInteraction, UserPrediction, ChallengeSession,
+        ChallengeRound, OracleSession, OracleBranch, UserProviderKey,
+        APIKey, SupportNote, TeamMember, UsageCounter, UsageQuota,
+        DebateAttempt, utcnow
     )
     import sqlalchemy as sa
-    
-    current_user.deleted_at = utcnow()
-    current_user.is_active = False
-    current_user.password_hash = "[DELETED]"
-    session.add(current_user)
+    import secrets
 
     user_id = current_user.id
+    deleted_email = f"deleted+{secrets.token_hex(8)}@invalid.local"
 
-    # DELETE: API keys
+    # Anonymize user PII
+    current_user.email = deleted_email
+    current_user.display_name = None
+    current_user.avatar_url = None
+    current_user.bio = None
+    current_user.timezone = None
+    current_user.password_hash = "[DELETED]"
+    current_user.deleted_at = utcnow()
+    current_user.is_active = False
+    session.add(current_user)
+
+    # DELETE: Direct user-owned records
     session.execute(sa.delete(APIKey).where(APIKey.user_id == user_id))
-    # DELETE: Provider keys
     session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
-    # DELETE: Support notes authored by user
     session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
-    # DELETE: User interactions
     session.execute(sa.delete(UserInteraction).where(UserInteraction.user_id == user_id))
-    # DELETE: Predictions
     session.execute(sa.delete(UserPrediction).where(UserPrediction.user_id == user_id))
+    session.execute(sa.delete(TeamMember).where(TeamMember.user_id == user_id))
+    session.execute(sa.delete(UsageCounter).where(UsageCounter.user_id == user_id))
+    session.execute(sa.delete(UsageQuota).where(UsageQuota.user_id == user_id))
+    session.execute(sa.delete(DebateAttempt).where(DebateAttempt.debate_id.in_(
+        sa.select(Debate.id).where(Debate.user_id == user_id)
+    )))
+
+    # DELETE: Challenge/oracle/red-team sessions
+    session.execute(sa.delete(ChallengeRound).where(
+        ChallengeRound.session_id.in_(
+            sa.select(ChallengeSession.id).where(ChallengeSession.user_id == user_id)
+        )
+    ))
+    session.execute(sa.delete(ChallengeSession).where(ChallengeSession.user_id == user_id))
+    session.execute(sa.delete(OracleBranch).where(
+        OracleBranch.session_id.in_(
+            sa.select(OracleSession.id).where(OracleSession.user_id == user_id)
+        )
+    ))
+    session.execute(sa.delete(OracleSession).where(OracleSession.user_id == user_id))
 
     # ANONYMIZE: Debates
     user_debates = session.exec(
@@ -602,20 +634,21 @@ async def delete_my_account(
             anonymized_count += 1
     session.add_all(user_debates)
 
-    # ANONYMIZE: Messages
+    # ANONYMIZE/DELETE: Related debate data
     if debate_ids:
         session.execute(
             sa.update(Message)
             .where(Message.debate_id.in_(debate_ids))
             .values(content="[DELETED]", persona=None, meta=None)
         )
-        # DELETE: Scores and Votes
         session.execute(sa.delete(Score).where(Score.debate_id.in_(debate_ids)))
         session.execute(sa.delete(Vote).where(Vote.debate_id.in_(debate_ids)))
         session.execute(sa.delete(PairwiseVote).where(PairwiseVote.debate_id.in_(debate_ids)))
+        session.execute(sa.delete(VoteRecord).where(VoteRecord.debate_id.in_(debate_ids)))
+        session.execute(sa.delete(DebateRound).where(DebateRound.debate_id.in_(debate_ids)))
+        session.execute(sa.delete(DebateTurn).where(DebateTurn.debate_id.in_(debate_ids)))
 
-    session.commit()
-
+    # Audit log (retain for compliance, but remove PII from metadata)
     record_audit(
         "account_deleted",
         user_id=user_id,
@@ -628,13 +661,15 @@ async def delete_my_account(
         },
         session=session,
     )
-    
+
+    session.commit()
+
     logger.info("User account deleted: %s, debates anonymized: %d", user_id, anonymized_count)
-    
+
     # Clear auth cookies
     clear_auth_cookie(response)
     clear_csrf_cookie(response)
-    
+
     return {
         "status": "ok",
         "message": "Your account has been deleted and your data has been anonymized.",

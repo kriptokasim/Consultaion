@@ -137,7 +137,9 @@ async def csrf_protect(request: Request) -> None:
     if request.method in SAFE_METHODS or not ENABLE_CSRF:
         return
     # FH125 C-3: Check route-level CSRF-exempt marker instead of path strings
-    if request.scope.get("route") and getattr(request.scope["route"], "csrf_exempt", False):
+    route = request.scope.get("route")
+    endpoint = getattr(route, "endpoint", None) if route else None
+    if endpoint and getattr(endpoint, "csrf_exempt", False):
         return
     # Skip CSRF for Bearer token auth - CSRF attacks only affect cookie auth
     auth_header = request.headers.get("Authorization", "")

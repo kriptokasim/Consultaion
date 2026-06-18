@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
@@ -151,7 +151,8 @@ async def save_provider_key(
     
     masked = mask_provider_key(provider_name, body.key)
 
-    # FH125 D-2: Encrypt key at rest
+    # FH125 D-2: Encrypt key at rest — fail closed in production
+    from config import settings as _settings
     try:
         from security.encryption import encrypt_value, fingerprint_key
         encrypted_payload = encrypt_value(body.key.strip())
@@ -159,17 +160,24 @@ async def save_provider_key(
         nonce = encrypted_payload["nonce"]
         key_version = encrypted_payload["key_version"]
         fingerprint = fingerprint_key(body.key.strip())
-    except RuntimeError:
-        # Encryption key not configured — store plaintext (dev fallback)
-        logger.warning("PROVIDER_KEY_ENCRYPTION_KEY not set; storing key in plaintext (dev only)")
+    except (RuntimeError, ImportError) as exc:
+        if not _settings.IS_LOCAL_ENV:
+            raise HTTPException(
+                status_code=503,
+                detail="Provider key encryption is not configured. Cannot store keys in plaintext."
+            ) from exc
+        logger.warning("Encryption unavailable in local dev; storing key in plaintext")
         encrypted = body.key.strip()
-        nonce = None
+        nonce = ""
         key_version = 0
         fingerprint = fingerprint_key(body.key.strip())
     
     if existing_key:
         existing_key.masked_key = masked
         existing_key.encrypted_key = encrypted
+        existing_key.encryption_nonce = nonce
+        existing_key.encryption_key_version = key_version
+        existing_key.key_fingerprint = fingerprint
         existing_key.updated_at = utcnow()
         session.add(existing_key)
         key_record = existing_key
@@ -179,6 +187,9 @@ async def save_provider_key(
             provider=provider_name,
             masked_key=masked,
             encrypted_key=encrypted,
+            encryption_nonce=nonce,
+            encryption_key_version=key_version,
+            key_fingerprint=fingerprint,
             created_at=utcnow(),
             updated_at=utcnow()
         )

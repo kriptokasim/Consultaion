@@ -18,25 +18,9 @@ import { getBillingMe } from "@/lib/api";
 import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
 import { DashboardTemplatesSection } from "@/components/dashboard/DashboardTemplatesSection";
 
-export default function DashboardClient({ email, authToken }: { email?: string; authToken?: string }) {
+export default function DashboardClient({ email }: { email?: string }) {
   const { t } = useI18n();
   const router = useRouter();
-
-  // Bootstrap: process token from Google OAuth redirect
-  useEffect(() => {
-    if (authToken && typeof window !== "undefined") {
-      // Set 'consultaion_session' cookie for SSR cross-origin bootstrapping.
-      document.cookie = `consultaion_session=${authToken}; path=/; secure; samesite=lax; max-age=2592000`; // 30 days
-
-      // Strip token from URL to prevent leakage via browser history / referrers
-      const url = new URL(window.location.href);
-      url.searchParams.delete("token");
-      window.history.replaceState({}, "", url.toString());
-
-      // Reload so SSR 'getMe' can see the newly set cookie
-      window.location.reload();
-    }
-  }, [authToken]);
 
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);

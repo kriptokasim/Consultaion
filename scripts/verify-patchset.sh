@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # FH125 I-2: Pre-push verification script
 # Runs build, test, typecheck, and Alembic head check before pushing.
-set -euo pipefail
+set -uo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,10 +17,10 @@ run_check() {
     echo -e "${YELLOW}▶ ${name}${NC}"
     if "$@"; then
         echo -e "${GREEN}✓ ${name} passed${NC}"
-        ((passed++))
+        passed=$((passed + 1))
     else
         echo -e "${RED}✗ ${name} failed${NC}"
-        ((failed++))
+        failed=$((failed + 1))
     fi
     echo
 }
@@ -39,12 +39,12 @@ fi
 # Backend checks
 if [ -d "apps/api" ]; then
     run_check "Backend: Test Collection" bash -c "cd apps/api && python -m pytest --collect-only -q"
-    run_check "Backend: Unit Tests" bash -c "cd apps/api && python -m pytest -x -q --timeout=60"
+    run_check "Backend: Unit Tests" bash -c "cd apps/api && python -m pytest -x -q"
 fi
 
-# Alembic head check (single migration head)
+# Alembic head check (exactly one migration head)
 if [ -f "apps/api/alembic.ini" ]; then
-    run_check "Alembic: Single Head" bash -c "cd apps/api && python -c \"from alembic.script import ScriptDirectory; from alembic.config import Config; cfg=Config('alembic.ini'); heads=ScriptDirectory.from_config(cfg).get_heads(); assert len(heads) <= 1, f'Multiple Alembic heads: {heads}'\""
+    run_check "Alembic: Single Head" bash -c "cd apps/api && python -c \"from alembic.script import ScriptDirectory; from alembic.config import Config; cfg=Config('alembic.ini'); heads=ScriptDirectory.from_config(cfg).get_heads(); assert len(heads) == 1, f'Expected exactly 1 Alembic head, got {len(heads)}: {heads}'\""
 fi
 
 # Secret scanner (gitleaks if available)

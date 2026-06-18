@@ -1,3 +1,5 @@
+import hashlib
+import logging
 from typing import Any, Dict
 
 from auth import get_current_user
@@ -11,11 +13,24 @@ from worker.arena_tasks import _execute_divergence_computation
 
 from routes.common import can_access_debate, require_debate_access
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/arena", tags=["arena"])
 
 
+def _normalize_claim_text(text: str) -> str:
+    """Canonical normalization for claim identity hashing."""
+    return " ".join(text.strip().lower().split())
+
+
+def _compute_claim_id(claim_text: str) -> str:
+    """Server-side SHA-256 of normalized claim text."""
+    normalized = _normalize_claim_text(claim_text)
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+
 class UserVotePayload(BaseModel):
-    claim_id: str = Field(..., description="Stable identifier for the claim (SHA-256 of claim text)")
+    claim_id: str = Field(..., description="Server-computed SHA-256 of normalized claim text")
     claim_text: str = Field(..., description="The claim content the user voted on")
 
 
@@ -31,7 +46,6 @@ async def get_divergence_report(
     if not debate:
         raise HTTPException(status_code=404, detail="Debate not found")
 
-    # Enforce access control: private debates are not readable by unauthorized users
     if not can_access_debate(debate, current_user, session):
         raise HTTPException(status_code=404, detail="Debate not found")
 
@@ -50,7 +64,6 @@ async def get_divergence_report(
                 "ready": False
             }
 
-        # Require auth + guard before triggering expensive LLM computation
         require_llm_action_allowed(
             user=current_user,
             action="divergence_recompute",
@@ -59,7 +72,6 @@ async def get_divergence_report(
             ip_address=request.client.host if request.client else "0.0.0.0",
         )
 
-        # Calculate on the fly if completed but report didn't process
         try:
             await _execute_divergence_computation(debate_id)
             report = session.exec(
@@ -98,23 +110,37 @@ async def cast_arena_vote(
 
     user_id = current_user.id
 
-    # Validate claim_id exists in the divergence report
+    # Report existence means it's ready (no `ready` column on DivergenceReport)
     report = session.exec(
         select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
     ).first()
-    if not report or not report.ready:
+    if not report:
         raise HTTPException(status_code=400, detail="Divergence report not available")
 
+    # Build claim text set and validate claim_id server-side
     all_claims = []
     for claim_group in [report.consensus_claims, report.contested_claims]:
         if claim_group and isinstance(claim_group, dict):
             for claim in claim_group.get("claims", []):
                 if isinstance(claim, dict):
-                    all_claims.append(claim.get("claim", ""))
+                    text = claim.get("claim", "")
+                    if text:
+                        all_claims.append(text)
 
-    claim_texts = {c.strip().lower() for c in all_claims}
-    if payload.claim_text.strip().lower() not in claim_texts:
-        raise HTTPException(status_code=400, detail="Invalid claim_id — claim not found in divergence report")
+    # Validate claim_id matches server-computed SHA-256
+    claim_text_lower = payload.claim_text.strip().lower()
+    found = False
+    for claim_text in all_claims:
+        if claim_text.strip().lower() == claim_text_lower:
+            found = True
+            # Verify claim_id matches server-side computation
+            expected_id = _compute_claim_id(claim_text)
+            if payload.claim_id != expected_id:
+                raise HTTPException(status_code=400, detail="Invalid claim_id — hash mismatch")
+            break
+
+    if not found:
+        raise HTTPException(status_code=400, detail="Invalid claim — not found in divergence report")
 
     # Check for existing vote on this claim by this user
     existing_vote = session.exec(
@@ -126,10 +152,10 @@ async def cast_arena_vote(
 
     if existing_vote:
         existing_claim_text = (existing_vote.vote_json or {}).get("claim_text", "")
-        if existing_claim_text.strip().lower() == payload.claim_text.strip().lower():
+        if existing_claim_text.strip().lower() == claim_text_lower:
             raise HTTPException(status_code=400, detail="Already voted on this claim")
 
-    # Record VoteRecord (server-validated data only, no client-trusted model_name/is_consensus)
+    # Record VoteRecord
     vote_record = VoteRecord(
         debate_id=debate_id,
         user_id=user_id,

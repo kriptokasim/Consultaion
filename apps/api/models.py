@@ -548,16 +548,20 @@ class UserInteraction(SQLModel, table=True):
 
 
 class UserProviderKey(SQLModel, table=True):
-    """
-    User-provided API keys for BYOK mode.
-    """
+    """FH125: User-provided API keys for BYOK mode, encrypted at rest."""
     __tablename__ = "user_provider_keys"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_user_provider_keys_user_provider"),
+    )
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
-    provider: str = Field(nullable=False, index=True)  # "openai", "anthropic", "gemini", "openrouter"
+    provider: str = Field(nullable=False, index=True)
     masked_key: str = Field(nullable=False)
     encrypted_key: str = Field(nullable=False)
+    encryption_nonce: str = Field(nullable=False)
+    encryption_key_version: int = Field(default=1, nullable=False)
+    key_fingerprint: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
