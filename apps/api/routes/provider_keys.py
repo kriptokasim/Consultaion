@@ -50,8 +50,9 @@ async def validate_key_with_provider(provider: str, key: str) -> bool:
                     headers={"Authorization": f"Bearer {key}"}
                 )
                 if response.status_code != 200:
+                    logger.warning("OpenAI key validation failed: status=%d", response.status_code)
                     raise ValidationError(
-                        message=f"OpenAI key validation failed (Status {response.status_code}): {response.text}",
+                        message="OpenAI key validation failed. Please check your key.",
                         code="provider_key.validation_failed"
                     )
             elif provider == "anthropic":
@@ -64,8 +65,9 @@ async def validate_key_with_provider(provider: str, key: str) -> bool:
                     }
                 )
                 if response.status_code != 200:
+                    logger.warning("Anthropic key validation failed: status=%d", response.status_code)
                     raise ValidationError(
-                        message=f"Anthropic key validation failed (Status {response.status_code}): {response.text}",
+                        message="Anthropic key validation failed. Please check your key.",
                         code="provider_key.validation_failed"
                     )
             elif provider == "gemini":
@@ -76,8 +78,9 @@ async def validate_key_with_provider(provider: str, key: str) -> bool:
                     json={"contents": [{"parts": [{"text": "Hello"}]}]}
                 )
                 if response.status_code != 200:
+                    logger.warning("Gemini key validation failed: status=%d", response.status_code)
                     raise ValidationError(
-                        message=f"Gemini key validation failed (Status {response.status_code}): {response.text}",
+                        message="Gemini key validation failed. Please check your key.",
                         code="provider_key.validation_failed"
                     )
             elif provider == "openrouter":
@@ -86,8 +89,9 @@ async def validate_key_with_provider(provider: str, key: str) -> bool:
                     headers={"Authorization": f"Bearer {key}"}
                 )
                 if response.status_code != 200:
+                    logger.warning("OpenRouter key validation failed: status=%d", response.status_code)
                     raise ValidationError(
-                        message=f"OpenRouter key validation failed (Status {response.status_code}): {response.text}",
+                        message="OpenRouter key validation failed. Please check your key.",
                         code="provider_key.validation_failed"
                     )
             else:

@@ -168,8 +168,9 @@ async def _build_and_send_summary(debate_id: str, user_id: str | None) -> None:
             url=url,
         )
     
-    # Fire and forget
-    asyncio.create_task(send_debate_summary_email(user.email, summary))
+    # Store task reference to prevent silent exception loss
+    task = asyncio.create_task(send_debate_summary_email(user.email, summary))
+    task.add_done_callback(lambda t: t.exception() and logger.warning("Email task failed: %s", t.exception()))
 
 
 async def _start_round(debate_id: str, index: int, label: str, note: str) -> int:
@@ -839,13 +840,12 @@ async def run_debate(
                             await asyncio.get_running_loop().run_in_executor(None, _run_refund)
                         except Exception as refund_err:
                             logger.warning(f"Failed to refund hosted credits: {refund_err}")
-        except Exception:
-            pass
-
+        except Exception as inner_exc:
+            logger.error("Failed to update debate status after transient error: debate_id=%s error=%s", debate_id, inner_exc)
 
         await backend.publish(
             channel_id,
-            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": f"Temporary AI provider issue: {exc}"}},
+            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Temporary AI provider issue. Please retry."}},
         )
 
     except Exception as exc:
@@ -896,8 +896,8 @@ async def run_debate(
                             await asyncio.get_running_loop().run_in_executor(None, _run_refund)
                         except Exception as refund_err:
                             logger.warning(f"Failed to refund hosted credits: {refund_err}")
-        except Exception:
-            pass
+        except Exception as inner_exc:
+            logger.error("Failed to update debate status after terminal error: debate_id=%s error=%s", debate_id, inner_exc)
 
 
         await backend.publish(

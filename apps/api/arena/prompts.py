@@ -33,18 +33,22 @@ ARENA_MODEL_SYSTEM_PROMPT = _ARENA_MODEL_TEMPLATE
 ARENA_SYNTHESIS_PROMPT = _ARENA_SYNTHESIS_TEMPLATE
 
 # Cache for precompiled per-model system prompts (avoids re-formatting each call)
+# FH125: Bounded cache to prevent unbounded memory growth
 _prompt_cache: dict[str, str] = {}
+_PROMPT_CACHE_MAX = 500
 
 
 def get_compiled_model_prompt(model_display_name: str, provider_name: str, locale: str | None = None) -> str:
-    """Return a cached compiled system prompt for the given model.
-
-    Includes locale instruction if non-English. Cache keyed on
-    (model_display_name, provider_name, locale) to avoid repeated formatting.
-    """
+    """Return a cached compiled system prompt for the given model."""
     cache_key = f"{model_display_name}|{provider_name}|{locale or 'en'}"
     if cache_key in _prompt_cache:
         return _prompt_cache[cache_key]
+
+    # Evict oldest entries if cache is full
+    if len(_prompt_cache) >= _PROMPT_CACHE_MAX:
+        keys_to_remove = list(_prompt_cache.keys())[:_PROMPT_CACHE_MAX // 2]
+        for k in keys_to_remove:
+            del _prompt_cache[k]
 
     base = ARENA_MODEL_SYSTEM_PROMPT.format(
         model_display_name=model_display_name,

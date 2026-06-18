@@ -237,6 +237,7 @@ class RedisChannelBackend:
         pooled_client = get_async_redis_client()
         if pooled_client is not None:
             self._redis = pooled_client
+            self._redis._from_pool = True
         else:
             # Fallback to direct connection if pool not available
             self._redis = redis.from_url(
@@ -259,7 +260,9 @@ class RedisChannelBackend:
             # We don't raise here to allow app startup, but subsequent calls will fail/retry
 
     async def stop(self) -> None:
-        await self._redis.aclose()
+        # Don't close pooled Redis clients — only close standalone connections
+        if self._redis and not getattr(self._redis, "_from_pool", False):
+            await self._redis.aclose()
 
     async def create_channel(self, channel_id: str) -> None:
         key = f"sse:meta:{channel_id}"
@@ -388,6 +391,7 @@ class StreamLeaseManager:
         self._max_streams = max_streams
         self._lease_ttl = lease_ttl
         self._memory_leases: dict[str, dict[str, float]] = {}
+        self._lock = asyncio.Lock()
 
     def _lease_key(self, debate_id: str) -> str:
         return f"sse:leases:{debate_id}"
@@ -420,16 +424,16 @@ class StreamLeaseManager:
             logger.warning("Redis lease acquire failed, falling back to memory: %s", exc)
 
         try:
-            now = time.time()
-            memory_set = self._memory_leases.setdefault(debate_id, {})
-            # Clean expired entries
-            expired = [k for k, v in memory_set.items() if v < now]
-            for k in expired:
-                del memory_set[k]
-            if len(memory_set) >= self._max_streams:
-                return StreamLeaseResult.DENIED
-            memory_set[identity] = now + self._lease_ttl
-            return StreamLeaseResult.ACQUIRED
+            async with self._lock:
+                now = time.time()
+                memory_set = self._memory_leases.setdefault(debate_id, {})
+                expired = [k for k, v in memory_set.items() if v < now]
+                for k in expired:
+                    del memory_set[k]
+                if len(memory_set) >= self._max_streams:
+                    return StreamLeaseResult.DENIED
+                memory_set[identity] = now + self._lease_ttl
+                return StreamLeaseResult.ACQUIRED
         except Exception as exc:
             logger.error("Memory lease acquire failed: %s", exc)
             
@@ -457,9 +461,10 @@ class StreamLeaseManager:
         except Exception:
             pass
 
-        memory_set = self._memory_leases.get(debate_id)
-        if memory_set:
-            memory_set.pop(identity, None)
+        async with self._lock:
+            memory_set = self._memory_leases.get(debate_id)
+            if memory_set:
+                memory_set.pop(identity, None)
 
     async def active_count(self, debate_id: str) -> int:
         """Return the number of active leases for a debate."""

@@ -8,7 +8,7 @@ from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, Query, Response
 from metrics import get_metrics_snapshot
-from models import Debate, Score
+from models import Debate, Score, User
 from pydantic import BaseModel
 from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from schemas import DebateConfig, default_debate_config, default_panel_config
@@ -92,10 +92,10 @@ class HallOfFameResponse(BaseModel):
 
 
 @router.get("/debug/cookie-config")
-async def debug_cookie_config():
+async def debug_cookie_config(current_user: User = Depends(get_current_admin)):
     """
     Debug endpoint to check cookie configuration.
-    Helps diagnose cross-domain auth issues.
+    Admin-only — exposes deployment configuration.
     """
     import os
 

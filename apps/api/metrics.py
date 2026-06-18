@@ -37,10 +37,13 @@ from typing import Dict
 
 _metrics: Dict[str, int] = defaultdict(int)
 _lock = Lock()
+_METRICS_MAX = 1000
 
 
 def increment_metric(name: str, value: int = 1) -> None:
     with _lock:
+        if len(_metrics) >= _METRICS_MAX and name not in _metrics:
+            return  # Drop new metric names when at capacity
         _metrics[name] += value
 
 

@@ -401,7 +401,7 @@ async def _raw_llm_call(
         
         ctx_user_id = get_log_context().get("user_id") or ctx_user_id
         
-        asyncio.create_task(persist_usage_log(
+        _usage_task = asyncio.create_task(persist_usage_log(
             call_usage,
             debate_id=debate_id,
             user_id=ctx_user_id,
@@ -409,6 +409,7 @@ async def _raw_llm_call(
             latency_ms=latency_ms,
             success=True,
         ))
+        _usage_task.add_done_callback(lambda t: t.exception() and logger.warning("Usage log task failed: %s", t.exception()))
         
         return content.strip(), call_usage
 
