@@ -1,10 +1,11 @@
 """Provider Credential Resolver — decrypts user-provided API keys for model calls.
 
-FH125: Supplies decrypted BYOK keys to the model gateway without caching
-plaintext globally. Each decryption is short-lived and scoped to the current call.
+FH125 Track F: Supplies decrypted BYOK keys to the model gateway.
+Each decryption is short-lived, scoped to the current call, and AAD-bound.
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -14,15 +15,24 @@ from models import UserProviderKey
 logger = logging.getLogger(__name__)
 
 
-def resolve_provider_key(
+@dataclass
+class ResolvedProviderCredential:
+    """A decrypted provider credential with metadata."""
+    key: str
+    source: str  # "user", "server", or "none"
+    provider: str
+    user_id: Optional[str] = None
+
+
+def resolve_provider_credential(
     session: Session,
     user_id: str,
     provider: str,
-) -> Optional[str]:
-    """Resolve and decrypt a user's provider key for the given provider.
+) -> Optional[ResolvedProviderCredential]:
+    """Resolve and decrypt a user's provider key.
 
-    Returns the decrypted key string, or None if not found.
-    Never logs the key value. Never caches plaintext globally.
+    Returns ResolvedProviderCredential with source="user" if found,
+    or None if no user key exists (caller falls back to server key).
     """
     stmt = select(UserProviderKey).where(
         UserProviderKey.user_id == user_id,
@@ -32,13 +42,31 @@ def resolve_provider_key(
     if not key_record:
         return None
 
+    # Reject legacy rows without encryption metadata
+    if not key_record.encryption_nonce and key_record.encryption_key_version == 0:
+        logger.warning(
+            "Rejecting legacy unencrypted key: user_id=%s provider=%s",
+            user_id, provider,
+        )
+        return None
+
     try:
         from security.encryption import decrypt_value
-        return decrypt_value({
-            "ciphertext": key_record.encrypted_key,
-            "nonce": key_record.encryption_nonce,
-            "key_version": key_record.encryption_key_version,
-        })
+        decrypted = decrypt_value(
+            {
+                "ciphertext": key_record.encrypted_key,
+                "nonce": key_record.encryption_nonce,
+                "key_version": key_record.encryption_key_version,
+            },
+            user_id=user_id,
+            provider=provider,
+        )
+        return ResolvedProviderCredential(
+            key=decrypted,
+            source="user",
+            provider=provider,
+            user_id=user_id,
+        )
     except Exception as exc:
         logger.warning(
             "Failed to decrypt provider key: user_id=%s provider=%s error=%s",
@@ -51,17 +79,13 @@ def get_model_api_key(
     session: Session,
     user_id: Optional[str],
     provider: str,
-) -> Optional[str]:
-    """Get the API key for a provider, preferring user's BYOK key over server key.
-
-    This is the main entry point for model gateway integration.
-    Returns the decrypted user key if available, otherwise None (caller falls back to server key).
-    """
+) -> Optional[ResolvedProviderCredential]:
+    """Get API key for a provider, preferring user BYOK over server key."""
     if not user_id:
         return None
 
-    user_key = resolve_provider_key(session, user_id, provider)
-    if user_key:
-        return user_key
+    credential = resolve_provider_credential(session, user_id, provider)
+    if credential:
+        return credential
 
     return None

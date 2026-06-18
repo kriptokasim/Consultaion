@@ -578,7 +578,8 @@ async def delete_my_account(
         VoteRecord, UserInteraction, UserPrediction, ChallengeSession,
         ChallengeRound, OracleSession, OracleBranch, UserProviderKey,
         APIKey, SupportNote, TeamMember, UsageCounter, UsageQuota,
-        DebateAttempt, RedTeamSession, ConversationVote, LLMUsageLog, utcnow
+        DebateAttempt, RedTeamSession, ConversationVote, LLMUsageLog,
+        UsageLedgerEntry, DebateStageCheckpoint, utcnow
     )
     import sqlalchemy as sa
     import secrets
@@ -601,6 +602,12 @@ async def delete_my_account(
     session.execute(sa.delete(APIKey).where(APIKey.user_id == user_id))
     session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
     session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
+    # Anonymize support notes ABOUT the user (retained for support history)
+    session.execute(
+        sa.update(SupportNote)
+        .where(SupportNote.user_id == user_id)
+        .values(user_id="[deleted]", note="[User deleted]")
+    )
     session.execute(sa.delete(UserInteraction).where(UserInteraction.user_id == user_id))
     session.execute(sa.delete(UserPrediction).where(UserPrediction.user_id == user_id))
     session.execute(sa.delete(TeamMember).where(TeamMember.user_id == user_id))
@@ -626,6 +633,10 @@ async def delete_my_account(
     session.execute(sa.delete(RedTeamSession).where(RedTeamSession.user_id == user_id))
     session.execute(sa.delete(ConversationVote).where(ConversationVote.user_id == user_id))
     session.execute(sa.delete(LLMUsageLog).where(LLMUsageLog.user_id == user_id))
+    session.execute(sa.delete(UsageLedgerEntry).where(UsageLedgerEntry.user_id == user_id))
+    session.execute(sa.delete(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id.in_(
+        sa.select(Debate.id).where(Debate.user_id == user_id)
+    )))
 
     # ANONYMIZE: Debates
     user_debates = session.exec(
@@ -658,7 +669,7 @@ async def delete_my_account(
         session.execute(sa.delete(DebateRound).where(DebateRound.debate_id.in_(debate_ids)))
         session.execute(sa.delete(DebateTurn).where(DebateTurn.debate_id.in_(debate_ids)))
 
-    # Audit log (retain for compliance, but remove PII from metadata)
+    # Audit log — staged before commit, persists atomically with deletion
     record_audit(
         "account_deleted",
         user_id=user_id,
