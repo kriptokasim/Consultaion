@@ -25,6 +25,7 @@ def record_audit(
     
     try:
         if session is None:
+            # Standalone call — create own session and commit
             with session_scope() as scoped:
                 log = AuditLog(
                     user_id=user_id,
@@ -36,6 +37,7 @@ def record_audit(
                 )
                 scoped.add(log)
         else:
+            # FH125: Don't commit inside caller's transaction — let caller manage commit
             log = AuditLog(
                 user_id=user_id,
                 action=action,
@@ -45,7 +47,6 @@ def record_audit(
                 created_at=utcnow(),
             )
             session.add(log)
-            session.commit()
     except SQLAlchemyError:
         # Audit failures should never block primary flows.
         return

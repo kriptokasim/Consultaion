@@ -155,7 +155,7 @@ async def save_provider_key(
     
     masked = mask_provider_key(provider_name, body.key)
 
-    # FH125 D-2: Encrypt key at rest — fail closed in production
+    # FH125 D-2: Encrypt key at rest — fail closed in all environments
     from config import settings as _settings
     try:
         from security.encryption import encrypt_value, fingerprint_key
@@ -165,16 +165,11 @@ async def save_provider_key(
         key_version = encrypted_payload["key_version"]
         fingerprint = fingerprint_key(body.key.strip())
     except (RuntimeError, ImportError) as exc:
-        if not _settings.IS_LOCAL_ENV:
-            raise HTTPException(
-                status_code=503,
-                detail="Provider key encryption is not configured. Cannot store keys in plaintext."
-            ) from exc
-        logger.warning("Encryption unavailable in local dev; storing key in plaintext")
-        encrypted = body.key.strip()
-        nonce = ""
-        key_version = 0
-        fingerprint = fingerprint_key(body.key.strip())
+        # FH125: Never store plaintext — fail closed in all environments
+        raise HTTPException(
+            status_code=503,
+            detail="Provider key encryption is not configured. Set PROVIDER_KEY_ENCRYPTION_KEY."
+        ) from exc
     
     if existing_key:
         existing_key.masked_key = masked

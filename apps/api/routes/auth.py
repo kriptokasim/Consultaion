@@ -206,6 +206,13 @@ async def _fetch_google_profile(access_token: str) -> dict[str, Any]:
     data = resp.json()
     if "email" not in data:
         raise AuthError(message="Google OAuth missing email", code="auth.google_missing_email", status_code=400)
+    # FH125: Reject unverified Google emails
+    if data.get("email_verified") is not True:
+        raise AuthError(
+            message="Google email is not verified. Please verify your email with Google.",
+            code="auth.google_email_not_verified",
+            status_code=400,
+        )
     return data
 
 
@@ -561,7 +568,8 @@ async def delete_my_account(
     - DELETE: api_keys, user_provider_keys, support_notes, user_interactions,
       user_predictions, challenge_sessions, challenge_rounds, oracle_sessions,
       oracle_branches, team_memberships, usage_counters, usage_quotas,
-      debate_attempts, vote_records
+      debate_attempts, vote_records, red_team_sessions, conversation_votes,
+      llm_usage_logs
     - ANONYMIZE: user (email→deleted@invalid.local, name, avatar, bio, password),
       debates (prompt→[DELETED]), messages (content→[DELETED])
     - RETAIN: audit_log (for compliance, PII removed)
@@ -571,7 +579,7 @@ async def delete_my_account(
         VoteRecord, UserInteraction, UserPrediction, ChallengeSession,
         ChallengeRound, OracleSession, OracleBranch, UserProviderKey,
         APIKey, SupportNote, TeamMember, UsageCounter, UsageQuota,
-        DebateAttempt, utcnow
+        DebateAttempt, RedTeamSession, ConversationVote, LLMUsageLog, utcnow
     )
     import sqlalchemy as sa
     import secrets
@@ -616,6 +624,9 @@ async def delete_my_account(
         )
     ))
     session.execute(sa.delete(OracleSession).where(OracleSession.user_id == user_id))
+    session.execute(sa.delete(RedTeamSession).where(RedTeamSession.user_id == user_id))
+    session.execute(sa.delete(ConversationVote).where(ConversationVote.user_id == user_id))
+    session.execute(sa.delete(LLMUsageLog).where(LLMUsageLog.user_id == user_id))
 
     # ANONYMIZE: Debates
     user_debates = session.exec(

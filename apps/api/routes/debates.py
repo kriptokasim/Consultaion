@@ -1643,17 +1643,13 @@ async def replay_events(
 async def stream_events(
     debate_id: str,
     request: Request,
-    token: Optional[str] = Query(default=None, description="Stream-scoped JWT for EventSource auth fallback"),
     last_sequence: Optional[int] = Query(default=None, description="Last sequence number received by client"),
     session: Session = Depends(get_session),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
-    # Resolve user: cookie/Bearer first, then scoped stream token fallback
-    # (EventSource API cannot set Authorization header, so token param is needed for 3P clients)
-    from auth import get_optional_user, resolve_stream_token
+    # FH125: Cookie/Bearer auth only — no query JWT for first-party flow
+    from auth import get_optional_user
     user = get_optional_user(request=request, session=session)
-    if not user and token:
-        user = resolve_stream_token(token, session, debate_id)
     if not user:
         from fastapi import HTTPException
         raise HTTPException(status_code=401, detail="authentication required")

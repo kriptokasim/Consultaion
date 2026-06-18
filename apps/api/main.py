@@ -270,6 +270,19 @@ async def lifespan(app: FastAPI):
         logger.error("Rate limiter backend check failed: %s", exc)
         if not settings.IS_LOCAL_ENV:
             raise
+
+    # FH125: Verify Redis connectivity in production
+    if not settings.IS_LOCAL_ENV and settings.REDIS_URL:
+        try:
+            import redis
+            r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=3)
+            r.ping()
+            r.close()
+            logger.info("Redis connectivity verified.")
+        except Exception as exc:
+            logger.error("Redis connectivity check failed: %s", exc)
+            raise RuntimeError(f"Redis is required in production but unreachable: {exc}") from exc
+
     try:
         models = list_enabled_models()
         if not models:
