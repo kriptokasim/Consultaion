@@ -3,8 +3,10 @@ import { CheckCircle2, AlertTriangle, ThumbsUp, Loader2, Check } from "lucide-re
 import { getColors } from "./ModelCard";
 
 async function sha256(text: string): Promise<string> {
+  // FH125: Must match backend normalization in routes/arena.py _normalize_claim_text
+  const normalized = text.trim().toLowerCase().split(/\s+/).join(" ");
   const encoder = new TextEncoder();
-  const data = encoder.encode(text);
+  const data = encoder.encode(normalized);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");

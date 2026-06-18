@@ -15,6 +15,12 @@ from parliament.model_registry import get_model_info
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+
+def csrf_exempt(func):
+    """Mark a route as exempt from CSRF protection."""
+    func.csrf_exempt = True
+    return func
+
 from .models import BillingPlan, BillingUsage
 from .providers import get_billing_provider
 from .reconciliation import (
@@ -165,6 +171,7 @@ def create_checkout(
     return {"checkout_url": checkout_url}
 
 
+@csrf_exempt
 @router.post("/webhook/{provider}")
 async def billing_webhook(
     provider: str,

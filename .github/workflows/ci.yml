@@ -515,7 +515,7 @@ jobs:
           DATABASE_URL: "sqlite:///./ci_test.db"
         working-directory: apps/api
         run: |
-          python -m pytest -q tests/test_sse_backend.py -x 2>/dev/null || echo "SSE tests not yet created"
+          python -m pytest tests/test_sse_backend.py -x -v
 
   auth-regression:
     name: Authorization Regression

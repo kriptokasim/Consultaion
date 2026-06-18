@@ -12,6 +12,7 @@ import type { ArenaRunUiState } from "@/components/parliament/StatusPill";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ApiError, getRateLimitInfo, startDebate, startDebateRun, getDebate } from "@/lib/api";
 import { useEventSource } from "@/lib/sse";
+import { API_ORIGIN } from "@/lib/config/runtime";
 import { defaultPanelConfig, type PanelSeatConfig } from "@/lib/panels";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -166,32 +167,34 @@ function ArenaPageContent() {
 
   const manualStartMode = !ENABLE_CONVERSATION_MODE
   const shouldStream = running && !!currentDebateId
-  const streamUrl = currentDebateId ? `/debates/${currentDebateId}/stream` : null
+  const streamUrl = currentDebateId ? `${API_ORIGIN}/debates/${currentDebateId}/stream` : null
 
   const handleStreamEvent = useCallback(
     (msg: any) => {
-      if (msg.type === 'error') {
-        console.error('Stream error:', msg)
+      // FH125: Events use envelope format with domain fields inside payload
+      const payload = msg.payload || msg
+      if (payload.type === 'error') {
+        console.error('Stream error:', payload)
         stopStreamRef.current?.('terminal_error')
         return
       }
-      setEvents((prev) => [...prev, msg])
+      setEvents((prev) => [...prev, payload])
 
-      if (msg.type === 'seat_message' || msg.type === 'message') {
-        setActivePersona(msg.seat_name || msg.actor)
+      if (payload.type === 'seat_message' || payload.type === 'message') {
+        setActivePersona(payload.seat_name || payload.persona || payload.actor)
         setSpeakerTime(0)
-      } else if (msg.type === 'round_started') {
+      } else if (payload.type === 'round_started') {
         setActivePersona(undefined)
         setSpeakerTime(0)
-      } else if (msg.type === 'score') {
+      } else if (payload.type === 'score') {
         setLatestScores((prev) => {
-          const newScores = [...prev, { persona: msg.persona, score: msg.score }]
-          return newScores.slice(-5) // Keep last 5
+          const newScores = [...prev, { persona: payload.persona, score: payload.score }]
+          return newScores.slice(-5)
         })
       }
 
-      if (msg.type === 'final') {
-        if (msg.meta?.ranking) {
+      if (payload.type === 'final') {
+        if (payload.meta?.ranking) {
           setVote({
             method: msg.meta?.vote?.method ?? 'borda',
             ranking: msg.meta.ranking,

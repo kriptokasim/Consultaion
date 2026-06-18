@@ -157,13 +157,13 @@ class MemoryChannelBackend:
         """
         await self.create_channel(channel_id)
 
-        # 1. Replay cached history if requested
-        if last_sequence is not None:
-            async with self._lock:
-                history_copy = list(self._history.get(channel_id, []))
-            for env in history_copy:
-                if env.get("sequence", 0) > last_sequence:
-                    yield env
+        # FH125: Replay all history for new subscribers (events published before registration)
+        async with self._lock:
+            history_copy = list(self._history.get(channel_id, []))
+            replay_seq = max((env.get("sequence", 0) for env in history_copy), default=0)
+        for env in history_copy:
+            if last_sequence is None or env.get("sequence", 0) > last_sequence:
+                yield env
 
         # FH125 F-4: Create per-subscriber queue
         sub_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=self._max_queue_size)
