@@ -532,7 +532,7 @@ async def run_debate(
     early_stop_reason: str | None = None
     budget_notice_sent = False
 
-    # Patchset 71: Lease & Heartbeat
+    # Lease & Heartbeat
     runner_id = _get_runner_id()
     heartbeat_task = None
     stop_heartbeat = asyncio.Event()
@@ -582,7 +582,7 @@ async def run_debate(
             is_parliament = bool(debate.panel_config)
             debate_mode = debate.mode or "debate"
 
-            # FH125: Resolve current attempt_id for attempt-scoped records
+            # Resolve current attempt_id for attempt-scoped records
             current_attempt_id: str | None = None
             if debate.run_attempt:
                 from models import DebateAttempt

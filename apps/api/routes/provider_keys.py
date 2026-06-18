@@ -169,7 +169,7 @@ async def save_provider_key(
         key_version = encrypted_payload["key_version"]
         fingerprint = fingerprint_key(body.key.strip())
     except (RuntimeError, ImportError) as exc:
-        # FH125: Never store plaintext — fail closed in all environments
+        # Never store plaintext — fail closed in all environments
         raise HTTPException(
             status_code=503,
             detail="Provider key encryption is not configured. Set PROVIDER_KEY_ENCRYPTION_KEY."

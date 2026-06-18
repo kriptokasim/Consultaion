@@ -33,7 +33,7 @@ ARENA_MODEL_SYSTEM_PROMPT = _ARENA_MODEL_TEMPLATE
 ARENA_SYNTHESIS_PROMPT = _ARENA_SYNTHESIS_TEMPLATE
 
 # Cache for precompiled per-model system prompts (avoids re-formatting each call)
-# FH125: Bounded cache to prevent unbounded memory growth
+# Bounded cache to prevent unbounded memory growth
 _prompt_cache: dict[str, str] = {}
 _PROMPT_CACHE_MAX = 500
 

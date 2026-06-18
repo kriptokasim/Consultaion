@@ -80,7 +80,7 @@ def download_export(
     export_dir = os.path.realpath(os.path.join(settings.EXPORT_DIR, "gdpr"))
     filepath = os.path.realpath(os.path.join(export_dir, filename))
 
-    # FH125: Prevent path traversal — resolved path must be within export_dir
+    # Prevent path traversal — resolved path must be within export_dir
     if not filepath.startswith(export_dir + os.sep) and filepath != export_dir:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 

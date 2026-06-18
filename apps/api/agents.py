@@ -509,7 +509,7 @@ async def call_llm_with_retry(
                 exc,
             )
             
-            # Patchset 81: OpenRouter Fallback logic
+            # OpenRouter Fallback logic
             # If we hit a Rate Limit and have OpenRouter configured, switch to fallback model.
             if isinstance(exc.cause, RateLimitError) and settings.OPENROUTER_API_KEY and settings.OPENROUTER_FALLBACK_MODEL:
                 if model_override != settings.OPENROUTER_FALLBACK_MODEL: # Prevent infinite switching if fallback also fails

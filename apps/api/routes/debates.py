@@ -173,7 +173,7 @@ async def get_debate_timeline(
     timeline = build_debate_timeline(session, debate)
     
     elapsed_ms = (time.time() - start_time) * 1000
-    # Patchset 112: Track timeline fetch performance
+    # Track timeline fetch performance
     if elapsed_ms > 500:
         logger.warning(f"timeline_fetch_slow: debate_id={debate_id} elapsed_ms={elapsed_ms:.1f} events={len(timeline)}")
         track_metric("timeline.fetch.slow")
@@ -487,7 +487,7 @@ async def create_debate(
         session=session,
     )
     track_metric("debates_created")
-    # Patchset 112: Track mode usage metrics
+    # Track mode usage metrics
     mode = body.mode or "conversation"
     # Replaced legacy mode.{mode}.started with consistent mode.debate.started 
     # and tracking the specific mode as a tag or sub-metric if needed, but for now just:
@@ -1026,21 +1026,11 @@ async def retry_debate_run(
 
     # If we still have a stage_key, invalidate downstream checkpoints (non-destructive)
     if stage_key:
-        DOWNSTREAM_STAGES = {
-            "draft": ["draft", "critique", "judge", "synthesis", "synthesis_draft", "verification"],
-            "critique": ["critique", "judge", "synthesis", "synthesis_draft", "verification"],
-            "judge": ["judge", "synthesis", "synthesis_draft", "verification"],
-            "divergence_analysis": ["divergence_analysis", "synthesis", "synthesis_draft", "verification"],
-            "synthesis": ["synthesis", "synthesis_draft", "verification"],
-            "synthesis_draft": ["synthesis_draft", "verification", "synthesis", "arena_synthesis"],
-            "verification": ["verification", "synthesis", "arena_synthesis"],
-            "arena_perspectives": ["arena_perspectives", "arena_synthesis", "divergence_analysis", "synthesis_draft", "verification"],
-            "arena_synthesis": ["arena_synthesis", "synthesis_draft", "verification"],
-        }
+        from orchestration.stage_graph import get_stages_to_invalidate
         
-        stages_to_clear = DOWNSTREAM_STAGES.get(stage_key, [stage_key])
+        stages_to_clear = get_stages_to_invalidate(stage_key)
         
-        # FH125: Invalidate downstream checkpoints instead of deleting evidence
+        # Invalidate downstream checkpoints instead of deleting evidence
         # Prior attempt evidence remains immutable and inspectable
         stmt_invalidate = (
             sa.update(DebateStageCheckpoint)
@@ -1160,7 +1150,7 @@ async def list_debates(
         base_query = base_query.where(*filters)
 
     # Caching for total count
-    # Patchset 112: Use shared Redis connection pool
+    # Use shared Redis connection pool
     total = None
     cache_key = None
     redis_client = None
@@ -1607,7 +1597,7 @@ async def stream_events(
     session: Session = Depends(get_session),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
-    # FH125: Cookie/Bearer auth only — no query JWT for first-party flow
+    # Cookie/Bearer auth only — no query JWT for first-party flow
     from auth import get_optional_user
     user = get_optional_user(request=request, session=session)
     if not user:
@@ -1618,7 +1608,7 @@ async def stream_events(
     channel_id = debate_channel_id(debate_id)
     await sse_backend.create_channel(channel_id)
 
-    # FH125: Resolve reconnect cursor BEFORE any code reads it.
+    # Resolve reconnect cursor BEFORE any code reads it.
     # Precedence: query parameter → Last-Event-ID header → None
     last_seq_val: int | None = last_sequence
     if last_seq_val is None:
@@ -1630,7 +1620,7 @@ async def stream_events(
                 track_metric("sse_invalid_last_event_id")
                 last_seq_val = None
 
-    # FH125: Reject negative sequence values
+    # Reject negative sequence values
     if last_seq_val is not None and last_seq_val < 0:
         last_seq_val = None
 
@@ -1654,7 +1644,7 @@ async def stream_events(
         )
 
     async def eventgen():
-        # Patchset 132: Use exactly-once lease context manager
+        # Use exactly-once lease context manager
         from sse_backend import get_stream_lease_manager, StreamLeaseResult, acquired_stream_lease
         from metrics import increment_metric
 
@@ -1689,7 +1679,7 @@ async def stream_events(
                     if evt_type == "final" or payload_type == "final":
                         break
             finally:
-                # Patchset 132: Cancel and await monitor task
+                # Cancel and await monitor task
                 monitor_task.cancel()
                 from contextlib import suppress
                 with suppress(asyncio.CancelledError):

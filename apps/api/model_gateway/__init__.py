@@ -79,7 +79,7 @@ async def route_llm_call(
     # Export keys to environment for LiteLLM
     export_api_keys()
     
-    # FH125: Resolve user BYOK credential if available
+    # Resolve user BYOK credential if available
     user_api_key = None
     user_provider = None
     if db_session and request.user_id:

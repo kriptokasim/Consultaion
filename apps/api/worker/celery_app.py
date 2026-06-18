@@ -151,7 +151,7 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
         enable_utc=True,
         task_track_started=True,
         beat_schedule=beat_schedule,
-        # FH105: Three-queue routing
+        # Three-queue routing
         task_routes={
             "arena.*": {"queue": "interactive"},
             "debate.*": {"queue": "interactive"},

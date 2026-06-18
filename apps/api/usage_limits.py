@@ -277,7 +277,7 @@ def check_quota(
     Raises:
         QuotaExceededError: If quota would be exceeded
     """
-    # Patchset 103: Owner unlimited bypass
+    # Owner unlimited bypass
     if user is not None:
         from security.owner import is_owner
         from config import settings as _settings

@@ -22,17 +22,18 @@ import { BillingLimitModal } from "@/components/billing/BillingLimitModal";
 import { SectionErrorBoundary } from "@/components/ui/SectionErrorBoundary";
 
 import type {
+  DebateSummary,
+  JudgeVoteFlow,
+  JudgeScoreEvent,
   ScoreItem,
   VotePayload,
   DebateEvent,
   Member,
-  JudgeVoteFlow,
-  JudgeScoreEvent,
-} from "./types";
+} from "../../lib/api/types";
 
 interface ParliamentRunViewProps {
   id: string;
-  debate: any;
+  debate: DebateSummary;
   scores: ScoreItem[];
   vote?: VotePayload;
   events: DebateEvent[];

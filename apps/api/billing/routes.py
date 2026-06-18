@@ -273,7 +273,7 @@ async def billing_webhook(
                 record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "error")
                 raise
 
-        # FH125: Emit side effects only after durable commit
+        # Emit side effects only after durable commit
         _emit_post_commit_events(payload or {})
 
         from observability.metrics import record_billing_webhook

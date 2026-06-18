@@ -226,7 +226,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not verify migration version: {e}")
         
-    # Patchset 107: Secondary startup validation for production safety
+    # Secondary startup validation for production safety
     if settings.APP_ENV in ("production", "staging"):
         if getattr(settings, "USE_MOCK", False):
             raise RuntimeError("FATAL: Refusing startup in production/staging with USE_MOCK=True.")
@@ -239,7 +239,7 @@ async def lifespan(app: FastAPI):
             
     _warn_on_multi_worker()
 
-    # FH125: Validate BYOK keyring at startup
+    # Validate BYOK keyring at startup
     if getattr(settings, "PROVIDER_KEY_ENCRYPTION_KEYS", None) or getattr(settings, "PROVIDER_KEY_ENCRYPTION_KEY", None):
         try:
             from security.encryption import validate_keyring
@@ -281,7 +281,7 @@ async def lifespan(app: FastAPI):
         if not settings.IS_LOCAL_ENV:
             raise
 
-    # FH125: Verify Redis connectivity in production
+    # Verify Redis connectivity in production
     if not settings.IS_LOCAL_ENV and settings.REDIS_URL:
         try:
             import redis
@@ -321,7 +321,7 @@ async def lifespan(app: FastAPI):
                 await cleanup_task
         await sse_backend.stop()
 
-        # FH106: Close shared HTTP client pool
+        # Close shared HTTP client pool
         try:
             from model_gateway.http_clients import close_all_clients
             await close_all_clients()

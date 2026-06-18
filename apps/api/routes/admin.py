@@ -764,7 +764,7 @@ def admin_quota_usage(
     return {"users": results, "total": len(results)}
 
 
-# Patchset 56: Admin User Management Endpoints
+# Admin User Management Endpoints
 
 
 # Request/Response Models

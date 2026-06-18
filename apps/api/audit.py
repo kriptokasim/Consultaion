@@ -18,8 +18,8 @@ def record_audit(
     meta: Optional[dict[str, Any]] = None,
     session: Optional[Session] = None,
 ) -> None:
-    # Patchset 73: Add IP address to meta if provided
-    # FH125: Defensive copy — never mutate caller-owned metadata
+    # Add IP address to meta if provided
+    # Defensive copy — never mutate caller-owned metadata
     final_meta = dict(meta or {})
     if ip_address:
         final_meta["ip_address"] = ip_address
@@ -38,7 +38,7 @@ def record_audit(
                 )
                 scoped.add(log)
         else:
-            # FH125: Don't commit inside caller's transaction — let caller manage commit
+            # Don't commit inside caller's transaction — let caller manage commit
             log = AuditLog(
                 user_id=user_id,
                 action=action,

@@ -32,7 +32,7 @@ class AppSettings(BaseSettings):
     DATABASE_URL_ASYNC: str | None = None
     REDIS_URL: str | None = None
 
-    # Patchset 112: Redis pool strict mode
+    # Redis pool strict mode
     # When true, Redis pool failures raise RuntimeError (production default)
     # When false, failures return None allowing fallback (local default)
     # If not set, defaults to strict=true in non-local environments
@@ -108,7 +108,7 @@ class AppSettings(BaseSettings):
     ENABLE_SLACK_ALERTS: bool = Field(False, description="Enable Slack webhook alerts")
     SLACK_WEBHOOK_URL: str | None = Field(None, description="Slack webhook URL for alerts")
     
-    # Patchset 76: Enhanced conversation UX with delayed voting
+    # Enhanced conversation UX with delayed voting
     ENABLE_CONVERSATION_V2: bool = Field(False, description="Enable enhanced conversation UX with delayed voting and structured vote reasons")
     
     STAGED_DECISION_PIPELINE: bool = Field(False, description="Enable Unified Deliberation Workspace and staged execution")
@@ -168,7 +168,7 @@ class AppSettings(BaseSettings):
     DEBATE_FAIL_FAST: bool = Field(True, description="Abort debates when too many seats fail.")
     MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS: int = Field(1, ge=1, description="Minimum successful model responses required to proceed with synthesis.")
 
-    # FH107: Stage-specific max_tokens limits
+    # Stage-specific max_tokens limits
     ARENA_MAX_TOKENS: int = Field(1200, ge=100, description="Max tokens per arena model response")
     SYNTHESIS_MAX_TOKENS: int = Field(2000, ge=100, description="Max tokens for synthesis step")
     STREAMING_RESPONSES_ENABLED: bool = Field(False, description="Enable streaming deltas via SSE (FH101/FH102)")
@@ -393,7 +393,7 @@ class AppSettings(BaseSettings):
                         "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY."
                     )
             
-            # Patchset 107: Safe production defaults
+            # Safe production defaults
             if getattr(self, "USE_MOCK", False):
                 raise ValueError("FATAL: USE_MOCK=True is not allowed in production/staging environments.")
             if not getattr(self, "REQUIRE_REAL_LLM", False):
@@ -428,7 +428,7 @@ class AppSettings(BaseSettings):
         if self.JWT_TTL_SECONDS is None:
             object.__setattr__(self, "JWT_TTL_SECONDS", self.JWT_EXPIRE_MINUTES * 60)
 
-        # Patchset 72: Async DB URL
+        # Async DB URL
         if not self.DATABASE_URL_ASYNC:
             url = self.DATABASE_URL
             async_url = url
@@ -508,7 +508,7 @@ class AppSettings(BaseSettings):
             cors_origins.append(resolved)
         object.__setattr__(self, "CORS_ORIGINS", ",".join(cors_origins))
         
-        # Patchset 73: Strict CORS Validation
+        # Strict CORS Validation
         if not is_local:
              if "*" in cors_origins:
                  raise ValueError("Wildcard CORS origin '*' is not allowed in production. Set explicit CORS_ORIGINS.")

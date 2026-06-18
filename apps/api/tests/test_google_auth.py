@@ -77,7 +77,7 @@ def test_google_callback_creates_user(monkeypatch):
             )
     assert redirect_response.status_code in (302, 307)
     assert redirect_response.headers["location"].startswith("http://localhost:3000/dashboard")
-    # FH125: OAuth callback no longer puts JWT in URL
+    # OAuth callback no longer puts JWT in URL
     assert "?token=" not in redirect_response.headers["location"]
 
     with Session(database.engine) as session:

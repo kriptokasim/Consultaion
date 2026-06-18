@@ -206,7 +206,7 @@ async def _fetch_google_profile(access_token: str) -> dict[str, Any]:
     data = resp.json()
     if "email" not in data:
         raise AuthError(message="Google OAuth missing email", code="auth.google_missing_email", status_code=400)
-    # FH125: Reject unverified Google emails
+    # Reject unverified Google emails
     if data.get("email_verified") is not True:
         raise AuthError(
             message="Google email is not verified. Please verify your email with Google.",
@@ -224,7 +224,7 @@ async def google_login(request: Request, response: Response) -> Response:
         record_429(ip, request.url.path)
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
     client_id, _, redirect_url = _google_config()
-    # Patchset 105: Use robust server-side state store
+    # Use robust server-side state store
     from security.state_store import state_store
     
     next_param = request.query_params.get("next", "/dashboard")
@@ -268,7 +268,7 @@ async def google_callback(
     if not code or not state:
         raise ValidationError(message="Missing code or state", code="auth.missing_params")
     
-    # Patchset 105: Consume state from store
+    # Consume state from store
     from security.state_store import state_store
     state_meta = state_store.consume_state(state)
     
@@ -310,7 +310,7 @@ async def google_callback(
         session.add(user)
         audit_action = "register_google"
     
-    # FH125: Stage audit before commit so it persists atomically
+    # Stage audit before commit so it persists atomically
     record_audit(
         audit_action,
         user_id=user.id,
@@ -484,7 +484,7 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
     
     if ENABLE_CSRF:
         set_csrf_cookie(response, generate_csrf_token())
-    # FH125: Login is read-only — use standalone audit session
+    # Login is read-only — use standalone audit session
     record_audit(
         "login",
         user_id=user.id,
@@ -605,7 +605,7 @@ async def delete_my_account(
     session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
     session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
     # Anonymize support notes ABOUT the user (retained for support history)
-    # FH125: Set FK to NULL instead of invalid placeholder string
+    # Set FK to NULL instead of invalid placeholder string
     session.execute(
         sa.update(SupportNote)
         .where(SupportNote.user_id == user_id)
@@ -686,7 +686,7 @@ async def delete_my_account(
         session=session,
     )
 
-    # FH125: Scrub PII from retained AuditLog metadata
+    # Scrub PII from retained AuditLog metadata
     from models import AuditLog
     audit_logs = session.exec(
         select(AuditLog).where(AuditLog.user_id == user_id)

@@ -29,7 +29,7 @@ def _current_period() -> str:
 def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
     uid = _normalize_user_id(user_id)
     
-    # Patchset 114: Check owner override
+    # Check owner override
     from models import User
     from security.owner import is_owner
     from config import settings
@@ -80,7 +80,7 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
     if settings.ENV == "test":
         return
 
-    # Patchset 103: Owner override
+    # Owner override
     from models import User
     from security.owner import is_owner
     
@@ -187,7 +187,7 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
     if settings.ENV == "test":
         return
 
-    # Patchset 103: Owner override
+    # Owner override
     from models import User
     from security.owner import is_owner
     user = db.get(User, _normalize_user_id(user_id))

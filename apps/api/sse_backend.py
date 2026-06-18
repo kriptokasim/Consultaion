@@ -189,7 +189,7 @@ class MemoryChannelBackend:
             self._last_seen[channel_id] = time.time()
 
             # FH125 F-4: Fan out to all per-subscriber queues
-            # Patchset 132: Priority-based backpressure — never drop critical events
+            # Priority-based backpressure — never drop critical events
             subscribers = list(self._subscribers.get(channel_id, []))
 
         new_priority = _event_priority(envelope)
@@ -259,7 +259,7 @@ class MemoryChannelBackend:
         """
         await self.create_channel(channel_id)
 
-        # FH125: Atomic replay-to-live handoff — no event lost between history and subscription
+        # Atomic replay-to-live handoff — no event lost between history and subscription
         sub_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=self._max_queue_size)
         async with self._lock:
             # 1. Register subscriber queue FIRST (before snapshotting history)
@@ -384,7 +384,7 @@ class RedisChannelBackend:
         self._ttl_seconds = ttl_seconds
         self._max_queue_size = max_queue_size
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
-        # Patchset 112: Use shared async Redis connection pool
+        # Use shared async Redis connection pool
         from redis_pool import get_async_redis_client
         pooled_client = get_async_redis_client()
         if pooled_client is not None:
@@ -475,7 +475,7 @@ class RedisChannelBackend:
                 return
 
     async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
-        # FH125: Race-safe replay-to-live handoff for Redis
+        # Race-safe replay-to-live handoff for Redis
         # 1. Subscribe to Pub/Sub FIRST (before reading history)
         pubsub = self._redis.pubsub()
         await pubsub.subscribe(channel_id)

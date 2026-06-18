@@ -119,7 +119,7 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
         # Find stale running debates using checkpoint
         stmt_running = select(Debate).where(Debate.status == "running")
         for debate in session.exec(stmt_running).all():
-            # Patchset 71: Check Lease Expiration
+            # Check Lease Expiration
             if debate.lease_expires_at:
                 lease_expires = debate.lease_expires_at
                 # Handle naive datetimes (SQLite tests)
