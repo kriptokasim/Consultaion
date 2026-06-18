@@ -70,6 +70,7 @@ class MemoryChannelBackend:
         self._max_queue_size = max_queue_size
         self._idle_timeout_seconds = idle_timeout_seconds
         self._channels: dict[str, asyncio.Queue[dict]] = {}
+        self._subscribers: dict[str, list[asyncio.Queue[dict]]] = {}
         self._last_seen: dict[str, float] = {}
         self._sequences: dict[str, int] = {}
         self._history: dict[str, list[dict]] = {}
@@ -130,21 +131,21 @@ class MemoryChannelBackend:
             if len(self._history[channel_id]) > self._max_queue_size:
                 self._history[channel_id].pop(0)
 
-            queue = self._channels.get(channel_id)
-            if not queue:
-                queue = self._channels[channel_id] = asyncio.Queue(maxsize=self._max_queue_size)
             self._last_seen[channel_id] = time.time()
-        
-        try:
-            # maintain queue size by removing old items if full
-            if queue.full():
-                try:
-                    queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-            await queue.put(envelope)
-        except Exception as e:
-            logger.error(f"Error publishing to memory channel {channel_id}: {e}")
+
+            # FH125 F-4: Fan out to all per-subscriber queues
+            subscribers = list(self._subscribers.get(channel_id, []))
+
+        for sub_queue in subscribers:
+            try:
+                if sub_queue.full():
+                    try:
+                        sub_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                await sub_queue.put(envelope)
+            except Exception as e:
+                logger.error(f"Error publishing to subscriber queue for {channel_id}: {e}")
 
     async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
         """Subscribe to a channel and yield events.
@@ -164,42 +165,49 @@ class MemoryChannelBackend:
                 if env.get("sequence", 0) > last_sequence:
                     yield env
 
-        queue = self._channels[channel_id]
+        # FH125 F-4: Create per-subscriber queue
+        sub_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=self._max_queue_size)
+        async with self._lock:
+            if channel_id not in self._subscribers:
+                self._subscribers[channel_id] = []
+            self._subscribers[channel_id].append(sub_queue)
+
         poll_timeout = getattr(settings, "SSE_POLL_TIMEOUT_SECONDS", 1.0)
         idle_start = time.time()
         try:
             while True:
-                # Update last seen on access
                 async with self._lock:
                     self._last_seen[channel_id] = time.time()
                 
-                # Patchset 75: Check idle timeout
                 if time.time() - idle_start > self._idle_timeout_seconds:
                     logger.info(f"SSE subscription idle timeout for {channel_id}")
                     break
                 
                 try:
-                    # Patchset 67.0: Use timeout to prevent infinite blocking
-                    envelope = await asyncio.wait_for(queue.get(), timeout=poll_timeout)
-                    idle_start = time.time()  # Reset idle timer on event
+                    envelope = await asyncio.wait_for(sub_queue.get(), timeout=poll_timeout)
+                    idle_start = time.time()
                     yield envelope
-                    # Exit on final/error event types inside payload
                     payload = envelope.get("payload", {})
                     if payload.get("type") in ("final", "error"):
                         break
                 except asyncio.TimeoutError:
-                    # Keep polling - this allows the generator to be cancelled externally
                     continue
         except asyncio.CancelledError:
             pass
+        finally:
+            # Remove subscriber queue on disconnect
+            async with self._lock:
+                subs = self._subscribers.get(channel_id, [])
+                if sub_queue in subs:
+                    subs.remove(sub_queue)
 
     async def cleanup(self) -> None:
         now = time.time()
-        # Create list of channels to remove to avoid modification during iteration
         async with self._lock:
             stale = [cid for cid, ts in self._last_seen.items() if now - ts > self._ttl_seconds]
             for cid in stale:
                 self._channels.pop(cid, None)
+                self._subscribers.pop(cid, None)
                 self._last_seen.pop(cid, None)
                 self._sequences.pop(cid, None)
                 self._history.pop(cid, None)

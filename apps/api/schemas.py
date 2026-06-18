@@ -25,9 +25,9 @@ class GatewayPolicy(str, Enum):
 
 
 class BudgetConfig(BaseModel):
-    max_tokens: Optional[int] = None
-    max_cost_usd: Optional[float] = None
-    early_stop_delta: Optional[float] = 1.0
+    max_tokens: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    max_cost_usd: Optional[float] = Field(default=None, ge=0.0, le=10000.0)
+    early_stop_delta: Optional[float] = Field(default=1.0, ge=0.0, le=100.0)
 
 
 class DebateSummary(BaseModel):
@@ -79,13 +79,16 @@ class PanelSeat(BaseModel):
 
 class PanelConfig(BaseModel):
     engine_version: str = "parliament-v1"
-    seats: List[PanelSeat]
+    seats: List[PanelSeat] = Field(min_length=1, max_length=20)
     max_seat_fail_ratio: Optional[float] = Field(
         default=None,
+        ge=0.0,
+        le=1.0,
         description="Override for DEBATE_MAX_SEAT_FAIL_RATIO; fraction of seats allowed to fail before aborting.",
     )
     min_required_seats: Optional[int] = Field(
         default=None,
+        ge=1,
         description="Override for DEBATE_MIN_REQUIRED_SEATS; minimum successful seats per round.",
     )
     fail_fast: Optional[bool] = Field(

@@ -23,21 +23,23 @@ class StripeBillingProvider(BillingProvider):
     def __init__(self):
         self.secret_key = settings.STRIPE_SECRET_KEY
         self.webhook_secret = settings.STRIPE_WEBHOOK_SECRET
-        self.success_url = settings.BILLING_CHECKOUT_SUCCESS_URL or "https://example.com/success"
-        self.cancel_url = settings.BILLING_CHECKOUT_CANCEL_URL or "https://example.com/canceled"
+        self.success_url = settings.BILLING_CHECKOUT_SUCCESS_URL or settings.WEB_APP_ORIGIN or ""
+        self.cancel_url = settings.BILLING_CHECKOUT_CANCEL_URL or settings.WEB_APP_ORIGIN or ""
         self.plan_price_map: Dict[str, str] = {
             "pro": settings.STRIPE_PRICE_PRO_ID or "",
         }
 
     def create_checkout_session(self, user_id: UUID, plan: BillingPlan) -> str:
         if not self.secret_key or not stripe:
-            logger.warning("Stripe secret key missing or stripe SDK unavailable; returning placeholder checkout URL.")
-            return f"https://example.com/checkout/placeholder?plan={plan.slug}"
+            raise RuntimeError(
+                "Stripe billing is not configured. Set STRIPE_SECRET_KEY and install stripe SDK."
+            )
 
         price_id = self.plan_price_map.get(plan.slug)
         if not price_id:
-            logger.warning("No Stripe price configured for plan %s; returning placeholder URL", plan.slug)
-            return f"https://example.com/checkout/placeholder?plan={plan.slug}"
+            raise RuntimeError(
+                f"No Stripe price ID configured for plan '{plan.slug}'. Set STRIPE_PRICE_PRO_ID."
+            )
 
         stripe.api_key = self.secret_key
         try:

@@ -25,3 +25,6 @@ opentelemetry-sdk==1.33.0
 opentelemetry-exporter-otlp==1.33.0
 # OT-11: Dependency integrity
 cyclonedx-bom==5.0.0
+# FH125: Stripe billing + provider key encryption
+stripe==11.1.1
+cryptography==43.0.1

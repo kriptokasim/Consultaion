@@ -439,8 +439,20 @@ async def create_debate(
         panel_config=panel.model_dump(),
         engine_version=panel.engine_version,
         mode=body.mode or "arena",
+        run_attempt=1,
     )
     session.add(debate)
+
+    # FH125 G-7: Create initial DebateAttempt
+    from models import DebateAttempt
+    attempt = DebateAttempt(
+        debate_id=debate_id,
+        attempt_number=1,
+        status="queued",
+        model_id=best_model_id,
+        created_at=utcnow(),
+    )
+    session.add(attempt)
     session.commit()
 
     channel_id = debate_channel_id(debate_id)
@@ -1057,7 +1069,19 @@ async def retry_debate_run(
     # 2. Reset debate status to scheduled to trigger execution (force resume = True)
     debate.status = "scheduled"
     debate.updated_at = sa.func.now()
+    debate.run_attempt = (debate.run_attempt or 0) + 1
     session.add(debate)
+
+    # FH125 G-7: Create DebateAttempt record for non-destructive retry
+    from models import DebateAttempt
+    attempt = DebateAttempt(
+        debate_id=debate_id,
+        attempt_number=debate.run_attempt,
+        status="queued",
+        model_id=debate.model_id,
+        created_at=utcnow(),
+    )
+    session.add(attempt)
     session.commit()
 
     # Setup SSE channel

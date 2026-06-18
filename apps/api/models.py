@@ -7,6 +7,7 @@ from typing import Any, List, Optional
 
 from sqlalchemy import JSON, Column, DateTime, Index, Text, UniqueConstraint, ForeignKey, String
 from sqlalchemy.orm import relationship
+from pydantic import field_validator
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -177,6 +178,15 @@ class Debate(SQLModel, table=True):
     gateway_policy: Optional[str] = Field(default=None, nullable=True)
     routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     mode: str = Field(default="conversation", nullable=False, index=True)
+
+    # FH125 G-5: Validate status assignments at ORM level
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        valid = {s.value for s in DebateStatus}
+        if v not in valid:
+            raise ValueError(f"Invalid debate status '{v}'. Must be one of: {sorted(valid)}")
+        return v
 
     # Patchset 71.0: Lease fields for multi-worker support
     runner_id: Optional[str] = Field(default=None, index=True, nullable=True)
