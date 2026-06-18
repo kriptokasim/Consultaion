@@ -159,7 +159,11 @@ async def save_provider_key(
     from config import settings as _settings
     try:
         from security.encryption import encrypt_value, fingerprint_key
-        encrypted_payload = encrypt_value(body.key.strip())
+        encrypted_payload = encrypt_value(
+            body.key.strip(),
+            user_id=current_user.id,
+            provider=provider_name,
+        )
         encrypted = encrypted_payload["ciphertext"]
         nonce = encrypted_payload["nonce"]
         key_version = encrypted_payload["key_version"]

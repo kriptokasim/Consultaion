@@ -239,6 +239,16 @@ async def lifespan(app: FastAPI):
             
     _warn_on_multi_worker()
 
+    # FH125: Validate BYOK keyring at startup
+    if getattr(settings, "PROVIDER_KEY_ENCRYPTION_KEYS", None) or getattr(settings, "PROVIDER_KEY_ENCRYPTION_KEY", None):
+        try:
+            from security.encryption import validate_keyring
+            validate_keyring()
+        except RuntimeError as e:
+            logger.error("BYOK keyring validation failed at startup: %s", e)
+            if settings.APP_ENV in ("production", "staging"):
+                raise
+
     # OT-3: Log resolved safe configuration at startup
     logger.info(
         "Startup config: env=%s deploy_target=%s sse_backend=%s rate_limit_backend=%s "

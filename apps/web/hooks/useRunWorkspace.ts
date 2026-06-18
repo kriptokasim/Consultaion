@@ -492,6 +492,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       // Patchset 132 Track D: Update last event timestamp for silence detection
       lastEventTimestampRef.current = Date.now();
       setIsSilent(false);
+      stopPolling();
 
       // Skip heartbeat events — they only reset the silence timer
       const payloadType = lastEvent.payload?.type;
@@ -596,10 +597,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     setIsPollingFallback(false);
   }, []);
 
-  // Patchset 132 Track D: Silence detection — start polling when SSE is connected but silent
+  // Patchset 132 Track D: Silence detection — elapsed-time watchdog
   const resetSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
+      clearInterval(silenceTimerRef.current as unknown as number);
       silenceTimerRef.current = null;
     }
   }, []);
@@ -620,16 +621,20 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       return;
     }
 
-    // When SSE is connected: start silence timer
+    // When SSE is connected: start elapsed-time watchdog
     if (sseStatus === "connected") {
-      stopPolling(); // Stop any existing polling first
-
+      stopPolling();
       resetSilenceTimer();
-      silenceTimerRef.current = setTimeout(() => {
-        // Silence detected — start fallback polling
-        setIsSilent(true);
-        startPolling(debateId);
-      }, SSE_SILENCE_TIMEOUT_MS) as unknown as NodeJS.Timeout;
+      lastEventTimestampRef.current = Date.now();
+
+      const watchdogTickMs = Math.min(SSE_SILENCE_TIMEOUT_MS / 2, 2000);
+      silenceTimerRef.current = setInterval(() => {
+        const elapsed = Date.now() - lastEventTimestampRef.current;
+        if (elapsed >= SSE_SILENCE_TIMEOUT_MS) {
+          setIsSilent(true);
+          startPolling(debateId);
+        }
+      }, watchdogTickMs) as unknown as NodeJS.Timeout;
     }
 
     return () => {

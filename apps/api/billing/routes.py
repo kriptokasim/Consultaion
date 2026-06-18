@@ -28,6 +28,34 @@ from .reconciliation import (
     get_reconciliation_runs,
     get_reconciliation_discrepancies,
 )
+
+
+def _emit_post_commit_events(payload: dict) -> None:
+    """Emit billing events only after the webhook transaction has committed.
+
+    FH125: Side effects must not occur if the DB commit fails.
+    """
+    from integrations.events import emit_event
+
+    event_type = payload.get("type", "")
+    data = (payload.get("data") or {}).get("object") or {}
+    metadata = data.get("metadata") or {}
+
+    if event_type == "checkout.session.completed":
+        user_id = metadata.get("user_id")
+        plan_slug = metadata.get("plan_slug")
+        if user_id and plan_slug:
+            emit_event(
+                "subscription_activated",
+                {"user_id": user_id, "plan_slug": plan_slug, "provider": "stripe"},
+            )
+    elif event_type == "customer.subscription.deleted":
+        subscription_id = data.get("id")
+        if subscription_id:
+            emit_event(
+                "subscription_cancelled",
+                {"subscription_id": subscription_id, "provider": "stripe"},
+            )
 from .service import (
     _current_period,
     get_active_plan,
@@ -244,6 +272,9 @@ async def billing_webhook(
                 from observability.metrics import record_billing_webhook
                 record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "error")
                 raise
+
+        # FH125: Emit side effects only after durable commit
+        _emit_post_commit_events(payload or {})
 
         from observability.metrics import record_billing_webhook
         record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "ok")

@@ -21,6 +21,7 @@ class BaseAdapter:
         routing_policy: str,
         on_delta: OnDeltaCallback,
         user_id: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> GatewayModelCallResult:
         """Stream tokens from the provider, calling on_delta for each chunk.
 
@@ -42,6 +43,7 @@ class BaseAdapter:
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
+        api_key: Optional[str] = None,
     ) -> GatewayModelCallResult:
         raise NotImplementedError()
 
@@ -57,6 +59,7 @@ class DirectProviderAdapter(BaseAdapter):
         routing_policy: str,
         on_delta: OnDeltaCallback,
         user_id: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> GatewayModelCallResult:
         from model_gateway.model_map import MODEL_MAP
         target_model = model_id
@@ -82,12 +85,16 @@ class DirectProviderAdapter(BaseAdapter):
         ttft_ms: float | None = None
 
         try:
+            llm_kwargs: dict[str, Any] = {}
+            if api_key:
+                llm_kwargs["api_key"] = api_key
             response = await acompletion(
                 model=target_model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
+                **llm_kwargs,
             )
             async for chunk in response:
                 delta = chunk.choices[0].delta if chunk.choices else None
@@ -103,6 +110,7 @@ class DirectProviderAdapter(BaseAdapter):
             result = await self.call_llm(
                 messages, model_id, temperature, max_tokens,
                 gateway_policy, model_pool, routing_policy, user_id,
+                api_key=api_key,
             )
             return result
         except Exception as e:
@@ -146,6 +154,7 @@ class DirectProviderAdapter(BaseAdapter):
         response_format: Optional[Dict[str, Any]] = None,
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
+        api_key: Optional[str] = None,
     ) -> GatewayModelCallResult:
         # Map model_id to direct provider representation
         target_model = model_id
@@ -182,6 +191,8 @@ class DirectProviderAdapter(BaseAdapter):
             kwargs["tools"] = tools
         if tool_choice is not None:
             kwargs["tool_choice"] = tool_choice
+        if api_key is not None:
+            kwargs["api_key"] = api_key
 
         try:
             response = await acompletion(

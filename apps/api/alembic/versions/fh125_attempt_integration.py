@@ -17,20 +17,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add attempt_id to Message
+    # Add attempt_id to Message with FK
     with op.batch_alter_table("message") as batch_op:
         batch_op.add_column(sa.Column("attempt_id", sa.String(), nullable=True))
         batch_op.create_index("ix_message_attempt_id", ["attempt_id"])
+        batch_op.create_foreign_key("fk_message_attempt_id", "debate_attempt", ["attempt_id"], ["id"])
 
-    # Add attempt_id to Score
+    # Add attempt_id to Score with FK
     with op.batch_alter_table("score") as batch_op:
         batch_op.add_column(sa.Column("attempt_id", sa.String(), nullable=True))
         batch_op.create_index("ix_score_attempt_id", ["attempt_id"])
+        batch_op.create_foreign_key("fk_score_attempt_id", "debate_attempt", ["attempt_id"], ["id"])
 
-    # Add attempt_id to DebateRound
-    with op.batch_alter_table("debate_round") as batch_op:
+    # Add attempt_id to DebateRound with FK (table name is debateround)
+    with op.batch_alter_table("debateround") as batch_op:
         batch_op.add_column(sa.Column("attempt_id", sa.String(), nullable=True))
-        batch_op.create_index("ix_debate_round_attempt_id", ["attempt_id"])
+        batch_op.create_index("ix_debateround_attempt_id", ["attempt_id"])
+        batch_op.create_foreign_key("fk_debateround_attempt_id", "debate_attempt", ["attempt_id"], ["id"])
 
     # Add unique constraint to DebateAttempt
     op.create_unique_constraint(
@@ -43,14 +46,17 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_constraint("uq_debate_attempt_debate_number", "debate_attempt", type_="unique")
 
-    with op.batch_alter_table("debate_round") as batch_op:
-        batch_op.drop_index("ix_debate_round_attempt_id")
+    with op.batch_alter_table("debateround") as batch_op:
+        batch_op.drop_constraint("fk_debateround_attempt_id", type_="foreignkey")
+        batch_op.drop_index("ix_debateround_attempt_id")
         batch_op.drop_column("attempt_id")
 
     with op.batch_alter_table("score") as batch_op:
+        batch_op.drop_constraint("fk_score_attempt_id", type_="foreignkey")
         batch_op.drop_index("ix_score_attempt_id")
         batch_op.drop_column("attempt_id")
 
     with op.batch_alter_table("message") as batch_op:
+        batch_op.drop_constraint("fk_message_attempt_id", type_="foreignkey")
         batch_op.drop_index("ix_message_attempt_id")
         batch_op.drop_column("attempt_id")

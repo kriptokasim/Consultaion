@@ -19,7 +19,8 @@ def record_audit(
     session: Optional[Session] = None,
 ) -> None:
     # Patchset 73: Add IP address to meta if provided
-    final_meta = meta or {}
+    # FH125: Defensive copy — never mutate caller-owned metadata
+    final_meta = dict(meta or {})
     if ip_address:
         final_meta["ip_address"] = ip_address
     

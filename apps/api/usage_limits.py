@@ -70,12 +70,11 @@ def _get_or_create_quota(session: Session, user_id: str, period: str) -> UsageQu
             reset_at=utcnow() + timedelta(seconds=_period_seconds(period)),
         )
     session.add(quota)
-    session.commit()
-    session.refresh(quota)
+    session.flush()
     return quota
 
 
-def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit: bool = True) -> UsageCounter:
+def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit: bool = False) -> UsageCounter:
     counter = session.exec(
         select(UsageCounter).where(UsageCounter.user_id == user_id, UsageCounter.period == period)
     ).first()
@@ -135,19 +134,23 @@ def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
         return
 
     from models import UsageCounter
+    from sqlalchemy import true as sa_true
     quota = _get_or_create_quota(session, user_id, "hour")
 
     # Atomic: lock row, check limit, increment — all in one statement
-    from sqlalchemy import update as sa_update, func as sa_func
+    from sqlalchemy import update as sa_update, func as sa_func, or_
+    if quota.max_runs is None:
+        # Unlimited — just increment
+        run_limit_clause = sa_true()
+    else:
+        run_limit_clause = UsageCounter.runs_used < quota.max_runs
     stmt = (
         sa_update(UsageCounter)
         .where(
             UsageCounter.user_id == user_id,
             UsageCounter.period == "hour",
         )
-        .where(
-            (quota.max_runs == None) | (UsageCounter.runs_used < quota.max_runs)
-        )
+        .where(run_limit_clause)
         .values(runs_used=UsageCounter.runs_used + 1)
         .execution_options(synchronize_session="fetch")
     )
@@ -167,7 +170,7 @@ def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
     else:
         # Refresh counter to get updated runs_used
         counter = session.exec(
-            sa_select(UsageCounter).where(
+            select(UsageCounter).where(
                 UsageCounter.user_id == user_id,
                 UsageCounter.period == "hour",
             )
@@ -215,7 +218,6 @@ def increment_export_usage_daily(session: Session, user_id: str) -> None:
     counter = _get_or_reset_counter(session, user_id, "day", commit=False)
     counter.exports_used += 1
     session.add(counter)
-    session.commit()
 
 
 class DailyUsage(TypedDict):

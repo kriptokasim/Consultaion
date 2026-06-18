@@ -308,9 +308,20 @@ async def google_callback(
         random_pwd = secrets.token_urlsafe(12)
         user = User(email=email, password_hash=hash_password(random_pwd))
         session.add(user)
-        session.commit()
-        session.refresh(user)
         audit_action = "register_google"
+    
+    # FH125: Stage audit before commit so it persists atomically
+    record_audit(
+        audit_action,
+        user_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        ip_address=ip,
+        meta={"email": user.email, "provider": "google"},
+        session=session,
+    )
+    session.commit()
+    session.refresh(user)
     
     # [AUTH_DEBUG] Patchset 53.0: Log before token creation
     if settings.AUTH_DEBUG:
@@ -352,15 +363,6 @@ async def google_callback(
     
     # State cookie cleanup no longer needed as we didn't set it.
     
-    record_audit(
-        audit_action,
-        user_id=user.id,
-        target_type="user",
-        target_id=user.id,
-        ip_address=ip,
-        meta={"email": user.email, "provider": "google"},
-        session=session,
-    )
     return redirect_resp
 
 
@@ -603,10 +605,11 @@ async def delete_my_account(
     session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
     session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
     # Anonymize support notes ABOUT the user (retained for support history)
+    # FH125: Set FK to NULL instead of invalid placeholder string
     session.execute(
         sa.update(SupportNote)
         .where(SupportNote.user_id == user_id)
-        .values(user_id="[deleted]", note="[User deleted]")
+        .values(user_id=None, note="[User deleted]")
     )
     session.execute(sa.delete(UserInteraction).where(UserInteraction.user_id == user_id))
     session.execute(sa.delete(UserPrediction).where(UserPrediction.user_id == user_id))
@@ -682,6 +685,18 @@ async def delete_my_account(
         },
         session=session,
     )
+
+    # FH125: Scrub PII from retained AuditLog metadata
+    from models import AuditLog
+    audit_logs = session.exec(
+        select(AuditLog).where(AuditLog.user_id == user_id)
+    ).all()
+    PII_KEYS = {"email", "ip_address", "ip", "remote_addr", "email_address"}
+    for log in audit_logs:
+        if log.meta:
+            scrubbed = {k: "[REDACTED]" if k.lower() in PII_KEYS else v for k, v in log.meta.items()}
+            log.meta = scrubbed
+            session.add(log)
 
     session.commit()
 

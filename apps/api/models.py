@@ -70,7 +70,7 @@ class SupportNote(SQLModel, table=True):
     __tablename__ = "support_note"
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
-    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    user_id: Optional[str] = Field(foreign_key="user.id", default=None, nullable=True, index=True)
     author_id: Optional[str] = Field(foreign_key="user.id", default=None, index=True)
     note: str = Field(sa_column=Column(Text, nullable=False))
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
@@ -286,8 +286,9 @@ class UsageCounter(SQLModel, table=True):
 class UsageLedgerEntry(SQLModel, table=True):
     """FH125 E-2: Unified usage ledger for idempotent accounting.
 
-    Kinds: run_reservation, credit_reservation, credit_settlement,
-    credit_refund, token_usage, export, billing_adjustment.
+    State machine: reserved → settled | refunded | failed
+
+    Kinds: run_reservation, credit_reservation, token_usage, export, billing_adjustment.
     """
     __tablename__ = "usage_ledger_entry"
     __table_args__ = (
@@ -297,10 +298,15 @@ class UsageLedgerEntry(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
     kind: str = Field(nullable=False, index=True)
+    status: str = Field(default="reserved", nullable=False, index=True)
     idempotency_key: str = Field(nullable=False)
     amount: int = Field(default=0, nullable=False)
+    debate_id: Optional[str] = Field(default=None, index=True)
+    attempt_id: Optional[str] = Field(default=None, index=True)
     meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    settled_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    refunded_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
 
 class AuditLog(SQLModel, table=True):

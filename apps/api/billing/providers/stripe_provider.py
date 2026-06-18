@@ -124,11 +124,7 @@ class StripeBillingProvider(BillingProvider):
 
                 db_session.add(sub)
                 # FH125: Don't commit here — let the webhook route transaction own the commit
-
-                emit_event(
-                    "subscription_activated",
-                    {"user_id": user_id, "plan_slug": plan_slug, "provider": "stripe"},
-                )
+                # Side effects emitted after outer commit in webhook route
 
         elif event_type in ("customer.subscription.created", "customer.subscription.updated") and db_session:
             subscription_id = data.get("id")
@@ -205,9 +201,5 @@ class StripeBillingProvider(BillingProvider):
                     user.plan = "free"
                     db_session.add(user)
 
-                db_session.commit()
-
-                emit_event(
-                    "subscription_cancelled",
-                    {"user_id": sub.user_id, "provider": "stripe"},
-                )
+                # FH125: Don't commit here — let the webhook route transaction own the commit
+                # Side effects emitted after outer commit in webhook route

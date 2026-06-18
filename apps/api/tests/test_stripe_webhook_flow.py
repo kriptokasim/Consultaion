@@ -141,6 +141,7 @@ def test_stripe_webhook_subscription_updated_and_deleted(db_session):
     }
     
     provider.handle_webhook(payload_update, {}, db_session=session)
+    session.commit()  # Simulate webhook route transaction commit
     
     # Refresh and verify
     session.refresh(sub)
@@ -164,6 +165,7 @@ def test_stripe_webhook_subscription_updated_and_deleted(db_session):
     }
     
     provider.handle_webhook(payload_delete, {}, db_session=session)
+    session.commit()  # Simulate webhook route transaction commit
     
     session.refresh(sub)
     session.refresh(user)

@@ -16,10 +16,12 @@ class DebateStateManager:
     Manages persistence of debate state to the database.
     
     Patchset 72: Migrated to Async SQLAlchemy.
+    Patchset 133: Added attempt_id for attempt-scoped records.
     """
-    def __init__(self, debate_id: str, user_id: Optional[str] = None):
+    def __init__(self, debate_id: str, user_id: Optional[str] = None, attempt_id: Optional[str] = None):
         self.debate_id = debate_id
         self.user_id = user_id
+        self.attempt_id = attempt_id
         self._resume_token: Optional[str] = None
 
     async def set_status(self, status: str, meta: Optional[Dict[str, Any]] = None) -> None:
@@ -68,6 +70,7 @@ class DebateStateManager:
                         role=role,
                         persona=payload.get("persona"),
                         content=payload.get("text", ""),
+                        attempt_id=self.attempt_id,
                         meta={k: v for k, v in payload.items() if k not in {"persona", "text"}},
                     )
                 )
@@ -84,6 +87,7 @@ class DebateStateManager:
                         judge=detail["judge"],
                         score=detail["score"],
                         rationale=detail["rationale"],
+                        attempt_id=self.attempt_id,
                     )
                 )
             await session.commit()

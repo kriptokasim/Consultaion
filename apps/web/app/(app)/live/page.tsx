@@ -164,6 +164,12 @@ function ArenaPageContent() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const elapsedTimerRef = useRef<NodeJS.Timeout | null>(null)
   const stopStreamRef = useRef<((status?: ArenaRunUiState) => void) | null>(null)
+  const lastEventTimestampRef = useRef<number>(Date.now())
+  const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const SSE_SILENCE_TIMEOUT_MS = typeof window !== "undefined"
+    ? parseInt(process.env.NEXT_PUBLIC_SSE_SILENCE_TIMEOUT_MS || "10000", 10)
+    : 10000
 
   const manualStartMode = !ENABLE_CONVERSATION_MODE
   const shouldStream = running && !!currentDebateId
@@ -171,6 +177,9 @@ function ArenaPageContent() {
 
   const handleStreamEvent = useCallback(
     (msg: any) => {
+      // FH125: Update liveness timestamp on every event
+      lastEventTimestampRef.current = Date.now()
+
       // FH125: Events use envelope format with domain fields inside payload
       const payload = msg.payload || msg
       if (payload.type === 'error') {
@@ -240,6 +249,35 @@ function ArenaPageContent() {
     onError: handleStreamError,
   })
 
+  // FH125: Elapsed-time watchdog — detect silence and trigger recovery
+  useEffect(() => {
+    if (!shouldStream) {
+      if (watchdogTimerRef.current) {
+        clearInterval(watchdogTimerRef.current)
+        watchdogTimerRef.current = null
+      }
+      return
+    }
+
+    lastEventTimestampRef.current = Date.now()
+    const watchdogTickMs = Math.min(SSE_SILENCE_TIMEOUT_MS / 2, 2000)
+    watchdogTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - lastEventTimestampRef.current
+      if (elapsed >= SSE_SILENCE_TIMEOUT_MS) {
+        console.warn('[Arena] Stream silence detected, attempting recovery')
+        // Reconnect by closing and reopening
+        closeStream()
+      }
+    }, watchdogTickMs) as unknown as NodeJS.Timeout
+
+    return () => {
+      if (watchdogTimerRef.current) {
+        clearInterval(watchdogTimerRef.current)
+        watchdogTimerRef.current = null
+      }
+    }
+  }, [shouldStream, SSE_SILENCE_TIMEOUT_MS, closeStream])
+
   const reset = () => {
     setEvents([])
     setActivePersona(undefined)
@@ -258,6 +296,10 @@ function ArenaPageContent() {
     if (elapsedTimerRef.current) {
       clearInterval(elapsedTimerRef.current)
       elapsedTimerRef.current = null
+    }
+    if (watchdogTimerRef.current) {
+      clearInterval(watchdogTimerRef.current)
+      watchdogTimerRef.current = null
     }
   }, [])
 

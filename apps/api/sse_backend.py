@@ -362,12 +362,13 @@ class RedisChannelBackend:
     - Retry with exponential backoff for publish operations
     - Auto-reconnect for subscriptions on connection loss
     """
-    def __init__(self, url: str, ttl_seconds: int = 900, max_queue_size: int = 1000) -> None:
+    def __init__(self, url: str, ttl_seconds: int = 900, max_queue_size: int = 1000, heartbeat_interval_seconds: float = 5.0) -> None:
         if redis is None:
             raise RuntimeError("redis library is required for RedisChannelBackend")
         self._url = url
         self._ttl_seconds = ttl_seconds
         self._max_queue_size = max_queue_size
+        self._heartbeat_interval_seconds = heartbeat_interval_seconds
         # Patchset 112: Use shared async Redis connection pool
         from redis_pool import get_async_redis_client
         pooled_client = get_async_redis_client()

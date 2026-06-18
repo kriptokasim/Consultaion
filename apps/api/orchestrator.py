@@ -191,7 +191,7 @@ async def _end_round(round_id: int) -> None:
             await session.commit()
 
 
-async def _persist_messages(debate_id: str, round_index: int, messages: List[Dict[str, Any]], role: str) -> None:
+async def _persist_messages(debate_id: str, round_index: int, messages: List[Dict[str, Any]], role: str, attempt_id: str | None = None) -> None:
     async with async_session_scope() as session:
         for payload in messages:
             session.add(
@@ -201,6 +201,7 @@ async def _persist_messages(debate_id: str, round_index: int, messages: List[Dic
                     role=role,
                     persona=payload.get("persona"),
                     content=payload.get("text", ""),
+                    attempt_id=attempt_id,
                     meta={k: v for k, v in payload.items() if k not in {"persona", "text"}},
                 )
             )
@@ -372,6 +373,7 @@ async def _run_draft_round(
     model_id: str | None,
     usage_tracker: UsageAccumulator,
     channel_id: str,
+    attempt_id: str | None = None,
 ) -> List[Dict[str, Any]]:
     """Execute the draft round."""
     draft_round = await _start_round(debate_id, 1, "draft", "candidate drafting")
@@ -409,7 +411,7 @@ async def _run_draft_round(
     if not candidates:
         raise DebateEngineError("All candidate generators failed")
 
-    await _persist_messages(debate_id, 1, candidates, role="candidate")
+    await _persist_messages(debate_id, 1, candidates, role="candidate", attempt_id=attempt_id)
     await _end_round(draft_round)
     backend = get_sse_backend()
     await backend.publish(channel_id, {"type": "message", "round": 1, "payload": {"candidates": candidates}})
@@ -424,13 +426,14 @@ async def _run_critique_round(
     model_id: str | None,
     usage_tracker: UsageAccumulator,
     channel_id: str,
+    attempt_id: str | None = None,
 ) -> List[Dict[str, Any]]:
     """Execute the critique and revision round."""
     critique_round = await _start_round(debate_id, 2, "critique", "cross-critique and revision")
     revised, critique_usage = await criticize_and_revise(prompt, candidates, model_id=model_id, debate_id=debate_id)
     usage_tracker.extend(critique_usage)
     
-    await _persist_messages(debate_id, 2, revised, role="revised")
+    await _persist_messages(debate_id, 2, revised, role="revised", attempt_id=attempt_id)
     await _end_round(critique_round)
     backend = get_sse_backend()
     await backend.publish(channel_id, {"type": "message", "round": 2, "payload": {"revised": revised}})
@@ -463,6 +466,7 @@ async def _run_judge_round(
                     judge=detail["judge"],
                     score=detail["score"],
                     rationale=detail["rationale"],
+                    attempt_id=current_attempt_id,
                 )
             )
         await session.commit()
@@ -578,7 +582,21 @@ async def run_debate(
             is_parliament = bool(debate.panel_config)
             debate_mode = debate.mode or "debate"
 
-        state_manager = DebateStateManager(debate_id, debate_user_id)
+            # FH125: Resolve current attempt_id for attempt-scoped records
+            current_attempt_id: str | None = None
+            if debate.run_attempt:
+                from models import DebateAttempt
+                from sqlmodel import select as sel
+                attempt = session.exec(
+                    sel(DebateAttempt).where(
+                        DebateAttempt.debate_id == debate_id,
+                        DebateAttempt.attempt_number == debate.run_attempt,
+                    )
+                ).first()
+                if attempt:
+                    current_attempt_id = attempt.id
+
+        state_manager = DebateStateManager(debate_id, debate_user_id, attempt_id=current_attempt_id)
         await state_manager.set_status("running")
         if is_resume:
             await _update_continuation_status(continuation_id, "running", ["dispatched", "requested", "preflight_passed"])

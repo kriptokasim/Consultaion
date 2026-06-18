@@ -61,38 +61,42 @@ def upgrade() -> None:
     op.create_index(op.f("ix_debate_error_debate_id"), "debate_error", ["debate_id"], unique=False)
     op.create_index(op.f("ix_debate_error_status"), "debate_error", ["status"], unique=False)
     op.create_index(op.f("ix_debate_error_user_id"), "debate_error", ["user_id"], unique=False)
-    op.alter_column("billing_plans", "id",
-               existing_type=sa.VARCHAR(length=36),
-               type_=sa.Uuid(),
-               existing_nullable=False)
+    with op.batch_alter_table("billing_plans") as batch_op:
+        batch_op.alter_column("id",
+                   existing_type=sa.VARCHAR(length=36),
+                   type_=sa.Uuid(),
+                   existing_nullable=False)
     op.drop_index("uq_billing_plans_slug", table_name="billing_plans")
-    op.alter_column("billing_subscriptions", "id",
-               existing_type=sa.VARCHAR(length=36),
-               type_=sa.Uuid(),
-               existing_nullable=False)
-    op.alter_column("billing_subscriptions", "plan_id",
-               existing_type=sa.VARCHAR(length=36),
-               type_=sa.Uuid(),
-               existing_nullable=False)
-    op.alter_column("billing_usage", "id",
-               existing_type=sa.VARCHAR(length=36),
-               type_=sa.Uuid(),
-               existing_nullable=False)
-    op.alter_column("billing_usage", "tokens_used",
-               existing_type=sa.BIGINT(),
-               type_=sa.Integer(),
-               existing_nullable=False,
-               existing_server_default=sa.text("0"))
+    with op.batch_alter_table("billing_subscriptions") as batch_op:
+        batch_op.alter_column("id",
+                   existing_type=sa.VARCHAR(length=36),
+                   type_=sa.Uuid(),
+                   existing_nullable=False)
+        batch_op.alter_column("plan_id",
+                   existing_type=sa.VARCHAR(length=36),
+                   type_=sa.Uuid(),
+                   existing_nullable=False)
+    with op.batch_alter_table("billing_usage") as batch_op:
+        batch_op.alter_column("id",
+                   existing_type=sa.VARCHAR(length=36),
+                   type_=sa.Uuid(),
+                   existing_nullable=False)
+        batch_op.alter_column("tokens_used",
+                   existing_type=sa.BIGINT(),
+                   type_=sa.Integer(),
+                   existing_nullable=False,
+                   existing_server_default=sa.text("0"))
     op.add_column("debate", sa.Column("runner_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True))
     op.add_column("debate", sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("debate", sa.Column("last_heartbeat_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("debate", sa.Column("run_attempt", sa.Integer(), nullable=False))
     op.create_index(op.f("ix_debate_runner_id"), "debate", ["runner_id"], unique=False)
     op.create_index("ix_debate_status_lease", "debate", ["status", "lease_expires_at"], unique=False)
-    op.drop_constraint("fk_debate_user_id_user", "debate", type_="foreignkey")
-    op.drop_constraint("fk_debate_team_id_team", "debate", type_="foreignkey")
-    op.create_foreign_key(None, "debate", "user", ["user_id"], ["id"])
-    op.create_foreign_key(None, "debate", "team", ["team_id"], ["id"])
+    with op.batch_alter_table("debate") as batch_op:
+        batch_op.drop_constraint("fk_debate_user_id_user", type_="foreignkey")
+        batch_op.drop_constraint("fk_debate_team_id_team", type_="foreignkey")
+        batch_op.create_foreign_key("fk_debate_user_id_user_new", "user", ["user_id"], ["id"])
+        batch_op.create_foreign_key("fk_debate_team_id_team_new", "team", ["team_id"], ["id"])
     op.drop_index("ix_debate_checkpoint_last_checkpoint_at", table_name="debate_checkpoint")
     op.drop_index("ix_debate_checkpoint_status_last_checkpoint", table_name="debate_checkpoint")
     op.create_index("ix_debate_checkpoint_last_checkpoint", "debate_checkpoint", ["last_checkpoint_at"], unique=False)
@@ -100,34 +104,35 @@ def upgrade() -> None:
     op.drop_index("ix_pairwise_vote_candidate_a_candidate_b", table_name="pairwise_vote")
     op.create_index("ix_pairwise_vote_candidates", "pairwise_vote", ["candidate_a", "candidate_b"], unique=False)
     op.create_index(op.f("ix_pairwise_vote_user_id"), "pairwise_vote", ["user_id"], unique=False)
-    op.alter_column("promotions", "id",
-               existing_type=sa.VARCHAR(length=36),
-               type_=sa.Uuid(),
-               existing_nullable=False)
-    op.alter_column("promotions", "location",
-               existing_type=sa.TEXT(),
-               type_=sqlmodel.sql.sqltypes.AutoString(),
-               existing_nullable=False)
-    op.alter_column("promotions", "title",
-               existing_type=sa.TEXT(),
-               type_=sqlmodel.sql.sqltypes.AutoString(),
-               existing_nullable=False)
-    op.alter_column("promotions", "body",
-               existing_type=sa.TEXT(),
-               type_=sqlmodel.sql.sqltypes.AutoString(),
-               existing_nullable=False)
-    op.alter_column("promotions", "cta_label",
-               existing_type=sa.TEXT(),
-               type_=sqlmodel.sql.sqltypes.AutoString(),
-               existing_nullable=True)
-    op.alter_column("promotions", "cta_url",
-               existing_type=sa.TEXT(),
-               type_=sqlmodel.sql.sqltypes.AutoString(),
-               existing_nullable=True)
-    op.alter_column("promotions", "target_plan_slug",
-               existing_type=sa.TEXT(),
-               type_=sqlmodel.sql.sqltypes.AutoString(),
-               existing_nullable=True)
+    with op.batch_alter_table("promotions") as batch_op:
+        batch_op.alter_column("id",
+                   existing_type=sa.VARCHAR(length=36),
+                   type_=sa.Uuid(),
+                   existing_nullable=False)
+        batch_op.alter_column("location",
+                   existing_type=sa.TEXT(),
+                   type_=sqlmodel.sql.sqltypes.AutoString(),
+                   existing_nullable=False)
+        batch_op.alter_column("title",
+                   existing_type=sa.TEXT(),
+                   type_=sqlmodel.sql.sqltypes.AutoString(),
+                   existing_nullable=False)
+        batch_op.alter_column("body",
+                   existing_type=sa.TEXT(),
+                   type_=sqlmodel.sql.sqltypes.AutoString(),
+                   existing_nullable=False)
+        batch_op.alter_column("cta_label",
+                   existing_type=sa.TEXT(),
+                   type_=sqlmodel.sql.sqltypes.AutoString(),
+                   existing_nullable=True)
+        batch_op.alter_column("cta_url",
+                   existing_type=sa.TEXT(),
+                   type_=sqlmodel.sql.sqltypes.AutoString(),
+                   existing_nullable=True)
+        batch_op.alter_column("target_plan_slug",
+                   existing_type=sa.TEXT(),
+                   type_=sqlmodel.sql.sqltypes.AutoString(),
+                   existing_nullable=True)
     op.drop_index("ix_promotions_location_priority", table_name="promotions")
     op.create_index(op.f("ix_promotions_location"), "promotions", ["location"], unique=False)
     op.add_column("user", sa.Column("plan", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=False))
@@ -147,34 +152,35 @@ def downgrade() -> None:
     op.drop_column("user", "plan")
     op.drop_index(op.f("ix_promotions_location"), table_name="promotions")
     op.create_index("ix_promotions_location_priority", "promotions", ["location", "is_active", "priority"], unique=False)
-    op.alter_column("promotions", "target_plan_slug",
-               existing_type=sqlmodel.sql.sqltypes.AutoString(),
-               type_=sa.TEXT(),
-               existing_nullable=True)
-    op.alter_column("promotions", "cta_url",
-               existing_type=sqlmodel.sql.sqltypes.AutoString(),
-               type_=sa.TEXT(),
-               existing_nullable=True)
-    op.alter_column("promotions", "cta_label",
-               existing_type=sqlmodel.sql.sqltypes.AutoString(),
-               type_=sa.TEXT(),
-               existing_nullable=True)
-    op.alter_column("promotions", "body",
-               existing_type=sqlmodel.sql.sqltypes.AutoString(),
-               type_=sa.TEXT(),
-               existing_nullable=False)
-    op.alter_column("promotions", "title",
-               existing_type=sqlmodel.sql.sqltypes.AutoString(),
-               type_=sa.TEXT(),
-               existing_nullable=False)
-    op.alter_column("promotions", "location",
-               existing_type=sqlmodel.sql.sqltypes.AutoString(),
-               type_=sa.TEXT(),
-               existing_nullable=False)
-    op.alter_column("promotions", "id",
-               existing_type=sa.Uuid(),
-               type_=sa.VARCHAR(length=36),
-               existing_nullable=False)
+    with op.batch_alter_table("promotions") as batch_op:
+        batch_op.alter_column("target_plan_slug",
+                   existing_type=sqlmodel.sql.sqltypes.AutoString(),
+                   type_=sa.TEXT(),
+                   existing_nullable=True)
+        batch_op.alter_column("cta_url",
+                   existing_type=sqlmodel.sql.sqltypes.AutoString(),
+                   type_=sa.TEXT(),
+                   existing_nullable=True)
+        batch_op.alter_column("cta_label",
+                   existing_type=sqlmodel.sql.sqltypes.AutoString(),
+                   type_=sa.TEXT(),
+                   existing_nullable=True)
+        batch_op.alter_column("body",
+                   existing_type=sqlmodel.sql.sqltypes.AutoString(),
+                   type_=sa.TEXT(),
+                   existing_nullable=False)
+        batch_op.alter_column("title",
+                   existing_type=sqlmodel.sql.sqltypes.AutoString(),
+                   type_=sa.TEXT(),
+                   existing_nullable=False)
+        batch_op.alter_column("location",
+                   existing_type=sqlmodel.sql.sqltypes.AutoString(),
+                   type_=sa.TEXT(),
+                   existing_nullable=False)
+        batch_op.alter_column("id",
+                   existing_type=sa.Uuid(),
+                   type_=sa.VARCHAR(length=36),
+                   existing_nullable=False)
     op.drop_index(op.f("ix_pairwise_vote_user_id"), table_name="pairwise_vote")
     op.drop_index("ix_pairwise_vote_candidates", table_name="pairwise_vote")
     op.create_index("ix_pairwise_vote_candidate_a_candidate_b", "pairwise_vote", ["candidate_a", "candidate_b"], unique=False)
@@ -182,38 +188,42 @@ def downgrade() -> None:
     op.drop_index("ix_debate_checkpoint_last_checkpoint", table_name="debate_checkpoint")
     op.create_index("ix_debate_checkpoint_status_last_checkpoint", "debate_checkpoint", ["status", "last_checkpoint_at"], unique=False)
     op.create_index("ix_debate_checkpoint_last_checkpoint_at", "debate_checkpoint", ["last_checkpoint_at"], unique=False)
-    op.drop_constraint(None, "debate", type_="foreignkey")
-    op.drop_constraint(None, "debate", type_="foreignkey")
-    op.create_foreign_key("fk_debate_team_id_team", "debate", "team", ["team_id"], ["id"], ondelete="SET NULL")
-    op.create_foreign_key("fk_debate_user_id_user", "debate", "user", ["user_id"], ["id"], ondelete="SET NULL")
+    with op.batch_alter_table("debate") as batch_op:
+        batch_op.drop_constraint(None, type_="foreignkey")
+        batch_op.drop_constraint(None, type_="foreignkey")
+        batch_op.create_foreign_key("fk_debate_team_id_team", "team", ["team_id"], ["id"], ondelete="SET NULL")
+        batch_op.create_foreign_key("fk_debate_user_id_user", "user", ["user_id"], ["id"], ondelete="SET NULL")
     op.drop_index("ix_debate_status_lease", table_name="debate")
     op.drop_index(op.f("ix_debate_runner_id"), table_name="debate")
     op.drop_column("debate", "run_attempt")
     op.drop_column("debate", "last_heartbeat_at")
     op.drop_column("debate", "lease_expires_at")
     op.drop_column("debate", "runner_id")
-    op.alter_column("billing_usage", "tokens_used",
-               existing_type=sa.Integer(),
-               type_=sa.BIGINT(),
-               existing_nullable=False,
-               existing_server_default=sa.text("0"))
-    op.alter_column("billing_usage", "id",
-               existing_type=sa.Uuid(),
-               type_=sa.VARCHAR(length=36),
-               existing_nullable=False)
-    op.alter_column("billing_subscriptions", "plan_id",
-               existing_type=sa.Uuid(),
-               type_=sa.VARCHAR(length=36),
-               existing_nullable=False)
-    op.alter_column("billing_subscriptions", "id",
-               existing_type=sa.Uuid(),
-               type_=sa.VARCHAR(length=36),
-               existing_nullable=False)
+    with op.batch_alter_table("billing_usage") as batch_op:
+        batch_op.alter_column("tokens_used",
+                   existing_type=sa.Integer(),
+                   type_=sa.BIGINT(),
+                   existing_nullable=False,
+                   existing_server_default=sa.text("0"))
+        batch_op.alter_column("id",
+                   existing_type=sa.Uuid(),
+                   type_=sa.VARCHAR(length=36),
+                   existing_nullable=False)
+    with op.batch_alter_table("billing_subscriptions") as batch_op:
+        batch_op.alter_column("plan_id",
+                   existing_type=sa.Uuid(),
+                   type_=sa.VARCHAR(length=36),
+                   existing_nullable=False)
+        batch_op.alter_column("id",
+                   existing_type=sa.Uuid(),
+                   type_=sa.VARCHAR(length=36),
+                   existing_nullable=False)
     op.create_index("uq_billing_plans_slug", "billing_plans", ["slug"], unique=1)
-    op.alter_column("billing_plans", "id",
-               existing_type=sa.Uuid(),
-               type_=sa.VARCHAR(length=36),
-               existing_nullable=False)
+    with op.batch_alter_table("billing_plans") as batch_op:
+        batch_op.alter_column("id",
+                   existing_type=sa.Uuid(),
+                   type_=sa.VARCHAR(length=36),
+                   existing_nullable=False)
     op.drop_index(op.f("ix_debate_error_user_id"), table_name="debate_error")
     op.drop_index(op.f("ix_debate_error_status"), table_name="debate_error")
     op.drop_index(op.f("ix_debate_error_debate_id"), table_name="debate_error")
