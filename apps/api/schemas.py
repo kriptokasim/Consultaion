@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class DebateMode(str, Enum):
+    arena = "arena"
+    conversation = "conversation"
+    compare = "compare"
+    debate = "debate"
+
+
+class RoutingPolicy(str, Enum):
+    router_smart = "router-smart"
+    router_deep = "router-deep"
+
+
+class GatewayPolicy(str, Enum):
+    auto = "auto"
+    direct = "direct"
+    fallback = "fallback"
 
 
 class BudgetConfig(BaseModel):
@@ -88,18 +107,18 @@ class DebateCreate(BaseModel):
         None, 
         description="Explicit model ID to use. If provided, bypasses routing engine. Examples: 'gpt4o-mini', 'claude-sonnet'"
     )
-    routing_policy: Optional[str] = Field(
+    routing_policy: Optional[RoutingPolicy] = Field(
         None,
-        description="Routing policy for model selection. Options: 'router-smart' (balanced), 'router-deep' (quality-focused). Defaults to 'router-smart'."
+        description="Routing policy for model selection."
     )
     panel_config: Optional[PanelConfig] = Field(None, description="Optional Parliament-style panel configuration.")
-    gateway_policy: Optional[str] = Field(
-        "auto",
-        description="Model gateway policy: 'auto' (smart router), 'direct', or 'fallback'."
+    gateway_policy: GatewayPolicy = Field(
+        GatewayPolicy.auto,
+        description="Model gateway policy."
     )
-    mode: Optional[str] = Field(
-        "arena",
-        description="Operation mode: 'arena' (default), 'conversation', 'compare', or 'debate'."
+    mode: DebateMode = Field(
+        DebateMode.arena,
+        description="Operation mode."
     )
     compare_models: Optional[List[str]] = Field(
         None,

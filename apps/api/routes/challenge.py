@@ -6,6 +6,7 @@ from auth import get_current_user
 from deps import get_session
 from exceptions import NotFoundError, PermissionError
 from fastapi import APIRouter, Depends, Request
+from routes.common import require_debate_access
 from guards.llm_action_guard import require_llm_action_allowed
 from models import (
     ChallengeRound,
@@ -99,9 +100,7 @@ async def start_challenge_session(
     """
     Starts a new Synthesis Challenge session linked to a specific debate run.
     """
-    debate = session.get(Debate, payload.debate_id)
-    if not debate:
-        raise NotFoundError(message="Debate run not found", code="debate.not_found")
+    debate = require_debate_access(session.get(Debate, payload.debate_id), current_user, session)
 
     if debate.status != "completed":
         raise PermissionError(message="Cannot challenge an uncompleted debate synthesis", code="challenge.debate_not_completed")
@@ -138,9 +137,7 @@ async def get_challenge_session(
     if not (current_user.role == "admin" or challenge_sess.user_id == current_user.id):
         raise PermissionError(message="Insufficient permissions", code="permission.denied")
 
-    debate = session.get(Debate, challenge_sess.debate_id)
-    if not debate:
-        raise NotFoundError(message="Linked debate not found", code="debate.not_found")
+    debate = require_debate_access(session.get(Debate, challenge_sess.debate_id), current_user, session)
 
     # Fetch rounds
     rounds_res = session.exec(
@@ -189,9 +186,7 @@ async def submit_challenge_round(
     if not (current_user.role == "admin" or challenge_sess.user_id == current_user.id):
         raise PermissionError(message="Insufficient permissions", code="permission.denied")
 
-    debate = session.get(Debate, challenge_sess.debate_id)
-    if not debate:
-        raise NotFoundError(message="Linked debate not found", code="debate.not_found")
+    debate = require_debate_access(session.get(Debate, challenge_sess.debate_id), current_user, session)
 
     require_llm_action_allowed(
         user=current_user,

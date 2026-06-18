@@ -5,6 +5,7 @@ from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 import time
 
 import httpx
+from datetime import datetime, timedelta, timezone
 from audit import record_audit
 from auth import (
     COOKIE_DOMAIN,
@@ -35,6 +36,12 @@ from routes.common import AUTH_MAX_CALLS, AUTH_WINDOW, serialize_user, user_team
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
+
+
+def csrf_exempt(func):
+    """Mark a route as exempt from CSRF protection."""
+    func.csrf_exempt = True
+    return func
 
 
 DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-guard")
@@ -313,15 +320,10 @@ async def google_callback(
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     redirect_target = sanitize_next_path(next_param)
     
-    # Append token to redirect URL for fallback auth
+    # Set auth as HttpOnly cookie only — never expose JWT in URL
     target_url = build_frontend_redirect(redirect_target)
-    parsed_url = urlparse(target_url)
-    query_params = dict(parse_qsl(parsed_url.query))
-    query_params["token"] = token
-    new_query = urlencode(query_params)
-    final_url = urlunparse(parsed_url._replace(query=new_query))
     
-    redirect_resp = RedirectResponse(url=final_url, status_code=status.HTTP_302_FOUND)
+    redirect_resp = RedirectResponse(url=target_url, status_code=status.HTTP_302_FOUND)
     set_auth_cookie(redirect_resp, token)
     
     # [AUTH_DEBUG] Patchset 53.0: Log after cookie set
@@ -355,6 +357,7 @@ async def google_callback(
     return redirect_resp
 
 
+@csrf_exempt
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 async def register_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
     ip = request.client.host if request and request.client else "anonymous"
@@ -390,6 +393,7 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
     return serialize_user(user)
 
 
+@csrf_exempt
 @router.post("/auth/login")
 async def login_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
     ip = request.client.host if request and request.client else "anonymous"
@@ -399,16 +403,48 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
-    
+
+    # FH125 C-5: Account lockout check
+    if user and user.locked_until:
+        if datetime.now(timezone.utc) < user.locked_until:
+            raise AuthError(
+                message="Account temporarily locked due to too many failed attempts",
+                code="auth.account_locked",
+                status_code=429,
+            )
+        # Lock expired — reset
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        session.add(user)
+        session.commit()
+
     # Patchset 63.2: Constant-time verification to prevent timing side-channels
-    # Always hash/verify a password even if user is not found.
-    # We use a module-level dummy hash (computed once) for the "user not found" case.
-    # Note: DUMMY_PASSWORD_HASH should be defined at module level.
     password_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
     password_valid = verify_password(body.password, password_hash)
 
     if not user or not password_valid:
+        # FH125 C-5: Progressive lockout on failed login
+        if user:
+            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+            user.last_failed_login_at = datetime.now(timezone.utc)
+            attempts = user.failed_login_attempts
+            if attempts >= 20:
+                user.locked_until = datetime.now(timezone.utc) + timedelta(hours=24)
+            elif attempts >= 10:
+                user.locked_until = datetime.now(timezone.utc) + timedelta(hours=1)
+            elif attempts >= 5:
+                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
+            session.add(user)
+            session.commit()
         raise AuthError(message="Invalid credentials", code="auth.invalid_credentials")
+
+    # Successful login — reset lockout state
+    if user.failed_login_attempts or user.locked_until:
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        user.last_failed_login_at = None
+        session.add(user)
+        session.commit()
     
     # [AUTH_DEBUG] Patchset 53.0: Log before token creation
     if settings.AUTH_DEBUG:
@@ -518,46 +554,86 @@ async def delete_my_account(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Soft-delete user account and anonymize their data.
+    Soft-delete user account and anonymize their data (FH125 H-1).
     
-    - Sets deleted_at and is_active=False
-    - Anonymizes debate content
-    - User can no longer log in or create debates
-    
-    For production: consider making this a background job.
+    Classification:
+    - DELETE: api_keys, user_provider_keys, support_notes, user_interactions, user_predictions
+    - ANONYMIZE: debates (prompt→[DELETED]), messages (content→[DELETED]), scores, votes
+    - RETAIN: audit_log (for compliance)
     """
-    from models import Debate, utcnow
+    from models import (
+        Debate, Message, Score, Vote, PairwiseVote, UserInteraction,
+        UserPrediction, APIKey, UserProviderKey, SupportNote, utcnow
+    )
+    import sqlalchemy as sa
     
-    # Mark account as deleted
     current_user.deleted_at = utcnow()
     current_user.is_active = False
+    current_user.password_hash = "[DELETED]"
     session.add(current_user)
-    
-    # Anonymize user's debates (remove PII but keep metadata)
+
+    user_id = current_user.id
+
+    # DELETE: API keys
+    session.execute(sa.delete(APIKey).where(APIKey.user_id == user_id))
+    # DELETE: Provider keys
+    session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
+    # DELETE: Support notes authored by user
+    session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
+    # DELETE: User interactions
+    session.execute(sa.delete(UserInteraction).where(UserInteraction.user_id == user_id))
+    # DELETE: Predictions
+    session.execute(sa.delete(UserPrediction).where(UserPrediction.user_id == user_id))
+
+    # ANONYMIZE: Debates
     user_debates = session.exec(
-        select(Debate).where(Debate.user_id == current_user.id)
+        select(Debate).where(Debate.user_id == user_id)
     ).all()
-    
+    debate_ids = [d.id for d in user_debates]
     anonymized_count = 0
     for debate in user_debates:
         if debate.prompt != "[DELETED]":
             debate.prompt = "[DELETED]"
-            if hasattr(debate, "messages") and debate.messages:
-                debate.messages = None
+            debate.final_content = None
+            debate.final_meta = None
+            debate.config = None
+            debate.panel_config = None
+            debate.user_id = None
             anonymized_count += 1
-    
+    session.add_all(user_debates)
+
+    # ANONYMIZE: Messages
+    if debate_ids:
+        session.execute(
+            sa.update(Message)
+            .where(Message.debate_id.in_(debate_ids))
+            .values(content="[DELETED]", persona=None, meta=None)
+        )
+        # DELETE: Scores and Votes
+        session.execute(sa.delete(Score).where(Score.debate_id.in_(debate_ids)))
+        session.execute(sa.delete(Vote).where(Vote.debate_id.in_(debate_ids)))
+        session.execute(sa.delete(PairwiseVote).where(PairwiseVote.debate_id.in_(debate_ids)))
+
     session.commit()
-    
+
     record_audit(
         "account_deleted",
-        user_id=current_user.id,
+        user_id=user_id,
         target_type="user",
-        target_id=current_user.id,
-        meta={"debates_anonymized": anonymized_count},
+        target_id=user_id,
+        meta={
+            "debates_anonymized": anonymized_count,
+            "api_keys_deleted": True,
+            "provider_keys_deleted": True,
+        },
         session=session,
     )
     
-    logger.info(f"User account deleted: {current_user.id}, debates anonymized: {anonymized_count}")
+    logger.info("User account deleted: %s, debates anonymized: %d", user_id, anonymized_count)
+    
+    # Clear auth cookies
+    clear_auth_cookie(response)
+    clear_csrf_cookie(response)
     
     return {
         "status": "ok",

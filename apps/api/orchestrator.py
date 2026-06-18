@@ -821,7 +821,7 @@ async def run_debate(
                 if debate and debate.status != "failed":
                     debate.status = "failed"
                     debate.updated_at = datetime.now(timezone.utc)
-                    debate.final_meta = {"error": f"Temporary AI provider issue: {exc}"}
+                    debate.final_meta = {"error": "Temporary AI provider issue. Please retry."}
                     session.add(debate)
                     await session.commit()
                     
@@ -878,7 +878,7 @@ async def run_debate(
                 if debate and debate.status != "failed":
                     debate.status = "failed"
                     debate.updated_at = datetime.now(timezone.utc)
-                    debate.final_meta = {"error": str(exc)}
+                    debate.final_meta = {"error": "Debate execution failed. Please retry."}
                     session.add(debate)
                     await session.commit()
                     
@@ -902,7 +902,7 @@ async def run_debate(
 
         await backend.publish(
             channel_id,
-            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": str(exc)}},
+            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Debate failed due to an internal error."}},
         )
 
     finally:

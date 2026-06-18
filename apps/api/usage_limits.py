@@ -130,8 +130,26 @@ def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
         )
         return
 
+    # FH125 E-4: Atomic quota reservation with row-level locking
+    from sqlalchemy import select as sa_select
+    from models import UsageCounter
     quota = _get_or_create_quota(session, user_id, "hour")
-    counter = _get_or_reset_counter(session, user_id, "hour")
+
+    # Lock the counter row to prevent race conditions
+    stmt = (
+        sa_select(UsageCounter)
+        .where(
+            UsageCounter.user_id == user_id,
+            UsageCounter.period == "hour",
+        )
+        .with_for_update()
+    )
+    locked = session.exec(stmt).first()
+    if locked is None:
+        counter = _get_or_reset_counter(session, user_id, "hour")
+    else:
+        counter = locked
+
     if quota.max_runs is not None and counter.runs_used + 1 > quota.max_runs:
         raise RateLimitError(
             code="runs_per_hour",
@@ -171,6 +189,14 @@ def record_token_usage(
         _apply_token_usage(session, user_id, tokens_int, commit=commit)
 
 
+def increment_export_usage_daily(session: Session, user_id: str) -> None:
+    """FH125 E-5: Increment the daily export counter on UsageCounter."""
+    counter = _get_or_reset_counter(session, user_id, "day", commit=False)
+    counter.exports_used += 1
+    session.add(counter)
+    session.commit()
+
+
 class DailyUsage(TypedDict):
     """Daily usage statistics for a user."""
     tokens_used: int
@@ -198,16 +224,8 @@ def get_today_usage(session: Session, user_id: Optional[str]) -> DailyUsage:
     counter = _get_or_reset_counter(session, user_id, "day", commit=False)
     tokens_used = counter.tokens_used or 0
     
-    # Get export count from billing service
-    # NOTE: May need to adapt if billing tracks monthly not daily
-    try:
-        from billing.service import get_billing_usage
-        usage = get_billing_usage(session, user_id)
-        # For now, use month count as proxy; future: add daily export counter
-        exports_used = usage.get("exports_this_month", 0)
-    except Exception:
-        # Gracefully fall back if billing not available
-        exports_used = 0
+    # Get export count from daily counter (FH125 E-5: separate daily/monthly)
+    exports_used = counter.exports_used or 0
     
     return {
         "tokens_used": tokens_used,

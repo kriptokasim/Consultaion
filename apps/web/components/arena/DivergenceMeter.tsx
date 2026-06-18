@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/apiClient";
 import { useToast } from "@/components/ui/toast";
 import { getColors } from "./ModelCard";
 import { getWithExpiry, setWithExpiry, TTL } from "@/lib/localStorageTTL";
+import { DivergenceClaimList } from "./DivergenceClaimList";
 
 interface Claim {
   claim: string;
@@ -115,7 +116,7 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
     if (stored) setVotedClaim(stored);
   }, [debateId]);
 
-  const handleVote = async (claimText: string, modelName: string, isConsensus: boolean) => {
+  const handleVote = async (claimText: string, claimId: string) => {
     if (votedClaim || votingFor) return;
     setVotingFor(claimText);
     try {
@@ -123,9 +124,8 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
         path: `/arena/${debateId}/user-vote`,
         method: "POST",
         body: {
+          claim_id: claimId,
           claim_text: claimText,
-          model_name: modelName,
-          is_consensus: isConsensus,
         },
       });
       setVotedClaim(claimText);
@@ -262,9 +262,6 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
         </p>
       </div>
 
-import { DivergenceClaimList } from "./DivergenceClaimList";
-
-// ... previous code ...
 
       {/* Claims Lists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-border/60">

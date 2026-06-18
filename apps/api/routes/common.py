@@ -260,13 +260,45 @@ def require_schema_current(session: Session) -> None:
 
     Raises a 503 Service Unavailable with retryable=true when the DB schema
     has not reached the expected Alembic head revision.
+
+    In ENV=test, the Alembic head check is bypassed because test databases
+    are created with metadata.create_all() and have no alembic_version row.
+    Table/column capability checks are still enforced.
     """
     from fastapi import HTTPException, status
 
     try:
         from services.schema_capabilities import get_schema_capabilities, get_registry
+        import os
+
+        is_test = os.environ.get("ENV", "").lower() == "test"
 
         caps = get_schema_capabilities(session, get_registry())
+
+        # In test mode, only check table/column capabilities, not Alembic head
+        if is_test:
+            # Filter out the schema_behind_head marker for test environments
+            non_alembic_missing = [
+                c for c in caps.missing_capabilities
+                if c != "schema_behind_head"
+            ]
+            if non_alembic_missing:
+                logger.debug(
+                    "schema_current_check_test_bypass: still missing capabilities=%s",
+                    non_alembic_missing,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "code": "schema_upgrade_required",
+                        "retryable": True,
+                        "message": "Database schema is missing required tables/columns. "
+                                   "Mutations are blocked until the schema is upgraded.",
+                    },
+                )
+            return
+
+        # Production/staging: full check including Alembic head
         if not caps.is_at_alembic_head or caps.missing_capabilities:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

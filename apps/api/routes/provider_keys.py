@@ -150,9 +150,22 @@ async def save_provider_key(
     existing_key = session.exec(stmt).first()
     
     masked = mask_provider_key(provider_name, body.key)
-    # Simple XOR/basic encryption or obfuscation (we can store base64 or plaintext since local)
-    # Let's save as plaintext but ensure it's masked in all APIs.
-    encrypted = body.key.strip()
+
+    # FH125 D-2: Encrypt key at rest
+    try:
+        from security.encryption import encrypt_value, fingerprint_key
+        encrypted_payload = encrypt_value(body.key.strip())
+        encrypted = encrypted_payload["ciphertext"]
+        nonce = encrypted_payload["nonce"]
+        key_version = encrypted_payload["key_version"]
+        fingerprint = fingerprint_key(body.key.strip())
+    except RuntimeError:
+        # Encryption key not configured — store plaintext (dev fallback)
+        logger.warning("PROVIDER_KEY_ENCRYPTION_KEY not set; storing key in plaintext (dev only)")
+        encrypted = body.key.strip()
+        nonce = None
+        key_version = 0
+        fingerprint = fingerprint_key(body.key.strip())
     
     if existing_key:
         existing_key.masked_key = masked

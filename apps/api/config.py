@@ -351,22 +351,10 @@ class AppSettings(BaseSettings):
             object.__setattr__(self, "ENABLE_SEC_HEADERS", True)
             object.__setattr__(self, "COOKIE_SECURE", True)
             object.__setattr__(self, "COOKIE_SAMESITE", "none")
-            # Auto-derive COOKIE_DOMAIN from WEB_APP_ORIGIN for cross-subdomain cookies
-            # Auto-derive COOKIE_DOMAIN from WEB_APP_ORIGIN for cross-subdomain cookies
-            if not self.COOKIE_DOMAIN:
-                from urllib.parse import urlparse
-                parsed = urlparse(self.WEB_APP_ORIGIN or "")
-                host = parsed.hostname or ""
-                parts = host.split(".")
-                # Patchset 105: Ensure we capture the root domain for subdomains
-                # e.g., web.consultaion.com -> .consultaion.com
-                if len(parts) >= 2:
-                    # Logic: if >= 2 parts, use last two (e.g. consultaion.com) prefixed with dot
-                    # This works for .com, .net, etc. Be careful with .co.uk if needed, but for now simple 2-part
-                    self.COOKIE_DOMAIN = "." + ".".join(parts[-2:])
-                else:
-                    # Localhost or single name
-                    self.COOKIE_DOMAIN = None
+            # FH125 C-2: COOKIE_DOMAIN defaults to unset (host-only cookies).
+            # Never auto-derive from WEB_APP_ORIGIN — public suffixes like
+            # .vercel.app or .onrender.com must NOT be used as cookie domains.
+            # Only set if explicitly configured via COOKIE_DOMAIN env var.
         
         # Production secret validation
         if not is_local:

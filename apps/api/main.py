@@ -131,12 +131,13 @@ async def csrf_protect(request: Request) -> None:
     CSRF protection is skipped when:
     - Request uses a safe HTTP method
     - ENABLE_CSRF is False
-    - Request is to auth endpoints (login/register)
+    - Route is marked CSRF-exempt via route metadata
     - Request uses Bearer token auth (Authorization header)
     """
     if request.method in SAFE_METHODS or not ENABLE_CSRF:
         return
-    if request.url.path in {"/auth/login", "/auth/register"}:
+    # FH125 C-3: Check route-level CSRF-exempt marker instead of path strings
+    if request.scope.get("route") and getattr(request.scope["route"], "csrf_exempt", False):
         return
     # Skip CSRF for Bearer token auth - CSRF attacks only affect cookie auth
     auth_header = request.headers.get("Authorization", "")
@@ -327,7 +328,9 @@ if ENABLE_SEC_HEADERS and not TEST_FAST_APP:
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("X-XSS-Protection", "0")
-        response.headers.setdefault("Content-Security-Policy-Report-Only", "default-src 'self'; frame-ancestors 'none';")
+        # FH125 I-3: HSTS + enforced CSP (moved from report-only)
+        response.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+        response.headers.setdefault("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none';")
         return response
 
 
@@ -423,7 +426,37 @@ async def prometheus_metrics():
 
 # ── OT-5: SLO Status Endpoint ────────────────────────────────────────────
 @app.get("/ops/slo", tags=["ops"])
-async def get_slo_statuses():
+async def get_slo_statuses(request: Request):
+    from auth import get_current_user
+    from fastapi import Depends
+    from models import User
+    from sqlmodel import Session
+    from deps import get_session
+
+    # FH125 I-3: Protect operational endpoint — admin only
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    from auth import decode_access_token
+    token = auth_header.removeprefix("Bearer ").strip()
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user_id = payload.get("sub") or payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Verify user is admin
+    from database import get_session as _get_session
+    for s in _get_session():
+        user = s.get(User, user_id)
+        if not user or not (user.role == "admin" or getattr(user, "is_admin", False)):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        break
+
     from observability.slo import get_all_slo_statuses
     statuses = get_all_slo_statuses()
     return {

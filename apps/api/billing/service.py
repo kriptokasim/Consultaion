@@ -291,7 +291,18 @@ def refund_hosted_credit(db: Session, user_id: UserID) -> None:
 
 def consume_hosted_credit(db: Session, user_id: UserID) -> None:
     """
-    Finalize hosted credit consumption. Placed for lifecycle completion.
+    Finalize hosted credit consumption after successful debate completion.
+    Decrements hosted_credits_used for free plan users.
     """
-    pass
+    uid = _normalize_user_id(user_id)
+    user = db.get(User, uid)
+    if not user:
+        return
+
+    plan = get_active_plan(db, uid)
+    if plan.is_default_free:
+        used = getattr(user, "hosted_credits_used", 0)
+        user.hosted_credits_used = max(0, used - 1)
+        db.add(user)
+        db.commit()
 

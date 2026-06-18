@@ -2,11 +2,24 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, List, Optional
 
 from sqlalchemy import JSON, Column, DateTime, Index, Text, UniqueConstraint, ForeignKey, String
 from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
+
+
+# FH125 G-5: Canonical debate statuses
+class DebateStatus(str, Enum):
+    queued = "queued"
+    scheduled = "scheduled"
+    running = "running"
+    perspectives_ready = "perspectives_ready"
+    completed = "completed"
+    completed_with_warnings = "completed_with_warnings"
+    failed = "failed"
+    cancelled = "cancelled"
 
 
 def utcnow() -> datetime:
@@ -38,6 +51,11 @@ class User(SQLModel, table=True):
     # Patchset 58.0: Privacy controls
     deleted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True, index=True))
     analytics_opt_out: bool = Field(default=False, nullable=False)
+
+    # FH125 C-5: Account lockout (progressive: 5→15min, 10→1h, 20→24h)
+    failed_login_attempts: int = Field(default=0, nullable=False)
+    locked_until: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    last_failed_login_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
 
     debates: List["Debate"] = Relationship(
@@ -248,7 +266,28 @@ class UsageCounter(SQLModel, table=True):
     period: str = Field(nullable=False, index=True)
     runs_used: int = Field(default=0, nullable=False)
     tokens_used: int = Field(default=0, nullable=False)
+    exports_used: int = Field(default=0, nullable=False)
     window_start: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class UsageLedgerEntry(SQLModel, table=True):
+    """FH125 E-2: Unified usage ledger for idempotent accounting.
+
+    Kinds: run_reservation, credit_reservation, credit_settlement,
+    credit_refund, token_usage, export, billing_adjustment.
+    """
+    __tablename__ = "usage_ledger_entry"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_usage_ledger_idempotency"),
+        Index("ix_usage_ledger_user_created", "user_id", "created_at"),
+    )
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    kind: str = Field(nullable=False, index=True)
+    idempotency_key: str = Field(nullable=False)
+    amount: int = Field(default=0, nullable=False)
+    meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
 class AuditLog(SQLModel, table=True):
@@ -578,6 +617,27 @@ class DebateStageCheckpoint(SQLModel, table=True):
     output_reference: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     failed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     error_code: Optional[str] = Field(default=None, nullable=True)
+
+
+class DebateAttempt(SQLModel, table=True):
+    """FH125 G-7: Non-destructive retry — each retry creates a new attempt.
+
+    Preserves previous evidence (scores, messages) while allowing fresh execution.
+    """
+    model_config = SQLModel.model_config.copy()
+    model_config["protected_namespaces"] = ()
+    __tablename__ = "debate_attempt"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    attempt_number: int = Field(nullable=False)
+    status: str = Field(default="queued", nullable=False, index=True)
+    model_id: Optional[str] = Field(default=None, nullable=True)
+    tokens_used: int = Field(default=0, nullable=False)
+    cost_usd: float = Field(default=0.0, nullable=False)
+    error_summary: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 
 

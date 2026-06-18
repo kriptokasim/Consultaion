@@ -1282,6 +1282,8 @@ async def export_debate_report(
     
     # Only increment and commit if export succeeded
     increment_export_usage(session, current_user.id)
+    from usage_limits import increment_export_usage_daily
+    increment_export_usage_daily(session, current_user.id)
     session.commit()
     
     track_metric("exports_generated")
@@ -1548,6 +1550,8 @@ async def export_scores_csv(
     
     # Increment and commit after successful generation
     increment_export_usage(session, current_user.id)
+    from usage_limits import increment_export_usage_daily
+    increment_export_usage_daily(session, current_user.id)
     session.commit()
     
     filename = f"scores_{debate_id}.csv"
@@ -1720,11 +1724,7 @@ async def update_debate(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    debate = session.get(Debate, debate_id)
-    if not debate:
-        raise NotFoundError(message="Debate not found", code="debate.not_found")
-    if not (current_user.role == "admin" or debate.user_id == current_user.id):
-        raise PermissionError(message="Insufficient permissions", code="permission.denied")
+    debate = require_debate_mutation_access(session.get(Debate, debate_id), current_user, session)
 
     previous_team = debate.team_id
     if body.team_id is not None:
@@ -1766,11 +1766,7 @@ async def share_debate(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    debate = session.get(Debate, debate_id)
-    if not debate:
-        raise NotFoundError(message="Debate not found", code="debate.not_found")
-    if not (current_user.role == "admin" or debate.user_id == current_user.id):
-        raise PermissionError(message="Insufficient permissions", code="permission.denied")
+    debate = require_debate_mutation_access(session.get(Debate, debate_id), current_user, session)
 
     if not debate.config:
         debate.config = {}
@@ -1808,11 +1804,7 @@ async def moderate_debate(
     current_user: User = Depends(get_current_user),
 ):
     from models import DebateTurn
-    debate = session.get(Debate, debate_id)
-    if not debate:
-        raise NotFoundError(message="Debate not found", code="debate.not_found")
-    if not (current_user.role == "admin" or debate.user_id == current_user.id):
-        raise PermissionError(message="Insufficient permissions", code="permission.denied")
+    debate = require_debate_mutation_access(session.get(Debate, debate_id), current_user, session)
 
     stmt = select(DebateTurn).where(
         DebateTurn.debate_id == debate_id,
@@ -1848,9 +1840,7 @@ async def get_argument_tree(
     current_user: User = Depends(get_current_user),
 ):
     from models import DebateTurn
-    debate = session.get(Debate, debate_id)
-    if not debate:
-        raise NotFoundError(message="Debate not found", code="debate.not_found")
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     
     stmt = select(DebateTurn).where(DebateTurn.debate_id == debate_id).order_by(DebateTurn.round_index.asc())
     turns = session.exec(stmt).all()
@@ -2033,10 +2023,10 @@ async def retry_agent(
                 "type": "notice",
                 "level": "error",
                 "debate_id": debate_id,
-                "message": f"Retry for agent '{target_persona}' failed: {exc}",
+                "message": f"Retry for agent '{target_persona}' failed.",
             }
         )
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Agent retry failed. Please try again later.")
 
 
 # Alias for router inclusion and compatibility

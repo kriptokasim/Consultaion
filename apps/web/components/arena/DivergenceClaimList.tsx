@@ -2,6 +2,14 @@ import React from "react";
 import { CheckCircle2, AlertTriangle, ThumbsUp, Loader2, Check } from "lucide-react";
 import { getColors } from "./ModelCard";
 
+async function sha256(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 interface Claim {
   claim: string;
   models?: string[]; // for consensus
@@ -15,7 +23,7 @@ interface DivergenceClaimListProps {
   emptyMessage: string;
   votedClaim: string | null;
   votingFor: string | null;
-  onVote: (claimText: string, modelName: string, isConsensus: boolean) => void;
+  onVote: (claimText: string, claimId: string) => void;
 }
 
 export function DivergenceClaimList({
@@ -71,7 +79,10 @@ export function DivergenceClaimList({
                   
                   {/* Vote Button */}
                   <button
-                    onClick={() => onVote(item.claim, item.models?.[0] || item.model || "Model", isConsensus)}
+                    onClick={async () => {
+                      const claimId = await sha256(item.claim);
+                      onVote(item.claim, claimId);
+                    }}
                     disabled={isAnySelected || isVotingThis}
                     className={`shrink-0 flex items-center justify-center h-8 px-3 rounded-lg text-xs font-semibold border transition-all ${
                       isSelected

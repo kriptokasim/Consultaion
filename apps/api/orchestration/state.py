@@ -129,14 +129,14 @@ class DebateStateManager:
             
             if self.user_id:
                 try:
-                    # record_token_usage currently sync - TODO: Refactor usage_limits to async
-                    # For now, simplistic approach: assuming record_token_usage can work if session is handled? 
-                    # No, record_token_usage likely creates its own session or expects sync session.
-                    # We should inspect record_token_usage.
-                    # If it takes 'session', AsyncSession might fail if it expects SyncSession.
-                    # Let's Skip token usage recording for now or fix it later.
-                    # Or better: check usage_limits.py later.
-                    pass 
+                    import asyncio
+                    from usage_limits import record_token_usage
+                    tokens = getattr(self, "_final_tokens", 0) or 0
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        None,
+                        lambda: record_token_usage(None, self.user_id, tokens),
+                    )
                 except Exception:
                     logger.exception("Failed to record token usage for debate %s", self.debate_id)
             await session.commit()

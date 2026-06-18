@@ -558,7 +558,6 @@ async def probe_provider(
             "latency_ms": round(latency_ms, 2),
             "error_code": failure.code.value,
             "error_message": failure.message,
-            "raw_error": str(e)
         }
 
 

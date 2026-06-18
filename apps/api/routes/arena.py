@@ -9,15 +9,14 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from worker.arena_tasks import _execute_divergence_computation
 
-from routes.common import can_access_debate
+from routes.common import can_access_debate, require_debate_access
 
 router = APIRouter(prefix="/arena", tags=["arena"])
 
 
 class UserVotePayload(BaseModel):
+    claim_id: str = Field(..., description="Stable identifier for the claim (SHA-256 of claim text)")
     claim_text: str = Field(..., description="The claim content the user voted on")
-    model_name: str = Field(..., description="The name of the model that produced the claim")
-    is_consensus: bool = Field(..., description="Whether the claim was categorized as consensus or contested")
 
 
 @router.get("/{debate_id}/divergence")
@@ -50,7 +49,7 @@ async def get_divergence_report(
                 "contested_claims": {"claims": []},
                 "ready": False
             }
-        
+
         # Require auth + guard before triggering expensive LLM computation
         require_llm_action_allowed(
             user=current_user,
@@ -67,9 +66,10 @@ async def get_divergence_report(
                 select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
             ).first()
         except Exception as exc:
+            logger.warning("divergence_computation_failed debate_id=%s error=%s", debate_id, exc)
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to calculate claims divergence: {str(exc)}"
+                detail="Failed to calculate claims divergence. Please try again later."
             )
 
     if not report:
@@ -93,48 +93,61 @@ async def cast_arena_vote(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session)
 ) -> Dict[str, Any]:
-    """Cast a user agreement vote on a consensus or contested claim."""
-    debate = session.get(Debate, debate_id)
-    if not debate:
-        raise HTTPException(status_code=404, detail="Debate not found")
+    """Cast a user agreement vote on a claim. Requires debate access."""
+    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
 
     user_id = current_user.id
 
-    # Check for existing vote record in this debate by this user
-    # Note: We query user interactions of type 'arena_vote' for this debate
-    existing_interaction = session.exec(
-        select(UserInteraction).where(
-            UserInteraction.debate_id == debate_id,
-            UserInteraction.user_id == user_id,
-            UserInteraction.interaction_type == "arena_vote"
+    # Validate claim_id exists in the divergence report
+    report = session.exec(
+        select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
+    ).first()
+    if not report or not report.ready:
+        raise HTTPException(status_code=400, detail="Divergence report not available")
+
+    all_claims = []
+    for claim_group in [report.consensus_claims, report.contested_claims]:
+        if claim_group and isinstance(claim_group, dict):
+            for claim in claim_group.get("claims", []):
+                if isinstance(claim, dict):
+                    all_claims.append(claim.get("claim", ""))
+
+    claim_texts = {c.strip().lower() for c in all_claims}
+    if payload.claim_text.strip().lower() not in claim_texts:
+        raise HTTPException(status_code=400, detail="Invalid claim_id — claim not found in divergence report")
+
+    # Check for existing vote on this claim by this user
+    existing_vote = session.exec(
+        select(VoteRecord).where(
+            VoteRecord.debate_id == debate_id,
+            VoteRecord.user_id == user_id,
         )
     ).first()
 
-    if existing_interaction:
-        raise HTTPException(status_code=400, detail="User has already voted on this debate's claims")
+    if existing_vote:
+        existing_claim_text = (existing_vote.vote_json or {}).get("claim_text", "")
+        if existing_claim_text.strip().lower() == payload.claim_text.strip().lower():
+            raise HTTPException(status_code=400, detail="Already voted on this claim")
 
-    # Record VoteRecord
+    # Record VoteRecord (server-validated data only, no client-trusted model_name/is_consensus)
     vote_record = VoteRecord(
         debate_id=debate_id,
         user_id=user_id,
         vote_json={
+            "claim_id": payload.claim_id,
             "claim_text": payload.claim_text,
-            "model_name": payload.model_name,
-            "is_consensus": payload.is_consensus,
             "type": "arena_vote"
         }
     )
     session.add(vote_record)
 
-    # Record UserInteraction for participation history
     interaction = UserInteraction(
         user_id=user_id,
         debate_id=debate_id,
         interaction_type="arena_vote",
         details={
+            "claim_id": payload.claim_id,
             "claim_text": payload.claim_text,
-            "model_name": payload.model_name,
-            "is_consensus": payload.is_consensus
         }
     )
     session.add(interaction)

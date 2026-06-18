@@ -128,3 +128,15 @@ def register_routers(app, settings) -> None:
         v1_debug_ns = _APIRouter(prefix="/api/v1")
         v1_debug_ns.include_router(v1_debug)
         app.include_router(v1_debug_ns)
+
+    # FH125 C-4: Add deprecation headers to root (non-/api/v1) API routes
+    if not settings.IS_LOCAL_ENV:
+        @app.middleware("http")
+        async def _root_deprecation_headers(request: Request, call_next):
+            resp = await call_next(request)
+            path = request.url.path
+            if not path.startswith("/api/v1") and not path.startswith("/metrics") and not path.startswith("/ops"):
+                resp.headers["Deprecation"] = "true"
+                resp.headers["Sunset"] = "2026-09-01"
+                resp.headers["Link"] = f"</api/v1{path}>; rel=\"successor-version\""
+            return resp
