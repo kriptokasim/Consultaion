@@ -1918,6 +1918,19 @@ async def retry_agent(
     debate = require_debate_mutation_access(debate, current_user, session)
     target_persona = body.persona
 
+    # FH125 G-7: Create new DebateAttempt for retry isolation
+    from models import DebateAttempt
+    debate.run_attempt = (debate.run_attempt or 0) + 1
+    attempt = DebateAttempt(
+        debate_id=debate_id,
+        attempt_number=debate.run_attempt,
+        status="running",
+        model_id=debate.model_id,
+        created_at=utcnow(),
+    )
+    session.add(attempt)
+    session.commit()
+
     agent_config_dict = None
     agents_list = debate.config.get("agents", []) if debate.config else []
     for ag in agents_list:

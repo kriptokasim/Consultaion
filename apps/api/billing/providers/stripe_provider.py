@@ -123,7 +123,7 @@ class StripeBillingProvider(BillingProvider):
                     sub.plan_id = plan_ref.id
 
                 db_session.add(sub)
-                db_session.commit()
+                # FH125: Don't commit here — let the webhook route transaction own the commit
 
                 emit_event(
                     "subscription_activated",
@@ -184,8 +184,7 @@ class StripeBillingProvider(BillingProvider):
                 if user:
                     user.plan = plan_slug if status in ("active", "trialing") else "free"
                     db_session.add(user)
-
-                db_session.commit()
+                # FH125: Don't commit here — let the webhook route transaction own the commit
 
         elif event_type == "customer.subscription.deleted" and db_session:
             subscription_id = data.get("id")

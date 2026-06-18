@@ -159,8 +159,15 @@ def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
         )
     counter.runs_used += 1
     session.add(counter)
+
+    # FH125: Check daily token headroom BEFORE committing run slot
+    # This ensures run slot is not consumed if token headroom fails
+    try:
+        _ensure_daily_token_headroom(session, user_id)
+    except Exception:
+        session.rollback()
+        raise
     session.commit()
-    _ensure_daily_token_headroom(session, user_id)
 
 
 def _apply_token_usage(session: Session, user_id: str, tokens_int: int, *, commit: bool) -> None:
