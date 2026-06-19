@@ -116,6 +116,15 @@ async def start_debate_run(
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    # Set correlation context for this request
+    from correlation import get_correlation_context, create_child_context
+    ctx = get_correlation_context()
+    if ctx:
+        ctx = create_child_context(
+            user_id=current_user.id if current_user else None,
+            debate_id=debate_id,
+        )
+
     if not settings.DISABLE_AUTORUN:
         raise ValidationError(message="Manual start is disabled", code="debate.manual_start_disabled")
     debate = session.get(Debate, debate_id)
@@ -138,12 +147,14 @@ async def start_debate_run(
     session.commit()
     
     from log_config import log_event
-    log_event(
-        "debate.started_manually",
-        debate_id=debate_id,
-        user_id=current_user.id if current_user else None,
-        model_id=debate.model_id,
-    )
+    log_fields = {
+        "debate_id": debate_id,
+        "user_id": current_user.id if current_user else None,
+        "model_id": debate.model_id,
+    }
+    if ctx:
+        log_fields.update(ctx.to_log_fields())
+    log_event("debate.started_manually", **log_fields)
 
     from audit import record_audit
     record_audit(
@@ -151,6 +162,7 @@ async def start_debate_run(
         user_id=current_user.id if current_user else None,
         target_type="debate",
         target_id=debate_id,
+        meta=ctx.to_log_fields() if ctx else None,
         session=session,
     )
     return {"id": debate_id, "status": "scheduled"}
@@ -166,6 +178,15 @@ async def continue_debate_run(
     current_user: User = Depends(get_current_user),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
+    # Set correlation context for this request
+    from correlation import get_correlation_context, create_child_context
+    ctx = get_correlation_context()
+    if ctx:
+        ctx = create_child_context(
+            user_id=current_user.id if current_user else None,
+            debate_id=debate_id,
+        )
+
     require_schema_current(session)
     # Load debate and verify mutation access
     debate = session.get(Debate, debate_id)

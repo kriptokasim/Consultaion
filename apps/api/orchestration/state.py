@@ -32,7 +32,10 @@ class DebateStateManager:
                 debate.status = status
                 debate.updated_at = datetime.now(timezone.utc)
                 if meta:
-                    debate.final_meta = meta
+                    # Validate final_meta with JSON contract
+                    from json_contracts import safe_validate_final_meta
+                    validated = safe_validate_final_meta(meta)
+                    debate.final_meta = validated.model_dump() if validated else meta
                 session.add(debate)
                 await session.commit()
 
@@ -119,7 +122,10 @@ class DebateStateManager:
             if not debate:
                 return
             debate.final_content = final_content
-            debate.final_meta = final_meta
+            # Validate final_meta with JSON contract
+            from json_contracts import safe_validate_final_meta
+            validated = safe_validate_final_meta(final_meta)
+            debate.final_meta = validated.model_dump() if validated else final_meta
             debate.status = status
             debate.updated_at = datetime.now(timezone.utc)
             session.add(debate)
