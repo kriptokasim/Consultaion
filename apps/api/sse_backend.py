@@ -179,6 +179,12 @@ class MemoryChannelBackend:
                 "payload": event
             }
 
+            # Add correlation context if available
+            from correlation import get_correlation_context
+            ctx = get_correlation_context()
+            if ctx:
+                envelope["correlation"] = ctx.to_sse_metadata()
+
             # Cache in history
             if channel_id not in self._history:
                 self._history[channel_id] = []

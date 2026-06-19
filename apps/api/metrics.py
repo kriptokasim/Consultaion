@@ -19,7 +19,6 @@ from typing import Dict
 # Rate limiting:
 # - rate_limit.triggered
 #
-# Patchset 112 additions:
 # Mode usage (matches Debate.mode values: conversation, compare, debate):
 # - mode.conversation.started
 # - mode.compare.started
@@ -35,7 +34,6 @@ from typing import Dict
 # - timeline.fetch.slow  (>500ms)
 # - timeline.fetch.ok
 #
-# Patchset 132 — SSE lease lifecycle:
 # - sse.lease.acquired
 # - sse.lease.denied
 # - sse.lease.released
