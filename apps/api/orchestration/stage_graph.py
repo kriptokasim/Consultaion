@@ -4,7 +4,7 @@ Centralized stage invalidation graph for debate retry logic.
 Each stage maps to the list of stages that must be invalidated when retrying from that stage.
 """
 
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 # Known stage keys
 KNOWN_STAGES: Set[str] = {

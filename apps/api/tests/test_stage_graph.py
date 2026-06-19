@@ -4,10 +4,10 @@ from orchestration.stage_graph import (
     KNOWN_STAGES,
     STAGE_ALIASES,
     STAGE_INVALIDATION_GRAPH,
-    normalize_stage_key,
     downstream_stages,
-    validate_stage_graph,
     get_stages_to_invalidate,
+    normalize_stage_key,
+    validate_stage_graph,
 )
 
 
