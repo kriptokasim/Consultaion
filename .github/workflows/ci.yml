@@ -545,7 +545,7 @@ jobs:
           python -m pytest -q tests/test_auth_flows.py tests/test_google_auth.py tests/test_redact.py -x
 
   architecture-graph-validation:
-    name: Graphify Architecture Graph Validation
+    name: Architecture Graph Validation (Custom AST)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -565,14 +565,15 @@ jobs:
         run: |
           # Make scripts executable
           chmod +x scripts/*.sh scripts/*.py
-          # Run build script with allow-collision for the config/Config reviewed exception
-          ./scripts/build-architecture-graph.sh --allow-collision
+          # Run build script (custom AST graph builder)
+          ./scripts/build-architecture-graph.sh
 
-      - name: Upload Graphify Build Artifacts
+      - name: Upload Architecture Graph Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: architecture-graph
           path: |
             graphify-out/code/
+            graphify-out/repository/
           retention-days: 30
 

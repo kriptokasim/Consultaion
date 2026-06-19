@@ -44,8 +44,8 @@ GIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "no-git-sha")
 echo "🔗 Current Repository SHA: $GIT_SHA"
 
 # 2. Print Graphify version
-GRAPHIFY_VERSION="0.8.42"
-echo "📦 Graphify Version: $GRAPHIFY_VERSION"
+GRAPHIFY_VERSION=$(python3 -c "import importlib.metadata; print(importlib.metadata.version('graphify'))" 2>/dev/null || echo "custom-ast-graph")
+echo "📦 Graph Version: $GRAPHIFY_VERSION (custom AST graph builder)"
 
 # 3. Handle Clean
 if [ "$CLEAN" = true ]; then

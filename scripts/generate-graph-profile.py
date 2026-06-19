@@ -10,7 +10,6 @@ import networkx.algorithms.community as nx_comm
 # Set up paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT / 'scripts'))
-sys.path.append(str(Path.home() / '.gemini/antigravity/brain/96999e47-f363-45b2-8a57-a2b076d61bd6/scratch'))
 
 def generate_svg_overview(G, output_path):
     # A simple, clean, lightweight SVG showing communities/subsystems and their sizes

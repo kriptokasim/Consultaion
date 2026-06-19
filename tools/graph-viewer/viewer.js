@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
         nodeOverlap: 20,
         refresh: 20,
         fit: true,
-        randomize: true,
+        randomize: false,
         componentSpacing: 100,
         nodeRepulsion: 400000,
         edgeElasticity: 100,
@@ -317,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Control buttons
     ctrlFit.addEventListener('click', () => cy.fit());
     ctrlLayout.addEventListener('click', () => {
-      cy.layout({ name: 'cose', randomize: true, fit: true }).run();
+      cy.layout({ name: 'cose', randomize: false, fit: true }).run();
     });
     
     detailsClose.addEventListener('click', () => {

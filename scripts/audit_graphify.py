@@ -7,7 +7,7 @@ import networkx as nx
 import networkx.algorithms.community as nx_comm
 
 # Constants & Configurations
-REPO_ROOT = Path('/home/durmusahm/Consultaion')
+REPO_ROOT = Path(__file__).parent.parent
 OUTPUT_DIR = REPO_ROOT / 'graphify-out'
 AUDIT_DIR = REPO_ROOT / 'docs' / 'audits'
 
