@@ -11,6 +11,7 @@ from routes.admin.promotions import admin_promotions, router as promotions_route
 from routes.admin.providers import admin_providers_health, admin_test_provider, router as providers_router
 from routes.admin.usage import admin_quota_usage, admin_usage_overview, router as usage_router
 from routes.admin.users import (
+    UpdateUserStatusRequest,
     admin_create_user_note,
     admin_get_user_notes,
     admin_search_users,
