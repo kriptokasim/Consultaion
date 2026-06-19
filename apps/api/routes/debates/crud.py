@@ -516,6 +516,18 @@ async def get_debate(
         debate = repo.get_by_id(debate_id)
         debate = require_debate_access(debate, current_user, session)
 
+    # Validate JSON contracts on read
+    if debate.config:
+        from json_contracts import safe_validate_config
+        validated = safe_validate_config(debate.config)
+        if validated:
+            debate.config = validated.model_dump()
+    if debate.final_meta:
+        from json_contracts import safe_validate_final_meta
+        validated = safe_validate_final_meta(debate.final_meta)
+        if validated:
+            debate.final_meta = validated.model_dump()
+
     # Fetch latest continuation status
     stmt = (
         select(DebateContinuation)

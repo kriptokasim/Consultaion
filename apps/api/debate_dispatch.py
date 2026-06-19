@@ -37,13 +37,18 @@ async def dispatch_debate_run(
     resume: bool = False,
     continuation_id: str | None = None,
 ) -> None:
+    # Propagate correlation context into background task
+    from correlation import get_correlation_context, create_child_context
+    ctx = get_correlation_context()
+    if ctx:
+        ctx = create_child_context(debate_id=debate_id)
+
     mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
     if mode == "celery":
         if run_debate_task is None:
             raise RuntimeError("Celery dispatch selected but worker tasks are unavailable")
         queue_name = choose_queue_for_debate(config_data, settings)
         if hasattr(run_debate_task, "apply_async"):
-            # Pass trace_id, is_resume, and continuation_id to the task
             run_debate_task.apply_async(args=[debate_id, trace_id], kwargs={"is_resume": resume, "continuation_id": continuation_id}, queue=queue_name)
         else:  # pragma: no cover - fall back for unusual task shims
             run_debate_task.delay(debate_id, trace_id, is_resume=resume, continuation_id=continuation_id)
