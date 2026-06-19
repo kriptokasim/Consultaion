@@ -354,8 +354,14 @@ async def get_debate_summary(_: Any = Depends(get_current_admin), session: Sessi
     configs = session.exec(select(Debate.config)).all()
     for cfg in configs:
         payload = cfg[0] if isinstance(cfg, tuple) else cfg
-        if isinstance(payload, dict) and payload.get("fast_debate"):
-            fast_count += 1
+        if isinstance(payload, dict):
+            # Validate config with JSON contract
+            from json_contracts import safe_validate_config
+            validated = safe_validate_config(payload)
+            if validated and validated.fast_debate:
+                fast_count += 1
+            elif isinstance(payload, dict) and payload.get("fast_debate"):
+                fast_count += 1
 
     def _num(value: Any) -> int:
         if isinstance(value, tuple):

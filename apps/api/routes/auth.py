@@ -404,6 +404,12 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
 @csrf_exempt
 @router.post("/auth/login")
 async def login_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
+    # Set correlation context for this request
+    from correlation import get_correlation_context, create_child_context
+    ctx = get_correlation_context()
+    if ctx:
+        ctx = create_child_context(user_id=None)
+
     ip = request.client.host if request and request.client else "anonymous"
     allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
     if not allowed:
