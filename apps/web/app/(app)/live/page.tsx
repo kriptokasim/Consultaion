@@ -196,30 +196,30 @@ function ArenaPageContent() {
       setEvents((prev) => [...prev, event])
 
       if (event.type === 'seat_message' || event.type === 'message') {
-        setActivePersona((event as any).seat_name || (event as any).persona || (event as any).agent_name)
+        setActivePersona(event.agent_name)
         setSpeakerTime(0)
       } else if (event.type === 'stage_start') {
         setActivePersona(undefined)
         setSpeakerTime(0)
       } else if (event.type === 'score') {
         setLatestScores((prev) => {
-          const scoreEvent = event as any
-          const newScores = [...prev, { persona: scoreEvent.agent_name || scoreEvent.persona, score: scoreEvent.value || scoreEvent.score }]
+          const persona = event.agent_name;
+          const score = event.value;
+          const newScores = [...prev, { persona: persona, score: score }]
           return newScores.slice(-5)
         })
       }
 
       if (isTerminalEvent(event)) {
-        const finalEvent = event as any
-        if (finalEvent.meta?.ranking) {
+        if (event.meta?.ranking) {
           setVote({
-            method: finalEvent.meta?.vote?.method ?? 'borda',
-            ranking: finalEvent.meta.ranking,
+            method: event.meta?.vote?.method ?? 'borda',
+            ranking: event.meta.ranking,
           })
         }
-        if (finalEvent.meta?.truncated) {
+        if (event.meta?.truncated) {
           setTruncated(true)
-          setTruncateReason(finalEvent.meta.truncate_reason)
+          setTruncateReason(event.meta.truncate_reason ?? null)
         }
         track('debate_completed', {
           debate_id: currentDebateIdRef.current,

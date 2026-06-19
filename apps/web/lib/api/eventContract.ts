@@ -39,6 +39,12 @@ export interface FinalEvent extends DomainEventBase {
   summary?: string;
   winner?: string;
   scores?: Record<string, number>;
+  meta?: {
+    ranking?: string[];
+    vote?: { method?: string };
+    truncated?: boolean;
+    truncate_reason?: string;
+  };
 }
 
 export interface ErrorEvent extends DomainEventBase {
@@ -142,7 +148,7 @@ export function assertEventTypeExhaustive(event: DomainEvent): void {
   }
 }
 
-export function isTerminalEvent(event: DomainEvent): boolean {
+export function isTerminalEvent(event: DomainEvent): event is FinalEvent {
   return event.type === "final";
 }
 

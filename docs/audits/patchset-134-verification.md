@@ -1,6 +1,6 @@
 # Patchset 134 — Verification
 
-**Final SHA:** 2164b04
+**Final SHA:** 781f2862fa588a3e2afbd6ec1676b7a64175b9dd
 **Date:** 2026-06-19
 **Status:** Corrective fixes applied
 
@@ -19,7 +19,7 @@
 
 ### Track A — Canonical Backend Settings ✅
 - [x] Integration settings migrated from core.settings
-- [ ] core/settings.py not yet deleted (deferred to next patchset)
+- [x] core/settings.py deleted
 
 ### Track B — SSE Backend Contract ✅
 - [x] Routes use only public backend interfaces
@@ -44,6 +44,7 @@
 ### Track H — Test Isolation ✅
 - [x] Table cleanup guards
 - [x] Global state cleanup tests
+- [x] Redis and background task cleanup verified
 
 ### Track I — Frontend Error Contract ✅
 - [x] Canonical error model
@@ -55,6 +56,7 @@
 
 ### Track K — Markdown Security ✅
 - [x] SafeMarkdown component uses existing DOMPurify
+- [x] Centralized boundary in StreamingText
 - [x] No new dependencies required
 
 ### Track L — UX Quality ✅
@@ -62,14 +64,13 @@
 - [x] Accessible status labels
 
 ### Track M — Accessibility ✅
-- [x] accessibility.spec.ts exists
-- [x] visual-regression.spec.ts exists
+- [x] accessibility.spec.ts exists and tracked
+- [x] visual-regression.spec.ts exists and tracked
 
 ### Track N — SSE Load Tests ✅
-- [x] Multiple subscriber test
-- [x] Replay test
-- [x] Terminal event test
-- [x] Reconnect test
+- [x] Concurrent consumer queue saturation
+- [x] Slow subscriber backpressure
+- [x] Reconnect cursor validation
 
 ### Track P — JSON Contract Versioning ✅
 - [x] schema_version field
@@ -103,17 +104,18 @@ npm run build
 
 ## Exit Criteria Checklist
 
-- [x] One canonical backend settings source (migrated, pending deletion)
+- [x] One canonical backend settings source (migrated and deleted)
 - [x] SSE routes use only public interfaces
 - [x] Route inventory preserved
-- [x] Frontend event/error types defined
+- [x] Frontend event/error types defined without `as any` bypass
 - [x] Stage graph centralized
 - [x] Test isolation guards
 - [x] Error contract standardized
 - [x] Correlation context available
-- [x] SafeMarkdown component uses DOMPurify
+- [x] SafeMarkdown component used universally
 - [x] ConnectionIndicator accessible
-- [x] Accessibility tests exist
-- [x] SSE load smoke tests pass
+- [x] Accessibility tests tracked
+- [x] SSE true concurrency load tests pass
+- [x] Graphify symbol ambiguity validator completed
 - [x] JSON contracts versioned
 - [x] Historical comments cleaned

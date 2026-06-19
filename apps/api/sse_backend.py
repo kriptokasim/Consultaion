@@ -18,7 +18,6 @@ except ImportError:  # pragma: no cover - redis optional for memory backend
 
 logger = logging.getLogger(__name__)
 
-# ── Patchset 132: Event priority classification ──────────────────────────
 
 # Critical events must never be dropped — they terminate or complete a stream
 CRITICAL_EVENT_TYPES = frozenset({
@@ -732,7 +731,6 @@ def get_stream_lease_manager() -> StreamLeaseManager:
     return _stream_lease_manager
 
 
-# ── Patchset 132: Exactly-once lease lifecycle ──────────────────────────
 
 LEASE_RELEASE_TIMEOUT_SECONDS = 5.0
 

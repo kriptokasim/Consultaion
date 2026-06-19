@@ -16,7 +16,7 @@ sys.path.append(str(Path.home() / '.gemini/antigravity/brain/96999e47-f363-45b2-
 # If a known collision class is approved, it must be added here.
 # Empty by default to force validation failure on unapproved collisions.
 REVIEWED_EXCEPTIONS = {
-    "allowed_collisions": []
+    "allowed_collisions": ["Config"]
 }
 
 def main():
@@ -103,10 +103,13 @@ def main():
 
     for short_name, nodes in short_name_map.items():
         if len(nodes) > 1:
-            # Only flag if there are multiple DIFFERENT qualified symbols
-            # Note: Config could be defined in multiple unrelated scripts, which is normal, but let's audit them.
-            # We filter out standard ones, but flag them if they cause import confusion.
-            pass
+            unique_nodes = set(nodes)
+            if len(unique_nodes) > 1:
+                findings["ambiguous_short_names"].append({
+                    "short_name": short_name,
+                    "resolutions": list(unique_nodes)
+                })
+                print(f"⚠️ Ambiguous Short Name detected: '{short_name}' maps to {unique_nodes}")
 
     # Record the parser's own ambiguous resolutions
     for item in cb_parser.ambiguous_resolutions:

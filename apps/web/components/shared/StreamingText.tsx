@@ -2,7 +2,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { sanitizeMarkdown } from "@/lib/sanitize";
+import SafeMarkdown from "@/components/content/SafeMarkdown";
 
 interface Props {
   text: string;
@@ -32,8 +32,6 @@ class SafeMarkdownRenderer extends Component<Props, State> {
       return <div className="text-rose-400 font-mono text-sm">Error rendering content fallback: {this.props.text}</div>;
     }
 
-    const html = sanitizeMarkdown(this.props.text);
-
     return (
       <div
         className={cn(
@@ -42,7 +40,7 @@ class SafeMarkdownRenderer extends Component<Props, State> {
           this.props.className
         )}
       >
-        <div dangerouslySetInnerHTML={{ __html: html }} className="inline" />
+        <SafeMarkdown content={this.props.text} className="inline" />
         {this.props.isStreaming && (
           <span className="inline-block w-2 h-4 ml-1 bg-amber-500 animate-pulse rounded-sm align-middle" />
         )}
