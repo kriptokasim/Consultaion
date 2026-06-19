@@ -84,9 +84,9 @@ def _node_name(node: ast.expr) -> str:
     return ""
 
 
-def _is_async_context(func_node: ast.AST) -> bool:
+def _is_async_context(node: ast.AST) -> bool:
     """Check if a node is an async function def."""
-    return isinstance(func_node, (ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith))
+    return isinstance(node, (ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith))
 
 
 def _has_noasync_comment(node: ast.AST, source_lines: list[str]) -> bool:
@@ -97,21 +97,26 @@ def _has_noasync_comment(node: ast.AST, source_lines: list[str]) -> bool:
     return False
 
 
-def _find_async_parents(tree: ast.Module) -> dict[int, ast.AST]:
-    """Map each AST node's line number to its nearest enclosing async function."""
-    mapping: dict[int, ast.AST] = {}
-    stack: list[ast.AST] = []
+def _find_enclosing_async(tree: ast.Module) -> dict[int, bool]:
+    """Map each line number to whether it's inside an async function."""
+    in_async: dict[int, bool] = {}
+    async_stack: list[bool] = []
 
-    def _visit(node: ast.AST) -> None:
-        stack.append(node)
+    def _visit(node: ast.AST, in_async_ctx: bool = False) -> None:
+        is_async = _is_async_context(node)
+        async_stack.append(is_async)
+        current_in_async = in_async_ctx or is_async
+
         if hasattr(node, "lineno"):
-            mapping[node.lineno] = stack[-2] if len(stack) > 1 else node
+            in_async[node.lineno] = current_in_async
+
         for child in ast.iter_child_nodes(node):
-            _visit(child)
-        stack.pop()
+            _visit(child, current_in_async)
+
+        async_stack.pop()
 
     _visit(tree)
-    return mapping
+    return in_async
 
 
 def audit_file(filepath: Path) -> list[Finding]:
@@ -126,7 +131,7 @@ def audit_file(filepath: Path) -> list[Finding]:
     source_lines = source.splitlines()
     findings: list[Finding] = []
 
-    async_parents = _find_async_parents(tree)
+    async_context = _find_enclosing_async(tree)
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -135,8 +140,7 @@ def audit_file(filepath: Path) -> list[Finding]:
             continue
 
         line = getattr(node, "lineno", 0)
-        parent = async_parents.get(line)
-        if not _is_async_context(parent):
+        if not async_context.get(line, False):
             continue
 
         name = _node_name(node.func)
