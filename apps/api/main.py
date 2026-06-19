@@ -5,14 +5,15 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 
-from integrations.sentry import init_sentry
 from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
 from billing.routes import billing_router
 from config import settings
+from correlation import CorrelationContext, set_correlation_context
 from database import init_db
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
+from integrations.sentry import init_sentry
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
 from middleware.body_limit import BodySizeLimitMiddleware
 from middleware.weighted_rate_limit import WeightedRateLimitMiddleware
@@ -27,7 +28,6 @@ from routes.admin import (
     admin_users,
     update_ratings_endpoint,
 )
-from routes.api_keys import api_keys_router
 from routes.auth import (
     AuthRequest,
     auth_router,
@@ -56,7 +56,6 @@ from routes.debates import (
     update_debate,
 )
 from routes.models import models_router
-from routes.ops import router as ops_router
 from routes.stats import (
     get_debate_summary,
     get_hall_of_fame_stats,
@@ -75,13 +74,6 @@ from routes.teams import (
     list_teams,
     teams_router,
 )
-from routes.participation import router as participation_router
-from routes.public_stats import router as public_stats_router
-from routes.arena import router as arena_router
-from routes.voting import router as voting_router
-from routes.redteam import router as redteam_router
-from routes.oracle import router as oracle_router
-from routes.challenge import router as challenge_router
 from schemas import DebateCreate
 from sse_backend import get_sse_backend
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -377,7 +369,15 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         clear_log_context()
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        trace_id = request.headers.get("x-trace-id") or f"trace-{uuid.uuid4().hex[:24]}"
         token = set_request_id(request_id)
+
+        ctx = CorrelationContext(
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+        corr_token = set_correlation_context(ctx)
+
         start = time.perf_counter()
         status_code = 500
         try:
@@ -388,7 +388,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             raise
         finally:
             duration = time.perf_counter() - start
-            from observability.metrics import record_http_request, PROMETHEUS_AVAILABLE
+            from observability.metrics import PROMETHEUS_AVAILABLE, record_http_request
             if PROMETHEUS_AVAILABLE:
                 import re
                 path = request.url.path
@@ -422,9 +422,12 @@ if settings.ENV != "test":
         allow_headers=["*"],
     )
 
+from exception_handlers import (
+    app_error_handler,
+    http_exception_handler,
+    validation_exception_handler,
+)
 from exceptions import AppError
-
-from exception_handlers import app_error_handler, http_exception_handler, validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 
@@ -433,8 +436,9 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 # Register all domain routers canonically via the central router registry
-from fastapi.responses import PlainTextResponse
 from core.router_registry import register_routers
+from fastapi.responses import PlainTextResponse
+
 register_routers(app, settings)
 
 
@@ -452,11 +456,7 @@ async def prometheus_metrics():
 # ── OT-5: SLO Status Endpoint ────────────────────────────────────────────
 @app.get("/ops/slo", tags=["ops"])
 async def get_slo_statuses(request: Request):
-    from auth import get_current_user
-    from fastapi import Depends
     from models import User
-    from sqlmodel import Session
-    from deps import get_session
 
     # FH125 I-3: Protect operational endpoint — admin only
     auth_header = request.headers.get("Authorization", "")

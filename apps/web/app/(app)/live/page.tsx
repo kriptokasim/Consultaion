@@ -26,6 +26,9 @@ import { track } from "@/lib/analytics";
 import { OnboardingHint } from "@/components/ui/onboarding-hint";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
+import { normalizeSSEEnvelope, type DomainEvent, isErrorEvent, isTerminalEvent } from "@/lib/api/eventContract";
+import { normalizeApiError, type ClientError, shouldRedirectToLogin, getCorrelationId } from "@/lib/api/errorContract";
+import { ConnectionIndicator, type ConnectionStatus } from "@/components/connection/ConnectionIndicator";
 
 import RunDetailClient from "../runs/[id]/RunDetailClient";
 
@@ -50,7 +53,7 @@ function ArenaPageContent() {
   const [prompt, setPrompt] = useState('Draft a national EV policy')
   const [panelConfig, setPanelConfig] = useState(() => defaultPanelConfig())
   const [running, setRunning] = useState(false)
-  const [events, setEvents] = useState<any[]>([])
+  const [events, setEvents] = useState<DomainEvent[]>([])
   const [activePersona, setActivePersona] = useState<string | undefined>(undefined)
   const [speakerTime, setSpeakerTime] = useState<number>(0)
   const [vote, setVote] = useState<VoteMeta | undefined>(undefined)
@@ -176,42 +179,47 @@ function ArenaPageContent() {
   const streamUrl = currentDebateId ? `${API_ORIGIN}/debates/${currentDebateId}/stream` : null
 
   const handleStreamEvent = useCallback(
-    (msg: any) => {
-      // FH125: Update liveness timestamp on every event
+    (msg: unknown) => {
       lastEventTimestampRef.current = Date.now()
 
-      // FH125: Events use envelope format with domain fields inside payload
-      const payload = msg.payload || msg
-      if (payload.type === 'error') {
-        console.error('Stream error:', payload)
+      const payload = (msg as Record<string, unknown>).payload || msg
+      const event = normalizeSSEEnvelope(payload)
+
+      if (!event) return
+
+      if (isErrorEvent(event)) {
+        console.error('Stream error:', event)
         stopStreamRef.current?.('terminal_error')
         return
       }
-      setEvents((prev) => [...prev, payload])
 
-      if (payload.type === 'seat_message' || payload.type === 'message') {
-        setActivePersona(payload.seat_name || payload.persona || payload.actor)
+      setEvents((prev) => [...prev, event])
+
+      if (event.type === 'seat_message' || event.type === 'message') {
+        setActivePersona((event as any).seat_name || (event as any).persona || (event as any).agent_name)
         setSpeakerTime(0)
-      } else if (payload.type === 'round_started') {
+      } else if (event.type === 'stage_start') {
         setActivePersona(undefined)
         setSpeakerTime(0)
-      } else if (payload.type === 'score') {
+      } else if (event.type === 'score') {
         setLatestScores((prev) => {
-          const newScores = [...prev, { persona: payload.persona, score: payload.score }]
+          const scoreEvent = event as any
+          const newScores = [...prev, { persona: scoreEvent.agent_name || scoreEvent.persona, score: scoreEvent.value || scoreEvent.score }]
           return newScores.slice(-5)
         })
       }
 
-      if (payload.type === 'final') {
-        if (payload.meta?.ranking) {
+      if (isTerminalEvent(event)) {
+        const finalEvent = event as any
+        if (finalEvent.meta?.ranking) {
           setVote({
-            method: payload.meta?.vote?.method ?? 'borda',
-            ranking: payload.meta.ranking,
+            method: finalEvent.meta?.vote?.method ?? 'borda',
+            ranking: finalEvent.meta.ranking,
           })
         }
-        if (payload.meta?.truncated) {
+        if (finalEvent.meta?.truncated) {
           setTruncated(true)
-          setTruncateReason(payload.meta.truncate_reason)
+          setTruncateReason(finalEvent.meta.truncate_reason)
         }
         track('debate_completed', {
           debate_id: currentDebateIdRef.current,
@@ -242,7 +250,7 @@ function ArenaPageContent() {
     setSessionStatus('recoverable_error')
   }, [manualStartMode])
 
-  const { status: streamStatus, close: closeStream } = useEventSource<any>(shouldStream ? streamUrl : null, {
+  const { status: streamStatus, close: closeStream } = useEventSource<DomainEvent>(shouldStream ? streamUrl : null, {
     enabled: shouldStream,
     withCredentials: true,
     onEvent: handleStreamEvent,
@@ -510,19 +518,20 @@ function ArenaPageContent() {
       router.replace(`/live?run=${id}`)
     } catch (error) {
       if (error instanceof ApiError) {
+        const clientError = normalizeApiError(error, error.status)
         const info = getRateLimitInfo(error)
         if (info) {
           setRateLimitNotice(info)
           pushToast({ title: info.detail, variant: "error" })
+        } else if (shouldRedirectToLogin(clientError)) {
+          router.push('/login')
         } else {
           console.error(error)
-          const body = error.body as any;
-          const errData = body?.error || {};
           setErrorState({
             title: t("live.startError"),
-            message: errData.message || error.message || "An unexpected error occurred.",
-            hint: errData.hint,
-            retryable: errData.retryable
+            message: clientError.message || "An unexpected error occurred.",
+            hint: clientError.hint,
+            retryable: clientError.retryable
           });
         }
       } else {
@@ -674,6 +683,13 @@ function ArenaPageContent() {
         activePersona={activePersona}
         onCopy={handleCopyId}
         runUrl={currentDebateId ? `/runs/${currentDebateId}` : null}
+      />
+      <ConnectionIndicator
+        status={streamStatus === 'connected' ? 'connected' :
+               streamStatus === 'connecting' || streamStatus === 'reconnecting' ? 'reconnecting' :
+               streamStatus === 'error' ? 'offline' :
+               running ? 'degraded' : 'closed'}
+        className="ml-2"
       />
 
       {/* New centered prompt workspace */}

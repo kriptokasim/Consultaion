@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 import sqlalchemy as sa
 from auth import get_current_user, get_optional_user
@@ -8,7 +8,6 @@ from config import settings
 from debate_dispatch import dispatch_debate_run
 from deps import get_session, get_sse_backend
 from exceptions import (
-    AppError,
     NotFoundError,
     PermissionError,
     ProviderCircuitOpenError,
@@ -17,21 +16,17 @@ from exceptions import (
 )
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from integrations.langfuse import start_debate_trace
-from models import Debate, DebateContinuation, Message, PairwiseVote, Score, Team, User, utcnow
+from models import Debate, DebateContinuation, Team, User, utcnow
 from parliament.model_registry import list_enabled_models
 from parliament.providers import PROVIDERS
 from parliament.roles import ROLE_PROFILES
 from parliament.router_v2 import RouteContext, choose_model
 from parliament.schemas import TimelineEvent
 from parliament.timeline import build_debate_timeline
-from pydantic import BaseModel
 from ratelimit import increment_ip_bucket, record_429
 from schemas import (
-    DebateConfig,
     DebateCreate,
     PanelConfig,
-    ContinuationResponse,
-    ContinuationRequest,
     default_debate_config,
     default_panel_config,
 )
@@ -41,15 +36,11 @@ from sse_backend import BaseSSEBackend
 from usage_limits import reserve_run_slot
 
 from routes.common import (
-    champion_for_debate,
     is_debate_owner,
     is_debate_public,
-    members_from_config,
     require_debate_access,
     require_debate_mutation_access,
-    require_debate_owner,
     require_schema_current,
-    serialize_rating_persona,
     track_metric,
     user_is_team_member,
 )
@@ -181,6 +172,13 @@ async def create_debate(
             require_beta_access(current_user, "conversation mode")
 
         config = body.config or default_debate_config()
+
+        # Validate config with JSON contract
+        from json_contracts import safe_validate_config
+        validated_config = safe_validate_config(config)
+        if validated_config:
+            config = validated_config.model_dump()
+
         enabled_models = {m.id: m for m in list_enabled_models()}
         if not enabled_models:
             raise ProviderCircuitOpenError(
@@ -519,7 +517,6 @@ async def get_debate(
         debate = require_debate_access(debate, current_user, session)
 
     # Fetch latest continuation status
-    from models import DebateContinuation
     stmt = (
         select(DebateContinuation)
         .where(DebateContinuation.debate_id == debate_id)
