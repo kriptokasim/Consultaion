@@ -68,6 +68,11 @@ export interface StageEndEvent extends DomainEventBase {
   stage: string;
 }
 
+export interface RoundStartedEvent extends DomainEventBase {
+  type: "round_started";
+  round?: number;
+}
+
 export type DomainEvent =
   | MessageEvent
   | SeatMessageEvent
@@ -78,7 +83,8 @@ export type DomainEvent =
   | HeartbeatEvent
   | ProgressEvent
   | StageStartEvent
-  | StageEndEvent;
+  | StageEndEvent
+  | RoundStartedEvent;
 
 export interface SSEEnvelope<T extends DomainEvent = DomainEvent> {
   sequence?: number;
@@ -98,6 +104,7 @@ const KNOWN_EVENT_TYPES = new Set<string>([
   "progress",
   "stage_start",
   "stage_end",
+  "round_started",
 ]);
 
 function assertNever(value: never): never {
@@ -113,7 +120,7 @@ export function normalizeSSEEnvelope(raw: unknown): DomainEvent | null {
 
   if (!type || !KNOWN_EVENT_TYPES.has(type)) return null;
 
-  return payload as DomainEvent;
+  return payload as unknown as DomainEvent;
 }
 
 export function assertEventTypeExhaustive(event: DomainEvent): void {
@@ -128,6 +135,7 @@ export function assertEventTypeExhaustive(event: DomainEvent): void {
     case "progress":
     case "stage_start":
     case "stage_end":
+    case "round_started":
       break;
     default:
       assertNever(event as never);
