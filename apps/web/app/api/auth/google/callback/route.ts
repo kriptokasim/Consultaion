@@ -68,7 +68,16 @@ export async function GET(request: NextRequest) {
 
     // 5. Set HttpOnly/Secure/SameSite cookie
     const nextParam = request.cookies.get("oauth_next")?.value || "/dashboard";
-    const nextPath = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard";
+    let nextPath = "/dashboard";
+    try {
+      const base = new URL(request.url).origin;
+      const resolved = new URL(nextParam, base);
+      if (resolved.origin === base && !resolved.pathname.includes("\\")) {
+        nextPath = resolved.pathname + resolved.search + resolved.hash;
+      }
+    } catch {
+      nextPath = "/dashboard";
+    }
     const redirectUrl = new URL(nextPath, request.url);
     const responseNext = NextResponse.redirect(redirectUrl);
 

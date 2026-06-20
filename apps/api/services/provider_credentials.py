@@ -102,8 +102,8 @@ async def resolve_provider_credential_async(
         UserProviderKey.user_id == user_id,
         UserProviderKey.provider == provider,
     )
-    result = await session.exec(stmt)
-    key_record = result.first()
+    result = await session.execute(stmt)
+    key_record = result.scalars().first()
     
     if not key_record:
         return None

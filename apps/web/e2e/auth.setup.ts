@@ -1,7 +1,7 @@
 import { test as setup, expect } from '@playwright/test';
 import path from 'path';
 
-const authFile = path.join(__dirname, '../../.playwright/.auth/user.json');
+const authFile = path.join(__dirname, '../.playwright/.auth/user.json');
 
 setup('authenticate', async ({ page }) => {
     // If we can use a simpler auth method (like setting a token), prefer that.
@@ -10,7 +10,7 @@ setup('authenticate', async ({ page }) => {
     const email = process.env.E2E_TEST_EMAIL || 'test@example.com';
     const password = process.env.E2E_TEST_PASSWORD || 'password123';
 
-    await page.goto('/login');
+    await page.goto('/login?next=/dashboard');
 
     if (await page.getByText('Recent Debates').isVisible().catch(() => false)) {
         await page.context().storageState({ path: authFile });

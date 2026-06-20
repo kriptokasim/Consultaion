@@ -7,6 +7,7 @@ import asyncio
 import os
 
 import pytest
+import pytest_asyncio
 import redis.asyncio as aioredis
 
 # Require real Redis — skip if not configured
@@ -17,14 +18,14 @@ if not REDIS_URL:
 from sse_backend import RedisChannelBackend
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def redis_client():
     client = aioredis.from_url(REDIS_URL, decode_responses=True)
     yield client
     await client.aclose()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def backend(redis_client):
     # Flush test keys before each test
     keys = await redis_client.keys("sse:test_redis:*")

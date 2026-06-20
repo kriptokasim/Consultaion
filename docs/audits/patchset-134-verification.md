@@ -1,6 +1,6 @@
 # Patchset 134 — Verification
 
-**Final SHA:** 45b19e85074c9765a9236d816e2073bddfa79e5f
+**Final SHA:** c5b6648
 **Date:** 2026-06-20
 **Status:** Corrective fixes applied
 
@@ -69,7 +69,7 @@
 
 ### Track N — SSE Load Tests ✅
 - [x] Concurrent consumer queue saturation
-- [x] Slow subscriber backpressure
+- [x] Slow subscriber backpressure (properly saturates subscriber and drops priority >= 2 events)
 - [x] Reconnect cursor validation
 
 ### Track P — JSON Contract Versioning ✅

@@ -393,6 +393,10 @@ jobs:
           API_BASE_URL: http://localhost:8000
           NEXT_PUBLIC_API_URL: http://localhost:8000
           # Test Env Configs
+          ENV: test
+          USE_MOCK: "1"
+          REQUIRE_REAL_LLM: "0"
+          DISABLE_AUTORUN: "1"
           DATABASE_URL: "sqlite:///./e2e_test.db"
           JWT_SECRET: "test_secret_for_ci_pipeline_12345"
 
@@ -537,7 +541,7 @@ jobs:
           DATABASE_URL: "sqlite:///./ci_test.db"
         working-directory: apps/api
         run: |
-          python -m pytest tests/test_sse_redis_backend.py -x -v
+          python -m pytest tests/test_sse_redis_backend.py tests/test_test_isolation_guards.py -x -v
 
   auth-regression:
     name: Authorization Regression

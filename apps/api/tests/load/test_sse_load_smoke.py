@@ -70,21 +70,32 @@ async def test_slow_subscriber_backpressure(backend):
     channel = "load-test-slow"
     await backend.create_channel(channel)
     
-    sub = backend.subscribe(channel, last_sequence=None)
+    events = []
+    ready = asyncio.Event()
+
+    async def consumer():
+        sub = backend.subscribe(channel, last_sequence=None)
+        # We must pull at least one item or start iteration to ensure it's attached
+        # We can signal ready, then iterate.
+        ready.set()
+        async for event in sub:
+            events.append(event)
+            await asyncio.sleep(0.01)
+            if len(events) >= 10:
+                break
+
+    task = asyncio.create_task(consumer())
+    await ready.wait()
+    # Let the event loop run to ensure subscription is registered in backend
+    await asyncio.sleep(0.1)
     
     # Publish many messages instantly to force queue overflow and backpressure
     for i in range(1500):
         await backend.publish(channel, {"type": "model_response_delta", "index": i})
         
-    # Read slowly
-    received = 0
-    async for event in sub:
-        received += 1
-        await asyncio.sleep(0.01)
-        if received == 10:
-            break
+    await asyncio.wait_for(task, timeout=5)
             
-    assert received == 10
+    assert len(events) == 10
     await backend.cleanup()
 
 

@@ -20,7 +20,17 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const nextParam = searchParams.get("next") || "/live";
-  const nextPath = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/live";
+  
+  let nextPath = "/live";
+  try {
+    const base = new URL(request.url).origin;
+    const resolved = new URL(nextParam, base);
+    if (resolved.origin === base && !resolved.pathname.includes("\\")) {
+      nextPath = resolved.pathname + resolved.search + resolved.hash;
+    }
+  } catch {
+    nextPath = "/live";
+  }
 
   // 1. Generate cryptographically random state nonce
   const state = crypto.randomBytes(32).toString("hex");

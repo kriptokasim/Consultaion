@@ -201,7 +201,7 @@ class AppSettings(BaseSettings):
     # Patchset 53.0: Auth Debug Mode
     AUTH_DEBUG: bool = Field(False, description="Enable verbose auth logging & debug endpoint")
 
-    INTERNAL_SECRET: str = "change_me_in_prod"
+    INTERNAL_SECRET: str | None = None
     JWT_SECRET: str = "change_me_in_prod"
     JWT_EXPIRE_MINUTES: int = 1440
     JWT_TTL_SECONDS: int | None = None
@@ -372,6 +372,12 @@ class AppSettings(BaseSettings):
                 raise ValueError("JWT_SECRET must be set to a secure value in production (ENV={})".format(self.ENV))
             if len(self.JWT_SECRET) < 32:
                 raise ValueError("JWT_SECRET must be at least 32 characters in production")
+            
+            # Internal Secret
+            if not self.INTERNAL_SECRET or self.INTERNAL_SECRET in ("change_me_in_prod", "CHANGE_ME_IN_PRODUCTION"):
+                raise ValueError("INTERNAL_SECRET must be set to a secure value in production (ENV={})".format(self.ENV))
+            if len(self.INTERNAL_SECRET) < 32:
+                raise ValueError("INTERNAL_SECRET must be at least 32 characters in production")
             
             # Stripe Webhook
             if self.STRIPE_WEBHOOK_VERIFY and not self.STRIPE_WEBHOOK_SECRET:

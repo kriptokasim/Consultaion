@@ -202,13 +202,13 @@ class MemoryChannelBackend:
                     dropped = False
                     if new_priority == 0:
                         # Critical event: must make room by dropping oldest loss-tolerant
-                        dropped = self._drop_from_queue(sub_queue, max_priority_to_drop=2)
+                        dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
                         if not dropped:
                             # No loss-tolerant to drop; try important
-                            dropped = self._drop_from_queue(sub_queue, max_priority_to_drop=1)
+                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=1)
                     elif new_priority == 1:
                         # Important event: only drop loss-tolerant
-                        dropped = self._drop_from_queue(sub_queue, max_priority_to_drop=2)
+                        dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
 
                     if not dropped and sub_queue.full():
                         from metrics import increment_metric
@@ -224,8 +224,8 @@ class MemoryChannelBackend:
             except Exception as e:
                 logger.error(f"Error publishing to subscriber queue for {channel_id}: {e}")
 
-    def _drop_from_queue(self, queue: asyncio.Queue[dict], max_priority_to_drop: int) -> bool:
-        """Try to drop the oldest event with priority <= max_priority_to_drop from a queue.
+    def _drop_from_queue(self, queue: asyncio.Queue[dict], min_priority_to_drop: int) -> bool:
+        """Try to drop the oldest event with priority >= min_priority_to_drop from a queue.
         
         Returns True if an event was dropped.
         """
@@ -235,7 +235,7 @@ class MemoryChannelBackend:
         while not queue.empty():
             try:
                 item = queue.get_nowait()
-                if not dropped and _event_priority(item) <= max_priority_to_drop:
+                if not dropped and _event_priority(item) >= min_priority_to_drop:
                     dropped = True
                     from metrics import increment_metric
                     increment_metric("sse.backpressure.dropped")

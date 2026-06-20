@@ -151,22 +151,8 @@ async def route_llm_call(
             if m not in models_to_try:
                 models_to_try.append(m)
                 
-    # Filter the try list to only keep direct models that have their API keys configured
-    available_direct_models = []
-    for m in models_to_try:
-        # Resolve provider
-        provider = "unknown"
-        if m in MODEL_MAP:
-            provider = MODEL_MAP[m]["provider"]
-        elif "-" in m:
-            provider = m.split("-")[0]
-            
-        if is_provider_available(provider):
-            available_direct_models.append(m)
-            
-    # If no direct models are available in the pool, fallback to trying the requested model
-    if not available_direct_models:
-        available_direct_models = [request.model_id]
+    # Pass all candidates to the adapter loop; BYOK resolution or server key checks will happen there.
+    available_direct_models = models_to_try
 
     last_error = None
     last_error_code = None

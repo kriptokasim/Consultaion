@@ -174,6 +174,17 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     # Reset SSE backend (in-memory event channels)
     reset_sse_backend_for_tests()
 
+    # Flush Redis if configured
+    if settings.REDIS_URL and str(settings.REDIS_URL).startswith("redis://"):
+        try:
+            import redis
+            r = redis.from_url(str(settings.REDIS_URL))
+            r.flushdb()
+            r.close()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to flush Redis test DB: {e}")
+
     yield
 
 

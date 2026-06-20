@@ -400,7 +400,7 @@ async def google_callback_post(
     
     if not state_meta:
         internal_secret = request.headers.get("x-internal-secret")
-        if not internal_secret or internal_secret != settings.INTERNAL_SECRET:
+        if not internal_secret or not settings.INTERNAL_SECRET or not secrets.compare_digest(internal_secret, settings.INTERNAL_SECRET):
             logger.warning(f"Google OAuth state not found and internal secret invalid/missing. IP={ip}")
             raise ValidationError(message="Invalid OAuth state or missing internal trust", code="auth.invalid_state")
 
