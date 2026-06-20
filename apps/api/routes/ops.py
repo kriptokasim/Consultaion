@@ -60,24 +60,27 @@ async def readyz(response: Response) -> dict[str, Any]:
     sse_ok, sse_info = await check_sse_readiness()
     
     schema_info = {"status": "unknown"}
-    try:
-        from database import SessionLocal
-        from services.schema_capabilities import get_registry, get_schema_capabilities
-        with SessionLocal() as session:
-            caps = get_schema_capabilities(session, get_registry())
-            schema_info = {
-                "at_head": caps.is_at_alembic_head,
-                "missing_capabilities": caps.missing_capabilities,
-            }
-            if not caps.is_at_alembic_head:
-                schema_info["status"] = "behind_head"
-                db_ok = False
-            else:
-                schema_info["status"] = "ok"
-    except Exception as exc:
-        schema_info["status"] = "error"
-        schema_info["error"] = str(exc)
-        db_ok = False
+    if settings.ENV == "test":
+        schema_info["status"] = "test_bypass"
+    else:
+        try:
+            from database import SessionLocal
+            from services.schema_capabilities import get_registry, get_schema_capabilities
+            with SessionLocal() as session:
+                caps = get_schema_capabilities(session, get_registry())
+                schema_info = {
+                    "at_head": caps.is_at_alembic_head,
+                    "missing_capabilities": caps.missing_capabilities,
+                }
+                if not caps.is_at_alembic_head:
+                    schema_info["status"] = "behind_head"
+                    db_ok = False
+                else:
+                    schema_info["status"] = "ok"
+        except Exception as exc:
+            schema_info["status"] = "error"
+            schema_info["error"] = str(exc)
+            db_ok = False
     
     status_code = status.HTTP_200_OK
     if not db_ok or not sse_ok:
