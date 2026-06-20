@@ -176,6 +176,9 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
 
     # Flush Redis if configured
     if settings.REDIS_URL and str(settings.REDIS_URL).startswith("redis://"):
+        if settings.ENV != "test":
+            raise RuntimeError(f"Refusing to flush Redis DB: ENV is '{settings.ENV}', not 'test'. "
+                               "This is a safety guard against accidental data loss.")
         try:
             import redis
             r = redis.from_url(str(settings.REDIS_URL))
