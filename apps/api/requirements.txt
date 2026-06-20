@@ -1,7 +1,7 @@
 # Consultaion API Dependencies
 fastapi>=0.138.0
 uvicorn[standard]==0.30.6
-pydantic==2.9.2
+pydantic==2.13.4
 pydantic-settings==2.6.0
 python-dotenv==1.0.1
 litellm==1.61.15
