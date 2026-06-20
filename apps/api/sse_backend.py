@@ -206,6 +206,14 @@ class MemoryChannelBackend:
                         if not dropped:
                             # No loss-tolerant to drop; try important
                             dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=1)
+                        if not dropped:
+                            # Queue is 100% full of critical events. To guarantee the new terminal
+                            # event is delivered, we implement a "latest critical wins" policy
+                            # by dropping the oldest critical event.
+                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=0)
+                            if dropped:
+                                from metrics import increment_metric
+                                increment_metric("sse.backpressure.critical_replaced")
                     elif new_priority == 1:
                         # Important event: only drop loss-tolerant
                         dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)

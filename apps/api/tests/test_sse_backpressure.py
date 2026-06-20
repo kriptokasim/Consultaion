@@ -225,3 +225,46 @@ async def test_heartbeat_events_are_loss_tolerant(backend):
     """Heartbeat events should be classified as loss-tolerant (droppable)."""
     from sse_backend import _event_priority
     assert _event_priority({"type": "heartbeat"}) == 2
+
+
+@pytest.mark.asyncio
+async def test_all_critical_queue_saturation(backend):
+    """If the queue is 100% full of critical events, a new critical event replaces the oldest one (latest critical wins)."""
+    channel = "bp:all_critical"
+    await backend.create_channel(channel)
+
+    events = []
+    consumer_started = asyncio.Event()
+    allow_consumer = asyncio.Event()
+
+    async def blocked_consumer():
+        # Subscribe before publishing so we get a subscriber queue
+        sub = backend.subscribe(channel)
+        consumer_started.set()
+        await allow_consumer.wait()
+        async for env in sub:
+            events.append(env)
+            if len(events) == 5:
+                break
+
+    task = asyncio.create_task(blocked_consumer())
+    await consumer_started.wait()
+    # Yield control briefly to ensure subscription is fully registered
+    await asyncio.sleep(0.05)
+
+    # Fill queue completely with critical events (priority 0)
+    # The queue size is 5 in the fixture.
+    for i in range(5):
+        await backend.publish(channel, {"type": "debate_completed", "id": i})
+
+    # Now publish a new critical event to a full queue.
+    await backend.publish(channel, {"type": "debate_completed", "id": 999})
+
+    # Unblock consumer to read events
+    allow_consumer.set()
+    await asyncio.wait_for(task, timeout=2)
+
+    ids = [e.get("payload", {}).get("id") for e in events]
+    # The oldest event (id=0) should have been dropped, and id=999 should be present
+    assert ids == [1, 2, 3, 4, 999]
+
