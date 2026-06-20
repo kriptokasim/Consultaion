@@ -36,15 +36,17 @@ def upgrade() -> None:
         batch_op.create_foreign_key("fk_debateround_attempt_id", "debate_attempt", ["attempt_id"], ["id"])
 
     # Add unique constraint to DebateAttempt
-    op.create_unique_constraint(
-        "uq_debate_attempt_debate_number",
-        "debate_attempt",
-        ["debate_id", "attempt_number"],
-    )
+    with op.batch_alter_table("debate_attempt") as batch_op:
+        batch_op.create_unique_constraint(
+            "uq_debate_attempt_debate_number",
+            ["debate_id", "attempt_number"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_debate_attempt_debate_number", "debate_attempt", type_="unique")
+    with op.batch_alter_table("debate_attempt") as batch_op:
+        batch_op.drop_constraint("uq_debate_attempt_debate_number", type_="unique")
+
 
     with op.batch_alter_table("debateround") as batch_op:
         batch_op.drop_constraint("fk_debateround_attempt_id", type_="foreignkey")
