@@ -72,9 +72,9 @@ async def test_slow_subscriber_backpressure(backend):
     
     sub = backend.subscribe(channel, last_sequence=None)
     
-    # Publish many messages instantly
-    for i in range(100):
-        await backend.publish(channel, {"type": "fast_message", "index": i})
+    # Publish many messages instantly to force queue overflow and backpressure
+    for i in range(1500):
+        await backend.publish(channel, {"type": "model_response_delta", "index": i})
         
     # Read slowly
     received = 0

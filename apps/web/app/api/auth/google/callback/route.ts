@@ -39,9 +39,13 @@ export async function GET(request: NextRequest) {
 
   try {
     // 4. Exchange code server-side via backend
+    const internalSecret = process.env.INTERNAL_SECRET || "";
     const response = await fetch(`${API_BASE}/auth/google/callback`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "x-internal-secret": internalSecret
+      },
       body: JSON.stringify({ code, state }),
     });
 
@@ -63,7 +67,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Set HttpOnly/Secure/SameSite cookie
-    const nextPath = request.cookies.get("oauth_next")?.value || "/dashboard";
+    const nextParam = request.cookies.get("oauth_next")?.value || "/dashboard";
+    const nextPath = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard";
     const redirectUrl = new URL(nextPath, request.url);
     const responseNext = NextResponse.redirect(redirectUrl);
 

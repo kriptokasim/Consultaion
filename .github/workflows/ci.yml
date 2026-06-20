@@ -361,8 +361,29 @@ jobs:
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
       # --- Playwright Setup & Run ---
+      - name: Install Root Playwright
+        run: npm install -D @playwright/test playwright
+
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
+
+      - name: Seed E2E Test Database
+        working-directory: apps/api
+        env:
+          DATABASE_URL: "sqlite:///./e2e_test.db"
+        run: |
+          python -c '
+          from database import engine
+          from sqlmodel import Session, SQLModel
+          from models import User
+          from auth import hash_password
+          SQLModel.metadata.create_all(engine)
+          with Session(engine) as session:
+              if not session.query(User).filter_by(email="test@example.com").first():
+                  user = User(email="test@example.com", password_hash=hash_password("password123"))
+                  session.add(user)
+                  session.commit()
+          '
 
       - name: Run Playwright Tests
         run: npx playwright test
@@ -516,7 +537,7 @@ jobs:
           DATABASE_URL: "sqlite:///./ci_test.db"
         working-directory: apps/api
         run: |
-          python -m pytest tests/test_sse_backend.py -x -v
+          python -m pytest tests/test_sse_redis_backend.py -x -v
 
   auth-regression:
     name: Authorization Regression

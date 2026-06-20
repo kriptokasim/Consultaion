@@ -88,3 +88,68 @@ def get_model_api_key(
         return credential
 
     return None
+
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+async def resolve_provider_credential_async(
+    session: AsyncSession,
+    user_id: str,
+    provider: str,
+) -> Optional[ResolvedProviderCredential]:
+    """Resolve and decrypt a user's provider key (async)."""
+    stmt = select(UserProviderKey).where(
+        UserProviderKey.user_id == user_id,
+        UserProviderKey.provider == provider,
+    )
+    result = await session.exec(stmt)
+    key_record = result.first()
+    
+    if not key_record:
+        return None
+
+    if not key_record.encryption_nonce and key_record.encryption_key_version == 0:
+        logger.warning(
+            "Rejecting legacy unencrypted key: user_id=%s provider=%s",
+            user_id, provider,
+        )
+        return None
+
+    try:
+        from security.encryption import decrypt_value
+        decrypted = decrypt_value(
+            {
+                "ciphertext": key_record.encrypted_key,
+                "nonce": key_record.encryption_nonce,
+                "key_version": key_record.encryption_key_version,
+            },
+            user_id=user_id,
+            provider=provider,
+        )
+        return ResolvedProviderCredential(
+            key=decrypted,
+            source="user",
+            provider=provider,
+            user_id=user_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to decrypt provider key: user_id=%s provider=%s error=%s",
+            user_id, provider, type(exc).__name__,
+        )
+        return None
+
+async def get_model_api_key_async(
+    session: AsyncSession,
+    user_id: Optional[str],
+    provider: str,
+) -> Optional[ResolvedProviderCredential]:
+    """Get API key for a provider (async), preferring user BYOK over server key."""
+    if not user_id:
+        return None
+
+    credential = await resolve_provider_credential_async(session, user_id, provider)
+    if credential:
+        return credential
+
+    return None

@@ -7,13 +7,12 @@ from pathlib import Path
 # Set up paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT / "scripts"))
-sys.path.append(str(Path.home() / ".gemini/antigravity/brain/96999e47-f363-45b2-8a57-a2b076d61bd6/scratch"))
 
 # Reviewed Exceptions
 # If a known collision class is approved, it must be added here.
 # Empty by default to force validation failure on unapproved collisions.
 REVIEWED_EXCEPTIONS = {
-    "allowed_collisions": ["Config"]
+    "allowed_collisions": ["CollisionClass:config/Config"]
 }
 
 def main():
@@ -174,7 +173,7 @@ def main():
         print(f"🚨 Collision Class Detected: {collision_id}!")
         
         # Fail validation unless explicitly allowed in REVIEWED_EXCEPTIONS or CLI bypass
-        is_excepted = "Config" in REVIEWED_EXCEPTIONS.get("allowed_collisions", []) or args.allow_collision
+        is_excepted = collision_id in REVIEWED_EXCEPTIONS.get("allowed_collisions", []) or args.allow_collision
         if not is_excepted:
             print("❌ Validation Failed: Collision class detected without an explicit reviewed exception.")
             validation_failed = True

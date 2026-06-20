@@ -71,3 +71,4 @@ scratch_user_request_prev.md
 
 # Graphify generated artifacts and caches
 graphify-out/
+*.tsbuildinfo

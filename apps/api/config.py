@@ -201,6 +201,7 @@ class AppSettings(BaseSettings):
     # Patchset 53.0: Auth Debug Mode
     AUTH_DEBUG: bool = Field(False, description="Enable verbose auth logging & debug endpoint")
 
+    INTERNAL_SECRET: str = "change_me_in_prod"
     JWT_SECRET: str = "change_me_in_prod"
     JWT_EXPIRE_MINUTES: int = 1440
     JWT_TTL_SECONDS: int | None = None

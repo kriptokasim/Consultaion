@@ -57,9 +57,22 @@ class TestIsolationBetweenTests:
 
     @pytest.mark.asyncio
     async def test_background_task_isolation(self):
-        # A simple check to ensure no rogue background tasks from previous tests are running
         import asyncio
         tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        # We allow pytest-asyncio and AnyIO related tasks, but not domain tasks
-        domain_tasks = [t for t in tasks if "debate" in t.get_name() or "sse" in t.get_name()]
+        
+        def get_coro_name(task):
+            coro = task.get_coro()
+            if hasattr(coro, "__name__"):
+                return coro.__name__
+            elif hasattr(coro, "cr_code"):
+                return coro.cr_code.co_name
+            return task.get_name()
+
+        domain_tasks = []
+        domain_prefixes = ("debate_", "sse_", "run_", "publish_")
+        for t in tasks:
+            cname = get_coro_name(t)
+            if any(cname.startswith(p) for p in domain_prefixes):
+                domain_tasks.append(t)
+
         assert len(domain_tasks) == 0, f"Found leaked domain background tasks: {domain_tasks}"

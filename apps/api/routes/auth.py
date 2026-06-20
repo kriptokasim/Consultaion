@@ -399,9 +399,14 @@ async def google_callback_post(
     state_meta = state_store.consume_state(state)
     
     if not state_meta:
+        internal_secret = request.headers.get("x-internal-secret")
+        if not internal_secret or internal_secret != settings.INTERNAL_SECRET:
+            logger.warning(f"Google OAuth state not found and internal secret invalid/missing. IP={ip}")
+            raise ValidationError(message="Invalid OAuth state or missing internal trust", code="auth.invalid_state")
+
         logger.info(
             f"Google OAuth state {state[:8]}... not found in backend state_store. "
-            f"Proceeding as it was validated by the frontend server. IP={ip}"
+            f"Proceeding as it was validated by the frontend server (trusted). IP={ip}"
         )
     
     client_id, client_secret, redirect_url = _google_config()

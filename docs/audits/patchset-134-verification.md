@@ -1,7 +1,7 @@
 # Patchset 134 — Verification
 
-**Final SHA:** 781f2862fa588a3e2afbd6ec1676b7a64175b9dd
-**Date:** 2026-06-19
+**Final SHA:** 45b19e85074c9765a9236d816e2073bddfa79e5f
+**Date:** 2026-06-20
 **Status:** Corrective fixes applied
 
 ---
@@ -112,7 +112,7 @@ npm run build
 - [x] Test isolation guards
 - [x] Error contract standardized
 - [x] Correlation context available
-- [x] SafeMarkdown component used universally
+- [x] SafeMarkdown component used for streaming responses (dangerouslySetInnerHTML remains for static content)
 - [x] ConnectionIndicator accessible
 - [x] Accessibility tests tracked
 - [x] SSE true concurrency load tests pass

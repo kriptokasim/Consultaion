@@ -80,19 +80,7 @@ async def route_llm_call(
     # Export keys to environment for LiteLLM
     export_api_keys()
     
-    # Resolve user BYOK credential if available
-    user_api_key = None
-    user_provider = None
-    if db_session and request.user_id:
-        from services.provider_credentials import get_model_api_key
 
-        from model_gateway.model_map import MODEL_MAP
-        provider_name = MODEL_MAP.get(request.model_id, {}).get("provider", "unknown")
-        resolved = get_model_api_key(db_session, request.user_id, provider_name)
-        if resolved and resolved.source == "user":
-            user_api_key = resolved.key
-            user_provider = resolved.provider
-            logger.info("Using user BYOK key for provider=%s user=%s", user_provider, request.user_id)
     
     # 3. Determine routing strategy
     adapter_cls, routing_policy = determine_routing_strategy(request)
@@ -212,6 +200,27 @@ async def route_llm_call(
         elif "-" in model_to_call:
             provider = model_to_call.split("-")[0]
 
+        # Resolve user BYOK credential specifically for this provider
+        current_api_key = None
+        if db_session and request.user_id:
+            try:
+                from sqlalchemy.ext.asyncio import AsyncSession
+                if isinstance(db_session, AsyncSession):
+                    from services.provider_credentials import get_model_api_key_async
+                    resolved = await get_model_api_key_async(db_session, request.user_id, provider)
+                else:
+                    from services.provider_credentials import get_model_api_key
+                    import asyncio
+                    def _get_key():
+                        return get_model_api_key(db_session, request.user_id, provider)
+                    resolved = await asyncio.get_running_loop().run_in_executor(None, _get_key)
+                
+                if resolved and resolved.source == "user":
+                    current_api_key = resolved.key
+                    logger.info("Using user BYOK key for provider=%s model=%s user=%s", provider, model_to_call, request.user_id)
+            except Exception as e:
+                logger.warning(f"Failed to lookup BYOK key for provider {provider}: {e}")
+
         try:
             adapter = DirectProviderAdapter()
             result = await adapter.call_llm(
@@ -226,7 +235,7 @@ async def route_llm_call(
                 response_format=request.response_format,
                 tools=request.tools,
                 tool_choice=request.tool_choice,
-                api_key=user_api_key,
+                api_key=current_api_key,
             )
             if result.success:
                 successful_result = result
