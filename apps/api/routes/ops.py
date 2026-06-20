@@ -1,21 +1,28 @@
 from __future__ import annotations
 
-import os
-import time
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import os
+import time
+from typing import Any
 
+from auth import get_current_admin
 from checks import check_db_readiness, check_sse_readiness
 from config import settings
-from fastapi import APIRouter, Response, status, Depends, HTTPException, Request
-from sqlmodel import Session, select, func
-
 from database import get_session
-from auth import get_current_admin
-from models import User, Debate, Message, Score, DebateCheckpoint, DebateStageCheckpoint, LLMUsageLog
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from litellm import acompletion
+from models import (
+    Debate,
+    DebateCheckpoint,
+    DebateStageCheckpoint,
+    LLMUsageLog,
+    Message,
+    Score,
+    User,
+)
 from ratelimit import increment_ip_bucket, record_429
+from sqlmodel import Session, func, select
 
 router = APIRouter(tags=["ops"])
 
@@ -220,7 +227,7 @@ def get_active_workers() -> list[dict[str, Any]]:
 
 
 def get_provider_circuit_status(provider: str) -> dict[str, Any]:
-    from model_gateway.provider_health import get_redis, get_status_key, get_failures_key
+    from model_gateway.provider_health import get_failures_key, get_redis, get_status_key
     redis_client = get_redis()
     if not redis_client:
         return {
@@ -353,7 +360,7 @@ async def get_debate_diagnostics(
     # 3. Query provider failures from LLMUsageLog
     failures_query = select(LLMUsageLog).where(
         LLMUsageLog.debate_id == debate_id,
-        LLMUsageLog.success == False
+        LLMUsageLog.success is False
     ).order_by(LLMUsageLog.created_at.desc())
     failed_logs = session.exec(failures_query).all()
 
@@ -446,7 +453,7 @@ async def get_providers_readiness(
         # 3. Last failure from DB
         last_fail_query = select(LLMUsageLog).where(
             LLMUsageLog.provider == provider,
-            LLMUsageLog.success == False
+            LLMUsageLog.success is False
         ).order_by(LLMUsageLog.created_at.desc())
         last_fail = session.exec(last_fail_query).first()
         

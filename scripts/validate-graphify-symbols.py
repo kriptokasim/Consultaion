@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-import os
-import sys
 import argparse
-import ast
-import re
 import json
+import sys
 from pathlib import Path
 
 # Set up paths
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.append(str(REPO_ROOT / 'scripts'))
-sys.path.append(str(Path.home() / '.gemini/antigravity/brain/96999e47-f363-45b2-8a57-a2b076d61bd6/scratch'))
+sys.path.append(str(REPO_ROOT / "scripts"))
+sys.path.append(str(Path.home() / ".gemini/antigravity/brain/96999e47-f363-45b2-8a57-a2b076d61bd6/scratch"))
 
 # Reviewed Exceptions
 # If a known collision class is approved, it must be added here.

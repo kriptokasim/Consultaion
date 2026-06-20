@@ -1,6 +1,5 @@
 """Tests for read operation rate limiting."""
-import pytest
-from middleware.weighted_rate_limit import _classify_endpoint, READ_ACTIONS
+from middleware.weighted_rate_limit import READ_ACTIONS, _classify_endpoint
 
 
 def test_health_check_classified():

@@ -1,19 +1,18 @@
 import asyncio
 import logging
 
+from audit import record_audit
 from auth import get_current_user
 from billing.service import check_export_quota, increment_export_usage
 from deps import get_session
 from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
-from models import Debate, User
+from models import User
 from sqlmodel import Session
 
 from routes.common import (
-    require_debate_access,
     track_metric,
 )
-from audit import record_audit
 
 logger = logging.getLogger(__name__)
 

@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import List
 
 from agents import UsageAccumulator, call_llm_for_role
-from arena.prompts import ARENA_MODEL_SYSTEM_PROMPT, ARENA_SYNTHESIS_PROMPT, get_compiled_model_prompt
 from database_async import async_session_scope
 from models import Debate, Message
 from parliament.model_registry import get_arena_models
 from sse_backend import get_sse_backend
-from streaming_types import StreamEventType, build_envelope, ModelResponseDelta
+
+from arena.prompts import (
+    get_compiled_model_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +123,8 @@ async def run_arena(
     2. Stream each response as it arrives
     3. Synthesize a final verdict from all responses
     """
-    from sqlmodel import select
     from config import settings
+    from sqlmodel import select
 
     # Load debate data
     async with async_session_scope() as session:
@@ -328,7 +331,7 @@ async def run_arena(
                 if hasattr(e, "error_code"):
                     err_code = e.error_code
 
-                from llm_errors import classify_provider_exception, ProviderFailureCode
+                from llm_errors import ProviderFailureCode, classify_provider_exception
                 classified_code = classify_provider_exception(e)
                 if classified_code:
                     err_code = classified_code.value
@@ -372,7 +375,7 @@ async def run_arena(
                 model_info = arena_models[i]
                 
                 err_code = "unknown"
-                from llm_errors import classify_provider_exception, ProviderFailureCode
+                from llm_errors import ProviderFailureCode, classify_provider_exception
                 classified_code = classify_provider_exception(result)
                 if classified_code:
                     err_code = classified_code.value
@@ -598,7 +601,6 @@ async def run_arena(
     )
 
 
-import re
 
 def sanitize_synthesis_error(error_msg: str) -> str:
     """Sanitize synthesis errors to avoid exposing sensitive details, stack traces, API keys, or provider internals."""
@@ -639,7 +641,7 @@ async def _synthesize_verdict(
     locale: str | None = None,
 ) -> tuple[str, dict | None, dict]:
     """Produce the final synthesized verdict and structured decision report from all model responses."""
-    from reporting.synthesizer import generate_decision_report, StructuredSynthesisError
+    from reporting.synthesizer import StructuredSynthesisError, generate_decision_report
 
     responses_list = [
         {

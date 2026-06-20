@@ -7,9 +7,8 @@ Proves that:
 4. Heartbeat events do not trigger debate hydration
 """
 import asyncio
-import time
-import pytest
 
+import pytest
 from sse_backend import MemoryChannelBackend
 
 

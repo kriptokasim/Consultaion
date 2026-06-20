@@ -1,7 +1,6 @@
 """Tests for claim quality filter — validates claim cleaning and filtering logic."""
 
-import pytest
-from reporting.claim_quality import clean_claim_text, is_valid_semantic_claim, filter_claims
+from reporting.claim_quality import clean_claim_text, filter_claims, is_valid_semantic_claim
 
 
 class TestCleanClaimText:

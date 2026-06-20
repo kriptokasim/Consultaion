@@ -6,9 +6,9 @@ Protected by authentication; users can only access their own data.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import json
 from datetime import datetime, timezone
 
 from auth import get_current_user
@@ -20,8 +20,8 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from .service import (
-    create_deletion_request,
     cancel_deletion_request,
+    create_deletion_request,
     export_user_data,
     process_scheduled_deletions,
 )
@@ -48,7 +48,7 @@ def request_data_export(
     try:
         export = export_user_data(session, current_user.id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     # In production, this would queue an async job and return a download URL.
     # For now, write to exports directory and return the file path.

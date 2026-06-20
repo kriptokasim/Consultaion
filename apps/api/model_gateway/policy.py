@@ -1,8 +1,14 @@
-from typing import Tuple, Type
 import os
 import sys
+from typing import Tuple, Type
+
+from model_gateway.adapters import (
+    BaseAdapter,
+    DirectProviderAdapter,
+    MockAdapter,
+)
 from model_gateway.types import GatewayRequest
-from model_gateway.adapters import BaseAdapter, DirectProviderAdapter, OpenRouterAdapter, MockAdapter
+
 
 def determine_routing_strategy(
     request: GatewayRequest,

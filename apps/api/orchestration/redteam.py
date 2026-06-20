@@ -1,8 +1,9 @@
 import asyncio
 import json
 import logging
-from typing import List, Dict, Any
-from agents import _call_llm, USE_MOCK
+from typing import Any, Dict, List
+
+from agents import USE_MOCK, _call_llm
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ async def run_red_team_analysis(proposal_text: str, lenses: List[str]) -> List[D
                 "remediation": "Review proposal manual controls for standard security compliance."
             }]
 
-    tasks = [_evaluate_lens(l) for l in lenses]
+    tasks = [_evaluate_lens(lens) for lens in lenses]
     results = await asyncio.gather(*tasks)
     
     # Flatten the list of lists

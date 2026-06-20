@@ -4,9 +4,9 @@ Bounded local/CI profile for validating SSE infrastructure under load.
 Tests subscriber scaling, reconnect behavior, backpressure, and concurrent delivery.
 """
 
-import sys
-import time
 import asyncio
+import sys
+
 import pytest
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent.parent))

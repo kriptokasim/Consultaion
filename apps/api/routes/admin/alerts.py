@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from auth import get_current_admin
-from deps import get_session
 from fastapi import APIRouter, Depends
 from models import User
-from sqlmodel import Session
 
 router = APIRouter()
 

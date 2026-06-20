@@ -4,14 +4,14 @@ Patchset 133 §6.4: Prove that the webhook handler does not commit internally,
 and that the webhook route's session_scope owns the transaction.
 """
 
-import pytest
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch
-from sqlmodel import Session, select
-from models import User
-from billing.models import BillingPlan, BillingSubscription, BillingWebhookEvent
+
+from billing.models import BillingPlan, BillingSubscription
 from billing.providers.stripe_provider import StripeBillingProvider
+from models import User
+from sqlmodel import Session, select
 
 
 def _ensure_plans(session: Session):

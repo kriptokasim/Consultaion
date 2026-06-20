@@ -1,8 +1,8 @@
-import secrets
 import json
 import logging
-from typing import Any, Optional
+import secrets
 import time
+from typing import Any, Optional
 
 from config import settings
 

@@ -1,9 +1,10 @@
 import asyncio
 import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
-from agents import _call_llm, USE_MOCK
+
+from agents import USE_MOCK, _call_llm
 
 logger = logging.getLogger(__name__)
 

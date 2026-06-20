@@ -4,9 +4,9 @@ Validates that test cleanup mechanisms work correctly.
 """
 
 import pytest
+from redis import asyncio as aioredis
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from redis import asyncio as aioredis
 
 
 class TestTableCleanup:

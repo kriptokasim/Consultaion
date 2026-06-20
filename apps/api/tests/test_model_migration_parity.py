@@ -1,12 +1,7 @@
 """Test that SQLModel model metadata matches Alembic migration state."""
-import pytest
-from sqlmodel import SQLModel, Session, inspect
-from sqlalchemy import text
-
+from sqlmodel import Session, inspect
 
 # Import all models to register them
-import models
-import billing.models
 
 
 CRITICAL_TABLES = [
@@ -125,9 +120,10 @@ def test_billing_usage_unique_constraint(db_session: Session):
 
 def test_alembic_chain_linearity_and_uniqueness():
     """Assert there is only a single head and all revision IDs are unique."""
-    from alembic.script import ScriptDirectory
-    from alembic.config import Config
     import os
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     api_dir = os.path.abspath(os.path.join(current_dir, ".."))

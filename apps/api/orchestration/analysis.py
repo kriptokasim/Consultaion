@@ -1,11 +1,12 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+from agents import call_llm_for_role
 from database_async import async_session_scope
 from models import Debate, DebateTurn
 from sqlmodel import select
-from agents import call_llm_for_role
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +70,13 @@ async def extract_debate_turn_analysis(debate_id: str, round_index: int, message
                 "   - explanation: a brief 1-sentence explanation of why these coordinates were assigned.\n\n"
                 "Output strictly as a single JSON object matching this structure:\n"
                 "{\n"
-                "  \"claims_nodes\": [\n"
-                "     {\"id\": \"c1\", \"type\": \"pro\", \"claim\": \"Text here\", \"rebuts_target\": null}\n"
+                '  "claims_nodes": [\n'
+                '     {"id": "c1", "type": "pro", "claim": "Text here", "rebuts_target": null}\n'
                 "  ],\n"
-                "  \"position_drift\": {\n"
-                "     \"stubbornness\": 0.5,\n"
-                "     \"cooperativeness\": 0.7,\n"
-                "     \"explanation\": \"Stated economic tradeoffs while acknowledging peer points.\"\n"
+                '  "position_drift": {\n'
+                '     "stubbornness": 0.5,\n'
+                '     "cooperativeness": 0.7,\n'
+                '     "explanation": "Stated economic tradeoffs while acknowledging peer points."\n'
                 "  }\n"
                 "}"
             )

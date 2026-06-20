@@ -1,9 +1,11 @@
 from uuid import uuid4
-from models import User, Debate, ChallengeSession, ChallengeRound
+
+from models import ChallengeRound, ChallengeSession, Debate, User
 from sqlmodel import Session, select
 
+
 def test_start_challenge_session_endpoint(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     # Create completed debate
     debate = Debate(
@@ -17,7 +19,7 @@ def test_start_challenge_session_endpoint(authenticated_client, db_session: Sess
     db_session.commit()
 
     payload = {"debate_id": debate.id}
-    response = authenticated_client.post('/challenge', json=payload)
+    response = authenticated_client.post("/challenge", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert "id" in data
@@ -30,7 +32,7 @@ def test_start_challenge_session_endpoint(authenticated_client, db_session: Sess
 
 
 def test_get_challenge_session_endpoint(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     debate = Debate(
         id=str(uuid4()),
@@ -62,7 +64,7 @@ def test_get_challenge_session_endpoint(authenticated_client, db_session: Sessio
     db_session.add(round_1)
     db_session.commit()
 
-    response = authenticated_client.get(f'/challenge/{sess.id}')
+    response = authenticated_client.get(f"/challenge/{sess.id}")
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == sess.id
@@ -74,7 +76,7 @@ def test_get_challenge_session_endpoint(authenticated_client, db_session: Sessio
 
 
 def test_submit_challenge_round_endpoint(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     debate = Debate(
         id=str(uuid4()),
@@ -96,7 +98,7 @@ def test_submit_challenge_round_endpoint(authenticated_client, db_session: Sessi
 
     # Submit pushback to trigger evaluation
     payload = {"pushback_text": "This synthesis contains a major error in its scaling logic."}
-    response = authenticated_client.post(f'/challenge/{sess.id}/round', json=payload)
+    response = authenticated_client.post(f"/challenge/{sess.id}/round", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert "round_number" in data

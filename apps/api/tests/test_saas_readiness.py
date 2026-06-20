@@ -1,10 +1,10 @@
-import pytest
-from unittest.mock import patch, AsyncMock
-from httpx import ASGITransport, AsyncClient
-from sqlmodel import Session, select
+from unittest.mock import AsyncMock, patch
 
+import pytest
+from httpx import ASGITransport, AsyncClient
 from main import app
-from models import User, UserProviderKey, UserInteraction, utcnow
+from models import User, UserInteraction, utcnow
+from sqlmodel import Session, select
 
 pytestmark = pytest.mark.anyio
 

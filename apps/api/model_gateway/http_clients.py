@@ -9,9 +9,8 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 import asyncio
-from typing import AsyncIterator
+import logging
 
 import httpx
 

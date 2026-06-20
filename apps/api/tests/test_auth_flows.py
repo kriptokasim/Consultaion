@@ -39,11 +39,11 @@ os.environ.setdefault("FASTAPI_TEST_MODE", "1")
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+import database  # noqa: E402
 from auth import COOKIE_NAME, create_access_token, hash_password  # noqa: E402
-from database import engine, init_db  # noqa: E402
+from database import init_db  # noqa: E402
 from main import app  # noqa: E402
 from models import User  # noqa: E402
-from routes.auth import OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE  # noqa: E402
 
 init_db()
 
@@ -95,7 +95,7 @@ async def test_invalid_and_expired_tokens_rejected(client: AsyncClient):
     res = await client.get("/me")
     assert res.status_code == 401
 
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         user = User(id=str(uuid.uuid4()), email=f"expired-{uuid.uuid4().hex[:6]}@example.com", password_hash=hash_password("TestPass123"))
         session.add(user)
         session.commit()
@@ -105,7 +105,7 @@ async def test_invalid_and_expired_tokens_rejected(client: AsyncClient):
     res = await client.get("/me")
     assert res.status_code == 401
 
-    with Session(engine) as session:
+    with Session(database.engine) as session:
         inactive = User(
             id=str(uuid.uuid4()),
             email=f"inactive-{uuid.uuid4().hex[:6]}@example.com",
@@ -168,3 +168,24 @@ async def test_get_me_requires_cookie(client: AsyncClient):
     client.cookies.clear()
     res = await client.get("/me")
     assert res.status_code == 401
+
+
+async def test_google_callback_post_creates_user_and_returns_token(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    async def fake_exchange(code: str, client_id: str, client_secret: str, redirect_url: str):
+        return {"access_token": "token", "id_token": "ignored"}
+
+    async def fake_profile(access_token: str):
+        return {"email": f"google-{uuid.uuid4().hex[:6]}@example.com", "name": "G User"}
+
+    import routes.auth as auth_routes
+
+    monkeypatch.setattr(auth_routes, "_exchange_code_for_token", fake_exchange)
+    monkeypatch.setattr(auth_routes, "_fetch_google_profile", fake_profile)
+
+    payload = {"code": "abc", "state": "frontend-state-nonce"}
+    res = await client.post("/auth/google/callback", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+

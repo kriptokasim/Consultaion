@@ -143,8 +143,8 @@ class DebateStateManager:
                     tokens = max(int(tokens_total), 0)
                     if tokens > 0:
                         def _record():
-                            from services.usage_ledger import record_token_usage as ledger_record
                             from database import session_scope
+                            from services.usage_ledger import record_token_usage as ledger_record
                             with session_scope() as s:
                                 ledger_record(
                                     s,

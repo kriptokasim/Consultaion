@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import traceback
 from datetime import datetime
@@ -81,9 +80,9 @@ def main() -> None:
     from sqlalchemy import create_engine
     engine = create_engine(database_url, pool_pre_ping=True)
 
-    from sqlmodel import Session, select
     from models import Debate
     from serializers import serialize_debate_private
+    from sqlmodel import Session, select
 
     checks: list[SmokeCheck] = []
 

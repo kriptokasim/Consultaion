@@ -42,10 +42,9 @@ def main() -> None:
     from services.migration_safety import (
         get_current_revisions,
         get_migration_heads,
-        verify_required_tables,
         verify_critical_columns,
+        verify_required_tables,
     )
-
     from sqlmodel import Session
 
     errors: list[str] = []

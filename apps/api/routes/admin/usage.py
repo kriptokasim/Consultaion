@@ -40,9 +40,7 @@ def admin_usage_overview(
     users = session.exec(users_query.order_by(User.created_at.desc())).all()
 
     # Prefetch active plans, subscriptions, and usages
-    from billing.models import BillingPlan, BillingSubscription, BillingUsage
     from security.owner import is_owner
-    from collections import defaultdict
 
     plans = session.exec(select(BillingPlan)).all()
     plan_map = {p.id: p for p in plans}

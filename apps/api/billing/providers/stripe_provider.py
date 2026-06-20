@@ -10,7 +10,6 @@ except ImportError:  # pragma: no cover
     stripe = None
 
 from config import settings
-from integrations.events import emit_event
 
 from billing.models import BillingPlan
 
@@ -58,8 +57,10 @@ class StripeBillingProvider(BillingProvider):
 
     def handle_webhook(self, payload: Dict, headers: Dict, db_session = None) -> None:
         from datetime import datetime, timezone
-        from sqlmodel import select
+
         from models import User
+        from sqlmodel import select
+
         from billing.models import BillingPlan, BillingSubscription
 
         event_type = payload.get("type")

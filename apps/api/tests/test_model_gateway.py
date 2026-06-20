@@ -1,11 +1,17 @@
-import pytest
 from unittest.mock import AsyncMock, patch
-from model_gateway.types import GatewayRequest, GatewayModelRestrictedError, GatewayQuotaExceededError
-from model_gateway.pools import get_model_pool, validate_user_access_to_model
+
+import pytest
+from model_gateway import route_llm_call
+from model_gateway.adapters import DirectProviderAdapter, OpenRouterAdapter
 from model_gateway.costs import check_credit_and_cost_safety
 from model_gateway.policy import determine_routing_strategy
-from model_gateway import route_llm_call
-from model_gateway.adapters import MockAdapter, DirectProviderAdapter, OpenRouterAdapter
+from model_gateway.pools import get_model_pool, validate_user_access_to_model
+from model_gateway.types import (
+    GatewayModelRestrictedError,
+    GatewayQuotaExceededError,
+    GatewayRequest,
+)
+
 
 def test_model_pool_lookup():
     assert get_model_pool("mimo-v2-free") == "free_hosted_pool"

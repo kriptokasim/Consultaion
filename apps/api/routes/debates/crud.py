@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import Optional
 
 import sqlalchemy as sa

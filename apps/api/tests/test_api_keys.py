@@ -213,8 +213,9 @@ def test_create_api_key_audit_log_failure_does_not_rollback(client, db_session, 
 
 def test_api_key_expiration(client, db_session):
     """Test creating an expired API key and using it for auth (should fail)."""
+    from datetime import datetime, timedelta, timezone
+
     from auth import hash_password
-    from datetime import datetime, timezone, timedelta
     
     # Create a user
     user = User(
@@ -323,8 +324,8 @@ def test_api_key_expiration(client, db_session):
 @pytest.mark.anyio
 async def test_api_key_rotation_reminder(db_session):
     """Test that API keys expiring in <= 7 days trigger reminders."""
-    from orchestrator_cleanup import check_api_key_rotations
     from auth import hash_password
+    from orchestrator_cleanup import check_api_key_rotations
     
     # Create a user
     user = User(

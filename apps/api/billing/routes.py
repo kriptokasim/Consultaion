@@ -15,19 +15,24 @@ from parliament.model_registry import get_model_info
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from .models import BillingPlan, BillingUsage
+from .providers import get_billing_provider
+from .reconciliation import (
+    get_reconciliation_discrepancies,
+    get_reconciliation_runs,
+    reconcile_usage,
+)
+from .service import (
+    _current_period,
+    get_active_plan,
+    get_or_create_usage,
+)
+
 
 def csrf_exempt(func):
     """Mark a route as exempt from CSRF protection."""
     func.csrf_exempt = True
     return func
-
-from .models import BillingPlan, BillingUsage
-from .providers import get_billing_provider
-from .reconciliation import (
-    reconcile_usage,
-    get_reconciliation_runs,
-    get_reconciliation_discrepancies,
-)
 
 
 def _emit_post_commit_events(payload: dict) -> None:
@@ -56,11 +61,6 @@ def _emit_post_commit_events(payload: dict) -> None:
                 "subscription_cancelled",
                 {"subscription_id": subscription_id, "provider": "stripe"},
             )
-from .service import (
-    _current_period,
-    get_active_plan,
-    get_or_create_usage,
-)
 
 try:  # pragma: no cover - optional dependency guard
     import stripe as stripe_sdk  # type: ignore
@@ -313,8 +313,8 @@ def admin_get_reconciliation_discrepancies(
     import uuid as _uuid
     try:
         run_uuid = _uuid.UUID(run_id)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid run_id")
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid run_id") from err
     discs = get_reconciliation_discrepancies(session, run_uuid)
     return {"items": discs}
 

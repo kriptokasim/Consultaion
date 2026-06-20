@@ -14,7 +14,7 @@ import pytest
 from reporting.claim_contradiction import classify_contradiction
 from reporting.model_evaluator import evaluate_models_blind, redact_model_names
 from reporting.synthesis_critic import verify_synthesis_report
-from reporting.synthesizer import run_semantic_claims_analysis, generate_decision_report
+from reporting.synthesizer import generate_decision_report, run_semantic_claims_analysis
 
 
 def test_redact_model_names():
@@ -103,7 +103,7 @@ async def test_classify_contradiction():
 async def test_verify_synthesis_report():
     prompt = "Kafka vs Redis Streams"
     responses = [{"persona": "M1", "content": "Kafka is persistent"}]
-    draft_report = "{\"title\": \"Draft\"}"
+    draft_report = '{"title": "Draft"}'
 
     mock_critic_response = {
         "completeness_score": 0.95,
@@ -343,8 +343,9 @@ async def test_critic_failure_metadata():
 @pytest.mark.anyio
 async def test_provider_structured_output_adapter_path():
     # Verify that passing response_format works without crashing and passes variables down
-    from agents import call_llm_for_role
     import traceback
+
+    from agents import call_llm_for_role
     
     messages = [{"role": "user", "content": "Hello"}]
     response_format = {"type": "json_object"}
@@ -515,7 +516,7 @@ def test_sanitize_synthesis_error():
     assert "validation or parsing error" in sanitize_synthesis_error(err_internal)
     
     # 3. Stack trace/Traceback
-    err_traceback = "Traceback (most recent call last):\n  File \"synthesizer.py\", line 123"
+    err_traceback = 'Traceback (most recent call last):\n  File "synthesizer.py", line 123'
     assert "validation or parsing error" in sanitize_synthesis_error(err_traceback)
     
     # 4. Safe user error

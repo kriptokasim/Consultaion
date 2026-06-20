@@ -19,19 +19,16 @@ import logging
 import time
 from typing import Callable, Optional
 
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
-
 from config import settings
 from core.operation_classes import (
-    OperationClass,
-    OPERATION_CLASSES,
-    OPERATION_WEIGHTS,
     get_operation_class,
     get_operation_weight,
 )
+from fastapi import Request, Response
 from ratelimit import get_rate_limiter_backend
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
 from middleware.rate_limit_identity import resolve_identity
 
 logger = logging.getLogger(__name__)

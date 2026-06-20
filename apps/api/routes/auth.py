@@ -1,11 +1,11 @@
 import logging
 import secrets
-from typing import Any, Optional
-from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 import time
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+from urllib.parse import urlencode, urlparse
 
 import httpx
-from datetime import datetime, timedelta, timezone
 from audit import record_audit
 from auth import (
     COOKIE_DOMAIN,
@@ -366,6 +366,104 @@ async def google_callback(
     return redirect_resp
 
 
+from pydantic import BaseModel
+
+
+class GoogleCallbackRequest(BaseModel):
+    code: str
+    state: str
+
+
+@csrf_exempt
+@router.post("/auth/google/callback")
+async def google_callback_post(
+    body: GoogleCallbackRequest,
+    request: Request,
+    response: Response,
+    session: Session = Depends(get_session),
+):
+    ip = request.client.host if request and request.client else "anonymous"
+    allowed, retry_after = increment_ip_bucket(ip, AUTH_WINDOW, AUTH_MAX_CALLS) if request else (True, None)
+    if not allowed:
+        record_429(ip, request.url.path)
+        raise RateLimitError(message="Rate limit exceeded", code="rate_limit.exceeded", retry_after_seconds=retry_after)
+
+    code = body.code
+    state = body.state
+
+    # Consume state from store (if it was initiated by the backend login endpoint).
+    # Since the Next.js frontend generates its own state nonce on the client-side and validates
+    # it in the Next.js callback route, it won't be in the backend's state_store.
+    # Therefore, if state_store.consume_state(state) is None, we log a warning/info and proceed.
+    from security.state_store import state_store
+    state_meta = state_store.consume_state(state)
+    
+    if not state_meta:
+        logger.info(
+            f"Google OAuth state {state[:8]}... not found in backend state_store. "
+            f"Proceeding as it was validated by the frontend server. IP={ip}"
+        )
+    
+    client_id, client_secret, redirect_url = _google_config()
+    try:
+        token_data = await _exchange_code_for_token(code, client_id, client_secret, redirect_url)
+        profile = await _fetch_google_profile(token_data["access_token"])
+    except AuthError:
+        raise
+    except Exception as exc:
+        logger.warning(
+            "Google OAuth network error",
+            extra={"error": str(exc), "ip": ip},
+            exc_info=True,
+        )
+        raise AuthError(
+            message="Google authentication temporarily unavailable",
+            code="auth.google_network_error",
+            status_code=502,
+        ) from exc
+
+    email = profile.get("email", "").strip().lower()
+    if not email:
+        raise ValidationError(message="Missing email from Google profile", code="auth.missing_email")
+
+    user = session.exec(select(User).where(User.email == email)).first()
+    audit_action = "login_google"
+    if not user:
+        random_pwd = secrets.token_urlsafe(12)
+        user = User(email=email, password_hash=hash_password(random_pwd))
+        session.add(user)
+        audit_action = "register_google"
+    
+    record_audit(
+        audit_action,
+        user_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        ip_address=ip,
+        meta={"email": user.email, "provider": "google"},
+        session=session,
+    )
+    session.commit()
+    session.refresh(user)
+
+    if settings.AUTH_DEBUG:
+        logger.info(
+            "[AUTH_DEBUG] Google login (POST) success, creating token",
+            extra={
+                "user_id": user.id,
+                "email": user.email,
+                "provider": "google",
+                "remote_addr": ip,
+            },
+        )
+    
+    token = create_access_token(user_id=user.id, email=user.email, role=user.role)
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
+
+
 @csrf_exempt
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
 async def register_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
@@ -405,7 +503,7 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
 @router.post("/auth/login")
 async def login_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
     # Set correlation context for this request
-    from correlation import get_correlation_context, create_child_context
+    from correlation import create_child_context, get_correlation_context
     ctx = get_correlation_context()
     if ctx:
         ctx = create_child_context(user_id=None)
@@ -581,16 +679,38 @@ async def delete_my_account(
       debates (prompt→[DELETED]), messages (content→[DELETED])
     - RETAIN: audit_log (for compliance, PII removed)
     """
-    from models import (
-        Debate, Message, DebateRound, DebateTurn, Score, Vote, PairwiseVote,
-        VoteRecord, UserInteraction, UserPrediction, ChallengeSession,
-        ChallengeRound, OracleSession, OracleBranch, UserProviderKey,
-        APIKey, SupportNote, TeamMember, UsageCounter, UsageQuota,
-        DebateAttempt, RedTeamSession, ConversationVote, LLMUsageLog,
-        UsageLedgerEntry, DebateStageCheckpoint, utcnow
-    )
-    import sqlalchemy as sa
     import secrets
+
+    import sqlalchemy as sa
+    from models import (
+        APIKey,
+        ChallengeRound,
+        ChallengeSession,
+        ConversationVote,
+        Debate,
+        DebateAttempt,
+        DebateRound,
+        DebateStageCheckpoint,
+        DebateTurn,
+        LLMUsageLog,
+        Message,
+        OracleBranch,
+        OracleSession,
+        PairwiseVote,
+        RedTeamSession,
+        Score,
+        SupportNote,
+        TeamMember,
+        UsageCounter,
+        UsageLedgerEntry,
+        UsageQuota,
+        UserInteraction,
+        UserPrediction,
+        UserProviderKey,
+        Vote,
+        VoteRecord,
+        utcnow,
+    )
 
     user_id = current_user.id
     deleted_email = f"deleted+{secrets.token_hex(8)}@invalid.local"

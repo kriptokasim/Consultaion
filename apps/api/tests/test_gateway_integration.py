@@ -1,14 +1,21 @@
+from unittest.mock import patch
+
 import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import Session, select
-from unittest.mock import patch, AsyncMock
-from models import User, Debate
-from llm_errors import TransientLLMError
-from model_gateway.agent_bridge import call_model_via_gateway
-from model_gateway.types import GatewayModelCallResult, GatewayQuotaExceededError, GatewayModelRestrictedError
 from agents import UsageCall
 from auth import COOKIE_NAME
+from fastapi.testclient import TestClient
+from llm_errors import TransientLLMError
+from model_gateway.agent_bridge import call_model_via_gateway
+from model_gateway.types import (
+    GatewayModelCallResult,
+    GatewayModelRestrictedError,
+    GatewayQuotaExceededError,
+)
+from models import Debate, User
+from sqlmodel import Session, select
+
 from tests.utils import settings_context
+
 
 @pytest.mark.anyio
 async def test_gateway_result_mapping_success():
@@ -227,11 +234,11 @@ def test_public_dto_safeguard(client: TestClient, authenticated_client: TestClie
 @pytest.mark.anyio
 async def test_used_equals_limit_gateway_block(db_session: Session):
     """Verify that when user's hosted_credits_used equals hosted_credits_limit, has_credits is False and pro pool is restricted."""
-    from model_gateway import route_llm_call
-    from model_gateway.types import GatewayRequest, GatewayModelRestrictedError
-    
     # 1. Setup a unique free user with used == limit (e.g. 5 == 5)
     import uuid
+
+    from model_gateway import route_llm_call
+    from model_gateway.types import GatewayModelRestrictedError, GatewayRequest
     email = f"free_limit_{uuid.uuid4().hex[:8]}@example.com"
     user = User(email=email, password_hash="hash", plan="free", hosted_credits_limit=5, hosted_credits_used=5)
     db_session.add(user)

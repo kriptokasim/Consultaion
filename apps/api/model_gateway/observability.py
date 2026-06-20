@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+
 from model_gateway.types import GatewayDecision, GatewayModelCallResult
 
 logger = logging.getLogger("model_gateway.observability")

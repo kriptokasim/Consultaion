@@ -12,6 +12,7 @@ os.environ["JWT_SECRET"] = "change_me_in_prod"
 
 from main import app
 
+
 def export_spec():
     openapi_schema = app.openapi()
     target_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "docs"))

@@ -1,10 +1,11 @@
 import logging
 from datetime import datetime, timezone
-from typing import Optional, List, Set
-from sqlmodel import Session, select
-from models import DebateContinuation
+from typing import List, Optional
+
 from database_async import async_session_scope
 from exceptions import ContinuationTransitionError
+from models import DebateContinuation
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 

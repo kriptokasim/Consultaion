@@ -8,7 +8,6 @@ Create Date: 2026-06-08
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 revision: str = "p116_add_user_pred_unique"
 down_revision: Union[str, None] = "p115_add_apikey_expire_fields"
@@ -35,28 +34,39 @@ def upgrade() -> None:
     """)
     op.create_index("ix_user_prediction_debate_id", "user_prediction", ["debate_id"], unique=False, if_not_exists=True)
     op.create_index("ix_user_prediction_user_id", "user_prediction", ["user_id"], unique=False, if_not_exists=True)
-    # Deduplicate existing rows — keep the newest prediction per (debate_id, user_id)
-    op.execute("""
-        DELETE FROM user_prediction
-        WHERE id NOT IN (
-            SELECT DISTINCT ON (debate_id, user_id) id
-            FROM user_prediction
-            ORDER BY debate_id, user_id, created_at DESC
-        )
-    """)
-    # Then add the unique constraint (if not already present)
-    op.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_prediction_debate_user'
-            ) THEN
-                ALTER TABLE user_prediction
-                ADD CONSTRAINT uq_user_prediction_debate_user UNIQUE (debate_id, user_id);
-            END IF;
-        END $$;
-    """)
+    
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        # Deduplicate existing rows — keep the newest prediction per (debate_id, user_id)
+        op.execute("""
+            DELETE FROM user_prediction
+            WHERE id NOT IN (
+                SELECT DISTINCT ON (debate_id, user_id) id
+                FROM user_prediction
+                ORDER BY debate_id, user_id, created_at DESC
+            )
+        """)
+        # Then add the unique constraint (if not already present)
+        op.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_prediction_debate_user'
+                ) THEN
+                    ALTER TABLE user_prediction
+                    ADD CONSTRAINT uq_user_prediction_debate_user UNIQUE (debate_id, user_id);
+                END IF;
+            END $$;
+        """)
+    else:
+        # SQLite: use CREATE UNIQUE INDEX to enforce uniqueness
+        op.create_index("uq_user_prediction_debate_user", "user_prediction", ["debate_id", "user_id"], unique=True, if_not_exists=True)
 
 
 def downgrade() -> None:
-    op.execute("ALTER TABLE user_prediction DROP CONSTRAINT IF EXISTS uq_user_prediction_debate_user")
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute("ALTER TABLE user_prediction DROP CONSTRAINT IF EXISTS uq_user_prediction_debate_user")
+    else:
+        op.drop_index("uq_user_prediction_debate_user", table_name="user_prediction", if_exists=True)
+

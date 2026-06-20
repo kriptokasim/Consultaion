@@ -11,7 +11,7 @@ from typing import List, Tuple
 
 from config import settings
 from database import session_scope
-from models import Debate, DebateCheckpoint, DebateError, Vote, APIKey, User
+from models import APIKey, Debate, DebateCheckpoint, DebateError, User, Vote
 from sqlmodel import select
 from sse_backend import get_sse_backend
 
@@ -32,8 +32,8 @@ async def check_api_key_rotations() -> int:
     with session_scope() as session:
         # Get all unexpired, unreminded, unrevoked keys
         stmt = select(APIKey).where(
-            APIKey.rotation_reminder_sent == False,
-            APIKey.revoked == False
+            APIKey.rotation_reminder_sent is False,
+            APIKey.revoked is False
         )
         keys = session.exec(stmt).all()
         
@@ -66,9 +66,9 @@ async def check_api_key_rotations() -> int:
                 from config import settings as _settings
                 if user and _settings.RESEND_API_KEY:
                     try:
-                        from integrations.email import RESEND_API_BASE
                         import httpx
-                        subject = f"[Security Warning] Your Consultaion API key is expiring soon"
+                        from integrations.email import RESEND_API_BASE
+                        subject = "[Security Warning] Your Consultaion API key is expiring soon"
                         html = f"""
                         <h1>API Key Expiration Warning</h1>
                         <p>Your API key <strong>{key.name}</strong> (prefix: {key.prefix}) is set to expire on <strong>{key.expires_at}</strong>.</p>

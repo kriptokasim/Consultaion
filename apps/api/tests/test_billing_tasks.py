@@ -7,13 +7,12 @@ on Redis unavailability, and lock release in finally blocks.
 We call the inner function body directly via the task's __call__
 to avoid Celery broker/backend teardown issues in test environments.
 """
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
 from worker.billing_tasks import (
     LockAcquireResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,11 +58,10 @@ def _reconciliation_module_patches():
 # underlying callable. With the EagerTask wrapper, __call__ invokes func(self, ...).
 
 from worker.billing_tasks import (
-    reconcile_previous_day as _daily_task,
-    reconcile_current_period as _monthly_task,
     reconcile_closed_period as _manual_task,
+    reconcile_current_period as _monthly_task,
+    reconcile_previous_day as _daily_task,
 )
-
 
 # ---------------------------------------------------------------------------
 # Lock behavior tests

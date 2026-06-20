@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Sliders, Send, Network, Compass, CheckCircle2, ChevronRight, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchWithAuth } from "@/lib/auth";
@@ -155,7 +155,7 @@ export function ArgumentTree({ debateId }: { debateId: string }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchTree = async () => {
+  const fetchTree = useCallback(async () => {
     try {
       const res = await fetchWithAuth(`/debates/${debateId}/argument-tree`);
       if (res.ok) {
@@ -167,14 +167,14 @@ export function ArgumentTree({ debateId }: { debateId: string }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [debateId]);
 
   useEffect(() => {
     fetchTree();
     // Poll for updates if debate is in progress
     const interval = setInterval(fetchTree, 10000);
     return () => clearInterval(interval);
-  }, [debateId]);
+  }, [debateId, fetchTree]);
 
   if (loading) {
     return (

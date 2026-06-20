@@ -75,14 +75,13 @@ def main() -> None:
 
     from services.migration_safety import (
         ensure_alembic_version_table,
-        widen_version_column,
+        get_all_revisions,
         get_current_revisions,
         get_migration_heads,
-        get_all_revisions,
-        verify_required_tables,
         verify_critical_columns,
+        verify_required_tables,
+        widen_version_column,
     )
-
     from sqlmodel import Session
 
     with Session(engine) as session:
@@ -145,8 +144,8 @@ def main() -> None:
                 actual_current, args.stamp,
             )
 
-            from alembic.config import Config as AlembicConfig
             from alembic.command import stamp
+            from alembic.config import Config as AlembicConfig
 
             alembic_cfg = AlembicConfig()
             alembic_cfg.set_main_option("script_location", "alembic")
@@ -215,8 +214,8 @@ def main() -> None:
             logger.info("Already at head revision %s — no upgrade needed", expected_head)
         else:
             logger.info("Running alembic upgrade head")
-            from alembic.config import Config as AlembicConfig
             from alembic.command import upgrade
+            from alembic.config import Config as AlembicConfig
 
             alembic_cfg = AlembicConfig()
             alembic_cfg.set_main_option("script_location", "alembic")

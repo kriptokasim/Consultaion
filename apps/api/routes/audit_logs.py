@@ -2,14 +2,14 @@ import csv
 import io
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from sqlmodel import Session, select, desc
 
 from auth import get_current_user
 from deps import get_session
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from models import User, UserInteraction
+from pydantic import BaseModel
+from sqlmodel import Session, desc, select
 
 router = APIRouter(prefix="/audit-logs", tags=["audit_logs"])
 
@@ -71,7 +71,7 @@ async def export_audit_logs_csv(
     
     # Set filename
     headers = {
-        'Content-Disposition': f'attachment; filename="consultaion_audit_logs_{current_user.id[:8]}.csv"'
+        "Content-Disposition": f'attachment; filename="consultaion_audit_logs_{current_user.id[:8]}.csv"'
     }
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -106,7 +106,7 @@ async def export_audit_logs_json(
 
     content = json.dumps(data, indent=2)
     headers = {
-        'Content-Disposition': f'attachment; filename="consultaion_audit_logs_{current_user.id[:8]}.json"'
+        "Content-Disposition": f'attachment; filename="consultaion_audit_logs_{current_user.id[:8]}.json"'
     }
     return StreamingResponse(
         iter([content]),

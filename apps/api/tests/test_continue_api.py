@@ -1,8 +1,8 @@
+from unittest.mock import ANY, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, ANY
-from models import Debate, User, DebateContinuation, LLMUsageLog
+from models import Debate, DebateContinuation, LLMUsageLog, User
 from sqlmodel import select
-from datetime import datetime, timezone
 
 
 def test_continue_conditional_transition(authenticated_client, db_session):
@@ -206,7 +206,7 @@ def test_continue_preflight_circuit_breaker(authenticated_client, db_session):
 
 
 def test_retry_debate_run(authenticated_client, db_session):
-    from models import DebateStageCheckpoint, Score, Vote, Message
+    from models import DebateStageCheckpoint, Score, Vote
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     # Create failed debate

@@ -14,15 +14,14 @@ import time
 import uuid
 from typing import Callable
 
+from observability.metrics import PROMETHEUS_AVAILABLE, record_http_request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response, StreamingResponse
+from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from observability.metrics import record_http_request, PROMETHEUS_AVAILABLE
-
 try:
-    from observability.tracing import traced_span, OTEL_AVAILABLE
+    from observability.tracing import OTEL_AVAILABLE
 except ImportError:
     OTEL_AVAILABLE = False
 

@@ -1,4 +1,5 @@
 import logging
+
 import sentry_sdk
 from config import settings
 from sentry_sdk.integrations.fastapi import FastApiIntegration

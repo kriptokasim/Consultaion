@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/components/ui/toast";
@@ -26,7 +26,7 @@ export default function AuditLogsPage() {
 
   const apiBase = API_ORIGIN;
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       const res = await fetch(`${apiBase}/audit-logs`, { credentials: "include" });
       if (res.ok) {
@@ -38,11 +38,11 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBase]);
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [fetchLogs]);
 
   const handleExportCSV = async () => {
     setIsExportingCSV(true);

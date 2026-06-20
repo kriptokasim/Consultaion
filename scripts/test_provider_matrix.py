@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
+import asyncio
 import os
 import sys
 import time
-import asyncio
 from pathlib import Path
 
 # Add apps/api to Python path
@@ -11,9 +11,9 @@ sys.path.insert(0, str(api_path))
 os.chdir(str(api_path))
 
 from config import settings
+from litellm import acompletion
 from model_gateway import export_api_keys
 from parliament.model_registry import ALL_MODELS, list_enabled_models
-from litellm import acompletion
 
 # Map of test model strings for providers
 TEST_MODELS = {
@@ -88,7 +88,7 @@ async def main():
 
     tasks = {provider: check_provider(provider) for provider in all_providers}
     results = await asyncio.gather(*tasks.values())
-    provider_results = dict(zip(tasks.keys(), results))
+    provider_results = dict(zip(tasks.keys(), results, strict=False))
 
     print(f"{'Provider':<15} | {'Status':<10} | {'Latency (ms)':<12} | {'Message/Error'}")
     print("-" * 80)

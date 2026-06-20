@@ -4,9 +4,8 @@ FH125: Verifies per-subscriber queue fan-out, event replay,
 terminal event handling, and subscriber cleanup.
 """
 import asyncio
-import pytest
-import time
 
+import pytest
 from sse_backend import MemoryChannelBackend
 
 

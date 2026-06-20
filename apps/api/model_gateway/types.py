@@ -1,6 +1,8 @@
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
 from pydantic import BaseModel, ConfigDict
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any, AsyncIterator, Callable, Awaitable
+
 
 class GatewayRequest(BaseModel):
     model_config = ConfigDict(protected_namespaces=())

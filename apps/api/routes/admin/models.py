@@ -7,8 +7,8 @@ from billing.models import BillingUsage
 from billing.routes import MODEL_COST_PER_1K
 from deps import get_session
 from fastapi import APIRouter, Depends
-from parliament.model_registry import get_default_model, list_enabled_models
 from models import User
+from parliament.model_registry import get_default_model, list_enabled_models
 from sqlmodel import Session, select
 
 router = APIRouter()

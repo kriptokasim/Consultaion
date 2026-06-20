@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
+import json
 import logging
 import re
-import json
-import difflib
-from typing import Optional, List, Dict, Any
+from typing import List
 
+from agents import call_llm_for_role
 from celery.utils.log import get_task_logger
 from database import session_scope
-from models import Debate, Message, DivergenceReport
-from sqlmodel import Session, select
-from agents import call_llm_for_role
+from models import Debate, DivergenceReport, Message
+from sqlmodel import select
+
 from worker.celery_app import celery_app
 
 logger = get_task_logger(__name__)
@@ -34,7 +35,7 @@ async def _extract_claims_from_response(prompt: str, response_content: str, mode
     system_prompt = (
         "You are an AI analyst. Extract a clean list of 3-5 distinct, key factual or logical claims made in the text. "
         "Each claim should be a standalone sentence in under 15 words. Do not quote the text. Do not add numbers. "
-        "Output strictly as a JSON object of form: {\"claims\": [\"claim 1\", \"claim 2\"]}"
+        'Output strictly as a JSON object of form: {"claims": ["claim 1", "claim 2"]}'
     )
     
     messages = [

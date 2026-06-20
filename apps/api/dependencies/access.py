@@ -15,7 +15,12 @@ from exceptions import NotFoundError, PermissionError
 from fastapi import Depends
 from log_config import update_log_context
 from models import Debate, Team, User
-from routes.common import can_access_debate, is_debate_owner, user_is_team_editor, user_is_team_member
+from routes.common import (
+    can_access_debate,
+    is_debate_owner,
+    user_is_team_editor,
+    user_is_team_member,
+)
 from sqlmodel import Session
 
 

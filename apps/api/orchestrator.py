@@ -14,15 +14,15 @@ from agents import (
 from config import settings
 from conversation.engine import run_conversation_debate
 from database_async import async_session_scope
+from exceptions import ProviderCircuitOpenError
 from integrations.email import send_debate_summary_email
 from integrations.langfuse import current_trace_id
 from integrations.slack import send_slack_alert
+from llm_errors import TransientLLMError
 from models import Debate, DebateRound, Message, Score, User, Vote
 from parliament.engine import run_parliament_debate
 from schemas import DebateConfig, DebateSummary, default_agents, default_judges
 from sqlalchemy import or_, update
-from exceptions import ProviderCircuitOpenError
-from llm_errors import TransientLLMError
 from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
@@ -449,6 +449,7 @@ async def _run_judge_round(
     model_id: str | None,
     usage_tracker: UsageAccumulator,
     channel_id: str,
+    attempt_id: str | None = None,
 ) -> Tuple[List[Dict[str, Any]], List[str], Dict[str, Any]]:
     """Execute the judging round and return (aggregate_scores, ranking, vote_details)."""
     judge_round = await _start_round(debate_id, 3, "judge", "rubric scoring")
@@ -466,7 +467,7 @@ async def _run_judge_round(
                     judge=detail["judge"],
                     score=detail["score"],
                     rationale=detail["rationale"],
-                    attempt_id=current_attempt_id,
+                    attempt_id=attempt_id,
                 )
             )
         await session.commit()
@@ -811,7 +812,7 @@ async def run_debate(
             return
         
         # Success path for Standard Pipeline
-        logger.info(f"Debate completed successfully", extra=log_extra)
+        logger.info("Debate completed successfully", extra=log_extra)
         increment_metric("debate.completed")
         await _build_and_send_summary(debate_id, debate_user_id)
         await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
@@ -847,9 +848,9 @@ async def run_debate(
                     # Refund free hosted credit
                     if debate.user_id:
                         try:
+                            from billing.service import refund_hosted_credit
                             from database import engine
                             from sqlmodel import Session
-                            from billing.service import refund_hosted_credit
                             
                             def _run_refund():
                                 with Session(engine) as sync_session:
@@ -903,9 +904,9 @@ async def run_debate(
                     # Refund free hosted credit
                     if debate.user_id:
                         try:
+                            from billing.service import refund_hosted_credit
                             from database import engine
                             from sqlmodel import Session
-                            from billing.service import refund_hosted_credit
                             
                             def _run_refund():
                                 with Session(engine) as sync_session:

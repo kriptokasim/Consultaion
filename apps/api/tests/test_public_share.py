@@ -1,9 +1,8 @@
-import pytest
+from auth import COOKIE_NAME, create_access_token, hash_password
 from fastapi.testclient import TestClient
-from models import Debate
+from models import Debate, User
 from sqlmodel import Session
-from auth import create_access_token, hash_password, COOKIE_NAME
-from models import User
+
 
 def test_owner_can_toggle_share(authenticated_client: TestClient, db_session: Session):
     # Create a debate
@@ -259,7 +258,11 @@ def test_unauthenticated_cannot_access_report(client: TestClient, authenticated_
 
 def test_sanitize_public_text():
     """Verify text safety utilities redact sensitive content."""
-    from utils.text_safety import sanitize_public_text, contains_sensitive_pattern, truncate_public_preview
+    from utils.text_safety import (
+        contains_sensitive_pattern,
+        sanitize_public_text,
+        truncate_public_preview,
+    )
 
     # API keys
     assert contains_sensitive_pattern("my key is sk-1234567890abcdefghijklmno")

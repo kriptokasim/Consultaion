@@ -40,8 +40,9 @@ def init_db() -> None:
         SQLModel.metadata.create_all(engine)
         
         # Safe dynamic column migrations for SQLite
-        from sqlalchemy import text, inspect
         import logging
+
+        from sqlalchemy import inspect, text
         db_logger = logging.getLogger("database")
         
         with engine.connect() as conn:

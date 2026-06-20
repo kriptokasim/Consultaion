@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
 
@@ -17,7 +17,7 @@ export default function ConnectionQuality({
   const [healthStatus, setHealthStatus] = useState<"healthy" | "degraded" | "offline">("healthy");
   const [isChecking, setIsChecking] = useState(false);
 
-  const checkLatency = async () => {
+  const checkLatency = useCallback(async () => {
     if (isChecking) return;
     setIsChecking(true);
     const start = performance.now();
@@ -43,7 +43,7 @@ export default function ConnectionQuality({
     } finally {
       setIsChecking(false);
     }
-  };
+  }, [isChecking]);
 
   useEffect(() => {
     // Initial check
@@ -55,7 +55,7 @@ export default function ConnectionQuality({
     }, 15000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [checkLatency]);
 
   // Compute status colors
   let statusColor = "bg-rose-500 border-rose-500/30";

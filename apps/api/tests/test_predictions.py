@@ -1,9 +1,7 @@
-import pytest
-from sqlmodel import select
-from datetime import datetime, timezone
 
-from models import Debate, User, UserPrediction, Score, UserInteraction
-from worker.voting_tasks import _execute_vote_reasons_extraction
+import pytest
+from models import Debate, Score, User, UserInteraction, UserPrediction
+from sqlmodel import select
 
 
 def test_cast_prediction_success(authenticated_client, db_session, monkeypatch):

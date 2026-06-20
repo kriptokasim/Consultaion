@@ -5,10 +5,13 @@ and backpressure uses blocked registered subscribers.
 """
 
 import asyncio
-import json
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from sse_backend import MemoryChannelBackend, CRITICAL_EVENT_TYPES, IMPORTANT_EVENT_TYPES, _event_priority
+from sse_backend import (
+    IMPORTANT_EVENT_TYPES,
+    MemoryChannelBackend,
+)
 
 
 class TestBackpressureBlockedSubscriber:

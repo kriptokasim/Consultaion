@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
-import json
-from typing import Optional, List, Dict, Any
 
+from agents import call_llm_for_role
 from celery.utils.log import get_task_logger
 from database import session_scope
 from models import Debate, Score
-from sqlmodel import Session, select
-from agents import call_llm_for_role
+from sqlmodel import select
+
 from worker.celery_app import celery_app
 
 logger = get_task_logger(__name__)
@@ -48,7 +48,7 @@ async def _execute_vote_reasons_extraction(debate_id: str) -> None:
         "Analyze why the winning candidate excelled, and why the other candidates failed or received lower scores.\n"
         "Extract 2-3 concise 'winner_highlights' (keys to success) and 2-3 'dissenter_highlights' (criticisms/drawbacks of other models).\n"
         "Output strictly as a JSON object of form:\n"
-        "{\"winner_highlights\": [\"Point 1\", \"Point 2\"], \"dissenter_highlights\": [\"Point 1\", \"Point 2\"]}"
+        '{"winner_highlights": ["Point 1", "Point 2"], "dissenter_highlights": ["Point 1", "Point 2"]}'
     )
 
     messages = [

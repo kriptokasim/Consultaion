@@ -38,7 +38,7 @@ async def dispatch_debate_run(
     continuation_id: str | None = None,
 ) -> None:
     # Propagate correlation context into background task
-    from correlation import get_correlation_context, create_child_context
+    from correlation import create_child_context, get_correlation_context
     ctx = get_correlation_context()
     if ctx:
         ctx = create_child_context(debate_id=debate_id)

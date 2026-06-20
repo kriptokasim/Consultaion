@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sqlmodel import Session, select
-from sqlalchemy import func
 
-from services.schema_capabilities import SchemaCapabilities, get_registry
+from services.schema_capabilities import SchemaCapabilities
 
 logger = logging.getLogger(__name__)
 

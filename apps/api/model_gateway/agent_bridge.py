@@ -1,8 +1,8 @@
-import time
 import logging
-from typing import Dict, List, Optional, Tuple, Any
-from sqlmodel import Session
+from typing import Any, Dict, List, Optional, Tuple
+
 from database import engine
+from sqlmodel import Session
 
 logger = logging.getLogger("model_gateway.agent_bridge")
 
@@ -30,22 +30,24 @@ async def call_model_via_gateway(
     maps successful results to agents.UsageCall, and maps access/quota errors to TransientLLMError
     for graceful runner degradation and UI-facing fail-safes.
     """
-    from model_gateway.types import (
-        GatewayRequest,
-        GatewayQuotaExceededError,
-        GatewayModelRestrictedError,
-    )
-    from model_gateway import route_llm_call
     from agents import UsageCall
     from llm_errors import TransientLLMError
+
+    from model_gateway import route_llm_call
+    from model_gateway.types import (
+        GatewayModelRestrictedError,
+        GatewayQuotaExceededError,
+        GatewayRequest,
+    )
 
     # 1. Resolve user plan if not explicitly passed
     resolved_user_plan = user_plan
     if not resolved_user_plan and user_id:
         try:
             import asyncio
-            from sqlalchemy.ext.asyncio import AsyncSession
+
             from billing.service import get_active_plan
+            from sqlalchemy.ext.asyncio import AsyncSession
             if db_session and not isinstance(db_session, AsyncSession):
                 plan = get_active_plan(db_session, user_id)
                 if plan:
@@ -90,10 +92,10 @@ async def call_model_via_gateway(
         logger.error(f"Gateway access control blocked call: {e}")
         # Map to TransientLLMError so the orchestrator marks the debate as failed
         # and displays the direct access constraint message on the UI.
-        raise TransientLLMError(str(e), cause=e)
+        raise TransientLLMError(str(e), cause=e) from e
     except Exception as e:
         logger.error(f"Gateway execution encountered unexpected exception: {e}")
-        raise TransientLLMError(f"Gateway routing failed: {e}", cause=e)
+        raise TransientLLMError(f"Gateway routing failed: {e}", cause=e) from e
 
     # 4. Check gateway execution success
     if not gw_res.success:

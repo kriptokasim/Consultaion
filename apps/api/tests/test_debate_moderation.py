@@ -1,12 +1,14 @@
 from uuid import uuid4
-from models import Debate, User, DebateTurn
-from sqlmodel import Session, select
+
 import pytest
+from models import Debate, DebateTurn, User
 from orchestration.analysis import extract_debate_turn_analysis
+from sqlmodel import Session, select
+
 
 def test_moderate_debate_endpoint(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
-    debate = Debate(id=str(uuid4()), prompt='Test prompt for moderate', user_id=user.id, status='queued')
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(id=str(uuid4()), prompt="Test prompt for moderate", user_id=user.id, status="queued")
     db_session.add(debate)
     db_session.commit()
 
@@ -14,7 +16,7 @@ def test_moderate_debate_endpoint(authenticated_client, db_session: Session):
         "round_index": 1,
         "moderation_steering": "Focus purely on cost efficiency"
     }
-    response = authenticated_client.post(f'/debates/{debate.id}/moderate', json=payload)
+    response = authenticated_client.post(f"/debates/{debate.id}/moderate", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["round_index"] == 1
@@ -33,8 +35,8 @@ def test_moderate_debate_endpoint(authenticated_client, db_session: Session):
 
 
 def test_get_argument_tree_endpoint(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
-    debate = Debate(id=str(uuid4()), prompt='Test prompt for tree', user_id=user.id, status='queued')
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(id=str(uuid4()), prompt="Test prompt for tree", user_id=user.id, status="queued")
     db_session.add(debate)
     db_session.commit()
 
@@ -60,7 +62,7 @@ def test_get_argument_tree_endpoint(authenticated_client, db_session: Session):
     db_session.add(turn2)
     db_session.commit()
 
-    response = authenticated_client.get(f'/debates/{debate.id}/argument-tree')
+    response = authenticated_client.get(f"/debates/{debate.id}/argument-tree")
     assert response.status_code == 200
     data = response.json()
     assert "nodes" in data
@@ -82,8 +84,8 @@ def test_get_argument_tree_endpoint(authenticated_client, db_session: Session):
 
 @pytest.mark.anyio
 async def test_extract_debate_turn_analysis_helper(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
-    debate = Debate(id=str(uuid4()), prompt='Test prompt for analysis helper', user_id=user.id, status='queued')
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(id=str(uuid4()), prompt="Test prompt for analysis helper", user_id=user.id, status="queued")
     db_session.add(debate)
     db_session.commit()
 

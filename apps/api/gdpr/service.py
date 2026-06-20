@@ -6,13 +6,11 @@ processing (Right to Erasure) with grace period support.
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict
 
-from config import settings
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
@@ -26,9 +24,8 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
 
     Covers: profile, billing, debates, API keys, audit logs, usage.
     """
-    from models import User
-    from billing.models import BillingUsage, BillingSubscription, BillingPlan
-    from models import AuditLog
+    from billing.models import BillingSubscription, BillingUsage
+    from models import AuditLog, User
 
     user = db.get(User, user_id)
     if not user:
@@ -208,7 +205,6 @@ def process_scheduled_deletions(db: Session) -> int:
 
 def _anonymize_user(db: Session, user) -> None:
     """Anonymize user data instead of hard-delete to preserve referential integrity."""
-    from models import User
 
     # Anonymize PII fields
     anonymized_email = f"deleted-{user.id[:8]}@anonymized.local"

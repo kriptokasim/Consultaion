@@ -15,12 +15,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-
-from sqlalchemy import select
-from sqlmodel import Session
+from typing import Any, Dict, List
 
 from models import Debate, Message
+from sqlalchemy import select
+from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 

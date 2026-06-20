@@ -7,9 +7,8 @@ Create Date: 2026-06-07
 """
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-import sqlmodel
+from alembic import op
 
 revision: str = "p115_add_apikey_expire_fields"
 down_revision: Union[str, None] = "p114_add_user_hosted_credits"

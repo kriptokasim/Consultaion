@@ -4,8 +4,8 @@ FH125 Track C: Tests that exercise the real RedisChannelBackend against
 a live Redis instance. These tests MUST fail if Redis is unavailable.
 """
 import asyncio
-import json
 import os
+
 import pytest
 import redis.asyncio as aioredis
 

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.trace import Span, Status, StatusCode

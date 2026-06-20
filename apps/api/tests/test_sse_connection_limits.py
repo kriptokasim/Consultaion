@@ -1,7 +1,5 @@
 """Tests for SSE connection rate limiting."""
-import pytest
-from unittest.mock import patch, MagicMock
-from middleware.weighted_rate_limit import WeightedRateLimitMiddleware, _is_sse_request
+from middleware.weighted_rate_limit import _is_sse_request
 
 
 def test_sse_detection():
@@ -12,7 +10,7 @@ def test_sse_detection():
 
 
 def test_read_actions_are_classified():
-    from middleware.weighted_rate_limit import _classify_endpoint, READ_ACTIONS
+    from middleware.weighted_rate_limit import READ_ACTIONS
     assert "read_run" in READ_ACTIONS
     assert "search" in READ_ACTIONS
     assert "health_check" in READ_ACTIONS

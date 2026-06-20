@@ -6,7 +6,6 @@ from auth import get_current_user
 from deps import get_session
 from exceptions import NotFoundError, PermissionError
 from fastapi import APIRouter, Depends, Request
-from routes.common import require_debate_access
 from guards.llm_action_guard import require_llm_action_allowed
 from models import (
     ChallengeRound,
@@ -20,6 +19,8 @@ from models import (
 from orchestration.challenge import evaluate_synthesis_challenge
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
+
+from routes.common import require_debate_access
 
 logger = logging.getLogger(__name__)
 

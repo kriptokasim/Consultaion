@@ -1,8 +1,9 @@
-import pytest
 import uuid
-from sqlmodel import Session
+
 from models import Debate, User
 from repositories.debate_repository import DebateRepository
+from sqlmodel import Session
+
 
 def test_debate_repository_crud(db_session: Session):
     # 1. Create a dummy user first

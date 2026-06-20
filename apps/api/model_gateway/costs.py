@@ -1,4 +1,5 @@
 from typing import Optional
+
 from model_gateway.types import GatewayQuotaExceededError
 
 # Default safety limits
@@ -20,9 +21,10 @@ async def check_credit_and_cost_safety(
     # Optional DB-based checks if a session is active
     if db_session and user_id:
         try:
+            import asyncio
+
             from sqlalchemy import text
             from sqlalchemy.ext.asyncio import AsyncSession
-            import asyncio
             
             if isinstance(db_session, AsyncSession):
                 result = (await db_session.execute(

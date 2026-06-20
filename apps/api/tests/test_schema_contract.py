@@ -1,42 +1,6 @@
-import pytest
-from sqlalchemy import inspect
-from sqlmodel import Session, select
 import database
-from models import (
-    User,
-    SupportNote,
-    DebateError,
-    DebateCheckpoint,
-    APIKey,
-    Debate,
-    DebateRound,
-    Message,
-    Score,
-    Vote,
-    Team,
-    TeamMember,
-    UsageQuota,
-    UsageCounter,
-    AuditLog,
-    PairwiseVote,
-    RatingPersona,
-    AdminEvent,
-    ConversationVote,
-    LLMUsageLog,
-    DivergenceReport,
-    DebateTurn,
-    UserPrediction,
-    VoteRecord,
-    RedTeamSession,
-    OracleSession,
-    OracleBranch,
-    ChallengeSession,
-    ChallengeRound,
-    UserInteraction,
-    UserProviderKey,
-    DebateContinuation,
-    DebateStageCheckpoint,
-)
+from sqlalchemy import inspect
+
 
 def test_database_table_existence():
     """Verify that all core schema tables exist in the database metadata and active schema."""
@@ -136,7 +100,6 @@ def test_debate_stage_checkpoint_schema_contract():
 
 def test_debate_continuation_status_values():
     """Verify debate_continuation status column accepts expected values."""
-    from models import DebateContinuation
     import sqlmodel
     with sqlmodel.Session(database.engine) as session:
         # Verify the column exists and has a string type

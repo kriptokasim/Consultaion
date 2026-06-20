@@ -1,11 +1,12 @@
-import time
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any, AsyncIterator, Callable, Awaitable
+import time
+from typing import Any, Dict, List, Optional
+
 from litellm import acompletion
-from model_gateway.types import GatewayModelCallResult, GatewayError, ModelDelta, OnDeltaCallback
-from model_gateway.http_clients import close_all_clients
 from llm_errors import classify_provider_exception
+
+from model_gateway.types import GatewayModelCallResult, ModelDelta, OnDeltaCallback
 
 logger = logging.getLogger("model_gateway.adapters")
 

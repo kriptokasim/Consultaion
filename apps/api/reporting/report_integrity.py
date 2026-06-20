@@ -4,9 +4,10 @@ Detects raw JSON leak, fenced code blocks, and schema-key leakage
 before structured decision reports are finalized.
 """
 
-from typing import Any, Tuple, List
 import json
 import re
+from typing import Any, List, Tuple
+
 
 def contains_raw_json_leak(val: Any) -> bool:
     """Check if a string value contains raw JSON leakage or fenced code blocks."""

@@ -56,9 +56,12 @@ export default function ModelAvatar({
       title={name}
     >
       {logoUrl ? (
-        <img
+        <Image
           src={logoUrl}
           alt={name}
+          width={48}
+          height={48}
+          unoptimized
           className="h-full w-full rounded-xl object-cover"
           onError={(e) => {
             // Remove image on error to fallback to initials

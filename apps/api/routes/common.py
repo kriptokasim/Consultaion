@@ -26,8 +26,8 @@ def track_metric(name: str, value: int = 1) -> None:
 
 
 def serialize_user(user: User) -> dict[str, Any]:
-    from security.owner import is_owner
     from plan_config import resolve_plan_for_user
+    from security.owner import is_owner
     return {
         "id": user.id,
         "email": user.email,
@@ -192,8 +192,8 @@ def require_debate_owner(debate: Optional[Debate], user: Optional[User], session
     Returns 401 for unauthenticated users, 403 for non-owners, 404 if debate
     doesn't exist.
     """
-    from fastapi import HTTPException, status
     from exceptions import NotFoundError, PermissionError as AppPermissionError
+    from fastapi import HTTPException, status
 
     if not debate:
         raise NotFoundError(message="Debate not found", code="debate.not_found")
@@ -212,8 +212,8 @@ def require_debate_mutation_access(debate: Optional[Debate], user: Optional[User
     More permissive than require_debate_owner — allows team editors.
     Used for endpoints like start/restart where team members may act.
     """
-    from fastapi import HTTPException, status
     from exceptions import NotFoundError, PermissionError as AppPermissionError
+    from fastapi import HTTPException, status
 
     if not debate:
         raise NotFoundError(message="Debate not found", code="debate.not_found")
@@ -268,8 +268,9 @@ def require_schema_current(session: Session) -> None:
     from fastapi import HTTPException, status
 
     try:
-        from services.schema_capabilities import get_schema_capabilities, get_registry
         import os
+
+        from services.schema_capabilities import get_registry, get_schema_capabilities
 
         is_test = os.environ.get("ENV", "").lower() == "test"
 

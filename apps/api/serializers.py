@@ -241,7 +241,7 @@ def merge_non_null(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, 
 
 def _get_debate_extra_fields(debate, session=None, continuation_status: Optional[str] = None) -> dict:
     """Fetch enrichment fields with schema capability gating and savepoint isolation."""
-    from services.schema_capabilities import get_schema_capabilities, get_registry
+    from services.schema_capabilities import get_registry, get_schema_capabilities
 
     res: dict[str, Any] = {
         "current_stage": debate.status,

@@ -16,7 +16,7 @@ from exceptions import (
 )
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
-from models import Debate, DebateContinuation, Message, PairwiseVote, Score, User
+from models import Debate, Message, PairwiseVote, Score, User
 from schemas import DebateConfig, default_debate_config
 from sqlmodel import Session, select
 from sse_backend import BaseSSEBackend
@@ -38,12 +38,11 @@ async def get_debate_events(
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
-    import time
     start_time = time.time()
     
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
 
-    from services.schema_capabilities import get_schema_capabilities, get_registry
+    from services.schema_capabilities import get_registry, get_schema_capabilities
     caps = get_schema_capabilities(session, get_registry())
 
     messages: list[Message] = []
@@ -277,8 +276,8 @@ async def export_scores_csv(
     if not scores:
         raise NotFoundError(message="No scores found", code="scores.not_found")
 
-    from services.reporting import generate_csv_content
     from billing.service import increment_export_usage
+    from services.reporting import generate_csv_content
     loop = asyncio.get_running_loop()
     content = await loop.run_in_executor(None, lambda: generate_csv_content(scores))
     
@@ -364,7 +363,7 @@ async def stream_events(
         record_sse_reconnect()
 
     # Acquire lease-based concurrent stream slot
-    from sse_backend import get_stream_lease_manager, StreamLeaseResult
+    from sse_backend import StreamLeaseResult, get_stream_lease_manager
     lease_mgr = get_stream_lease_manager()
     subscriber_id = f"{user.id}:{uuid.uuid4().hex}"
     lease_result = await lease_mgr.try_acquire(debate_id, subscriber_id)
@@ -379,8 +378,8 @@ async def stream_events(
 
     async def eventgen():
         # Use exactly-once lease context manager
-        from sse_backend import get_stream_lease_manager, StreamLeaseResult, acquired_stream_lease
         from metrics import increment_metric
+        from sse_backend import acquired_stream_lease, get_stream_lease_manager
 
         lease_mgr = get_stream_lease_manager()
 

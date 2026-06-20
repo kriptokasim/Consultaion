@@ -1,8 +1,8 @@
 import asyncio
-from unittest.mock import patch, MagicMock
-
 import sys
-sys.path.append('.')
+from unittest.mock import MagicMock, patch
+
+sys.path.append(".")
 
 async def test():
     # Setup minimal mock config
@@ -10,7 +10,6 @@ async def test():
     config.settings.USE_MOCK = True
     
     # Mock database session
-    from database_async import async_session_scope
     
     class MockDebate:
         def __init__(self):
@@ -38,9 +37,9 @@ async def test():
             print(f"SSE Publish: {args}")
             
     # Patch dependencies
-    with patch('arena.engine.async_session_scope', return_value=MockSession()), \
-         patch('arena.engine.get_sse_backend', return_value=MockSSE()), \
-         patch('arena.engine.call_llm_for_role', new_callable=MagicMock) as mock_llm:
+    with patch("arena.engine.async_session_scope", return_value=MockSession()), \
+         patch("arena.engine.get_sse_backend", return_value=MockSSE()), \
+         patch("arena.engine.call_llm_for_role", new_callable=MagicMock) as mock_llm:
          
         class MockUsage:
             def __init__(self, t):
@@ -55,9 +54,9 @@ async def test():
 
         # Mock LLM returns a tuple (content, usage)
         async def mock_call(*args, **kwargs):
-            role = kwargs.get('role', '')
-            if 'Synthesizer' in role:
-                return f"Synthesized answer.", MockUsage(50)
+            role = kwargs.get("role", "")
+            if "Synthesizer" in role:
+                return "Synthesized answer.", MockUsage(50)
             return f"Mock answer from {role}.", MockUsage(100)
             
         mock_llm.side_effect = mock_call

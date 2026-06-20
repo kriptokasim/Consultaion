@@ -41,9 +41,14 @@ from auth import get_current_admin, hash_password  # noqa: E402
 from billing.models import BillingPlan, BillingSubscription, BillingUsage  # noqa: E402
 from billing.service import _current_period  # noqa: E402
 from database import engine, init_db  # noqa: E402
-from models import Debate, User, AuditLog, LLMUsageLog  # noqa: E402
+from models import AuditLog, Debate, LLMUsageLog, User  # noqa: E402
 from promotions.models import Promotion  # noqa: E402
-from routes.admin import admin_user_billing, admin_user_detail, admin_users, admin_metrics  # noqa: E402
+from routes.admin import (  # noqa: E402
+    admin_metrics,
+    admin_user_billing,
+    admin_user_detail,
+    admin_users,
+)
 from schemas import default_panel_config  # noqa: E402
 
 init_db()

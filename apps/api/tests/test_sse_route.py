@@ -7,7 +7,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -18,12 +18,12 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("SSE_BACKEND", "memory")
 os.environ.setdefault("USE_MOCK", "1")
 
+from auth import create_access_token  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from models import Debate, User  # noqa: E402
 from routes.debates import stream_events  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
 from sse_backend import MemoryChannelBackend  # noqa: E402
-from auth import create_access_token  # noqa: E402
 
 init_db()
 
@@ -398,7 +398,7 @@ async def test_final_event_releases_lease():
                 break
 
         # Explicitly close the generator to trigger finally block
-        if hasattr(response.body_iterator, 'aclose'):
+        if hasattr(response.body_iterator, "aclose"):
             await response.body_iterator.aclose()
 
         # Wait for cleanup
@@ -468,7 +468,7 @@ async def test_client_cancellation_releases_lease():
             pass
 
         await asyncio.sleep(0.15)
-        if hasattr(response.body_iterator, 'aclose'):
+        if hasattr(response.body_iterator, "aclose"):
             await response.body_iterator.aclose()
         await asyncio.sleep(0.1)
 
@@ -538,8 +538,8 @@ async def test_unauthorized_returns_401():
     backend = MemoryChannelBackend(ttl_seconds=30)
     await backend.start()
 
-    from sqlmodel import Session
     from fastapi import HTTPException
+    from sqlmodel import Session
     with Session(engine) as session:
         _, debate_id, _ = _ensure_fixtures(session)
         req = _make_request()  # no token
@@ -584,7 +584,7 @@ async def test_forbidden_debate_returns_error():
 
         # Depending on ACL implementation, this should raise 403 or similar
         # The route calls require_debate_access which may raise PermissionError or NotFoundError
-        from exceptions import PermissionError as AppPermissionError, NotFoundError
+        from exceptions import NotFoundError, PermissionError as AppPermissionError
         from fastapi import HTTPException
         try:
             await stream_events(

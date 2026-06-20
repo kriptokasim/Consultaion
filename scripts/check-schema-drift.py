@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-import sys
 import os
+import sys
 
 # Set up PYTHONPATH so we can import apps/api modules
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(SCRIPT_DIR, "../apps/api"))
 
-from alembic.runtime.migration import MigrationContext
+
+# Import all models to register them with SQLModel metadata
 from alembic.autogenerate import compare_metadata
+from alembic.runtime.migration import MigrationContext
+from config import AppSettings
 from sqlalchemy import create_engine
 from sqlmodel import SQLModel
 
-# Import all models to register them with SQLModel metadata
-import models
-import billing.models
-from config import AppSettings
 
 def main():
     print("Checking for real schema drift (metadata vs migrations)...")

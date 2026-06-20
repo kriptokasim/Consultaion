@@ -104,9 +104,8 @@ def reconcile_previous_day(self):
     )
     from core.database import SessionLocal
     from observability.metrics import (
-        record_reconciliation_run,
         record_reconciliation_failure,
-        record_reconciliation_discrepancy,
+        record_reconciliation_run,
     )
 
     window = ReconciliationWindow.previous_utc_day()
@@ -144,7 +143,7 @@ def reconcile_previous_day(self):
         record_reconciliation_run("daily", "failed", elapsed)
         record_reconciliation_failure(type(exc).__name__)
         logger.error("Daily reconciliation failed: window=%s error=%s", window.label, exc)
-        raise self.retry(exc=exc, countdown=300)
+        raise self.retry(exc=exc, countdown=300) from exc
     finally:
         stop_renew.set()
         renew_thread.join(timeout=1.0)
@@ -158,16 +157,17 @@ def reconcile_current_period(self):
     Runs monthly on the 1st at 04:00 UTC. Uses ReconciliationWindow.closed_month()
     for the previous closed month.
     """
+    from datetime import datetime, timedelta, timezone
+
     from billing.reconciliation import (
         ReconciliationWindow,
         reconcile_usage,
         record_reconciliation_time,
     )
-    from datetime import datetime, timezone, timedelta
     from core.database import SessionLocal
     from observability.metrics import (
-        record_reconciliation_run,
         record_reconciliation_failure,
+        record_reconciliation_run,
     )
 
     last_month = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
@@ -206,7 +206,7 @@ def reconcile_current_period(self):
         record_reconciliation_run("monthly", "failed", elapsed)
         record_reconciliation_failure(type(exc).__name__)
         logger.error("Monthly reconciliation failed: window=%s error=%s", window.label, exc)
-        raise self.retry(exc=exc, countdown=600)
+        raise self.retry(exc=exc, countdown=600) from exc
     finally:
         stop_renew.set()
         renew_thread.join(timeout=1.0)
@@ -227,8 +227,8 @@ def reconcile_closed_period(self, period: str):
     )
     from core.database import SessionLocal
     from observability.metrics import (
-        record_reconciliation_run,
         record_reconciliation_failure,
+        record_reconciliation_run,
     )
 
     window = ReconciliationWindow.from_period(period)
@@ -266,7 +266,7 @@ def reconcile_closed_period(self, period: str):
         record_reconciliation_run("manual", "failed", elapsed)
         record_reconciliation_failure(type(exc).__name__)
         logger.error("Manual reconciliation failed: window=%s error=%s", window.label, exc)
-        raise self.retry(exc=exc, countdown=300)
+        raise self.retry(exc=exc, countdown=300) from exc
     finally:
         stop_renew.set()
         renew_thread.join(timeout=1.0)

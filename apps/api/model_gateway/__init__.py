@@ -1,12 +1,12 @@
 import logging
 import os
-import sys
-from model_gateway.types import GatewayRequest, GatewayModelCallResult, GatewayError
-from model_gateway.pools import get_model_pool, validate_user_access_to_model, load_pools_config
+
+from model_gateway.adapters import DirectProviderAdapter, MockAdapter, OpenRouterAdapter
+from model_gateway.agent_bridge import call_model_via_gateway
 from model_gateway.costs import check_credit_and_cost_safety
 from model_gateway.policy import determine_routing_strategy
-from model_gateway.adapters import DirectProviderAdapter, OpenRouterAdapter, MockAdapter
-from model_gateway.agent_bridge import call_model_via_gateway
+from model_gateway.pools import get_model_pool, load_pools_config, validate_user_access_to_model
+from model_gateway.types import GatewayError, GatewayModelCallResult, GatewayRequest
 
 logger = logging.getLogger("model_gateway")
 
@@ -49,9 +49,10 @@ async def route_llm_call(
     has_credits = False
     if db_session and request.user_id:
         try:
+            import asyncio
+
             from models import User
             from sqlalchemy.ext.asyncio import AsyncSession
-            import asyncio
             
             if isinstance(db_session, AsyncSession):
                 user = await db_session.get(User, request.user_id)
@@ -84,6 +85,7 @@ async def route_llm_call(
     user_provider = None
     if db_session and request.user_id:
         from services.provider_credentials import get_model_api_key
+
         from model_gateway.model_map import MODEL_MAP
         provider_name = MODEL_MAP.get(request.model_id, {}).get("provider", "unknown")
         resolved = get_model_api_key(db_session, request.user_id, provider_name)
@@ -97,7 +99,7 @@ async def route_llm_call(
     model_pool = get_model_pool(request.model_id)
     
     # Log gateway decision
-    from model_gateway.observability import log_gateway_decision, log_gateway_call_metrics
+    from model_gateway.observability import log_gateway_call_metrics, log_gateway_decision
     from model_gateway.types import GatewayDecision
     decision = GatewayDecision(
         selected_model=request.model_id,
@@ -186,7 +188,7 @@ async def route_llm_call(
     successful_result = None
 
     # Filter out models with open circuits
-    from model_gateway.provider_health import is_circuit_open, record_success, record_failure
+    from model_gateway.provider_health import is_circuit_open, record_failure, record_success
     filtered_direct_models = []
     for m in available_direct_models:
         # Resolve provider
@@ -333,8 +335,7 @@ async def route_llm_stream(
     Simpler than route_llm_call — no quota checks, no fallback chains.
     Used by the arena streaming path (FH101/FH102).
     """
-    from model_gateway.types import OnDeltaCallback
-    from model_gateway.provider_health import is_circuit_open
+    from model_gateway.provider_health import is_circuit_open, record_failure, record_success
 
     export_api_keys()
 
@@ -378,3 +379,23 @@ async def route_llm_stream(
         record_failure(provider, result.error_code or "unknown", result.error_message or "")
 
     return result
+
+
+__all__ = [
+    "DirectProviderAdapter",
+    "MockAdapter",
+    "OpenRouterAdapter",
+    "call_model_via_gateway",
+    "check_credit_and_cost_safety",
+    "determine_routing_strategy",
+    "get_model_pool",
+    "load_pools_config",
+    "validate_user_access_to_model",
+    "GatewayError",
+    "GatewayModelCallResult",
+    "GatewayRequest",
+    "is_provider_available",
+    "export_api_keys",
+    "route_llm_call",
+    "route_llm_stream",
+]

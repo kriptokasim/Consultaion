@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from agents import call_llm_for_role
 from config import settings
@@ -112,14 +112,14 @@ async def evaluate_models_blind(
         "Your response must be parseable by json.loads().\n"
         "Schema format:\n"
         "{\n"
-        "  \"evaluations\": [\n"
+        '  "evaluations": [\n'
         "    {\n"
-        "      \"candidate\": \"Model_A\",\n"
-        "      \"logic_score\": 0.90,\n"
-        "      \"completeness_score\": 0.85,\n"
-        "      \"conciseness_score\": 0.95,\n"
-        "      \"overall_score\": 0.90,\n"
-        "      \"rationale\": \"Detailed explanation...\"\n"
+        '      "candidate": "Model_A",\n'
+        '      "logic_score": 0.90,\n'
+        '      "completeness_score": 0.85,\n'
+        '      "conciseness_score": 0.95,\n'
+        '      "overall_score": 0.90,\n'
+        '      "rationale": "Detailed explanation..."\n'
         "    }\n"
         "  ]\n"
         "}"

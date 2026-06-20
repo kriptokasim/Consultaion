@@ -6,11 +6,8 @@ Proves that:
 3. Routes use only public backend interfaces
 4. No private attribute access in production routes
 """
-import asyncio
-import json
 import pytest
-
-from sse_backend import MemoryChannelBackend, BaseSSEBackend
+from sse_backend import BaseSSEBackend, MemoryChannelBackend
 
 
 @pytest.fixture
@@ -88,7 +85,6 @@ async def test_base_sse_backend_has_replay_method():
 @pytest.mark.asyncio
 async def test_replay_route_uses_public_interface():
     """The replay_events route should only call public backend methods."""
-    import ast
     import inspect
 
     from routes.debates import replay_events

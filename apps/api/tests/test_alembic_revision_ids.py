@@ -1,7 +1,7 @@
 """Test that all Alembic migration revision IDs satisfy the VARCHAR(32) limit."""
+import glob
 import os
 import re
-import glob
 
 
 def _extract_revision_id(filepath: str) -> tuple[str, str]:

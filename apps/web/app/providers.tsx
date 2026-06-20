@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
 import { FeatureFlagProvider } from '@/components/FeatureFlagProvider';
+import { ToastProvider } from '@/components/ui/toast';
 
 export function Providers({ children }: { children: React.ReactNode }) {
     // Patchset 112: Tuned React Query defaults
@@ -42,7 +43,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
             <QueryClientProvider client={queryClient}>
                 <FeatureFlagProvider>
-                    {children}
+                    <ToastProvider>
+                        {children}
+                    </ToastProvider>
                 </FeatureFlagProvider>
             </QueryClientProvider>
         </ThemeProvider>

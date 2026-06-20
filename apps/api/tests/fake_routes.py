@@ -6,9 +6,9 @@ from auth import (
     create_access_token,
     decode_access_token,
     generate_csrf_token,
+    get_current_user_flexible,
     hash_password,
     verify_password,
-    get_current_user_flexible,
 )
 from config import settings
 from database import engine

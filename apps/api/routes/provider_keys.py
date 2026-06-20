@@ -1,14 +1,14 @@
 import logging
-from datetime import datetime, timezone
-import httpx
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+from datetime import datetime
 
+import httpx
 from auth import get_current_user
 from deps import get_session
 from exceptions import NotFoundError, ValidationError
+from fastapi import APIRouter, Depends, HTTPException
 from models import User, UserProviderKey, utcnow
+from pydantic import BaseModel, Field
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ async def validate_key_with_provider(provider: str, key: str) -> bool:
             raise ValidationError(
                 message=f"Network error trying to contact {provider} API. Please try again later.",
                 code="provider_key.network_error"
-            )
+            ) from e
 
 
 def mask_provider_key(provider: str, key: str) -> str:
@@ -156,7 +156,6 @@ async def save_provider_key(
     masked = mask_provider_key(provider_name, body.key)
 
     # FH125 D-2: Encrypt key at rest — fail closed in all environments
-    from config import settings as _settings
     try:
         from security.encryption import encrypt_value, fingerprint_key
         encrypted_payload = encrypt_value(

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def _check_schema_integrity() -> dict[str, Any]:
     """Check required tables and columns exist."""
-    from services.migration_safety import verify_required_tables, verify_critical_columns
+    from services.migration_safety import verify_critical_columns, verify_required_tables
 
     with engine.connect() as conn:
         from sqlmodel import Session

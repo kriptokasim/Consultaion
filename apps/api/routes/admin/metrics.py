@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from auth import get_current_admin
-from billing.models import BillingPlan, BillingSubscription, BillingUsage
+from billing.models import BillingPlan, BillingSubscription
 from deps import get_session
 from fastapi import APIRouter, Depends
 from models import AuditLog, Debate, LLMUsageLog, User
@@ -29,7 +29,7 @@ def admin_metrics(
     daus = session.exec(
         select(func.count(func.distinct(AuditLog.user_id)))
         .where(AuditLog.created_at >= day_ago)
-        .where(AuditLog.user_id != None)
+        .where(AuditLog.user_id is not None)
     ).one() or 0
 
     active_debates_count = session.exec(

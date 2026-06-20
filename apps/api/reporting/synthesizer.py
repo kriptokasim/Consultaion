@@ -13,17 +13,18 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from agents import call_llm_for_role
 from config import settings
-from reporting.synthesis_schema import DecisionReport, QualityMeta, Verdict
-from reporting.claim_similarity import get_claim_embeddings, compute_semantic_similarity
-from reporting.claim_contradiction import classify_contradiction
-from reporting.model_evaluator import evaluate_models_blind
-from reporting.claim_quality import filter_claims
 from worker.arena_tasks import _extract_claims_from_response
-from reporting.report_integrity import validate_report_integrity, looks_like_incomplete_json
+
+from reporting.claim_contradiction import classify_contradiction
+from reporting.claim_quality import filter_claims
+from reporting.claim_similarity import compute_semantic_similarity, get_claim_embeddings
+from reporting.model_evaluator import evaluate_models_blind
+from reporting.report_integrity import looks_like_incomplete_json, validate_report_integrity
+from reporting.synthesis_schema import DecisionReport, QualityMeta
 
 logger = logging.getLogger(__name__)
 
@@ -281,38 +282,38 @@ async def generate_decision_report(
             "Your response must be parseable by json.loads().\n"
             "Schema format:\n"
             "{\n"
-            "  \"title\": \"Clear descriptive title\",\n"
-            "  \"executive_summary\": \"High-level strategic summary...\",\n"
-            "  \"verdict\": {\n"
-            "    \"recommendation\": \"Actionable recommendation...\",\n"
-            "    \"confidence\": <float 0.0 to 1.0>,\n"
-            "    \"decision_type\": \"proceed | revise | defer | reject | mixed\",\n"
-            "    \"rationale\": \"Reasoning for this verdict...\"\n"
+            '  "title": "Clear descriptive title",\n'
+            '  "executive_summary": "High-level strategic summary...",\n'
+            '  "verdict": {\n'
+            '    "recommendation": "Actionable recommendation...",\n'
+            '    "confidence": <float 0.0 to 1.0>,\n'
+            '    "decision_type": "proceed | revise | defer | reject | mixed",\n'
+            '    "rationale": "Reasoning for this verdict..."\n'
             "  },\n"
-            "  \"key_findings\": [\n"
-            "    {\"title\": \"Finding title\", \"summary\": \"Details...\", \"importance\": \"critical | high | medium | low\"}\n"
+            '  "key_findings": [\n'
+            '    {"title": "Finding title", "summary": "Details...", "importance": "critical | high | medium | low"}\n'
             "  ],\n"
-            "  \"options_considered\": [\n"
-            "    {\"option\": \"Option name\", \"pros\": [\"pro1\"], \"cons\": [\"con1\"], \"score\": <optional float>}\n"
+            '  "options_considered": [\n'
+            '    {"option": "Option name", "pros": ["pro1"], "cons": ["con1"], "score": <optional float>}\n'
             "  ],\n"
-            "  \"model_positions\": [\n"
-            "    {\"model\": \"Model Name\", \"stance\": \"supportive | concerned | neutral | opposing\", "
-            "\"distinct_contribution\": \"The unique, specific contribution this model provided\", "
+            '  "model_positions": [\n'
+            '    {"model": "Model Name", "stance": "supportive | concerned | neutral | opposing", '
+            '"distinct_contribution": "The unique, specific contribution this model provided", '
             "\"blind_spot\": \"Specific limitation in this model's analysis. If none, write: No major limitation identified.\"}\n"
             "  ],\n"
-            "  \"risks_and_assumptions\": [\n"
-            "    {\"item\": \"Specific risk/assumption with concrete diagnostics\", \"type\": \"risk | assumption\", \"severity\": \"critical | high | medium | low\", \"mitigation\": \"Mitigation...\"}\n"
+            '  "risks_and_assumptions": [\n'
+            '    {"item": "Specific risk/assumption with concrete diagnostics", "type": "risk | assumption", "severity": "critical | high | medium | low", "mitigation": "Mitigation..."}\n'
             "  ],\n"
-            "  \"recommendation_table\": [\n"
-            "    {\"criterion\": \"Criterion\", \"winner_or_answer\": \"Winner/Option\", \"evidence\": \"Evidence...\", \"confidence\": <float 0.0 to 1.0>}\n"
+            '  "recommendation_table": [\n'
+            '    {"criterion": "Criterion", "winner_or_answer": "Winner/Option", "evidence": "Evidence...", "confidence": <float 0.0 to 1.0>}\n'
             "  ],\n"
-            "  \"next_actions\": [\n"
-            "    {\"action\": \"Action desc\", \"owner\": \"Owner\", \"priority\": \"now | next | later\"}\n"
+            '  "next_actions": [\n'
+            '    {"action": "Action desc", "owner": "Owner", "priority": "now | next | later"}\n'
             "  ],\n"
-            "  \"caveats\": [\"Caveat 1\", \"Caveat 2\"],\n"
-            "  \"dissenting_views\": [\"Dissenting view 1\"],\n"
-            "  \"unique_insights\": [\"Unique insight 1\"],\n"
-            "  \"context_needed\": [\"List of specific missing context items needed to make this report more specific, e.g. ARR, number of users, ICP, retention rate\"]\n"
+            '  "caveats": ["Caveat 1", "Caveat 2"],\n'
+            '  "dissenting_views": ["Dissenting view 1"],\n'
+            '  "unique_insights": ["Unique insight 1"],\n'
+            '  "context_needed": ["List of specific missing context items needed to make this report more specific, e.g. ARR, number of users, ICP, retention rate"]\n'
             "}"
         )
 
@@ -446,7 +447,7 @@ async def generate_decision_report(
             except Exception as repair_exc:
                 logger.error("JSON repair failed: %s.", repair_exc)
                 # If repair fails and raw content looks like incomplete JSON, raise error to fail-closed
-                raw_to_check = raw_content or (repaired_json if 'repaired_json' in locals() else '') or (json_str if 'json_str' in locals() else '')
+                raw_to_check = raw_content or (repaired_json if "repaired_json" in locals() else "") or (json_str if "json_str" in locals() else "")
                 if looks_like_incomplete_json(raw_to_check):
                     raise ValueError("Structured report generation failed; refusing unsafe raw JSON fallback.") from repair_exc
                 
@@ -661,9 +662,9 @@ async def generate_decision_report(
                 "debate_id": debate_id,
                 "stage": "structured_report_generation",
                 "reason": str(exc),
-                "has_semantic_analysis": bool(semantic_analysis) if 'semantic_analysis' in locals() else False,
+                "has_semantic_analysis": bool(semantic_analysis) if "semantic_analysis" in locals() else False,
                 "fallback_model": responses[0].get("persona", responses[0].get("model", "Model")) if responses else "unknown",
             },
         )
-        raise StructuredSynthesisError(str(exc), semantic_analysis=semantic_analysis if 'semantic_analysis' in locals() else None, original_exc=exc)
+        raise StructuredSynthesisError(str(exc), semantic_analysis=semantic_analysis if "semantic_analysis" in locals() else None, original_exc=exc) from exc
 

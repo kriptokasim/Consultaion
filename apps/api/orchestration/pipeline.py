@@ -174,7 +174,11 @@ class StandardDebatePipeline(DebatePipeline):
             )
 
             import time as time_module
-            from observability.metrics import record_pipeline_stage_duration, record_pipeline_stage_failure
+
+            from observability.metrics import (
+                record_pipeline_stage_duration,
+                record_pipeline_stage_failure,
+            )
 
             stage_mode = "recovery" if context.is_resume else "full"
             stage_start = time_module.monotonic()

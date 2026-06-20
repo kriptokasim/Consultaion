@@ -11,10 +11,11 @@ from agents import UsageAccumulator, UsageCall, call_llm_for_role
 from config import settings
 from database import session_scope
 from models import Debate, Message, Score
-from pydantic import ValidationError
-from schemas import PanelConfig, default_panel_config, DebateConfig, default_judges, JudgeConfig
-from sse_backend import get_sse_backend
 from orchestration.finalization import FinalizationService
+from pydantic import ValidationError
+from schemas import DebateConfig, JudgeConfig, PanelConfig, default_judges, default_panel_config
+from sse_backend import get_sse_backend
+
 from .config import PARLIAMENT_CHARTER
 from .prompts import build_messages_for_seat, transcript_to_text
 from .roles import ROLE_PROFILES
@@ -478,13 +479,13 @@ async def _execute_round(
 
         results = await asyncio.gather(*[_run_seat(seat, current_transcript) for seat in seat_group])
         
-        for seat, envelope, call_usage, exc in results:
-            if exc:
+        for seat, envelope, call_usage, err in results:
+            if err:
                 logger.error(
                     "Seat %s failed in round %s: %s",
                     seat.seat_id,
                     round_info.get("index"),
-                    exc,
+                    err,
                 )
                 failure_count += 1
                 continue

@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import time
-from collections import deque
 from collections.abc import AsyncIterator
 from enum import Enum
 from typing import Optional, Protocol
@@ -90,8 +89,6 @@ class BaseSSEBackend(Protocol):
     async def cleanup(self) -> None:
         ...
 
-    async def cleanup(self) -> None:
-        ...
 
     async def ping(self) -> bool:
         ...

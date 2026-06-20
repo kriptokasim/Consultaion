@@ -1,11 +1,11 @@
-import pytest
 import uuid
 from datetime import datetime, timezone
-from sqlmodel import Session, select
-from database import engine
-from models import User
+
 from billing.models import BillingPlan, BillingSubscription
 from billing.providers.stripe_provider import StripeBillingProvider
+from models import User
+from sqlmodel import Session, select
+
 
 def _ensure_plans(session: Session):
     free_plan = session.exec(select(BillingPlan).where(BillingPlan.slug == "free")).first()

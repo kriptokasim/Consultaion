@@ -11,16 +11,16 @@ import hashlib
 import ipaddress
 import logging
 import time
+from collections import OrderedDict
 from typing import Optional
 
 import jwt
-from fastapi import Request
-
+from api_key_utils import extract_prefix, verify_api_key
 from config import settings
 from database import engine
-from sqlmodel import Session, select
+from fastapi import Request
 from models import APIKey
-from api_key_utils import verify_api_key, extract_prefix
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,6 @@ logger = logging.getLogger(__name__)
 # Format: {token_sha256: (resolved_id, resolved_type, expires_at)}
 # Max 10K entries, LRU eviction via OrderedDict on access
 _MAX_CACHE_SIZE = 10000
-
-from collections import OrderedDict
 
 _VERIFIED_TOKENS_CACHE: OrderedDict[str, tuple[Optional[str], str, float]] = OrderedDict()
 
@@ -149,7 +147,7 @@ def _validate_api_key(token: str) -> Optional[str]:
         with Session(engine) as session:
             stmt = select(APIKey).where(
                 APIKey.prefix == prefix,
-                APIKey.revoked == False
+                APIKey.revoked is False
             )
             record = session.exec(stmt).first()
             if record:

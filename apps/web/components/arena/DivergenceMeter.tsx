@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { CheckCircle2, AlertTriangle, ThumbsUp, Sparkles, Loader2, Check, Clock } from "lucide-react";
 import { apiRequest } from "@/lib/apiClient";
 import { useToast } from "@/components/ui/toast";
@@ -75,7 +75,7 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
     }
   }, [report?.divergence_score]);
 
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     try {
       const data = await apiRequest<DivergenceReport>({
         path: `/arena/${debateId}/divergence`,
@@ -98,7 +98,7 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
       setIsPolling(false);
       return null;
     }
-  };
+  }, [debateId, pollCount]);
 
   useEffect(() => {
     if (!isCompleted) return;
@@ -108,7 +108,7 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [debateId, isCompleted, pollCount]);
+  }, [debateId, isCompleted, pollCount, fetchReport]);
 
   // Load voted state from localStorage for UX stickiness
   useEffect(() => {

@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, List, Optional
 
-from sqlalchemy import JSON, Column, DateTime, Index, Text, UniqueConstraint, ForeignKey, String
-from sqlalchemy.orm import relationship
 from pydantic import field_validator
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy.orm import relationship
 from sqlmodel import Field, Relationship, SQLModel
 
 

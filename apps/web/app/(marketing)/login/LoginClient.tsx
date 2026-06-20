@@ -29,6 +29,17 @@ export default function LoginClient() {
     return () => window.clearTimeout(timer)
   }, [])
 
+  useEffect(() => {
+    const err = searchParams.get("error")
+    if (err) {
+      if (err === "google_not_configured") {
+        setError("Google Sign-In is not configured on this server. Please check your environment variables.")
+      } else {
+        setError(err)
+      }
+    }
+  }, [searchParams])
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setError(null)

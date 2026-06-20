@@ -1,9 +1,8 @@
 import logging
-from typing import Optional
 
+from audit import record_audit
 from auth import get_current_user
 from deps import get_session
-from exceptions import NotFoundError
 from fastapi import APIRouter, Depends
 from models import Debate, User
 from pydantic import BaseModel
@@ -12,9 +11,7 @@ from sqlmodel import Session, select
 from routes.common import (
     require_debate_access,
     require_debate_mutation_access,
-    user_is_team_member,
 )
-from audit import record_audit
 
 logger = logging.getLogger(__name__)
 

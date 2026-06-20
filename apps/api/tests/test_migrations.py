@@ -7,8 +7,9 @@ from sqlmodel import Session, create_engine, text
 BASE_DIR = Path(__file__).resolve().parents[1]
 DB_URL = os.environ.get("DATABASE_URL")
 
-import pytest
 import sys
+
+import pytest
 
 
 def _run_alembic(database_url: str):
@@ -66,7 +67,6 @@ def test_004_alembic_current_matches_head():
   """Verify Alembic current matches head (no pending migrations)."""
   if not DB_URL or "postgresql" not in DB_URL.lower():
       pytest.skip("Migration tests require PostgreSQL")
-  import re
   env = os.environ.copy()
   env["DATABASE_URL"] = DB_URL
   env["JWT_SECRET"] = "dummy-secret-for-migrations"

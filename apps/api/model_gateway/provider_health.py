@@ -1,7 +1,8 @@
 import logging
+
 from config import settings
-from redis_pool import get_sync_redis_client
 from llm_errors import ProviderFailureCode
+from redis_pool import get_sync_redis_client
 
 logger = logging.getLogger("model_gateway.provider_health")
 

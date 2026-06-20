@@ -1,10 +1,9 @@
+
 import pytest
-from models import Debate, User, DebateContinuation
-from sqlmodel import select
-from datetime import datetime, timezone
 from auth import hash_password
 from exceptions import ContinuationTransitionError
-from services.continuations import transition_continuation_sync, transition_continuation_async
+from models import Debate, DebateContinuation, User
+from services.continuations import transition_continuation_async, transition_continuation_sync
 
 
 def test_transition_continuation_sync(db_session):

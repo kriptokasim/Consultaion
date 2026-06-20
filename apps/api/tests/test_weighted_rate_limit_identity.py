@@ -1,6 +1,6 @@
 """Tests for rate limit identity resolution edge cases."""
-import pytest
 from unittest.mock import MagicMock
+
 from middleware.rate_limit_identity import resolve_identity
 
 

@@ -1,18 +1,16 @@
 """Tests for structured report integrity check logic, including JSON leakage detection."""
 
-import pytest
-import json
 from reporting.report_integrity import (
     contains_raw_json_leak,
     looks_like_incomplete_json,
     validate_report_integrity,
 )
-from reporting.synthesis_schema import DecisionReport, Verdict, QualityMeta
+from reporting.synthesis_schema import DecisionReport, Verdict
 
 
 def test_contains_raw_json_leak_detects_markdown_code_fences():
-    assert contains_raw_json_leak("```json\n{\n  \"verdict\": \"proceed\"\n}\n```") is True
-    assert contains_raw_json_leak("```\n{\n  \"verdict\": \"proceed\"\n}\n```") is True
+    assert contains_raw_json_leak('```json\n{\n  "verdict": "proceed"\n}\n```') is True
+    assert contains_raw_json_leak('```\n{\n  "verdict": "proceed"\n}\n```') is True
     assert contains_raw_json_leak("Just regular text.") is False
 
 
@@ -39,7 +37,7 @@ def test_looks_like_incomplete_json():
     # Incomplete/truncated JSON fails decoding and matches starting markers
     assert looks_like_incomplete_json('{"verdict": "proceed"') is True
     assert looks_like_incomplete_json('{"executive_summary": "We suggests..."') is True
-    assert looks_like_incomplete_json("```json\n{\n  \"verdict\": \"proceed\"") is True
+    assert looks_like_incomplete_json('```json\n{\n  "verdict": "proceed"') is True
 
 
 def test_validate_report_integrity_clean_report():
@@ -61,12 +59,12 @@ def test_validate_report_integrity_clean_report():
 def test_validate_report_integrity_dirty_report():
     report = DecisionReport(
         title="Dirty Report",
-        executive_summary="```json\n{\"verdict\": \"leak\"}\n```",
+        executive_summary='```json\n{"verdict": "leak"}\n```',
         verdict=Verdict(
             recommendation="Proceed.",
             confidence=0.8,
             decision_type="proceed",
-            rationale="Here is the leaked JSON: {\"verdict\": \"leak\", \"executive_summary\": \"leak\"}",
+            rationale='Here is the leaked JSON: {"verdict": "leak", "executive_summary": "leak"}',
         )
     )
     ok, problems = validate_report_integrity(report)

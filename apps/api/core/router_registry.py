@@ -31,30 +31,30 @@ def build_router_registry() -> List[RouterRegistration]:
     This eliminates the need to manually duplicate router includes across
     root and /api/v1 blocks.
     """
-    from routes.auth import router as auth_router
-    from routes.ops import router as ops_router
-    from routes.stats import router as stats_router
-    from routes.models import router as models_router
-    from routes.debates import router as debates_router
-    from routes.teams import router as teams_router
-    from routes.admin import router as admin_router
-    from routes.participation import router as participation_router
-    from routes.arena import router as arena_router
-    from routes.voting import router as voting_router
-    from routes.redteam import router as redteam_router
-    from routes.oracle import router as oracle_router
-    from routes.challenge import router as challenge_router
-    from routes.public_stats import router as public_stats_router
-    from routes.routing_admin import router as routing_admin_router
     from billing.routes import billing_router
+    from gdpr.routes import gdpr_router
     from promotions.routes import promotions_router
+    from routes.admin import router as admin_router
     from routes.api_keys import api_keys_router
-    from routes.provider_keys import router as provider_keys_router
+    from routes.arena import router as arena_router
     from routes.audit_logs import router as audit_logs_router
+    from routes.auth import router as auth_router
+    from routes.challenge import router as challenge_router
+    from routes.debates import router as debates_router
     from routes.features import router as features_router
     from routes.gifs import router as gifs_router
+    from routes.models import router as models_router
+    from routes.ops import router as ops_router
+    from routes.oracle import router as oracle_router
+    from routes.participation import router as participation_router
+    from routes.provider_keys import router as provider_keys_router
+    from routes.public_stats import router as public_stats_router
+    from routes.redteam import router as redteam_router
+    from routes.routing_admin import router as routing_admin_router
+    from routes.stats import router as stats_router
+    from routes.teams import router as teams_router
     from routes.votes import router as votes_router
-    from gdpr.routes import gdpr_router
+    from routes.voting import router as voting_router
 
     return [
         RouterRegistration(auth_router),
@@ -91,7 +91,6 @@ def register_routers(app, settings) -> None:
     /api/v1 routes are the canonical namespace.
     """
     from fastapi import Request
-    from fastapi.responses import JSONResponse
 
     registry = build_router_registry()
 
@@ -138,5 +137,5 @@ def register_routers(app, settings) -> None:
             if not path.startswith("/api/v1") and not path.startswith("/metrics") and not path.startswith("/ops"):
                 resp.headers["Deprecation"] = "true"
                 resp.headers["Sunset"] = "2026-09-01"
-                resp.headers["Link"] = f"</api/v1{path}>; rel=\"successor-version\""
+                resp.headers["Link"] = f'</api/v1{path}>; rel="successor-version"'
             return resp

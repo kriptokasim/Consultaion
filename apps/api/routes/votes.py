@@ -10,15 +10,14 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
-from sqlalchemy import func, select
-from sqlmodel import Session
-
 from auth import get_optional_user
 from config import settings
 from database import get_session
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models import ConversationVote, User
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 

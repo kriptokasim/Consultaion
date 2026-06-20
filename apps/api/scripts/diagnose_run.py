@@ -14,18 +14,25 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import os
-from datetime import datetime, timezone
+import sys
+from datetime import datetime
 
 # Ensure the api/ directory is on sys.path so sibling packages resolve.
 _api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _api_dir not in sys.path:
     sys.path.insert(0, _api_dir)
 
-from sqlmodel import Session, select, func
-from models import Debate, Message, Score, DebateCheckpoint, DebateStageCheckpoint, LLMUsageLog
-from checks import check_db_readiness
+from checks import check_db_readiness  # noqa: E402
+from models import (  # noqa: E402
+    Debate,
+    DebateCheckpoint,
+    DebateStageCheckpoint,
+    LLMUsageLog,
+    Message,
+    Score,
+)
+from sqlmodel import func, select  # noqa: E402
 
 
 def _fmt_ts(dt: datetime | None) -> str:
@@ -176,11 +183,11 @@ def diagnose(debate_id: str) -> str:
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
         if not debate:
-            lines.append(f"[2] DEBATE: NOT FOUND")
+            lines.append("[2] DEBATE: NOT FOUND")
             lines.append("")
             return "\n".join(lines)
 
-        lines.append(f"[2] DEBATE STATE")
+        lines.append("[2] DEBATE STATE")
         lines.append(f"    Status          : {debate.status}")
         lines.append(f"    Mode            : {debate.mode}")
         lines.append(f"    Created         : {_fmt_ts(debate.created_at)}")
@@ -248,7 +255,7 @@ def diagnose(debate_id: str) -> str:
         # 7. Provider failures from LLMUsageLog
         failures = session.exec(
             select(LLMUsageLog).where(
-                LLMUsageLog.debate_id == debate_id, LLMUsageLog.success == False
+                LLMUsageLog.debate_id == debate_id, LLMUsageLog.success is False
             ).order_by(LLMUsageLog.created_at.desc())
         ).all()
 
@@ -270,7 +277,7 @@ def diagnose(debate_id: str) -> str:
         lines.append("")
 
         # 8. Decision tree
-        lines.append(f"[8] DECISION TREE")
+        lines.append("[8] DECISION TREE")
         status = debate.status
         if status == "failed":
             reason = "all_models_failed" if failed == len(responses) and len(responses) > 0 else "unknown"

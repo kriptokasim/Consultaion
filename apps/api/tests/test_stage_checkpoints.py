@@ -1,10 +1,10 @@
+from unittest.mock import patch
+
 import pytest
-import json
-from unittest.mock import AsyncMock, patch
 from database_async import async_session_scope
-from models import User, Debate, DebateStageCheckpoint, Message, Score, Vote, DivergenceReport
-from sqlmodel import select
+from models import Debate, DebateStageCheckpoint, DivergenceReport, Message, Score, User, Vote
 from orchestration.checkpoints import run_with_checkpoint
+from sqlmodel import select
 
 
 @pytest.mark.anyio
@@ -247,7 +247,7 @@ def test_retry_api_downstream_clearing(authenticated_client, db_session):
 async def test_debate_workspace_serialization(db_session):
     # Setup test objects in db
     from models import Debate, DebateStageCheckpoint, Message, Score
-    from serializers import serialize_debate_public, serialize_debate_private
+    from serializers import serialize_debate_private, serialize_debate_public
 
     debate = Debate(
         id="test-workspace-serialization",

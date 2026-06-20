@@ -7,8 +7,8 @@ Proves that:
 4. No stream lease remains after cancellation
 """
 import asyncio
-import pytest
 
+import pytest
 from sse_backend import MemoryChannelBackend
 
 

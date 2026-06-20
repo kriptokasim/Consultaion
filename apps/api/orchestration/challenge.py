@@ -1,8 +1,9 @@
 import asyncio
 import json
 import logging
-from typing import Dict, Any, List
-from agents import _call_llm, USE_MOCK
+from typing import Any, Dict
+
+from agents import USE_MOCK, _call_llm
 
 logger = logging.getLogger(__name__)
 

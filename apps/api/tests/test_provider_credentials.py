@@ -4,14 +4,14 @@ Patchset 133 §7.1: Proves encryption/decryption uses identical AAD,
 wrong context fails, and keys never appear in logs.
 """
 
-import os
-import pytest
-import uuid
-import logging
 import base64
-from sqlmodel import Session, select
+import logging
+import os
+import uuid
+
+import pytest
 from models import User, UserProviderKey
-from security.encryption import encrypt_value, decrypt_value, fingerprint_key, validate_keyring
+from security.encryption import decrypt_value, encrypt_value, fingerprint_key, validate_keyring
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +58,8 @@ class TestBYOKRoundTrip:
         plaintext = "sk-test-wrong-user"
         encrypted = encrypt_value(plaintext, user_id=test_user.id, provider="openai")
 
-        with pytest.raises(Exception):
+        from cryptography.exceptions import InvalidTag
+        with pytest.raises(InvalidTag):
             decrypt_value(encrypted, user_id="wrong-user-id", provider="openai")
 
     def test_provider_key_wrong_provider_fails(self, test_user):
@@ -66,7 +67,8 @@ class TestBYOKRoundTrip:
         plaintext = "sk-test-wrong-provider"
         encrypted = encrypt_value(plaintext, user_id=test_user.id, provider="openai")
 
-        with pytest.raises(Exception):
+        from cryptography.exceptions import InvalidTag
+        with pytest.raises(InvalidTag):
             decrypt_value(encrypted, user_id=test_user.id, provider="anthropic")
 
     def test_provider_key_never_logged(self, test_user, caplog):

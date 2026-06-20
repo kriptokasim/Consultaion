@@ -1,10 +1,9 @@
-import asyncio
 import logging
 import uuid
 from typing import Optional
 
 import sqlalchemy as sa
-from auth import get_current_user, get_optional_user
+from auth import get_current_user
 from channels import debate_channel_id
 from config import settings
 from debate_dispatch import dispatch_debate_run
@@ -13,15 +12,12 @@ from exceptions import (
     NotFoundError,
     ValidationError,
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from models import Debate, DebateContinuation, Message, User, utcnow
-from parliament.model_registry import list_enabled_models, get_default_model
-from parliament.router_v2 import RouteContext, choose_model
-from pydantic import BaseModel
+from parliament.model_registry import get_default_model, list_enabled_models
 from schemas import (
-    ContinuationResponse,
     ContinuationRequest,
-    default_debate_config,
+    ContinuationResponse,
 )
 from sqlmodel import Session, select
 from sse_backend import BaseSSEBackend
@@ -30,7 +26,6 @@ from routes.common import (
     require_debate_access,
     require_debate_mutation_access,
     require_schema_current,
-    track_metric,
 )
 from routes.debates.schemas import ContinuationResolveRequest, RetryAgentRequest, RetryRequest
 
@@ -88,9 +83,9 @@ def check_continue_preflight(debate: Debate, current_user: User, session: Sessio
             )
 
     # 3. Model/Provider health check
-    from parliament.model_registry import list_enabled_models, get_default_model
-    from parliament.provider_health import get_health_state
     from datetime import datetime, timezone
+
+    from parliament.provider_health import get_health_state
 
     enabled_models = {m.id: m for m in list_enabled_models()}
     target_model_id = debate.model_id or get_default_model().id
@@ -117,7 +112,7 @@ async def start_debate_run(
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     # Set correlation context for this request
-    from correlation import get_correlation_context, create_child_context
+    from correlation import create_child_context, get_correlation_context
     ctx = get_correlation_context()
     if ctx:
         ctx = create_child_context(
@@ -179,7 +174,7 @@ async def continue_debate_run(
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     # Set correlation context for this request
-    from correlation import get_correlation_context, create_child_context
+    from correlation import create_child_context, get_correlation_context
     ctx = get_correlation_context()
     if ctx:
         ctx = create_child_context(
@@ -312,10 +307,9 @@ async def continue_debate_run(
         raise exc
 
     # 3. Credit Reservation prior to state transition
-    from billing.service import get_active_plan, reserve_hosted_credit, refund_hosted_credit
+    from billing.service import get_active_plan, refund_hosted_credit, reserve_hosted_credit
     plan = get_active_plan(session, current_user.id)
     
-    from parliament.model_registry import list_enabled_models, get_default_model
     enabled_models = {m.id: m for m in list_enabled_models()}
     target_model_id = debate.model_id or get_default_model().id
     target_model_info = enabled_models.get(target_model_id)
@@ -477,13 +471,14 @@ async def get_debate_continuation(
         raise NotFoundError(message=f"Debate {debate_id} not found", code="debate.not_found")
     require_debate_access(debate, current_user, session)
     
-    from models import DebateContinuation
     import uuid
+
+    from models import DebateContinuation
     # Validate continuation_id is a valid UUID
     try:
         uuid.UUID(continuation_id)
-    except ValueError:
-        raise NotFoundError(message=f"Continuation {continuation_id} not found", code="continuation.not_found")
+    except ValueError as err:
+        raise NotFoundError(message=f"Continuation {continuation_id} not found", code="continuation.not_found") from err
 
     continuation = session.get(DebateContinuation, continuation_id)
     if not continuation or str(continuation.debate_id) != debate_id:
@@ -554,7 +549,7 @@ async def retry_debate_run(
     # 1. Determine target stage(s) to clear
     stage_key = body.stage_key if body else None
     
-    from models import DebateStageCheckpoint, Score, Vote
+    from models import DebateStageCheckpoint
     if not stage_key:
         # If no stage key specified, look for any failed stage
         stmt = (
@@ -769,7 +764,7 @@ async def retry_agent(
             if m_info.get("display_name") == target_persona:
                 m_info["success"] = True
                 
-        final_meta["successful_count"] = sum(1 for m in models_list if m.get("success") != False)
+        final_meta["successful_count"] = sum(1 for m in models_list if m.get("success") is not False)
         final_meta["models"] = models_list
         debate.final_meta = final_meta
         session.add(debate)
@@ -804,4 +799,4 @@ async def retry_agent(
                 "message": f"Retry for agent '{target_persona}' failed.",
             }
         )
-        raise HTTPException(status_code=500, detail="Agent retry failed. Please try again later.")
+        raise HTTPException(status_code=500, detail="Agent retry failed. Please try again later.") from exc

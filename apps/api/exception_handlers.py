@@ -2,12 +2,11 @@ import logging
 import uuid
 from typing import Any, Dict
 
+from exceptions import AppError
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
-
-from exceptions import AppError
 
 logger = logging.getLogger(__name__)
 

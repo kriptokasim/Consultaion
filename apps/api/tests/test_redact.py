@@ -3,7 +3,6 @@
 Validates the redact_sensitive() helper which redacts sensitive keys
 from dictionaries for safe logging.
 """
-import pytest
 from utils.redact import redact_sensitive
 
 

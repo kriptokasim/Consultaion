@@ -8,13 +8,11 @@ Proves that:
 5. Valid streams are not falsely rejected with HTTP 503
 """
 import asyncio
-import pytest
-import time
 
+import pytest
 from sse_backend import (
     StreamLeaseManager,
     StreamLeaseResult,
-    AcquiredStreamLease,
     acquired_stream_lease,
 )
 

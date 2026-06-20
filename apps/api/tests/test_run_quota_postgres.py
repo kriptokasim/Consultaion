@@ -5,11 +5,11 @@ and missing counter initialization is race-safe.
 """
 
 import uuid
-import asyncio
+
 import pytest
-from sqlmodel import Session, select
-from models import User, UsageCounter, UsageQuota
-from usage_limits import reserve_run_slot, RateLimitError
+from models import UsageCounter, UsageQuota, User
+from sqlmodel import select
+from usage_limits import RateLimitError, reserve_run_slot
 
 
 @pytest.fixture
@@ -89,6 +89,7 @@ class TestRunLimitConcurrency:
     def test_period_reset_allows_new_runs(self, db_session, test_user):
         """After period expires, new runs are allowed."""
         from datetime import timedelta
+
         from models import utcnow
 
         quota = UsageQuota(

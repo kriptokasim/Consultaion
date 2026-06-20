@@ -1,14 +1,16 @@
 from uuid import uuid4
-from models import User, OracleSession, OracleBranch
-from sqlmodel import Session, select
+
 import pytest
+from models import OracleBranch, OracleSession, User
 from routes.oracle import run_base_reasoning_task, run_fork_reasoning_task
+from sqlmodel import Session, select
+
 
 def test_start_oracle_session_endpoint(authenticated_client, db_session: Session):
     payload = {
         "prompt": "Evaluate the scalability of local RAM caching under peak concurrency."
     }
-    response = authenticated_client.post('/oracle', json=payload)
+    response = authenticated_client.post("/oracle", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert "session_id" in data
@@ -25,7 +27,7 @@ def test_start_oracle_session_endpoint(authenticated_client, db_session: Session
 
 
 def test_get_oracle_session_endpoint(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     sess = OracleSession(
         id=str(uuid4()),
         user_id=user.id,
@@ -54,7 +56,7 @@ def test_get_oracle_session_endpoint(authenticated_client, db_session: Session):
     db_session.add(branch)
     db_session.commit()
 
-    response = authenticated_client.get(f'/oracle/{sess.id}')
+    response = authenticated_client.get(f"/oracle/{sess.id}")
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == sess.id
@@ -66,7 +68,7 @@ def test_get_oracle_session_endpoint(authenticated_client, db_session: Session):
 
 @pytest.mark.anyio
 async def test_oracle_background_reasoning_tasks(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     sess = OracleSession(
         id=str(uuid4()),
         user_id=user.id,

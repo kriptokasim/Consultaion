@@ -2,6 +2,7 @@
 import subprocess
 import sys
 
+
 def main():
     result = subprocess.run(
         ["pytest", "--collect-only", "-q"],

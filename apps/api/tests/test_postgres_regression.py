@@ -1,12 +1,8 @@
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import pytest
-from models import Debate, Message, Score, DebateStageCheckpoint
+from models import Debate, Message, User
 from sqlmodel import Session, select
-from auth import COOKIE_NAME, create_access_token, hash_password
-from models import User
 
 
 def _create_debate(session: Session, user, **kwargs) -> Debate:
@@ -137,7 +133,7 @@ def test_missing_optional_table_under_savepoint(authenticated_client, db_session
 
 def test_historical_response_role_mapping(authenticated_client, db_session):
     """FH124: Messages with different roles are correctly classified."""
-    from services.debate_responses import RESPONSE_ROLES, EXCLUDED_ROLES
+    from services.debate_responses import EXCLUDED_ROLES, RESPONSE_ROLES
 
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     debate = _create_debate(db_session, user, prompt="Role mapping test", status="completed")
@@ -183,7 +179,7 @@ def test_repair_dry_run(authenticated_client, db_session):
 
 def test_repair_idempotency(authenticated_client, db_session):
     """FH124: Querying the same debate twice yields consistent results."""
-    from services.debate_responses import fetch_persisted_responses, RESPONSE_ROLES
+    from services.debate_responses import RESPONSE_ROLES
 
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     debate = _create_debate(db_session, user, prompt="Idempotency test", status="completed")

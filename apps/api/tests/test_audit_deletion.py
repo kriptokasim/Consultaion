@@ -4,11 +4,12 @@ Patchset 133 §7.7: Proves audit records persist correctly and deletion
 is safe on PostgreSQL.
 """
 
-import pytest
 import uuid
-from sqlmodel import Session, select
-from models import User, SupportNote, AuditLog, Debate, utcnow
+
+import pytest
 from audit import record_audit
+from models import AuditLog, SupportNote, User
+from sqlmodel import select
 
 
 @pytest.fixture

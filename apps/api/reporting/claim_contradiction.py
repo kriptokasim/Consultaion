@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Dict, Any
+from typing import Any, Dict
 
 from agents import call_llm_for_role
 from config import settings
@@ -58,12 +58,12 @@ async def classify_contradiction(
         "if they actively contradict each other (express opposing facts, incompatible conclusions, "
         "or mutually exclusive recommendations) or if they are complementary/non-contradictory. "
         "Output strictly valid JSON with no other formatting or explanation outside the JSON. "
-        "Schema: {\"is_contradictory\": boolean, \"explanation\": \"short reason why\"}"
+        'Schema: {"is_contradictory": boolean, "explanation": "short reason why"}'
     )
 
     user_content = (
-        f"Claim A: \"{claim_a}\"\n"
-        f"Claim B: \"{claim_b}\"\n\n"
+        f'Claim A: "{claim_a}"\n'
+        f'Claim B: "{claim_b}"\n\n'
         "Are these contradictory?"
     )
 

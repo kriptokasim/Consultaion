@@ -1,9 +1,10 @@
-from typing import Any, Dict, List
-from fastapi import APIRouter, Depends
-from sqlmodel import Session, select, func
-from models import User, UserInteraction
-from deps import get_session
+from typing import Any, Dict
+
 from auth import get_current_user
+from deps import get_session
+from fastapi import APIRouter, Depends
+from models import User, UserInteraction
+from sqlmodel import Session, func, select
 
 router = APIRouter(tags=["participation"])
 

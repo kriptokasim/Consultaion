@@ -92,6 +92,7 @@ def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
     from security.owner import is_owner
     if is_owner(user):
         import logging
+
         from config import settings
         logging.getLogger(__name__).info(
             "owner_override_applied",

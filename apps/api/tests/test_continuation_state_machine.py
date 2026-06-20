@@ -1,13 +1,13 @@
 import pytest
-from models import Debate, User, DebateContinuation
-from sqlmodel import Session
 from auth import hash_password
 from exceptions import ContinuationTransitionError
+from models import Debate, DebateContinuation, User
 from services.continuations import (
-    transition_continuation_sync,
-    transition_continuation_async,
     ALLOWED_CONTINUATION_TRANSITIONS,
+    transition_continuation_async,
+    transition_continuation_sync,
 )
+from sqlmodel import Session
 
 
 def _create_debate_and_continuation(db_session: Session, debate_id: str, cont_key: str):

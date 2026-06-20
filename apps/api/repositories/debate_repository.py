@@ -1,6 +1,8 @@
-from typing import Optional, List
-from sqlmodel import Session, select
+from typing import List, Optional
+
 from models import Debate
+from sqlmodel import Session, select
+
 
 class DebateRepository:
     def __init__(self, session: Session):

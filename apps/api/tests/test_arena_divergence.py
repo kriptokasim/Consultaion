@@ -1,8 +1,6 @@
-import asyncio
 import pytest
+from models import Debate, DivergenceReport, Message, User, UserInteraction, VoteRecord
 from sqlmodel import select
-
-from models import Debate, Message, DivergenceReport, VoteRecord, UserInteraction, User
 from worker.arena_tasks import _execute_divergence_computation, compute_string_similarity
 
 

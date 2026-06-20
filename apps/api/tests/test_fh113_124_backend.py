@@ -1,11 +1,9 @@
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
-from models import Debate, Message, User
-from sqlmodel import Session, select
-from auth import COOKIE_NAME, create_access_token, hash_password
+from models import Debate, User
+from sqlmodel import select
 
 
 def test_core_serializer_survives_checkpoint_failure(authenticated_client, db_session):

@@ -450,7 +450,7 @@ function ArenaPageContent() {
       url.searchParams.delete('resume')
       window.history.replaceState({}, '', url.toString())
     }
-  }, [resumeParam, authStatus])
+  }, [resumeParam, authStatus, gatewayPolicy, router, stopStream])
 
   const handlePanelChange = useCallback(
     (seats: PanelSeatConfig[]) => {

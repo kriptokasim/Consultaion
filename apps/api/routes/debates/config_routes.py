@@ -3,13 +3,13 @@ from typing import Optional
 
 from auth import get_optional_user
 from deps import get_session
+from exceptions import NotFoundError
 from fastapi import APIRouter, Depends, Query, Response
 from models import Debate, User
 from schemas import DebateConfig, PanelConfig, default_debate_config
 from sqlmodel import Session, select
 
-from exceptions import NotFoundError
-from routes.common import require_debate_access, serialize_rating_persona, track_metric
+from routes.common import require_debate_access, serialize_rating_persona
 from routes.debates.dependencies import _members_from_config
 
 logger = logging.getLogger(__name__)

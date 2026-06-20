@@ -16,7 +16,6 @@ Requirements:
 import argparse
 import logging
 import sys
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -29,10 +28,10 @@ def migrate_provider_keys(dry_run: bool = True, batch_size: int = BATCH_SIZE) ->
 
     Returns a summary dict with counts of migrated, skipped, and failed rows.
     """
-    from sqlmodel import Session, select
-    from models import UserProviderKey
     from database import engine
-    from security.encryption import encrypt_value, fingerprint_key, validate_keyring
+    from models import UserProviderKey
+    from security.encryption import validate_keyring
+    from sqlmodel import Session, select
 
     summary = {"migrated": 0, "skipped": 0, "failed": 0, "errors": []}
 

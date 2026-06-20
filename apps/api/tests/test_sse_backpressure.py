@@ -8,8 +8,8 @@ Proves that:
 5. Loss-tolerant events are dropped before important/critical events
 """
 import asyncio
-import pytest
 
+import pytest
 from sse_backend import MemoryChannelBackend, _event_priority
 
 

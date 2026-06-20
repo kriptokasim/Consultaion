@@ -1,15 +1,17 @@
 from uuid import uuid4
-from models import User, RedTeamSession
-from sqlmodel import Session, select
+
 import pytest
+from models import RedTeamSession, User
 from routes.redteam import run_analysis_task
+from sqlmodel import Session, select
+
 
 def test_start_red_team_session_endpoint(authenticated_client, db_session: Session):
     payload = {
         "proposal_text": "We will host our database without a password in public access.",
         "lenses": ["security", "compliance"]
     }
-    response = authenticated_client.post('/redteam', json=payload)
+    response = authenticated_client.post("/redteam", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert "id" in data
@@ -26,7 +28,7 @@ def test_start_red_team_session_endpoint(authenticated_client, db_session: Sessi
 
 
 def test_get_red_team_session_endpoint(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     rt = RedTeamSession(
         id=str(uuid4()),
         user_id=user.id,
@@ -47,7 +49,7 @@ def test_get_red_team_session_endpoint(authenticated_client, db_session: Session
     db_session.add(rt)
     db_session.commit()
 
-    response = authenticated_client.get(f'/redteam/{rt.id}')
+    response = authenticated_client.get(f"/redteam/{rt.id}")
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == rt.id
@@ -59,7 +61,7 @@ def test_get_red_team_session_endpoint(authenticated_client, db_session: Session
 
 @pytest.mark.anyio
 async def test_red_team_analysis_background_task(authenticated_client, db_session: Session):
-    user = db_session.exec(select(User).where(User.email == 'normal@example.com')).first()
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     rt = RedTeamSession(
         id=str(uuid4()),
         user_id=user.id,

@@ -187,7 +187,7 @@ class SynthesisStage(BaseStage):
             
         selected_scores = [s for s in scores if s["persona"] in {c["persona"] for c in selected_candidates}]
         
-        from agents import UsageAccumulator, synthesize
+        from agents import UsageAccumulator
         
         responses_list = [
             {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
 import { API_ORIGIN } from "@/lib/config/runtime";
@@ -32,7 +32,7 @@ export default function ProviderKeysPage() {
 
   const apiBase = API_ORIGIN;
 
-  const fetchKeys = async () => {
+  const fetchKeys = useCallback(async () => {
     try {
       const res = await fetch(`${apiBase}/provider-keys`, { credentials: "include" });
       if (res.ok) {
@@ -44,11 +44,11 @@ export default function ProviderKeysPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiBase]);
 
   useEffect(() => {
     fetchKeys();
-  }, []);
+  }, [fetchKeys]);
 
   const handleAddOrUpdate = async (provider: string) => {
     if (!newKey.trim()) return;

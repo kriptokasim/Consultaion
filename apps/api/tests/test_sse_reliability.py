@@ -5,6 +5,7 @@ and terminal events cannot be dropped.
 """
 
 import asyncio
+
 import pytest
 from sse_backend import MemoryChannelBackend
 

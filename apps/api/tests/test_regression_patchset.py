@@ -13,9 +13,7 @@ Covers the critical scenarios from the regression matrix:
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 
 class TestFH63ProfileNull:
@@ -132,10 +130,10 @@ class TestFH70AlembicAudit:
         sys.path.insert(0, str(script_dir))
         from audit_alembic_revisions import _extract_revision_info
 
-        code = '''
+        code = """
 revision: str = "test_rev_001"
 down_revision: str | None = "prev_rev"
-'''
+"""
         tree = ast.parse(code)
         info = _extract_revision_info(tree, "test.py")
         assert info is not None
@@ -151,10 +149,10 @@ down_revision: str | None = "prev_rev"
         sys.path.insert(0, str(script_dir))
         from audit_alembic_revisions import _extract_revision_info
 
-        code = '''
+        code = """
 revision = "merge_rev"
 down_revision = ("rev_a", "rev_b")
-'''
+"""
         tree = ast.parse(code)
         info = _extract_revision_info(tree, "test.py")
         assert info is not None
@@ -170,10 +168,10 @@ down_revision = ("rev_a", "rev_b")
         sys.path.insert(0, str(script_dir))
         from audit_alembic_revisions import _extract_revision_info
 
-        code = '''
+        code = """
 revision = "first_rev"
 down_revision = None
-'''
+"""
         tree = ast.parse(code)
         info = _extract_revision_info(tree, "test.py")
         assert info is not None
@@ -184,8 +182,9 @@ class TestFH71ReconciliationRunKey:
     """Reconciliation must persist run_key and use it for idempotency."""
 
     def test_run_key_generation(self):
-        from billing.reconciliation import ReconciliationWindow
         from datetime import datetime, timezone
+
+        from billing.reconciliation import ReconciliationWindow
 
         window = ReconciliationWindow(
             start_at=datetime(2024, 1, 15, tzinfo=timezone.utc),
@@ -199,8 +198,9 @@ class TestFH71ReconciliationRunKey:
         assert "2024-01-15" in key1
 
     def test_different_windows_different_keys(self):
-        from billing.reconciliation import ReconciliationWindow
         from datetime import datetime, timezone
+
+        from billing.reconciliation import ReconciliationWindow
 
         w1 = ReconciliationWindow(
             start_at=datetime(2024, 1, 15, tzinfo=timezone.utc),

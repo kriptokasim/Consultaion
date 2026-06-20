@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 
 
@@ -31,10 +30,15 @@ def mask_url(url: str) -> str:
 
 def diagnose_debate(session, debate_id: str) -> dict:
     """Query debate-specific diagnostics. READ-ONLY, no mutations."""
-    from sqlmodel import select, func
     from models import (
-        Debate, Message, Score, DebateCheckpoint, DebateStageCheckpoint, DebateContinuation
+        Debate,
+        DebateCheckpoint,
+        DebateContinuation,
+        DebateStageCheckpoint,
+        Message,
+        Score,
     )
+    from sqlmodel import func, select
 
     result: dict = {
         "debate_id": debate_id,
@@ -157,13 +161,11 @@ def main() -> None:
 
     from services.migration_safety import (
         ensure_alembic_version_table,
-        widen_version_column,
         get_current_revisions,
         get_migration_heads,
-        verify_required_tables,
         verify_critical_columns,
+        verify_required_tables,
     )
-
     from sqlmodel import Session
 
     schema_data: dict = {}

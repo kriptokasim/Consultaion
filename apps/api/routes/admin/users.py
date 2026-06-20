@@ -55,9 +55,8 @@ def admin_users(
     q_lower = q.lower() if q else None
 
     # Prefetch plans, subscriptions, and usages
-    from billing.models import BillingPlan, BillingSubscription, BillingUsage
+    from billing.models import BillingSubscription, BillingUsage
     from security.owner import is_owner
-    from datetime import datetime, timezone
 
     plans = session.exec(select(BillingPlan)).all()
     plan_map = {p.id: p for p in plans}

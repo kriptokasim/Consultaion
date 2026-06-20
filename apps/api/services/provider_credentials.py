@@ -8,9 +8,8 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from sqlmodel import Session, select
-
 from models import UserProviderKey
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 

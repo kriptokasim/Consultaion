@@ -13,13 +13,11 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-import time
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
-from config import settings
-from sqlmodel import Session, select, func, col
+from sqlmodel import Session, func, select
 
 logger = logging.getLogger(__name__)
 
@@ -138,12 +136,13 @@ def reconcile_usage(
     Cost reconciliation compares recorded SUM(cost_usd) vs independently
     recomputed cost from token counts and model pricing.
     """
+    from models import Debate, LLMUsageLog
+
     from billing.models import (
-        BillingUsage,
-        BillingReconciliationRun,
         BillingReconciliationDiscrepancy,
+        BillingReconciliationRun,
+        BillingUsage,
     )
-    from models import LLMUsageLog, Debate
 
     if window is None:
         window = ReconciliationWindow.previous_utc_day()
@@ -436,6 +435,7 @@ def _check_debate_count(user_id: str, billing_debates: int, actual_debates: int)
 def _check_orphan_usage(db: Session, window: ReconciliationWindow) -> List[Dict[str, object]]:
     """Check for LLM usage without a BillingUsage record."""
     from models import LLMUsageLog
+
     from billing.models import BillingUsage
 
     period = window.period_str()

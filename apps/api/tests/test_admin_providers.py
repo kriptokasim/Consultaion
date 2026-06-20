@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, patch
-from sqlmodel import Session, select
+
+import pytest
 from auth import COOKIE_NAME, create_access_token, hash_password
 from models import User
+from sqlmodel import Session, select
+
 
 def _setup_admin(db_session: Session, client):
     admin_email = "admin@example.com"

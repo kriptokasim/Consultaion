@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta, timezone
 from typing import Optional, TypedDict
 
@@ -138,7 +139,7 @@ def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
     quota = _get_or_create_quota(session, user_id, "hour")
 
     # Atomic: lock row, check limit, increment — all in one statement
-    from sqlalchemy import update as sa_update, func as sa_func, or_
+    from sqlalchemy import update as sa_update
     if quota.max_runs is None:
         # Unlimited — just increment
         run_limit_clause = sa_true()
@@ -279,8 +280,8 @@ def check_quota(
     """
     # Owner unlimited bypass
     if user is not None:
-        from security.owner import is_owner
         from config import settings as _settings
+        from security.owner import is_owner
         if is_owner(user) and _settings.OWNER_UNLIMITED:
             import logging
             logging.getLogger(__name__).info(

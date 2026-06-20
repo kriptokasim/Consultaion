@@ -8,19 +8,18 @@ Uses prometheus_client with a lazy singleton.
 from __future__ import annotations
 
 import logging
-import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 try:
     from prometheus_client import (
+        CONTENT_TYPE_LATEST,
         CollectorRegistry,
         Counter,
         Gauge,
         Histogram,
         generate_latest,
-        CONTENT_TYPE_LATEST,
     )
 
     REGISTRY = CollectorRegistry(auto_describe=True)

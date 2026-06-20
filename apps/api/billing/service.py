@@ -30,9 +30,9 @@ def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
     uid = _normalize_user_id(user_id)
     
     # Check owner override
+    from config import settings
     from models import User
     from security.owner import is_owner
-    from config import settings
     
     user = db.get(User, uid)
     if is_owner(user):
@@ -249,8 +249,8 @@ def reserve_hosted_credit(db: Session, user_id: UserID) -> None:
     their hosted_credits_used counter.
     Raises ValidationError if they have exhausted their credits.
     """
-    from models import User
     from exceptions import ValidationError
+    from models import User
     
     uid = _normalize_user_id(user_id)
     user = db.get(User, uid)

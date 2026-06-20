@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 from config import settings
 from exceptions import ProviderCircuitOpenError
 from integrations.langfuse import current_trace_id, log_model_observation
-from litellm import acompletion, RateLimitError
+from litellm import RateLimitError
 from llm_errors import TransientLLMError
 from parliament.provider_health import get_health_state, record_call_result
 from safety.pii import scrub_messages
@@ -268,10 +268,8 @@ async def _raw_llm_call(
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, UsageCall]:
-    from parliament.model_registry import get_default_model, get_model
-    from model_gateway.types import GatewayRequest
-    from model_gateway import route_llm_call
     from database import engine
+    from parliament.model_registry import get_default_model, get_model
     from sqlmodel import Session
 
     try:
@@ -312,8 +310,8 @@ async def _raw_llm_call(
     gateway_policy = "auto"
     if debate_id or ctx_user_id:
         try:
-            from models import Debate
             from billing.service import get_active_plan
+            from models import Debate
 
             def _fetch_db_info():
                 policy = "auto"
@@ -341,8 +339,8 @@ async def _raw_llm_call(
     start_ts = time.monotonic()
     try:
         # Execute routing call through the Gateway Bridge
-        from model_gateway.agent_bridge import call_model_via_gateway
         from database_async import async_session_scope
+        from model_gateway.agent_bridge import call_model_via_gateway
         async with async_session_scope() as session:
             content, call_usage = await call_model_via_gateway(
                 messages=scrubbed_messages,

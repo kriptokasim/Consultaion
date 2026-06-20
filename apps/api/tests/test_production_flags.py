@@ -1,8 +1,7 @@
-import logging
 import pytest
+from config import AppSettings
 from pydantic import ValidationError
 
-from config import AppSettings
 from tests.utils import override_env
 
 

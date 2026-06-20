@@ -1,9 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
-import sqlalchemy as sa
-from sqlmodel import Session, select
 from models import Debate
-from routes.public_stats import PublicStats
+from sqlmodel import Session
 
 
 def test_get_public_stats_empty(client: TestClient):

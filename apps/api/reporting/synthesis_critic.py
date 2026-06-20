@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from agents import call_llm_for_role
 from config import settings
@@ -71,13 +71,13 @@ async def verify_synthesis_report(
         "A report full of generic SaaS advice without connection to the user's specific situation scores low on specificity.\n\n"
         "You MUST respond ONLY in valid JSON format matching this schema:\n"
         "{\n"
-        "  \"completeness_score\": <float from 0.0 to 1.0>,\n"
-        "  \"faithfulness_score\": <float from 0.0 to 1.0>,\n"
-        "  \"has_hallucinations\": <boolean>,\n"
-        "  \"needs_revision\": <boolean: true if faithfulness or completeness < 0.85 or has_hallucinations is true>,\n"
+        '  "completeness_score": <float from 0.0 to 1.0>,\n'
+        '  "faithfulness_score": <float from 0.0 to 1.0>,\n'
+        '  "has_hallucinations": <boolean>,\n'
+        '  "needs_revision": <boolean: true if faithfulness or completeness < 0.85 or has_hallucinations is true>,\n'
         "  \"specificity_score\": <float from 0.0 to 1.0: how tailored is this report to the user's specific context>,\n"
-        "  \"genericity_risk\": \"low | medium | high\",\n"
-        "  \"critic_feedback\": \"Detailed constructive critique listing specific fixes needed, or empty string if perfect\"\n"
+        '  "genericity_risk": "low | medium | high",\n'
+        '  "critic_feedback": "Detailed constructive critique listing specific fixes needed, or empty string if perfect"\n'
         "}"
     )
 

@@ -429,10 +429,10 @@ from exception_handlers import (
 )
 from exceptions import AppError
 from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app.add_exception_handler(AppError, app_error_handler)
-app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 # Register all domain routers canonically via the central router registry
@@ -467,8 +467,8 @@ async def get_slo_statuses(request: Request):
     token = auth_header.removeprefix("Bearer ").strip()
     try:
         payload = decode_access_token(token)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as err:
+        raise HTTPException(status_code=401, detail="Invalid token") from err
 
     user_id = payload.get("sub") or payload.get("user_id")
     if not user_id:
