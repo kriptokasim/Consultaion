@@ -78,24 +78,46 @@ async def test_slow_subscriber_backpressure(backend):
         # We must pull at least one item or start iteration to ensure it's attached
         # We can signal ready, then iterate.
         ready.set()
+        # Read until we see the final event or timeout
         async for event in sub:
             events.append(event)
-            await asyncio.sleep(0.01)
-            if len(events) >= 10:
+            await asyncio.sleep(0.001)  # slow it down to induce backpressure
+            if event.get("payload", {}).get("type") == "final":
                 break
 
     task = asyncio.create_task(consumer())
     await ready.wait()
-    # Let the event loop run to ensure subscription is registered in backend
-    await asyncio.sleep(0.1)
     
-    # Publish many messages instantly to force queue overflow and backpressure
+    # Wait deterministically for the subscriber queue to be registered
+    while not backend._subscribers.get(channel):
+        await asyncio.sleep(0.01)
+        
+    # Check drop metrics
+    from metrics import get_metrics_snapshot
+    before_drop = get_metrics_snapshot().get("sse.backpressure.dropped", 0)
+    
+    # Publish many loss-tolerant messages instantly to force queue overflow
     for i in range(1500):
         await backend.publish(channel, {"type": "model_response_delta", "index": i})
         
+    # Publish important and critical events
+    await backend.publish(channel, {"type": "arena_response", "data": "important"})
+    await backend.publish(channel, {"type": "final"})
+        
     await asyncio.wait_for(task, timeout=5)
             
-    assert len(events) == 10
+    # Assertions
+    types = [e.get("payload", {}).get("type") for e in events]
+    assert "final" in types, "Critical event was dropped!"
+    assert "arena_response" in types, "Important event was dropped!"
+    
+    # Default queue size is 1000, so we should have received around 1000 events total, not 1500
+    assert len(events) <= 1100, "Expected backpressure to drop events, but received too many"
+    
+    # Check drop metrics increased
+    after_drop = get_metrics_snapshot().get("sse.backpressure.dropped", 0)
+    assert after_drop > before_drop, "Expected sse.backpressure.dropped metric to increase"
+    
     await backend.cleanup()
 
 

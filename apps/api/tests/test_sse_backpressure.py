@@ -1,7 +1,7 @@
 """Patchset 132 Track C: Terminal event backpressure protection tests.
 
 Proves that:
-1. Critical events (final, error) are never dropped under backpressure
+1. Critical events (final, error) are preferentially retained under backpressure
 2. Delta coalescing preserves output order
 3. Fast and slow subscribers both receive terminal state
 4. Overflow metrics increment correctly
@@ -225,3 +225,42 @@ async def test_heartbeat_events_are_loss_tolerant(backend):
     """Heartbeat events should be classified as loss-tolerant (droppable)."""
     from sse_backend import _event_priority
     assert _event_priority({"type": "heartbeat"}) == 2
+
+
+@pytest.mark.asyncio
+async def test_all_critical_queue_saturation(backend):
+    """If the queue is 100% full of critical events, a new critical event replaces the oldest one (latest critical wins)."""
+    channel = "bp:all_critical"
+    await backend.create_channel(channel)
+
+    # To specifically test the pending subscriber queue eviction policy, we inject
+    # a bounded queue directly into the subscribers list before publishing.
+    sub_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=5)
+    async with backend._lock:
+        backend._subscribers[channel] = [sub_queue]
+
+    # Fill queue completely with critical events (priority 0)
+    for i in range(5):
+        await backend.publish(channel, {"type": "debate_completed", "id": i})
+
+    from metrics import get_metrics_snapshot
+    before_dropped = get_metrics_snapshot().get("sse.backpressure.dropped", 0)
+    before_replaced = get_metrics_snapshot().get("sse.backpressure.critical_replaced", 0)
+
+    # Now publish a new critical event to a full queue.
+    await backend.publish(channel, {"type": "debate_completed", "id": 999})
+
+    after_dropped = get_metrics_snapshot().get("sse.backpressure.dropped", 0)
+    after_replaced = get_metrics_snapshot().get("sse.backpressure.critical_replaced", 0)
+
+    assert after_dropped - before_dropped == 1
+    assert after_replaced - before_replaced == 1
+
+    received = []
+    while not sub_queue.empty():
+        received.append(sub_queue.get_nowait())
+
+    ids = [e.get("payload", {}).get("id") for e in received]
+    # The oldest event (id=0) should have been dropped, and id=999 should be present
+    assert ids == [1, 2, 3, 4, 999]
+

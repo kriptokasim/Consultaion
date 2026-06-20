@@ -18,10 +18,18 @@ except ImportError:  # pragma: no cover - redis optional for memory backend
 logger = logging.getLogger(__name__)
 
 
-# Critical events must never be dropped — they terminate or complete a stream
-CRITICAL_EVENT_TYPES = frozenset({
-    "final", "error", "debate_completed", "debate_failed",
+# Terminal events that immediately disconnect the subscriber
+TERMINAL_EVENT_TYPES = frozenset({
+    "final", "error",
 })
+
+# Critical events that must be delivered but do not terminate the stream
+CRITICAL_NON_TERMINAL_EVENT_TYPES = frozenset({
+    "debate_completed", "debate_failed",
+})
+
+# All critical events use priority 0 (preferentially retained)
+CRITICAL_EVENT_TYPES = TERMINAL_EVENT_TYPES | CRITICAL_NON_TERMINAL_EVENT_TYPES
 
 # Important state transitions should be preserved when possible
 IMPORTANT_EVENT_TYPES = frozenset({
@@ -98,8 +106,10 @@ class MemoryChannelBackend:
     """
     In-memory SSE backend for single-instance deployments.
     
-    Queue size is bounded (default 1000). When full, the oldest event is dropped
-    to make room for new events (drop-oldest policy).
+    Queue size is bounded (default 1000). When full, the queue enforces a priority-aware eviction policy:
+    1. Loss-tolerant events are dropped first.
+    2. Important events are dropped next.
+    3. If full of critical events, the oldest critical event is replaced by the newest (latest critical wins).
     
     Subscriptions will terminate on:
     - Receiving 'final' or 'error' event types
@@ -191,7 +201,8 @@ class MemoryChannelBackend:
             self._last_seen[channel_id] = time.time()
 
             # FH125 F-4: Fan out to all per-subscriber queues
-            # Priority-based backpressure — never drop critical events
+            # Priority-based backpressure — Critical events are preferentially retained.
+            # "Latest critical wins" policy applies as a per-subscriber pending queue guarantee.
             subscribers = list(self._subscribers.get(channel_id, []))
 
         new_priority = _event_priority(envelope)
@@ -206,6 +217,14 @@ class MemoryChannelBackend:
                         if not dropped:
                             # No loss-tolerant to drop; try important
                             dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=1)
+                        if not dropped:
+                            # Queue is 100% full of critical events. To guarantee the new critical
+                            # event is delivered, we implement a "latest critical wins" policy
+                            # by dropping the oldest critical event.
+                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=0)
+                            if dropped:
+                                from metrics import increment_metric
+                                increment_metric("sse.backpressure.critical_replaced")
                     elif new_priority == 1:
                         # Important event: only drop loss-tolerant
                         dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
@@ -279,7 +298,7 @@ class MemoryChannelBackend:
                 yield env
                 # If replay contained a terminal event, stop immediately
                 payload = env.get("payload", {})
-                if payload.get("type") in ("final", "error"):
+                if payload.get("type") in TERMINAL_EVENT_TYPES:
                     async with self._lock:
                         if sub_queue in self._subscribers.get(channel_id, []):
                             self._subscribers[channel_id].remove(sub_queue)
@@ -317,7 +336,7 @@ class MemoryChannelBackend:
                     last_heartbeat = time.time()
                     yield envelope
                     payload = envelope.get("payload", {})
-                    if payload.get("type") in ("final", "error"):
+                    if payload.get("type") in TERMINAL_EVENT_TYPES:
                         break
                 except asyncio.TimeoutError:
                     # Emit heartbeat if no events for heartbeat interval
