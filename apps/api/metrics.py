@@ -53,6 +53,21 @@ from typing import Dict
 # - coding.judge_invoked_count
 # - coding.free_only_block_count
 
+# Patchset 136: Run Pipeline Observability:
+# - debate.create.accepted
+# - debate.dispatch.scheduled
+# - debate.dispatch.inline_started
+# - debate.dispatch.celery_scheduled
+# - debate.dispatch.celery_schedule_failed
+# - debate.worker.started
+# - debate.worker.completed
+# - debate.worker.failed
+# - model_gateway.call.started
+# - model_gateway.provider.attempted
+# - model_gateway.provider.success
+# - model_gateway.provider.failed
+# - debate.run.stuck_queued_detected
+
 _metrics: Dict[str, int] = defaultdict(int)
 _lock = Lock()
 _METRICS_MAX = 1000

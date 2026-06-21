@@ -491,6 +491,268 @@ async def get_providers_readiness(
     }
 
 
+@router.get("/ops/run-pipeline-health")
+async def get_run_pipeline_health(
+    current_admin: User = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """
+    Admin-only endpoint that reports whether the current deployment can actually execute runs.
+    Patchset 136: Run Pipeline Health Endpoint.
+    """
+    from model_gateway.model_map import MODEL_MAP
+
+    env_info = {
+        "ENV": settings.ENV,
+        "APP_ENV": settings.APP_ENV,
+        "DEPLOY_TARGET": settings.DEPLOY_TARGET,
+    }
+
+    # Autorun
+    autorun_info = {"DISABLE_AUTORUN": settings.DISABLE_AUTORUN}
+
+    # Dispatch
+    dispatch_mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
+    broker_url = settings.CELERY_BROKER_URL or ""
+    result_backend = settings.CELERY_RESULT_BACKEND or ""
+    task_routes_raw = {}
+    try:
+        from worker.celery_app import celery_app as _ca
+        tr = getattr(_ca.conf, "task_routes", None) or {}
+        task_routes_raw = {k: v.get("queue", "default") if isinstance(v, dict) else str(v) for k, v in tr.items()}
+    except Exception:
+        pass
+
+    dispatch_info = {
+        "DEBATE_DISPATCH_MODE": dispatch_mode,
+        "CELERY_BROKER_URL_present": bool(broker_url),
+        "CELERY_RESULT_BACKEND_present": bool(result_backend),
+        "broker_is_memory": broker_url.startswith("memory://") if broker_url else False,
+        "task_routes": task_routes_raw,
+    }
+
+    # Worker heartbeat
+    workers = get_active_workers()
+    healthy_workers = [w for w in workers if w["status"] == "healthy"]
+    worker_info = {
+        "heartbeat_seen": len(healthy_workers) > 0,
+        "worker_count": len(healthy_workers),
+        "workers": [
+            {
+                "worker_id": w["name"],
+                "git_sha": w["git_sha"],
+                "last_heartbeat_age_seconds": w["age_seconds"],
+                "queues": [],
+            }
+            for w in healthy_workers
+        ],
+    }
+
+    # Providers
+    provider_configs = [
+        ("openrouter", settings.OPENROUTER_API_KEY),
+        ("openai", settings.OPENAI_API_KEY),
+        ("anthropic", settings.ANTHROPIC_API_KEY),
+        ("gemini", settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY),
+        ("groq", settings.GROQ_API_KEY),
+        ("mistral", settings.MISTRAL_API_KEY),
+    ]
+    providers_info = {}
+    for pname, pkey in provider_configs:
+        enabled_models = [
+            mid for mid, mdata in MODEL_MAP.items()
+            if mdata.get("provider") == pname
+        ]
+        providers_info[pname] = {
+            "key_present": bool(pkey),
+            "enabled_models": enabled_models,
+        }
+
+    # Models
+    try:
+        from parliament.model_registry import list_enabled_models
+        enabled_models_list = list_enabled_models()
+        from parliament.model_registry import get_default_model
+        default_model = get_default_model()
+        arena_models = [
+            m.id for m in enabled_models_list
+            if getattr(m, "tier", "standard") == "advanced"
+        ]
+    except Exception:
+        enabled_models_list = []
+        default_model = None
+        arena_models = []
+
+    models_info = {
+        "enabled_count": len(enabled_models_list),
+        "default_model": default_model.id if default_model else None,
+        "arena_models_enabled": arena_models,
+    }
+
+    # SSE
+    sse_info = {
+        "SSE_BACKEND": settings.SSE_BACKEND,
+        "SSE_REDIS_URL_present": bool(settings.SSE_REDIS_URL or settings.REDIS_URL),
+    }
+
+    # Pipeline warnings
+    pipeline_warnings = settings.validate_run_pipeline()
+
+    # Determine overall status
+    blocking_errors = [w for w in pipeline_warnings if w["severity"] == "blocking"]
+    warnings_list = [w for w in pipeline_warnings if w["severity"] == "warning"]
+
+    if dispatch_mode == "celery" and not healthy_workers:
+        blocking_errors.append({
+            "code": "no_workers",
+            "severity": "blocking",
+            "message": "Dispatch mode is Celery but no healthy worker heartbeat detected.",
+        })
+
+    if not any(p["key_present"] for p in providers_info.values()):
+        blocking_errors.append({
+            "code": "no_provider_keys",
+            "severity": "blocking",
+            "message": "No provider API keys are present. Runs will fail to reach any LLM provider.",
+        })
+
+    if dispatch_mode == "celery" and dispatch_info["broker_is_memory"]:
+        blocking_errors.append({
+            "code": "memory_broker",
+            "severity": "blocking",
+            "message": "Celery broker is memory://. Tasks will not survive process restart.",
+        })
+
+    status = "ok" if not blocking_errors else "blocked"
+    if not blocking_errors and warnings_list:
+        status = "degraded"
+
+    return {
+        "environment": env_info,
+        "autorun": autorun_info,
+        "dispatch": dispatch_info,
+        "worker": worker_info,
+        "providers": providers_info,
+        "models": models_info,
+        "sse": sse_info,
+        "status": status,
+        "blocking_errors": blocking_errors,
+        "warnings": warnings_list,
+    }
+
+
+@router.post("/ops/llm-smoke-test")
+async def llm_smoke_test(
+    request: Request,
+    current_admin: User = Depends(get_current_admin),
+) -> dict[str, Any]:
+    """
+    Admin-only smoke test that proves the deployment can reach a real LLM provider.
+    Patchset 136: Provider Smoke Test Endpoint.
+    """
+    import time as _time
+
+    # Parse optional body for provider/model override
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+
+    target_provider = body.get("provider", "openrouter")
+    target_model = body.get("model_id")
+
+    # Guard: mock mode cannot satisfy smoke test when REQUIRE_REAL_LLM=true
+    if settings.REQUIRE_REAL_LLM and settings.USE_MOCK:
+        return {
+            "success": False,
+            "provider": target_provider,
+            "model_id": None,
+            "gateway_reached": False,
+            "provider_attempted": False,
+            "error_code": "mock_mode_blocked",
+            "message": "REQUIRE_REAL_LLM=true but USE_MOCK=true. Smoke test cannot use mock adapter.",
+        }
+
+    # Resolve model
+    provider_model_map = {
+        "openrouter": target_model or "openrouter/openai/gpt-4o-mini",
+        "openai": target_model or "openai/gpt-4o-mini",
+        "anthropic": target_model or "anthropic/claude-3-haiku-20240307",
+        "gemini": target_model or "gemini/gemini-2.0-flash",
+        "groq": target_model or "groq/llama-3.3-70b-versatile",
+        "mistral": target_model or "mistral/mistral-large-latest",
+    }
+    model_id = provider_model_map.get(target_provider, target_model or "openrouter/openai/gpt-4o-mini")
+
+    # Check provider key
+    key_name_map = {
+        "openrouter": "OPENROUTER_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "mistral": "MISTRAL_API_KEY",
+    }
+    key_name = key_name_map.get(target_provider)
+    has_key = bool(getattr(settings, key_name, None)) if key_name else False
+
+    if not has_key:
+        return {
+            "success": False,
+            "provider": target_provider,
+            "model_id": model_id,
+            "gateway_reached": False,
+            "provider_attempted": False,
+            "error_code": "missing_provider_key",
+            "message": f"{key_name or target_provider.upper() + '_API_KEY'} is missing in backend runtime environment.",
+        }
+
+    # Attempt LLM call via the same gateway path as normal runs
+    start_ts = _time.monotonic()
+    gateway_reached = False
+    provider_attempted = False
+
+    try:
+        from model_gateway import export_api_keys
+        export_api_keys()
+
+        from litellm import acompletion
+        response = await acompletion(
+            model=model_id,
+            messages=[{"role": "user", "content": "Reply with exactly: OK"}],
+            temperature=0.0,
+            max_tokens=5,
+        )
+        gateway_reached = True
+        provider_attempted = True
+        latency_ms = (_time.monotonic() - start_ts) * 1000
+        content = response.choices[0].message.get("content") or ""
+        return {
+            "success": True,
+            "provider": target_provider,
+            "model_id": model_id,
+            "gateway_reached": True,
+            "provider_attempted": True,
+            "latency_ms": round(latency_ms, 2),
+            "response_preview": content.strip()[:100],
+        }
+    except Exception as e:
+        latency_ms = (_time.monotonic() - start_ts) * 1000
+        gateway_reached = True
+        from llm_errors import classify_provider_exception
+        failure = classify_provider_exception(e)
+        return {
+            "success": False,
+            "provider": target_provider,
+            "model_id": model_id,
+            "gateway_reached": gateway_reached,
+            "provider_attempted": provider_attempted,
+            "latency_ms": round(latency_ms, 2),
+            "error_code": failure.code.value,
+            "message": failure.message,
+        }
+
+
 @router.post("/ops/providers/{provider}/probe")
 async def probe_provider(
     provider: str,

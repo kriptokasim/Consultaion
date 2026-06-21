@@ -525,6 +525,78 @@ class AppSettings(BaseSettings):
              if not cors_origins:
                  raise ValueError("CORS_ORIGINS must be set in production.")
 
+        # Patchset 136: Log run pipeline validation warnings at startup
+        try:
+            pipeline_warnings = self.validate_run_pipeline()
+            for w in pipeline_warnings:
+                if w["severity"] == "blocking":
+                    logger.error("RUN PIPELINE [%s]: %s", w["code"], w["message"])
+                else:
+                    logger.warning("RUN PIPELINE [%s]: %s", w["code"], w["message"])
+        except Exception as _pw_err:
+            logger.warning("Failed to run pipeline validation: %s", _pw_err)
+
+
+    # ── Patchset 136: Run Pipeline Validation ──────────────────────────────
+    def validate_run_pipeline(self) -> list[dict[str, str]]:
+        """Validate production run pipeline configuration. Returns list of warnings."""
+        warnings: list[dict[str, str]] = []
+        env_label = (self.ENV or "development").lower()
+        local_envs = {"development", "dev", "local", "test"}
+        is_local = env_label in local_envs and self.IS_LOCAL_ENV
+
+        # A1: Autorun guard
+        if self.DISABLE_AUTORUN and not is_local:
+            warnings.append({
+                "code": "autorun_disabled",
+                "severity": "warning",
+                "message": "DISABLE_AUTORUN=true in non-local env. New debates will remain queued until manually dispatched.",
+            })
+
+        # A2: Celery broker guard
+        dispatch_mode = (self.DEBATE_DISPATCH_MODE or "inline").lower()
+        if dispatch_mode == "celery" and not is_local:
+            broker = self.CELERY_BROKER_URL or ""
+            if not broker:
+                warnings.append({
+                    "code": "celery_broker_missing",
+                    "severity": "blocking",
+                    "message": "DEBATE_DISPATCH_MODE=celery but CELERY_BROKER_URL is not set.",
+                })
+            elif broker.startswith("memory://"):
+                warnings.append({
+                    "code": "celery_broker_memory",
+                    "severity": "blocking",
+                    "message": "DEBATE_DISPATCH_MODE=celery but CELERY_BROKER_URL resolves to memory://. Tasks will not survive process restart.",
+                })
+
+        # A3: Real LLM guard
+        if self.REQUIRE_REAL_LLM and self.USE_MOCK:
+            warnings.append({
+                "code": "real_llm_vs_mock",
+                "severity": "blocking",
+                "message": "REQUIRE_REAL_LLM=true but USE_MOCK=true. This is an invalid combination.",
+            })
+
+        # A4: Provider key presence
+        provider_keys = {
+            "OPENROUTER_API_KEY": self.OPENROUTER_API_KEY,
+            "OPENAI_API_KEY": self.OPENAI_API_KEY,
+            "ANTHROPIC_API_KEY": self.ANTHROPIC_API_KEY,
+            "GEMINI_API_KEY": self.GEMINI_API_KEY or self.GOOGLE_API_KEY,
+            "GROQ_API_KEY": self.GROQ_API_KEY,
+            "MISTRAL_API_KEY": self.MISTRAL_API_KEY,
+        }
+        present_keys = [k for k, v in provider_keys.items() if v]
+        if not present_keys and not is_local:
+            warnings.append({
+                "code": "no_provider_keys",
+                "severity": "blocking",
+                "message": "No provider API keys are configured. Runs will fail to reach any LLM provider.",
+            })
+
+        return warnings
+
 
 class SettingsProxy:
     def __init__(self) -> None:

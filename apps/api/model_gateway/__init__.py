@@ -97,6 +97,13 @@ async def route_llm_call(
     adapter_cls, routing_policy = determine_routing_strategy(request)
     model_pool = get_model_pool(request.model_id)
     
+    # Patchset 136: Gateway call started metric
+    try:
+        from metrics import incr_metric
+        incr_metric("model_gateway.call.started")
+    except Exception:
+        pass
+    
     # Log gateway decision
     from model_gateway.observability import log_gateway_call_metrics, log_gateway_decision
     from model_gateway.types import GatewayDecision
@@ -197,6 +204,13 @@ async def route_llm_call(
         elif "-" in model_to_call:
             provider = model_to_call.split("-")[0]
 
+        # Patchset 136: Provider attempted metric
+        try:
+            from metrics import incr_metric
+            incr_metric("model_gateway.provider.attempted", tags={"provider": provider})
+        except Exception:
+            pass
+
         # Resolve user BYOK credential specifically for this provider
         current_api_key = None
         if db_session and request.user_id:
@@ -237,6 +251,12 @@ async def route_llm_call(
             if result.success:
                 successful_result = result
                 record_success(provider)
+                # Patchset 136: Provider success metric
+                try:
+                    from metrics import incr_metric
+                    incr_metric("model_gateway.provider.success", tags={"provider": provider})
+                except Exception:
+                    pass
                 # If we had to switch to an alternative model in the same pool, mark it
                 if model_to_call != request.model_id:
                     successful_result.fallback_used = True
@@ -246,6 +266,12 @@ async def route_llm_call(
                 last_error = result.error_message
                 last_error_code = result.error_code
                 record_failure(provider, result.error_code or "unknown", result.error_message or "")
+                # Patchset 136: Provider failed metric
+                try:
+                    from metrics import incr_metric
+                    incr_metric("model_gateway.provider.failed", tags={"provider": provider})
+                except Exception:
+                    pass
                 retry_count += 1
         except Exception as e:
             logger.warning(f"Direct provider call failed for {model_to_call}: {e}")

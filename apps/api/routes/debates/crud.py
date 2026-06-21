@@ -182,6 +182,7 @@ async def create_debate(
 
         enabled_models = {m.id: m for m in list_enabled_models()}
         if not enabled_models:
+            # Patchset 136: Fail early before consuming quota
             raise ProviderCircuitOpenError(
                 message="No models available; configure provider keys.", 
                 code="models.unavailable",
@@ -383,6 +384,12 @@ async def create_debate(
         autorun=not settings.DISABLE_AUTORUN,
     )
 
+    # Patchset 136: Dispatch observability metric
+    from routes.common import track_metric
+    track_metric("debate.create.accepted")
+    if not settings.DISABLE_AUTORUN:
+        track_metric("debate.dispatch.scheduled")
+
     from audit import record_audit
     record_audit(
         "debate_created",
@@ -409,7 +416,46 @@ async def create_debate(
     except Exception:
         pass
 
-    return {"id": debate_id}
+    # Patchset 136: Expanded response with run pipeline diagnostics
+    dispatch_mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
+    queue_name = None
+    if dispatch_mode == "celery":
+        from debate_dispatch import choose_queue_for_debate
+        queue_name = choose_queue_for_debate(config_payload, settings)
+
+    provider_keys_present = []
+    if settings.OPENROUTER_API_KEY:
+        provider_keys_present.append("openrouter")
+    if settings.OPENAI_API_KEY:
+        provider_keys_present.append("openai")
+    if settings.ANTHROPIC_API_KEY:
+        provider_keys_present.append("anthropic")
+    if settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY:
+        provider_keys_present.append("gemini")
+    if settings.GROQ_API_KEY:
+        provider_keys_present.append("groq")
+    if settings.MISTRAL_API_KEY:
+        provider_keys_present.append("mistral")
+
+    response_payload: dict = {
+        "id": debate_id,
+        "status": "queued",
+        "autorun": not settings.DISABLE_AUTORUN,
+        "dispatch_mode": dispatch_mode,
+        "queue": queue_name,
+        "worker_required": dispatch_mode == "celery",
+        "diagnostics": {
+            "provider_keys_present": provider_keys_present,
+            "enabled_models_count": len(enabled_models),
+        },
+    }
+
+    if settings.DISABLE_AUTORUN:
+        response_payload["warning"] = (
+            "Autorun is disabled; this run will remain queued until manually dispatched."
+        )
+
+    return response_payload
 
 
 @router.get("/debates", response_model=DebateListResponse)

@@ -113,7 +113,10 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
             Debate.created_at < queued_cutoff
         )
         for debate in session.exec(stmt_queued).all():
-            age = int((now - debate.created_at).total_seconds())
+            created_at = debate.created_at
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            age = int((now - created_at).total_seconds())
             stale_debates.append((debate.id, "queued_timeout", age))
         
         # Find stale running debates using checkpoint
@@ -177,6 +180,13 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
                 # Status changed while we were processing
                 continue
             
+            # Patchset 136: Map stale reasons to explicit failure codes
+            failure_code = "run_dispatch_timeout"
+            if reason == "running_timeout":
+                failure_code = "run_stuck_running"
+            elif reason == "lease_timeout_retries_exceeded":
+                failure_code = "lease_timeout_retries_exceeded"
+            
             # Update debate status
             db_debate.status = final_status
             db_debate.updated_at = now
@@ -184,6 +194,7 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
                 db_debate.final_meta = {}
             db_debate.final_meta["stale_cleanup"] = {
                 "reason": reason,
+                "failure_code": failure_code,
                 "age_seconds": age,
                 "cleaned_at": now.isoformat(),
             }
@@ -197,6 +208,7 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
                 error_summary=f"stale_debate_timeout: {reason}",
                 participant_errors={
                     "reason": reason,
+                    "failure_code": failure_code,
                     "age_seconds": age,
                     "last_known_step": _get_last_step(session, debate_id),
                 },
@@ -212,6 +224,25 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
                 ckpt.status = final_status
                 session.add(ckpt)
             
+            # Patchset 136: Record audit event
+            try:
+                from audit import record_audit
+                record_audit(
+                    "debate_stale_timeout",
+                    user_id=db_debate.user_id,
+                    target_type="debate",
+                    target_id=debate_id,
+                    meta={
+                        "reason": reason,
+                        "failure_code": failure_code,
+                        "age_seconds": age,
+                        "final_status": final_status,
+                    },
+                    session=session,
+                )
+            except Exception as audit_err:
+                logger.warning("Failed to record audit for stale debate %s: %s", debate_id, audit_err)
+            
             session.commit()
         
         # Emit SSE event for observability
@@ -222,6 +253,7 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
                     "type": "debate.failed",
                     "debate_id": debate_id,
                     "reason": "stale_timeout",
+                    "failure_code": failure_code,
                     "stale_reason": reason,
                     "age_seconds": age,
                     "final_status": final_status,
@@ -230,16 +262,24 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
         except Exception as e:
             logger.warning("Failed to publish stale cleanup SSE event: %s", e)
         
+        # Patchset 136: Record metric
+        try:
+            from metrics import incr_metric
+            incr_metric("debate.run.stuck_queued_detected", tags={"reason": reason})
+        except Exception:
+            pass
+        
         if final_status == "degraded":
             degraded_count += 1
         else:
             failed_count += 1
         
         logger.info(
-            "Stale debate cleanup: debate_id=%s status=%s reason=%s age_seconds=%d",
+            "Stale debate cleanup: debate_id=%s status=%s reason=%s failure_code=%s age_seconds=%d",
             debate_id,
             final_status,
             reason,
+            failure_code,
             age,
         )
     

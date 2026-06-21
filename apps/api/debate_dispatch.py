@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from config import settings
 from orchestrator import run_debate
 
@@ -7,6 +9,8 @@ try:
     from worker.debate_tasks import run_debate_task
 except Exception:  # pragma: no cover - Celery optional in some envs
     run_debate_task = None  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 def choose_queue_for_debate(config_data: dict | None, settings_obj=settings) -> str:
@@ -44,15 +48,45 @@ async def dispatch_debate_run(
         ctx = create_child_context(debate_id=debate_id)
 
     mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
+
+    # Patchset 136: Structured dispatch logging
+    dispatch_meta = {
+        "debate_id": debate_id,
+        "dispatch_mode": mode,
+        "model_id": model_id,
+        "trace_id": trace_id,
+        "resume": resume,
+    }
+
     if mode == "celery":
         if run_debate_task is None:
+            from metrics import incr_metric
+            incr_metric("debate.dispatch.celery_schedule_failed")
+            logger.error(
+                "Celery dispatch selected but worker tasks unavailable",
+                extra=dispatch_meta,
+            )
             raise RuntimeError("Celery dispatch selected but worker tasks are unavailable")
         queue_name = choose_queue_for_debate(config_data, settings)
-        if hasattr(run_debate_task, "apply_async"):
-            run_debate_task.apply_async(args=[debate_id, trace_id], kwargs={"is_resume": resume, "continuation_id": continuation_id}, queue=queue_name)
-        else:  # pragma: no cover - fall back for unusual task shims
-            run_debate_task.delay(debate_id, trace_id, is_resume=resume, continuation_id=continuation_id)
+        dispatch_meta["queue"] = queue_name
+        try:
+            if hasattr(run_debate_task, "apply_async"):
+                run_debate_task.apply_async(args=[debate_id, trace_id], kwargs={"is_resume": resume, "continuation_id": continuation_id}, queue=queue_name)
+            else:  # pragma: no cover - fall back for unusual task shims
+                run_debate_task.delay(debate_id, trace_id, is_resume=resume, continuation_id=continuation_id)
+            from metrics import incr_metric
+            incr_metric("debate.dispatch.celery_scheduled")
+            logger.info("Dispatched debate via Celery", extra=dispatch_meta)
+        except Exception as exc:
+            from metrics import incr_metric
+            incr_metric("debate.dispatch.celery_schedule_failed")
+            logger.error("Failed to schedule Celery task", extra={**dispatch_meta, "error": str(exc)})
+            raise
         return
+
+    from metrics import incr_metric
+    incr_metric("debate.dispatch.inline_started")
+    logger.info("Dispatching debate inline", extra=dispatch_meta)
 
     from observability.tracing import traced_span
     with traced_span("debate.run", {"debate_id": debate_id, "resume": str(resume)}):
