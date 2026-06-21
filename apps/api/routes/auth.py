@@ -401,8 +401,36 @@ async def google_callback_post(
     if not state_meta:
         internal_secret = request.headers.get("x-internal-secret")
         if not internal_secret or not settings.INTERNAL_SECRET or not secrets.compare_digest(internal_secret, settings.INTERNAL_SECRET):
-            logger.warning(f"Google OAuth state not found and internal secret invalid/missing. IP={ip}")
-            raise ValidationError(message="Invalid OAuth state or missing internal trust", code="auth.invalid_state")
+            # Patchset 136: Diagnostic — distinguish missing secret from mismatch
+            if not settings.INTERNAL_SECRET:
+                logger.error(
+                    "Google OAuth failed: INTERNAL_SECRET is not set in backend environment. "
+                    "Set INTERNAL_SECRET in Render env vars and match it in Vercel env vars. IP=%s", ip
+                )
+                raise ValidationError(
+                    message="Google sign-in misconfigured: INTERNAL_SECRET is not set on the server. "
+                            "An admin must set INTERNAL_SECRET in both backend and frontend environments.",
+                    code="auth.invalid_state",
+                )
+            elif not internal_secret:
+                logger.warning(
+                    "Google OAuth failed: frontend did not send x-internal-secret header. "
+                    "Ensure INTERNAL_SECRET is set in the Vercel/Next.js environment. IP=%s", ip
+                )
+                raise ValidationError(
+                    message="Google sign-in failed: frontend is not sending the required internal secret. "
+                            "Ensure INTERNAL_SECRET is set in the frontend (Vercel) environment.",
+                    code="auth.invalid_state",
+                )
+            else:
+                logger.warning(
+                    "Google OAuth failed: x-internal-secret mismatch. "
+                    "Frontend and backend INTERNAL_SECRET values do not match. IP=%s", ip
+                )
+                raise ValidationError(
+                    message="Google sign-in failed: internal secret mismatch between frontend and backend.",
+                    code="auth.invalid_state",
+                )
 
         logger.info(
             f"Google OAuth state {state[:8]}... not found in backend state_store. "
