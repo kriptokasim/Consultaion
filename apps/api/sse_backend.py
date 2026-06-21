@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Terminal events that immediately disconnect the subscriber
 TERMINAL_EVENT_TYPES = frozenset({
-    "final", "error",
+    "final", "error", "run_completed"
 })
 
 # Critical events that must be delivered but do not terminate the stream
@@ -34,14 +34,14 @@ CRITICAL_EVENT_TYPES = TERMINAL_EVENT_TYPES | CRITICAL_NON_TERMINAL_EVENT_TYPES
 # Important state transitions should be preserved when possible
 IMPORTANT_EVENT_TYPES = frozenset({
     "arena_response", "model_response_completed", "model_response_failed",
-    "perspectives_ready", "stage_checkpoint",
+    "perspectives_ready", "stage_checkpoint", "lane_assigned", "lane_convergence_checked"
 })
 
 # Loss-tolerant events can be dropped or coalesced under pressure
 # (deltas, heartbeats, progress notices, repeated diagnostics)
 
 _DELTA_EVENT_TYPES = frozenset({
-    "model_response_delta",
+    "model_response_delta", "agent_progress_delta"
 })
 
 

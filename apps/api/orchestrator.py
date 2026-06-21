@@ -588,12 +588,13 @@ async def run_debate(
             if debate.run_attempt:
                 from models import DebateAttempt
                 from sqlmodel import select as sel
-                attempt = session.exec(
+                result = await session.execute(
                     sel(DebateAttempt).where(
                         DebateAttempt.debate_id == debate_id,
                         DebateAttempt.attempt_number == debate.run_attempt,
                     )
-                ).first()
+                )
+                attempt = result.scalars().first()
                 if attempt:
                     current_attempt_id = attempt.id
 

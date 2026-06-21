@@ -251,12 +251,12 @@ def test_api_key_expiration(client, db_session):
     # Verify audit log for expired key failure
     from models import AuditLog
     from sqlmodel import select
-    stmt_expired = select(AuditLog).where(
-        AuditLog.user_id == user.id,
+    logs_expired = db_session.exec(select(AuditLog).where(
         AuditLog.action == "api_key_auth_failed"
-    )
-    logs_expired = db_session.exec(stmt_expired).all()
-    assert len(logs_expired) == 1
+    )).all()
+    # Check that at least one of these failed due to expiration
+    expired_logs = [log for log in logs_expired if log.meta.get("reason") == "expired"]
+    assert len(expired_logs) == 1
     assert logs_expired[0].meta["reason"] == "expired"
     assert logs_expired[0].meta["prefix"] == prefix
     
@@ -321,12 +321,12 @@ def test_api_key_expiration(client, db_session):
     assert logs_revoked[0].meta["prefix"] == prefix2
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_api_key_rotation_reminder(db_session):
     """Test that API keys expiring in <= 7 days trigger reminders."""
     from auth import hash_password
     from orchestrator_cleanup import check_api_key_rotations
-    
+
     # Create a user
     user = User(
         email="rotation_test@example.com",

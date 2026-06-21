@@ -178,9 +178,11 @@ async def test_google_callback_post_creates_user_and_returns_token(client: Async
         return {"email": f"google-{uuid.uuid4().hex[:6]}@example.com", "name": "G User"}
 
     import routes.auth as auth_routes
+    import security.state_store
 
     monkeypatch.setattr(auth_routes, "_exchange_code_for_token", fake_exchange)
     monkeypatch.setattr(auth_routes, "_fetch_google_profile", fake_profile)
+    monkeypatch.setattr(security.state_store.state_store, "consume_state", lambda s: {"next": "/dashboard"})
 
     payload = {"code": "abc", "state": "frontend-state-nonce"}
     res = await client.post("/auth/google/callback", json=payload)

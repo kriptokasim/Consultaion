@@ -662,5 +662,65 @@ class DebateAttempt(SQLModel, table=True):
     completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
+# ── Patchset 135: Coding Agent Mode ─────────────────────────────────────
 
+class CodingRun(SQLModel, table=True):
+    __tablename__ = "coding_run"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    repo_ref: Optional[str] = Field(default=None, nullable=True)
+    branch: Optional[str] = Field(default=None, nullable=True)
+    base_commit_sha: Optional[str] = Field(default=None, nullable=True)
+    head_commit_sha: Optional[str] = Field(default=None, nullable=True)
+    status: str = Field(default="queued", index=True)  # queued, running, completed, failed
+    tier: int = Field(default=0)  # 0: fast, 1: thinking, 2: verifier+judge
+    lane_config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    file_paths: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    diff_preview: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True)))
+    updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True)))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
+class CodingTurn(SQLModel, table=True):
+    __tablename__ = "coding_turn"
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    coding_run_id: str = Field(foreign_key="coding_run.id", nullable=False, index=True)
+    prompt: str = Field(sa_column=Column(Text, nullable=False))
+    sequence: int = Field(default=1)
+    status: str = Field(default="running", index=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True)))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+class CodingLaneResult(SQLModel, table=True):
+    __tablename__ = "coding_lane_result"
+    __table_args__ = (
+        UniqueConstraint("coding_run_id", "coding_turn_id", "lane_name", name="uq_coding_lane_result_lane"),
+    )
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    coding_run_id: str = Field(foreign_key="coding_run.id", nullable=False)
+    coding_turn_id: str = Field(foreign_key="coding_turn.id", nullable=False)
+    lane_name: str = Field(nullable=False)  # fast, thinking, verifier, judge
+    model_key: str = Field(nullable=False)
+    provider: str = Field(nullable=False)
+    status: str = Field(default="completed")
+    content: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    error: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    latency_ms: Optional[float] = Field(default=None)
+    token_usage: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True)))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+
+class CodingPatchArtifact(SQLModel, table=True):
+    __tablename__ = "coding_patch_artifact"
+    __table_args__ = (
+        UniqueConstraint("coding_run_id", "coding_turn_id", name="uq_coding_patch_artifact_turn"),
+    )
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    coding_run_id: str = Field(foreign_key="coding_run.id", nullable=False)
+    coding_turn_id: str = Field(foreign_key="coding_turn.id", nullable=False)
+    final_patch: str = Field(sa_column=Column(Text, nullable=False))
+    apply_status: Optional[str] = Field(default=None)
+    test_status: Optional[str] = Field(default=None)
+    test_output: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True)))

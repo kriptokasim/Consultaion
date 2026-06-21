@@ -287,6 +287,7 @@ def get_user_from_api_key(
             meta={"prefix": prefix, "reason": "revoked"},
             session=session,
         )
+        session.commit()
         return None
 
     # Verify key is not expired
@@ -305,6 +306,7 @@ def get_user_from_api_key(
                 meta={"prefix": prefix, "reason": "expired"},
                 session=session,
             )
+            session.commit()
             return None
     
     # Verify the full key matches the hash
@@ -318,6 +320,7 @@ def get_user_from_api_key(
             meta={"prefix": prefix, "reason": "invalid_secret"},
             session=session,
         )
+        session.commit()
         return None
     
     # Update last_used_at only when stale (>5 minutes) to reduce write amplification

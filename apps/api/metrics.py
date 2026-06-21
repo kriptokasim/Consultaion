@@ -46,6 +46,13 @@ from typing import Dict
 # - sse.backpressure.slow_subscriber
 # - sse.backpressure.critical_enqueue_failed
 
+# Coding Agent:
+# - coding.lane_latency_ms
+# - coding.early_exit_rate
+# - coding.lane_failure_count
+# - coding.judge_invoked_count
+# - coding.free_only_block_count
+
 _metrics: Dict[str, int] = defaultdict(int)
 _lock = Lock()
 _METRICS_MAX = 1000
@@ -57,7 +64,22 @@ def increment_metric(name: str, value: int = 1) -> None:
             return  # Drop new metric names when at capacity
         _metrics[name] += value
 
+# Aliases for newer code
+def incr_metric(name: str, value: int = 1, tags: Dict[str, str] = None) -> None:
+    # We ignore tags for now in the simple dict backend, just append them to the name
+    if tags:
+        tag_str = ",".join(f"{k}={v}" for k, v in tags.items())
+        name = f"{name}[{tag_str}]"
+    increment_metric(name, value)
+
+def record_timer(name: str, value_ms: float, tags: Dict[str, str] = None) -> None:
+    if tags:
+        tag_str = ",".join(f"{k}={v}" for k, v in tags.items())
+        name = f"{name}[{tag_str}]"
+    # Basic aggregate: we just store the count for now in this simple metrics module
+    increment_metric(f"{name}_count", 1)
 
 def get_metrics_snapshot() -> Dict[str, int]:
     with _lock:
         return dict(_metrics)
+

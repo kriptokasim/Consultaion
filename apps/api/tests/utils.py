@@ -112,6 +112,7 @@ def init_test_database(database_url: str) -> None:
         database_url: The database URL to initialize
     """
     from sqlmodel import SQLModel, create_engine
+    import models  # Ensure all models are registered in SQLModel.metadata
     
     # Create engine for this specific database
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}

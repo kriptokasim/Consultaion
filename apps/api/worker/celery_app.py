@@ -156,6 +156,7 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
             "arena.*": {"queue": "interactive"},
             "debate.*": {"queue": "interactive"},
             "voting.*": {"queue": "interactive"},
+            "coding.*": {"queue": "interactive"},
             "billing.*": {"queue": "maintenance"},
             "maintenance.*": {"queue": "maintenance"},
         },

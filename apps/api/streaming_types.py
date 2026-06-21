@@ -39,6 +39,14 @@ class StreamEventType(str, Enum):
     # Terminal
     DEBATE_COMPLETED = "debate_completed"
     DEBATE_FAILED = "debate_failed"
+    RUN_COMPLETED = "run_completed"
+    ERROR = "error"
+    FINAL = "final"
+
+    # Coding Agent Mode
+    LANE_ASSIGNED = "lane_assigned"
+    AGENT_PROGRESS_DELTA = "agent_progress_delta"
+    LANE_CONVERGENCE_CHECKED = "lane_convergence_checked"
 
 
 @dataclass
@@ -109,3 +117,29 @@ def build_envelope(
         payload=payload or {},
     )
     return envelope.to_dict()
+
+# ── Patchset 135: Coding Agent Event Payloads ──────────────────────────
+
+@dataclass
+class LaneAssignment:
+    run_id: str
+    lane_name: str
+    model_key: str
+    tier: int
+
+@dataclass
+class AgentProgressDelta:
+    lane: str
+    model_id: str
+    phase: str
+    text: str
+    sequence: int
+
+@dataclass
+class LaneConvergence:
+    similarity_score: float
+    threshold: float
+    early_exit: bool
+    judge_skipped: bool
+    source: str
+

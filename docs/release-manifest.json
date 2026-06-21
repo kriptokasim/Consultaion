@@ -1,0 +1,9 @@
+{
+  "verified_code_sha": "ef0acf74afed34caeeaee291a13481713eb932ee",
+  "verification_doc_sha": null,
+  "ci_run_id": null,
+  "patchset": 135,
+  "open_tracks": ["E_backend", "E_frontend", "E3", "D"],
+  "closed_tracks": ["0", "A", "C"],
+  "production_readiness": "internal_beta"
+}

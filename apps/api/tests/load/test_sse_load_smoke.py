@@ -89,8 +89,12 @@ async def test_slow_subscriber_backpressure(backend):
     await ready.wait()
     
     # Wait deterministically for the subscriber queue to be registered
-    while not backend._subscribers.get(channel):
-        await asyncio.sleep(0.01)
+    # Fail fast if subscriber registration regresses (no infinite wait)
+    async def wait_for_registration() -> None:
+        while not backend._subscribers.get(channel):
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(wait_for_registration(), timeout=1.0)
         
     # Check drop metrics
     from metrics import get_metrics_snapshot

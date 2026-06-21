@@ -6,7 +6,8 @@ from model_gateway.agent_bridge import call_model_via_gateway
 from model_gateway.costs import check_credit_and_cost_safety
 from model_gateway.policy import determine_routing_strategy
 from model_gateway.pools import get_model_pool, load_pools_config, validate_user_access_to_model
-from model_gateway.types import GatewayError, GatewayModelCallResult, GatewayRequest
+from model_gateway.types import GatewayError, GatewayModelRestrictedError, GatewayModelCallResult, GatewayRequest
+from model_gateway.model_map import resolve_model_key, is_free_model, MODEL_ALIASES
 
 logger = logging.getLogger("model_gateway")
 
@@ -69,7 +70,17 @@ async def route_llm_call(
         except Exception as e:
             logger.warning(f"Error checking hosted credits in gateway: {e}")
 
-    # 1. Validate plan restriction
+    # 1. Resolve canonical model key
+    from config import settings
+    resolved_model_id = resolve_model_key(request.model_id)
+    request.model_id = resolved_model_id  # ensure downstream components use canonical key
+
+    # 1a. Free-only mode guard
+    if settings.FREE_ONLY_MODE and not is_free_model(resolved_model_id):
+        logger.warning(f"FREE_ONLY_MODE block: {resolved_model_id} is not explicitly free")
+        raise GatewayModelRestrictedError(f"Model '{resolved_model_id}' is not available in free-only mode.")
+
+    # 1b. Validate plan restriction
     validate_user_access_to_model(request.model_id, request.user_plan, has_credits=has_credits)
     
     # 2. Estimate run cost (e.g., standard estimation: 0.015 per 1k input/output tokens)

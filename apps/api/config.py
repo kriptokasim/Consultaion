@@ -96,6 +96,9 @@ class AppSettings(BaseSettings):
     USE_MOCK: bool = False
     REQUIRE_REAL_LLM: bool = False
     DISABLE_RATINGS: bool = False
+    # Patchset 135: Free-only enforcement — when True, the gateway rejects
+    # any model whose cost_class is not explicitly "free".
+    FREE_ONLY_MODE: bool = False
     ENABLE_METRICS: bool = True
     ENABLE_CONVERSATION_MODE: bool = Field(True, description="Enable new conversation mode")
     ENABLE_GIPHY: bool = Field(False, description="Enable Giphy integration visual delights")
