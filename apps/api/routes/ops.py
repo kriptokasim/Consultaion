@@ -707,34 +707,61 @@ async def llm_smoke_test(
             "message": f"{key_name or target_provider.upper() + '_API_KEY'} is missing in backend runtime environment.",
         }
 
-    # Attempt LLM call via the same gateway path as normal runs
+    # Attempt LLM call via the same model_gateway path as normal runs
     start_ts = _time.monotonic()
-    gateway_reached = False
-    provider_attempted = False
 
     try:
-        from model_gateway import export_api_keys
+        from model_gateway import export_api_keys, route_llm_call
+        from model_gateway.types import GatewayRequest
         export_api_keys()
 
-        from litellm import acompletion
-        response = await acompletion(
-            model=model_id,
+        gateway_request = GatewayRequest(
             messages=[{"role": "user", "content": "Reply with exactly: OK"}],
+            model_id=model_id,
+            role="smoke_test",
             temperature=0.0,
             max_tokens=5,
+            gateway_policy="auto",
+            user_id=None,
+            user_plan="free",
         )
-        gateway_reached = True
-        provider_attempted = True
+        result = await route_llm_call(gateway_request, db_session=None)
         latency_ms = (_time.monotonic() - start_ts) * 1000
-        content = response.choices[0].message.get("content") or ""
+
+        if result.success:
+            return {
+                "success": True,
+                "provider": result.provider,
+                "model_id": result.model_used,
+                "gateway_reached": True,
+                "provider_attempted": True,
+                "latency_ms": round(latency_ms, 2),
+                "response_preview": (result.content or "").strip()[:100],
+            }
+        else:
+            return {
+                "success": False,
+                "provider": result.provider,
+                "model_id": result.model_used,
+                "gateway_reached": True,
+                "provider_attempted": True,
+                "latency_ms": round(latency_ms, 2),
+                "error_code": result.error_code or "provider_error",
+                "message": result.error_message or "Provider call failed.",
+            }
+    except Exception as e:
+        latency_ms = (_time.monotonic() - start_ts) * 1000
+        from llm_errors import classify_provider_exception
+        failure = classify_provider_exception(e)
         return {
-            "success": True,
+            "success": False,
             "provider": target_provider,
             "model_id": model_id,
             "gateway_reached": True,
-            "provider_attempted": True,
+            "provider_attempted": False,
             "latency_ms": round(latency_ms, 2),
-            "response_preview": content.strip()[:100],
+            "error_code": failure.code.value,
+            "message": failure.message,
         }
     except Exception as e:
         latency_ms = (_time.monotonic() - start_ts) * 1000

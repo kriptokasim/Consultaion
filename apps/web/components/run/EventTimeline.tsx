@@ -6,10 +6,13 @@ export interface TimelineEvent {
   type: string;
   timestamp: string;
   label: string;
+  message?: string;
   details?: string;
   status?: 'info' | 'success' | 'warning' | 'error';
   lane?: string;
 }
+
+export type RunEvent = TimelineEvent;
 
 export function EventTimeline({ events, isRunning }: { events: TimelineEvent[], isRunning: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);

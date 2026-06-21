@@ -182,7 +182,8 @@ async def create_debate(
 
         enabled_models = {m.id: m for m in list_enabled_models()}
         if not enabled_models:
-            # Patchset 136: Fail early before consuming quota
+            # Patchset 136: No models available — fail before further processing.
+            # Quota was already reserved (line 140); the outer except block refunds it.
             raise ProviderCircuitOpenError(
                 message="No models available; configure provider keys.", 
                 code="models.unavailable",

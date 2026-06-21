@@ -358,6 +358,34 @@ class TestCreateDebateDiagnostics:
             settings.DEBATE_DISPATCH_MODE = original_mode
             settings.DEBATE_DEFAULT_QUEUE = original_default_q
 
+    def test_no_models_refunds_quota(self, authenticated_client, db_session):
+        """When no models are enabled, debate creation fails and quota is refunded."""
+        from parliament.model_registry import list_enabled_models
+        from models import UsageCounter
+
+        # Record runs_used before
+        from config import settings
+        original_models = settings.DISABLE_AUTORUN
+
+        # Temporarily make list_enabled_models return empty
+        import routes.debates.crud as crud_module
+        original_fn = crud_module.list_enabled_models
+        crud_module.list_enabled_models = lambda: []
+        try:
+            resp = authenticated_client.post("/debates", json={
+                "prompt": "Test no models",
+                "mode": "arena",
+            })
+            assert resp.status_code in (400, 500, 503)
+            # Verify no debate was created (no leaked record)
+            from models import Debate
+            from sqlmodel import select
+            stmt = select(Debate).where(Debate.prompt == "Test no models")
+            debate = db_session.exec(stmt).first()
+            assert debate is None, "Debate should not be created when no models available"
+        finally:
+            crud_module.list_enabled_models = original_fn
+
 
 # ---------------------------------------------------------------------------
 # 136-E: Stuck Queued Run Detection

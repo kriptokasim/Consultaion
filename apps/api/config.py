@@ -528,11 +528,21 @@ class AppSettings(BaseSettings):
         # Patchset 136: Log run pipeline validation warnings at startup
         try:
             pipeline_warnings = self.validate_run_pipeline()
+            blocking = [w for w in pipeline_warnings if w["severity"] == "blocking"]
             for w in pipeline_warnings:
                 if w["severity"] == "blocking":
                     logger.error("RUN PIPELINE [%s]: %s", w["code"], w["message"])
                 else:
                     logger.warning("RUN PIPELINE [%s]: %s", w["code"], w["message"])
+            # In production/staging, blocking conditions are fatal
+            if blocking and not is_local:
+                codes = ", ".join(w["code"] for w in blocking)
+                messages = "; ".join(w["message"] for w in blocking)
+                raise ValueError(
+                    f"FATAL: Run pipeline validation failed in {app_env} with blocking errors: [{codes}]. {messages}"
+                )
+        except ValueError:
+            raise  # Re-raise validation errors
         except Exception as _pw_err:
             logger.warning("Failed to run pipeline validation: %s", _pw_err)
 

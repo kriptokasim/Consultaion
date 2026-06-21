@@ -209,7 +209,7 @@ export async function getReport(id: string) {
 }
 
 export async function startDebate(payload: { prompt: string; config?: any; model_id?: string | null; panel_config?: PanelConfigPayload; mode?: string; locale?: string; compare_models?: string[]; gateway_policy?: string }) {
-  return apiRequest<{ id: string }>({
+  return apiRequest<{ id: string; status: string; autorun: boolean; dispatch_mode: string; queue: string | null; worker_required: boolean; diagnostics: { provider_keys_present: string[]; enabled_models_count: number }; warning?: string }>({
     method: "POST",
     path: "/debates",
     body: payload,
