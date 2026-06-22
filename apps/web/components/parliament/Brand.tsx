@@ -9,7 +9,7 @@ type BrandProps = {
 };
 
 export default function Brand({ variant = "mark", className, height = 32 }: BrandProps) {
-  const src = "/brand/consultaion-logo.svg";
+  const src = "/brand/consultaion-logo.png";
   return (
     <div
       className={cn("flex items-center justify-center shrink-0", className)}
