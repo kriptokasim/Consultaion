@@ -199,6 +199,7 @@ MODEL_MAP: dict[str, dict[str, Any]] = {
 # Using an alias logs a deprecation warning.
 
 MODEL_ALIASES: dict[str, str] = {
+    # Short frontend IDs (backward compatibility from model_registry.py)
     "gpt4o-mini": "openai_fast",
     "gpt4o-deep": "openai_premium",
     "claude-sonnet": "anthropic_reasoning",
@@ -210,6 +211,18 @@ MODEL_ALIASES: dict[str, str] = {
     "deepseek-r1": "openrouter_fallback",
     "router-smart": "openrouter_fallback",
     "router-deep": "openrouter_fallback",
+
+    # Litellm-format model strings (reverse lookups — arena engine passes litellm_model
+    # as model_override, which flows through to resolve_model_key via the gateway).
+    "openai/gpt-4o-mini": "openai_fast",
+    "openai/gpt-4o": "openai_premium",
+    "anthropic/claude-3-5-sonnet-20240620": "anthropic_reasoning",
+    "anthropic/claude-3-haiku-20240307": "anthropic_reasoning",
+    "gemini/gemini-2.0-flash": "gemini_general",
+    "gemini/gemini-2.5-pro-preview-06-05": "gemini_pro",
+    "groq/llama-3.3-70b-versatile": "groq_fast",
+    "mistral/mistral-large-latest": "mistral_large",
+    "openrouter/deepseek/deepseek-r1": "openrouter_fallback",
 }
 
 

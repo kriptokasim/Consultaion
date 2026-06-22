@@ -842,7 +842,14 @@ async def run_debate(
                 if debate and debate.status != "failed":
                     debate.status = "failed"
                     debate.updated_at = datetime.now(timezone.utc)
-                    debate.final_meta = {"error": "Temporary AI provider issue. Please retry."}
+                    from correlation import get_correlation_context
+                    corr_ctx = get_correlation_context()
+                    debate.final_meta = {
+                        "error": "Temporary AI provider issue. Please retry.",
+                        "failure_code": "transient_provider_error",
+                        "failure_detail_safe": str(exc)[:500],
+                        "correlation_id": corr_ctx.request_id if corr_ctx else None,
+                    }
                     session.add(debate)
                     await session.commit()
                     
@@ -898,7 +905,14 @@ async def run_debate(
                 if debate and debate.status != "failed":
                     debate.status = "failed"
                     debate.updated_at = datetime.now(timezone.utc)
-                    debate.final_meta = {"error": "Debate execution failed. Please retry."}
+                    from correlation import get_correlation_context
+                    corr_ctx = get_correlation_context()
+                    debate.final_meta = {
+                        "error": "Debate execution failed. Please retry.",
+                        "failure_code": "terminal_execution_error",
+                        "failure_detail_safe": str(exc)[:500],
+                        "correlation_id": corr_ctx.request_id if corr_ctx else None,
+                    }
                     session.add(debate)
                     await session.commit()
                     

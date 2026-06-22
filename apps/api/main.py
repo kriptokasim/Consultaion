@@ -5,7 +5,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 
-from auth import CSRF_COOKIE_NAME, ENABLE_CSRF
+from auth import CSRF_COOKIE_NAME, ENABLE_CSRF, get_current_admin, get_optional_user
 from billing.routes import billing_router
 from config import settings
 from correlation import CorrelationContext, set_correlation_context
@@ -17,6 +17,7 @@ from integrations.sentry import init_sentry
 from log_config import LOGGING_CONFIG, clear_log_context, reset_request_id, set_request_id
 from middleware.body_limit import BodySizeLimitMiddleware
 from middleware.weighted_rate_limit import WeightedRateLimitMiddleware
+from models import User
 from observability.tracing import init_tracing
 from parliament.model_registry import get_default_model, list_enabled_models
 from promotions.routes import promotions_router
@@ -418,8 +419,8 @@ if settings.ENV != "test":
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Idempotency-Key", "X-Requested-With"],
     )
 
 from exception_handlers import (
@@ -443,9 +444,23 @@ register_routers(app, settings)
 
 
 
-# ── OT-5: Prometheus Metrics Endpoint ────────────────────────────────────
+# ── OT-5: Prometheus Metrics Endpoint (auth-protected in production) ────
+async def _metrics_depends(
+    request: Request,
+    current_user = Depends(get_optional_user),
+) -> None:
+    """Allow unrestricted access in local dev; require admin in production."""
+    if settings.IS_LOCAL_ENV:
+        return
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    is_admin = current_user.role == "admin" or getattr(current_user, "is_admin", False)
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
 @app.get("/metrics", response_class=PlainTextResponse, include_in_schema=False)
-async def prometheus_metrics():
+async def prometheus_metrics(_: None = Depends(_metrics_depends)):
     from observability.metrics import get_metrics_bytes, get_metrics_content_type
     data = get_metrics_bytes()
     if data is None:
@@ -453,35 +468,9 @@ async def prometheus_metrics():
     return PlainTextResponse(data.decode("utf-8"), media_type=get_metrics_content_type())
 
 
-# ── OT-5: SLO Status Endpoint ────────────────────────────────────────────
+# ── OT-5: SLO Status Endpoint (admin-only via shared dependency) ────────
 @app.get("/ops/slo", tags=["ops"])
-async def get_slo_statuses(request: Request):
-    from models import User
-
-    # FH125 I-3: Protect operational endpoint — admin only
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    from auth import decode_access_token
-    token = auth_header.removeprefix("Bearer ").strip()
-    try:
-        payload = decode_access_token(token)
-    except Exception as err:
-        raise HTTPException(status_code=401, detail="Invalid token") from err
-
-    user_id = payload.get("sub") or payload.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    # Verify user is admin
-    from database import get_session as _get_session
-    for s in _get_session():
-        user = s.get(User, user_id)
-        if not user or not (user.role == "admin" or getattr(user, "is_admin", False)):
-            raise HTTPException(status_code=403, detail="Admin access required")
-        break
-
+async def get_slo_statuses(current_user: User = Depends(get_current_admin)):
     from observability.slo import get_all_slo_statuses
     statuses = get_all_slo_statuses()
     return {

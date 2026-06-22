@@ -1,9 +1,10 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DebateUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     team_id: Optional[str] = None
 
 

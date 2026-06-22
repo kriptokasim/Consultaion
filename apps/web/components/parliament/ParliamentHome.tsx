@@ -51,11 +51,11 @@ export default function ParliamentHome({
           </div>
           <div className="space-y-4">
             <h1 className="text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
-              One question. <span className="text-accent-secondary">Many AI models.</span> One champion answer.
+              One question. <span className="text-accent-secondary">Many AI models.</span> One reasoned answer.
             </h1>
             <p className="max-w-2xl text-base text-muted-foreground">
               Ask a single question and let multiple AI models draft their answers. Judges cross-examine them, score every
-              speech, and Consultaion returns one champion answer back to you.
+              speech, and Consultaion returns one synthesized answer back to you.
             </p>
             <p className="max-w-2xl text-sm text-muted-foreground">
               Start by entering a question below, then click <strong>Run Arena</strong>. You can watch the models generate answers,
@@ -71,7 +71,7 @@ export default function ParliamentHome({
               aria-label="Run AI Arena session"
               className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-smooth transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              Run Arena
+              Ask a question
             </button>
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-4 py-2 text-sm font-medium text-muted-foreground">
               <Clock className="h-4 w-4 text-accent-secondary" />

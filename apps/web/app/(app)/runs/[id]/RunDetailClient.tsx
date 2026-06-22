@@ -445,6 +445,9 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   // responses could be retrieved.
   if (debate?.status === "failed") {
     const errorReason = debate?.final_meta?.error || debate?.error_reason || "Run encountered a terminal error and failed.";
+    const failureCode = debate?.final_meta?.failure_code;
+    const failureDetail = debate?.final_meta?.failure_detail_safe;
+    const correlationId = debate?.final_meta?.correlation_id;
     const hasPersistedResponses = responsesState === "ready" && responses.length > 0;
     const responsesQueryFailed = responsesState === "failed";
     const noResponsesPersisted = responsesState === "empty" || (responsesState === "ready" && responses.length === 0);
@@ -474,6 +477,15 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
                 {failedCount > 0 && ` ${failedCount} provider${failedCount > 1 ? "s" : ""} failed.`}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">{failureSummary}</p>
+              {failureCode && (
+                <p className="mt-1 text-xs font-mono text-muted-foreground">
+                  Failure: {failureCode}
+                  {correlationId && <> · ID: {correlationId}</>}
+                </p>
+              )}
+              {failureDetail && failureDetail !== errorReason && (
+                <p className="mt-1 text-xs text-muted-foreground">{failureDetail}</p>
+              )}
               <Button variant="outline" className="mt-3" onClick={() => window.location.reload()}>
                 Retry Run
               </Button>
@@ -527,6 +539,15 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
           <AlertTitle>Run Failed</AlertTitle>
           <AlertDescription>
             <p className="mt-2 text-sm">{errorReason}</p>
+            {failureCode && (
+              <p className="mt-1 text-xs font-mono text-muted-foreground">
+                Failure: {failureCode}
+                {correlationId && <> · ID: {correlationId}</>}
+              </p>
+            )}
+            {failureDetail && failureDetail !== errorReason && (
+              <p className="mt-1 text-xs text-muted-foreground">{failureDetail}</p>
+            )}
             <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
               Retry / Refresh
             </Button>

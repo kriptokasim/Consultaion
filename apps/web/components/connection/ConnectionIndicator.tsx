@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useI18n } from "@/lib/i18n/client";
 
-export type ConnectionStatus = "connected" | "reconnecting" | "degraded" | "offline" | "closed";
+export type ConnectionStatus = "connected" | "reconnecting" | "degraded" | "offline" | "closed" | "idle";
 
 interface ConnectionIndicatorProps {
   status: ConnectionStatus;
@@ -38,6 +38,11 @@ const STATUS_CONFIG: Record<
     color: "bg-gray-400",
     pulse: false,
     labelKey: "connection.closed",
+  },
+  idle: {
+    color: "bg-gray-300",
+    pulse: false,
+    labelKey: "connection.idle",
   },
 };
 

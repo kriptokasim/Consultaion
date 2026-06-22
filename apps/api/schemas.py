@@ -231,6 +231,7 @@ class ModelPublic(BaseModel):
 
 
 class AuthRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     email: str
     password: str
 

@@ -7,7 +7,7 @@ from model_gateway.costs import check_credit_and_cost_safety
 from model_gateway.policy import determine_routing_strategy
 from model_gateway.pools import get_model_pool, load_pools_config, validate_user_access_to_model
 from model_gateway.types import GatewayError, GatewayModelRestrictedError, GatewayModelCallResult, GatewayRequest
-from model_gateway.model_map import resolve_model_key, is_free_model, MODEL_ALIASES
+from model_gateway.model_map import ModelKeyError, resolve_model_key, is_free_model, MODEL_ALIASES
 
 logger = logging.getLogger("model_gateway")
 
@@ -72,7 +72,44 @@ async def route_llm_call(
 
     # 1. Resolve canonical model key
     from config import settings
-    resolved_model_id = resolve_model_key(request.model_id)
+    from model_gateway.model_map import MODEL_MAP, MODEL_ALIASES
+    # Diagnostic: log model resolution context before attempt
+    logger.info(
+        "model_gateway.resolve_attempt",
+        extra={
+            "requested_model_id": request.model_id,
+            "in_model_map": request.model_id in MODEL_MAP,
+            "in_aliases": request.model_id in MODEL_ALIASES,
+            "user_id": request.user_id,
+            "user_plan": request.user_plan,
+            "gateway_policy": request.gateway_policy,
+        },
+    )
+    try:
+        resolved_model_id = resolve_model_key(request.model_id)
+    except ModelKeyError as mke:
+        logger.error(
+            "model_gateway.model_key_unresolved",
+            extra={
+                "requested_model_id": request.model_id,
+                "error": str(mke),
+                "user_id": request.user_id,
+            },
+        )
+        # Return a structured error result with safe failure code
+        return GatewayModelCallResult(
+            content="",
+            model_used=request.model_id,
+            provider="gateway",
+            success=False,
+            error_message=(
+                f"The selected model \"{request.model_id}\" is not available. "
+                "Please choose a supported model or retry with default models."
+            ),
+            error_code="model_key_unresolved",
+            model_pool="default",
+            routing_policy="resolve",
+        )
     request.model_id = resolved_model_id  # ensure downstream components use canonical key
 
     # 1a. Free-only mode guard

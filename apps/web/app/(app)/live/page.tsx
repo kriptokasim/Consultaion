@@ -687,7 +687,7 @@ function ArenaPageContent() {
       <ConnectionIndicator
         status={streamStatus === 'connected' ? 'connected' :
                streamStatus === 'connecting' || streamStatus === 'reconnecting' ? 'reconnecting' :
-               running ? 'degraded' : 'closed'}
+               running ? 'degraded' : 'idle'}
         className="ml-2"
       />
 

@@ -702,6 +702,7 @@
   "debate.technicalDetails.title": "Technical details (for debugging)",
   "admin.users.emptySearch": "No users found matching your search.",
   "admin.quota.empty": "No quota usage data found.",
+  "connection.idle": "Standing by",
   "processing": "Processing...",
   "confirm": "Confirm",
   "participation.hero.kicker": "Participant Profile",

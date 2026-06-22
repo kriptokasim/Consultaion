@@ -26,15 +26,8 @@ async def debug_auth(
     
     Only available when AUTH_DEBUG=True. Never exposes raw cookie values.
     
-    Returns:
-        - user: Current authenticated user (if any)
-        - cookies_present: List of cookie names (values redacted)
-        - has_auth_cookie: Whether auth cookie is present
-        - cookie_name: Expected auth cookie name
-        - cookie_*: Cookie configuration values
-        - cors_origins: Configured CORS origins
-        - web_app_origin: Expected frontend origin
-        - enable_csrf: Whether CSRF is enabled
+    In production/staging (not local), only minimal info is returned and
+    a sanitized audit event is logged server-side.
     """
     if not settings.AUTH_DEBUG:
         raise HTTPException(status_code=404, detail="Not found")
@@ -44,6 +37,31 @@ async def debug_auth(
     
     # Redact cookie values for security
     cookie_keys = {k: "<present>" if v else "<empty>" for k, v in cookies.items()}
+    
+    # In production/staging (non-local), return only minimal info and audit server-side
+    if not settings.IS_LOCAL_ENV:
+        from audit import record_audit
+        from deps import get_session
+        # Log sanitized audit event
+        record_audit(
+            "auth_debug_accessed",
+            user_id=current_user.id if current_user else None,
+            target_type="system",
+            meta={
+                "request_path": request.url.path,
+                "auth_debug_accessed": True,
+                "has_auth_cookie": has_auth_cookie,
+            },
+        )
+        return {
+            "user": None if current_user is None else {
+                "id": current_user.id,
+                "email": current_user.email,
+                "role": current_user.role,
+            },
+            "auth_state": "authenticated" if current_user else "anonymous",
+            "note": "Debug info available in server logs only",
+        }
     
     return {
         "user": None if current_user is None else {

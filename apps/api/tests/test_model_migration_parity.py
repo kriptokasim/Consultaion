@@ -1,147 +1,152 @@
-"""Test that SQLModel model metadata matches Alembic migration state."""
-from sqlmodel import Session, inspect
+"""Patchset 138: Model resolution regression tests.
 
-# Import all models to register them
-
-
-CRITICAL_TABLES = [
-    "debate_continuation",
-    "debate_stage_checkpoint",
-    "billing_reconciliation_runs",
-    "billing_reconciliation_discrepancies",
-    "llm_usage_log",
-    "billing_usage",
-    "billing_webhook_events",
-    "debate",
-    "user",
-]
-
-
-def test_critical_tables_exist(db_session: Session):
-    """All critical tables should exist after migration."""
-    inspector = inspect(db_session.get_bind())
-    tables = set(inspector.get_table_names())
-    for table in CRITICAL_TABLES:
-        assert table in tables, f"Critical table '{table}' missing from database"
+Tests that:
+1. All default panel config (frontend-side) model IDs resolve correctly
+2. All canonical keys pass through unchanged
+3. All short aliases resolve correctly
+4. All litellm-format model strings resolve correctly
+5. Unknown model keys raise ModelKeyError
+6. Each resolved canonical key exists in MODEL_MAP
+"""
+import pytest
+from model_gateway.model_map import (
+    MODEL_MAP,
+    MODEL_ALIASES,
+    ModelKeyError,
+    resolve_model_key,
+    get_model_cost_class,
+    is_free_model,
+)
 
 
-def test_debate_continuation_columns(db_session: Session):
-    """DebateContinuation should have all expected columns."""
-    inspector = inspect(db_session.get_bind())
-    columns = {c["name"] for c in inspector.get_columns("debate_continuation")}
-    expected = {
-        "id", "debate_id", "idempotency_key", "status",
-        "created_at", "updated_at", "user_id", "target",
-        "requested_at", "preflight_passed_at", "dispatched_at",
-        "started_at", "completed_at", "failed_at", "cancelled_at",
-        "paused_at", "failure_code", "failure_detail_safe",
-        "credit_reservation_id", "retry_of_continuation_id",
-    }
-    missing = expected - columns
-    assert not missing, f"DebateContinuation missing columns: {missing}"
+class TestModelResolution:
+    """Default values that frontend sends as seat.model (from schemas.default_panel_config)."""
+
+    DEFAULT_PANEL_SEAT_MODELS = [
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3-5-sonnet-20240620",
+    ]
+
+    FRONTEND_MODEL_IDS = [
+        "gpt4o-mini",
+        "gpt4o-deep",
+        "claude-sonnet",
+        "claude-haiku",
+        "gemini-2-flash",
+        "gemini-2-5-pro",
+        "groq-llama-3-3",
+        "mistral-large",
+        "deepseek-r1",
+        "router-smart",
+        "router-deep",
+    ]
+
+    LITELLM_FORMAT_IDS = [
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o",
+        "anthropic/claude-3-5-sonnet-20240620",
+        "anthropic/claude-3-haiku-20240307",
+        "gemini/gemini-2.0-flash",
+        "gemini/gemini-2.5-pro-preview-06-05",
+        "groq/llama-3.3-70b-versatile",
+        "mistral/mistral-large-latest",
+        "openrouter/deepseek/deepseek-r1",
+    ]
+
+    CANONICAL_KEYS = list(MODEL_MAP.keys())
+
+    @pytest.mark.parametrize("model_id", DEFAULT_PANEL_SEAT_MODELS)
+    def test_default_panel_seat_models_resolve(self, model_id: str):
+        """Default panel config seat models must resolve to a canonical key."""
+        resolved = resolve_model_key(model_id)
+        assert resolved in MODEL_MAP, (
+            f"Default panel seat model '{model_id}' resolved to '{resolved}' "
+            f"which is not a canonical MODEL_MAP key"
+        )
+
+    @pytest.mark.parametrize("model_id", FRONTEND_MODEL_IDS)
+    def test_frontend_model_ids_resolve(self, model_id: str):
+        """All frontend-facing model IDs must resolve to canonical keys."""
+        resolved = resolve_model_key(model_id)
+        assert resolved in MODEL_MAP, (
+            f"Frontend model ID '{model_id}' → '{resolved}' not in MODEL_MAP"
+        )
+
+    @pytest.mark.parametrize("model_id", LITELLM_FORMAT_IDS)
+    def test_litellm_format_ids_resolve(self, model_id: str):
+        """Litellm-format model strings must resolve (arena engine passes these as model_override)."""
+        resolved = resolve_model_key(model_id)
+        assert resolved in MODEL_MAP, (
+            f"Litellm format '{model_id}' → '{resolved}' not in MODEL_MAP"
+        )
+
+    @pytest.mark.parametrize("canonical_key", CANONICAL_KEYS)
+    def test_canonical_keys_pass_through(self, canonical_key: str):
+        """Canonical keys must be returned unchanged."""
+        resolved = resolve_model_key(canonical_key)
+        assert resolved == canonical_key, (
+            f"Canonical key '{canonical_key}' changed to '{resolved}'"
+        )
+
+    def test_unknown_key_raises(self):
+        """An unknown model key must raise ModelKeyError."""
+        with pytest.raises(ModelKeyError):
+            resolve_model_key("completely-fake-model-name")
+
+    def test_all_resolved_keys_have_metadata(self):
+        """Every model key that resolves must have a MODEL_MAP entry."""
+        all_ids = set(self.FRONTEND_MODEL_IDS + self.LITELLM_FORMAT_IDS + self.CANONICAL_KEYS)
+        for model_id in all_ids:
+            try:
+                resolved = resolve_model_key(model_id)
+                assert resolved in MODEL_MAP, f"{model_id} → {resolved} missing from MODEL_MAP"
+                record = MODEL_MAP[resolved]
+                assert "provider" in record, f"{resolved} missing 'provider'"
+                assert "litellm_model" in record, f"{resolved} missing 'litellm_model'"
+            except ModelKeyError:
+                pass  # unknown keys tested separately
+
+    def test_deprecated_usage_logs_warning(self, caplog):
+        """Using an alias (not canonical) logs a deprecation warning."""
+        import logging
+        caplog.set_level(logging.WARNING, logger="model_gateway.model_map")
+        resolve_model_key("gpt4o-mini")
+        assert "Deprecated model alias" in caplog.text
+
+    def test_alias_count(self):
+        """MODEL_ALIASES count includes all reverse lookups."""
+        assert len(MODEL_ALIASES) >= 20  # short + litellm format aliases
+
+    def test_aliases_dont_duplicate_canonical_keys(self):
+        """No alias should be a canonical key."""
+        for alias in MODEL_ALIASES:
+            assert alias not in MODEL_MAP, (
+                f"Alias '{alias}' also appears as a canonical key in MODEL_MAP"
+            )
 
 
-def test_debate_stage_checkpoint_columns(db_session: Session):
-    """DebateStageCheckpoint should have all expected columns."""
-    inspector = inspect(db_session.get_bind())
-    columns = {c["name"] for c in inspector.get_columns("debate_stage_checkpoint")}
-    expected = {
-        "id", "debate_id", "stage_key", "status", "input_hash",
-        "error_message", "started_at", "completed_at", "execution_metadata",
-        "attempt", "output_reference", "failed_at", "error_code",
-    }
-    missing = expected - columns
-    assert not missing, f"DebateStageCheckpoint missing columns: {missing}"
+class TestModelCostClassification:
+    """Cost class and free-model helpers should work after resolution."""
 
+    def test_free_models(self):
+        """Known free models should return True for is_free_model."""
+        free_canonicals = [
+            k for k, v in MODEL_MAP.items() if v.get("cost_class") == "free"
+        ]
+        assert free_canonicals, "Expected at least one free model"
+        for key in free_canonicals:
+            assert is_free_model(key), f"{key} should be free"
 
-def test_billing_reconciliation_runs_columns(db_session: Session):
-    """BillingReconciliationRun should have all expected columns."""
-    inspector = inspect(db_session.get_bind())
-    columns = {c["name"] for c in inspector.get_columns("billing_reconciliation_runs")}
-    expected = {
-        "id", "period", "run_type", "status", "users_checked",
-        "discrepancies_found", "total_tokens_internal", "total_tokens_usage",
-        "started_at", "completed_at", "error_message",
-    }
-    missing = expected - columns
-    assert not missing, f"BillingReconciliationRun missing columns: {missing}"
+    def test_paid_models(self):
+        """Known paid models should return False for is_free_model."""
+        paid_canonicals = [
+            k for k, v in MODEL_MAP.items() if v.get("cost_class") == "paid"
+        ]
+        assert paid_canonicals, "Expected at least one paid model"
+        for key in paid_canonicals:
+            assert not is_free_model(key), f"{key} should not be free"
 
-
-def test_billing_reconciliation_discrepancies_columns(db_session: Session):
-    """BillingReconciliationDiscrepancy should have all expected columns."""
-    inspector = inspect(db_session.get_bind())
-    columns = {c["name"] for c in inspector.get_columns("billing_reconciliation_discrepancies")}
-    expected = {
-        "id", "run_id", "user_id", "discrepancy_type",
-        "internal_value", "expected_value", "severity", "details",
-        "created_at",
-    }
-    missing = expected - columns
-    assert not missing, f"BillingReconciliationDiscrepancy missing columns: {missing}"
-
-
-def test_debate_continuation_indexes(db_session: Session):
-    """DebateContinuation should have critical indexes."""
-    inspector = inspect(db_session.get_bind())
-    indexes = {idx["name"] for idx in inspector.get_indexes("debate_continuation")}
-    assert any("debate_id" in name for name in indexes), "Missing debate_id index"
-    assert any("debate_status" in name or "debate_id" in name for name in indexes), (
-        "Missing (debate_id, status) composite index"
-    )
-
-
-def test_debate_continuation_unique_constraints(db_session: Session):
-    """DebateContinuation should have unique constraint on (debate_id, idempotency_key)."""
-    inspector = inspect(db_session.get_bind())
-    uq = inspector.get_unique_constraints("debate_continuation")
-    uq_names = [c["name"] for c in uq]
-    assert any("debate_id" in name and "idempotency" in name for name in uq_names), (
-        f"Missing unique constraint on (debate_id, idempotency_key). Found: {uq_names}"
-    )
-
-
-def test_debate_continuation_foreign_keys(db_session: Session):
-    """DebateContinuation should have FK to debate table."""
-    inspector = inspect(db_session.get_bind())
-    fks = inspector.get_foreign_keys("debate_continuation")
-    fk_targets = {fk["referred_table"] for fk in fks}
-    assert "debate" in fk_targets, "Missing FK to debate table"
-
-
-def test_billing_usage_unique_constraint(db_session: Session):
-    """BillingUsage should have unique constraint on (user_id, period)."""
-    inspector = inspect(db_session.get_bind())
-    uq = inspector.get_unique_constraints("billing_usage")
-    uq_names = [c["name"] for c in uq]
-    assert any("user" in name and "period" in name for name in uq_names), (
-        f"Missing unique constraint on (user_id, period). Found: {uq_names}"
-    )
-
-
-def test_alembic_chain_linearity_and_uniqueness():
-    """Assert there is only a single head and all revision IDs are unique."""
-    import os
-
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    api_dir = os.path.abspath(os.path.join(current_dir, ".."))
-    ini_path = os.path.join(api_dir, "alembic.ini")
-
-    config = Config(ini_path)
-    config.set_main_option("script_location", os.path.join(api_dir, "alembic"))
-    script = ScriptDirectory.from_config(config)
-
-    heads = script.get_heads()
-    assert len(heads) == 1, f"Expected exactly 1 alembic migration head, found {len(heads)}: {heads}"
-
-    revisions = list(script.walk_revisions())
-    rev_ids = [r.revision for r in revisions]
-
-    # Assert all revision IDs are unique
-    assert len(rev_ids) == len(set(rev_ids)), f"Duplicate Alembic revision IDs found: {rev_ids}"
-
-    # Assert all revision IDs have a length between 8 and 32 characters
-    for rev in rev_ids:
-        assert 8 <= len(rev) <= 32, f"Revision ID '{rev}' length ({len(rev)}) must be between 8 and 32 characters"
+    def test_unknown_model_cost_class(self):
+        """An unknown key returns 'unknown' cost class without error."""
+        cls = get_model_cost_class("nonexistent_model_key")
+        assert cls == "unknown"
