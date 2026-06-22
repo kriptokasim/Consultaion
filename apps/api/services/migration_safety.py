@@ -21,7 +21,11 @@ MODEL_CRITICAL_COLUMNS: dict[str, list[str]] = {
     "debate": ["id", "prompt", "status", "created_at", "updated_at", "user_id"],
     "message": ["id", "debate_id", "role", "content", "created_at"],
     "score": ["id", "debate_id", "persona", "score", "created_at"],
-    "debate_continuation": ["id", "debate_id", "status", "created_at"],
+    "debate_continuation": [
+        "id", "debate_id", "status", "created_at",
+        "cancelled_at", "paused_at", "failure_code", "failure_detail_safe",
+        "credit_reservation_id", "retry_of_continuation_id"
+    ],
 }
 
 

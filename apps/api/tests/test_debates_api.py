@@ -57,7 +57,7 @@ def test_start_debate_run(authenticated_client, db_session: Session):
     debate = Debate(id=str(uuid4()), prompt="Start me", user_id=user.id, status="queued")
     db_session.add(debate)
     db_session.commit()
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(f"/debates/{debate.id}/start")
         assert response.status_code == 200
         data = response.json()
@@ -152,7 +152,7 @@ def test_continue_debate_run(authenticated_client, db_session: Session):
     db_session.add(debate)
     db_session.commit()
     
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(f"/debates/{debate.id}/continue")
         assert response.status_code == 200
         data = response.json()
@@ -237,3 +237,33 @@ def test_retry_agent(authenticated_client, db_session: Session):
     ).first()
     assert msg is not None
     assert msg.content == "Retried agent response content"
+
+def test_get_debate_with_continuation_row(authenticated_client, db_session: Session):
+    import datetime
+    from models import DebateContinuation
+    
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(id=str(uuid4()), prompt="Test prompt with continuation", user_id=user.id, status="queued")
+    db_session.add(debate)
+    db_session.commit()
+    
+    # Create a continuation with the new columns to ensure serialization/ORM mapping handles it properly
+    continuation = DebateContinuation(
+        id=str(uuid4()),
+        debate_id=debate.id,
+        idempotency_key="test-idem-key-1",
+        status="requested",
+        cancelled_at=datetime.datetime.now(datetime.timezone.utc),
+        paused_at=datetime.datetime.now(datetime.timezone.utc),
+        failure_code="test_failure",
+        failure_detail_safe="Test failure detail",
+        credit_reservation_id="res_123"
+    )
+    db_session.add(continuation)
+    db_session.commit()
+    
+    response = authenticated_client.get(f"/debates/{debate.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == debate.id
+    assert data["prompt"] == "Test prompt with continuation"
