@@ -153,7 +153,7 @@ class DebateStateManager:
                                     attempt_id=getattr(self, "_attempt_id", None),
                                     tokens=tokens,
                                 )
-                        loop = asyncio.get_event_loop()
+                        loop = asyncio.get_running_loop()
                         await loop.run_in_executor(None, _record)
                 except Exception:
                     logger.exception("Failed to record token usage for debate %s", self.debate_id)

@@ -538,14 +538,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setEvents((prev) => prev.some((e) => e.id === newEvent.id) ? prev : [...prev, newEvent]);
 
       // Refetch debate on state-change events
-      if (["arena_response", "message", "seat_message", "model_response", "score", "stage_checkpoint", "final", "debate_failed", "perspectives_ready", "debate_completed"].includes(eventType)) {
+      if (["arena_synthesis", "arena_response", "message", "seat_message", "model_response", "score", "stage_checkpoint", "final", "debate_failed", "perspectives_ready", "debate_completed"].includes(eventType)) {
         getDebate(debateId)
           .then((updated) => setDebate(updated))
           .catch(() => {});
       }
 
       // Sync persisted responses on terminal events
-      if (["debate_completed", "debate_failed", "arena_response"].includes(eventType)) {
+      if (["arena_synthesis", "debate_completed", "debate_failed", "arena_response"].includes(eventType)) {
         getDebateResponses(debateId)
           .then((data) => {
             setResponses(data.items);

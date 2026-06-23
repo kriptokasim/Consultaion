@@ -112,7 +112,7 @@ async def persist_usage_log(
 ) -> None:
     """Store usage data for cost analytics (async wrapper)."""
     # Run in thread pool to avoid blocking
-    await asyncio.get_event_loop().run_in_executor(
+    await asyncio.get_running_loop().run_in_executor(
         None,
         lambda: _persist_usage_log_sync(
             call_usage,

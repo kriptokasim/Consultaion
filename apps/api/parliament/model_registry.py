@@ -2,6 +2,9 @@ from typing import List, Literal, Optional, Set
 
 from config import settings
 from pydantic import BaseModel, Field
+from sqlmodel import Session, select
+from database import engine
+from models import UserProviderKey
 
 
 class ModelInfo(BaseModel):
@@ -261,6 +264,32 @@ def list_enabled_models() -> List[ModelInfo]:
         if not _provider_enabled(model.provider):
             continue
         enabled_models.append(model)
+    return enabled_models
+
+
+def list_enabled_models_for_user(user_id: Optional[str] = None) -> List[ModelInfo]:
+    """Return a list of models enabled globally or via user BYOK."""
+    enabled_models = list_enabled_models()
+    if not user_id:
+        return enabled_models
+
+    user_providers = set()
+    try:
+        with Session(engine) as session:
+            stmt = select(UserProviderKey.provider).where(UserProviderKey.user_id == user_id)
+            user_providers = set(session.exec(stmt).all())
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to fetch BYOK for user {user_id}: {e}")
+
+    enabled_ids = {m.id for m in enabled_models}
+    for model in ALL_MODELS:
+        if not model.enabled:
+            continue
+        if model.id not in enabled_ids and model.provider in user_providers:
+            enabled_models.append(model)
+            enabled_ids.add(model.id)
+            
     return enabled_models
 
 

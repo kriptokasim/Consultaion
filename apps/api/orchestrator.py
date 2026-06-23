@@ -291,7 +291,7 @@ async def _complete_debate_record(
                 await session.commit()
                 # Run sync function in threadpool
                 import asyncio
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: record_token_usage(user_id, tokens_total)
                 )

@@ -41,6 +41,21 @@ type CompletedRunLoadState =
   | "ready_degraded"
   | "failed";
 
+export function resolveRunViewKind(mode: string | undefined | null): "arena" | "compare" | "conversation" | "voting" | "debate" {
+  if (!mode) return "debate";
+  switch (mode) {
+    case "arena":
+    case "compare":
+    case "conversation":
+    case "voting":
+      return mode;
+    case "parliament":
+    case "debate":
+    default:
+      return "debate";
+  }
+}
+
 export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   const params = useParams();
   const router = useRouter();
@@ -558,10 +573,9 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   }
 
   if (isCompleted && isDebateLoaded) {
-    const showArenaView = debate?.mode === "arena";
-    const showVotingView = debate?.mode === "voting";
+    const viewKind = resolveRunViewKind(debate?.mode);
 
-    if (showArenaView) {
+    if (viewKind === "arena") {
       return (
         <div className="container max-w-[1400px] py-6">
           {hydrationQuality !== "complete" && (
@@ -587,7 +601,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
       );
     }
 
-    if (showVotingView) {
+    if (viewKind === "voting") {
       return (
         <div className="container max-w-6xl py-6">
           {hydrationQuality !== "complete" && (
@@ -617,6 +631,22 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
             scores={scores}
             vote={vote}
           />
+        </div>
+      );
+    }
+
+    if (viewKind === "compare") {
+      return (
+        <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
+          <CompareRunView debate={debate as any} events={normalizedResultsEvents as any} />
+        </div>
+      );
+    }
+
+    if (viewKind === "conversation") {
+      return (
+        <div className="container max-w-5xl h-[calc(100vh-4rem)] py-6">
+          <ConversationRunView debate={debate as any} events={normalizedResultsEvents as any} />
         </div>
       );
     }
@@ -658,8 +688,9 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
   }
 
   const liveEvents = events.map((e: any) => e.payload || e);
+  const viewKind = resolveRunViewKind(debate?.mode);
 
-  if (debate?.mode === "arena" && !isCompleted) {
+  if (viewKind === "arena" && !isCompleted) {
     return (
       <FeatureGate flag="unifiedWorkspace" fallback={
         <div className="flex flex-col h-[calc(100vh-4rem)]">
@@ -738,7 +769,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  if (debate?.mode === "compare" && !isCompleted) {
+  if (viewKind === "compare" && !isCompleted) {
     return (
       <div className="container max-w-[1400px] h-[calc(100vh-4rem)] py-6">
         <CompareRunView debate={debate as any} events={liveEvents as any} />
@@ -746,7 +777,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  if (debate?.mode === "conversation" && !isCompleted) {
+  if (viewKind === "conversation" && !isCompleted) {
     return (
       <div className="container max-w-5xl h-[calc(100vh-4rem)] py-6">
         <ConversationRunView debate={debate as any} events={liveEvents as any} />
@@ -754,7 +785,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
     );
   }
 
-  if (debate?.mode === "voting" && !isCompleted) {
+  if (viewKind === "voting" && !isCompleted) {
     return (
       <div className="container max-w-6xl py-6">
         <VotingRunView

@@ -10,6 +10,7 @@ from typing import List
 from agents import call_llm_for_role
 from celery.utils.log import get_task_logger
 from database import session_scope
+from database_async import async_session_scope
 from models import Debate, DivergenceReport, Message
 from sqlmodel import select
 
@@ -72,8 +73,8 @@ async def _extract_claims_from_response(prompt: str, response_content: str, mode
 
 async def _execute_divergence_computation(debate_id: str) -> None:
     """Core logic to fetch responses, extract claims, calculate similarity, and store report."""
-    with session_scope() as session:
-        debate = session.get(Debate, debate_id)
+    async with async_session_scope() as session:
+        debate = await session.get(Debate, debate_id)
         if not debate:
             module_logger.warning("Debate %s not found for divergence computation", debate_id)
             return
@@ -85,7 +86,8 @@ async def _execute_divergence_computation(debate_id: str) -> None:
             Message.debate_id == debate_id,
             Message.role == "arena_response"
         )
-        db_responses = session.exec(stmt).all()
+        db_responses_result = await session.execute(stmt)
+        db_responses = db_responses_result.scalars().all()
         responses = [
             {"content": r.content, "persona": r.persona or "Model"}
             for r in db_responses
@@ -94,8 +96,9 @@ async def _execute_divergence_computation(debate_id: str) -> None:
     if not responses:
         module_logger.warning("No arena responses found for debate %s", debate_id)
         # Create empty report
-        with session_scope() as session:
-            report = session.exec(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)).first()
+        async with async_session_scope() as session:
+            result = await session.execute(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id))
+            report = result.scalars().first()
             if not report:
                 report = DivergenceReport(
                     debate_id=debate_id,
@@ -104,7 +107,7 @@ async def _execute_divergence_computation(debate_id: str) -> None:
                     contested_claims={"claims": []}
                 )
                 session.add(report)
-                session.commit()
+                await session.commit()
             return
 
     checkpoint_input = {
@@ -169,15 +172,16 @@ async def _execute_divergence_computation(debate_id: str) -> None:
             total_distinct = len(consensus_list) + len(contested_list)
             divergence_score = len(contested_list) / total_distinct if total_distinct > 0 else 0.0
 
-        with session_scope() as session:
-            report = session.exec(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)).first()
+        async with async_session_scope() as session:
+            result = await session.execute(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id))
+            report = result.scalars().first()
             if not report:
                 report = DivergenceReport(debate_id=debate_id)
             report.divergence_score = float(round(divergence_score, 2))
             report.consensus_claims = {"claims": consensus_list}
             report.contested_claims = {"claims": contested_list}
             session.add(report)
-            session.commit()
+            await session.commit()
             module_logger.info("Saved semantic DivergenceReport for debate %s. Score: %.2f", debate_id, divergence_score)
         return divergence_score, consensus_list, contested_list
 

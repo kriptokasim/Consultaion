@@ -234,7 +234,7 @@ export default function DebateArena({
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              Hansard Transcript
+              Arena Transcript
             </button>
             <button
               onClick={() => setActiveTab("tree")}

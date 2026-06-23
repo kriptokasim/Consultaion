@@ -18,7 +18,7 @@ from exceptions import (
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from integrations.langfuse import start_debate_trace
 from models import Debate, DebateContinuation, Team, User, utcnow
-from parliament.model_registry import list_enabled_models
+from parliament.model_registry import list_enabled_models_for_user
 from parliament.providers import PROVIDERS
 from parliament.roles import ROLE_PROFILES
 from parliament.router_v2 import RouteContext, choose_model
@@ -180,7 +180,7 @@ async def create_debate(
         if validated_config:
             config = validated_config.model_dump()
 
-        enabled_models = {m.id: m for m in list_enabled_models()}
+        enabled_models = {m.id: m for m in list_enabled_models_for_user(current_user.id)}
         if not enabled_models:
             # Patchset 136: No models available — fail before further processing.
             # Quota was already reserved (line 140); the outer except block refunds it.
