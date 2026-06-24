@@ -907,11 +907,28 @@ async def run_debate(
                     debate.updated_at = datetime.now(timezone.utc)
                     from correlation import get_correlation_context
                     corr_ctx = get_correlation_context()
+                    existing_meta = debate.final_meta or {}
+                    
+                    # Determine safe error message
+                    error_msg = "Debate execution failed. Please retry."
+                    failure_code = "terminal_execution_error"
+                    
+                    if existing_meta.get("error"):
+                        error_msg = existing_meta["error"]
+                        failure_code = existing_meta.get("failure_code", failure_code)
+                    elif isinstance(exc, ValueError) and "Conversation mode is disabled" in str(exc):
+                        error_msg = "Conversation mode is disabled"
+                        failure_code = "conversation.disabled"
+                    elif hasattr(exc, "safe_message") and exc.safe_message:
+                        error_msg = exc.safe_message
+                        failure_code = getattr(exc, "failure_code", failure_code)
+
                     debate.final_meta = {
-                        "error": "Debate execution failed. Please retry.",
-                        "failure_code": "terminal_execution_error",
-                        "failure_detail_safe": str(exc)[:500],
-                        "correlation_id": corr_ctx.request_id if corr_ctx else None,
+                        **existing_meta,
+                        "error": error_msg,
+                        "failure_code": failure_code,
+                        "failure_detail_safe": existing_meta.get("failure_detail_safe") or str(exc)[:500],
+                        "correlation_id": existing_meta.get("correlation_id") or (corr_ctx.request_id if corr_ctx else None),
                     }
                     session.add(debate)
                     await session.commit()

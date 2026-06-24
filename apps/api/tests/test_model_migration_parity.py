@@ -10,12 +10,12 @@ Tests that:
 """
 import pytest
 from model_gateway.model_map import (
-    MODEL_MAP,
     MODEL_ALIASES,
+    MODEL_MAP,
     ModelKeyError,
-    resolve_model_key,
     get_model_cost_class,
     is_free_model,
+    resolve_model_key,
 )
 
 

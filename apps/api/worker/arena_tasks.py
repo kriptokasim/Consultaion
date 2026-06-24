@@ -9,7 +9,6 @@ from typing import List
 
 from agents import call_llm_for_role
 from celery.utils.log import get_task_logger
-from database import session_scope
 from database_async import async_session_scope
 from models import Debate, DivergenceReport, Message
 from sqlmodel import select

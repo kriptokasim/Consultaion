@@ -57,7 +57,7 @@ def _build_cache_key(session: Session) -> str:
         bind = session.get_bind()
         dialect = bind.dialect.name
         url = bind.url.render_as_string(hide_password=True)
-        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+        url_hash = hashlib.sha256(url.encode()).hexdigest()[:12]
         return f"{dialect}:{url_hash}"
     except Exception:
         return "default"

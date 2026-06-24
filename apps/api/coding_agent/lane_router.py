@@ -6,6 +6,7 @@ and risk keywords, and determine active lanes.
 from dataclasses import dataclass
 from typing import Optional, Set
 
+
 @dataclass
 class TierResult:
     tier: int

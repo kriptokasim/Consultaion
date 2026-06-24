@@ -4,10 +4,15 @@ import os
 from model_gateway.adapters import DirectProviderAdapter, MockAdapter, OpenRouterAdapter
 from model_gateway.agent_bridge import call_model_via_gateway
 from model_gateway.costs import check_credit_and_cost_safety
+from model_gateway.model_map import ModelKeyError, is_free_model, resolve_model_key
 from model_gateway.policy import determine_routing_strategy
 from model_gateway.pools import get_model_pool, load_pools_config, validate_user_access_to_model
-from model_gateway.types import GatewayError, GatewayModelRestrictedError, GatewayModelCallResult, GatewayRequest
-from model_gateway.model_map import ModelKeyError, resolve_model_key, is_free_model, MODEL_ALIASES
+from model_gateway.types import (
+    GatewayError,
+    GatewayModelCallResult,
+    GatewayModelRestrictedError,
+    GatewayRequest,
+)
 
 logger = logging.getLogger("model_gateway")
 
@@ -72,7 +77,8 @@ async def route_llm_call(
 
     # 1. Resolve canonical model key
     from config import settings
-    from model_gateway.model_map import MODEL_MAP, MODEL_ALIASES
+
+    from model_gateway.model_map import MODEL_ALIASES, MODEL_MAP
     # Diagnostic: log model resolution context before attempt
     logger.info(
         "model_gateway.resolve_attempt",
@@ -103,7 +109,7 @@ async def route_llm_call(
             provider="gateway",
             success=False,
             error_message=(
-                f"The selected model \"{request.model_id}\" is not available. "
+                f'The selected model "{request.model_id}" is not available. '
                 "Please choose a supported model or retry with default models."
             ),
             error_code="model_key_unresolved",
@@ -257,10 +263,11 @@ async def route_llm_call(
                     from services.provider_credentials import get_model_api_key_async
                     resolved = await get_model_api_key_async(db_session, request.user_id, provider)
                 else:
-                    from services.provider_credentials import get_model_api_key
                     import asyncio
-                    def _get_key():
-                        return get_model_api_key(db_session, request.user_id, provider)
+
+                    from services.provider_credentials import get_model_api_key
+                    def _get_key(p=provider):
+                        return get_model_api_key(db_session, request.user_id, p)
                     resolved = await asyncio.get_running_loop().run_in_executor(None, _get_key)
                 
                 if resolved and resolved.source == "user":
@@ -398,6 +405,7 @@ async def route_llm_stream(
     max_tokens: int = 1200,
     on_delta=None,
     debate_id: str | None = None,
+    user_id: str | None = None,
 ) -> GatewayModelCallResult:
     """Stream LLM tokens via the gateway, calling on_delta for each chunk.
 
@@ -430,6 +438,18 @@ async def route_llm_stream(
             routing_policy="stream",
         )
 
+    api_key = None
+    if user_id:
+        try:
+            from database_async import async_session_scope
+            from services.provider_credentials import get_model_api_key_async
+            async with async_session_scope() as session:
+                resolved = await get_model_api_key_async(session, user_id, provider)
+                if resolved:
+                    api_key = resolved.api_key
+        except Exception as e:
+            logger.warning(f"Failed to resolve api key in stream: {e}")
+
     adapter = adapter_cls()
     result = await adapter.stream_llm(
         messages=messages,
@@ -440,6 +460,8 @@ async def route_llm_stream(
         model_pool="default",
         routing_policy="stream",
         on_delta=on_delta or (lambda d: None),
+        user_id=user_id,
+        api_key=api_key,
     )
 
     if result.success:

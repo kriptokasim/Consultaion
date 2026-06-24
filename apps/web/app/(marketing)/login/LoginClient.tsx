@@ -35,7 +35,9 @@ export default function LoginClient() {
       if (err === "google_not_configured") {
         setError("Google Sign-In is not configured on this server. Please check your environment variables.")
       } else {
-        setError(err)
+        import("@/lib/api/errorContract").then(({ getFriendlyMessage }) => {
+          setError(getFriendlyMessage({ code: err, message: err } as any))
+        })
       }
     }
   }, [searchParams])
@@ -48,7 +50,10 @@ export default function LoginClient() {
       await login(email, password)
       router.push(nextPath)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      import("@/lib/api/errorContract").then(({ normalizeApiError, getFriendlyMessage }) => {
+        const clientError = normalizeApiError(err)
+        setError(getFriendlyMessage(clientError))
+      })
     } finally {
       setLoading(false)
     }

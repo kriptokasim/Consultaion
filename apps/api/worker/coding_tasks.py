@@ -4,20 +4,18 @@ Implements the multi-lane routing, early exit, and SSE broadcasting.
 """
 import asyncio
 import logging
-import uuid
-import json
 from datetime import datetime
+
+from coding_agent.lane_router import classify_tier
+from database import session_scope
+from metrics import incr_metric, record_timer
+from model_gateway.agent_bridge import call_model_via_gateway
+from models import CodingLaneResult, CodingPatchArtifact, CodingRun, CodingTurn
 from sqlmodel import Session, select
-from typing import Dict, Any, List
+from sse_backend import get_sse_backend
+from streaming_types import StreamEventType
 
 from worker.celery_app import celery_app
-from database import session_scope
-from models import CodingRun, CodingTurn, CodingLaneResult, CodingPatchArtifact
-from model_gateway.agent_bridge import call_model_via_gateway
-from coding_agent.lane_router import classify_tier
-from streaming_types import StreamEventType
-from sse_backend import get_sse_backend
-from metrics import incr_metric, record_timer
 
 logger = logging.getLogger("worker.coding_tasks")
 

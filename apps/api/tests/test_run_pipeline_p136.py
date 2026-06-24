@@ -20,7 +20,7 @@ class TestDefaultArenaModelResolution:
     @pytest.mark.parametrize("model_id", _default_arena_seat_models())
     def test_seat_model_resolves(self, model_id: str):
         """Each default seat model must resolve to a canonical MODEL_MAP key."""
-        from model_gateway.model_map import resolve_model_key, MODEL_MAP
+        from model_gateway.model_map import MODEL_MAP, resolve_model_key
         resolved = resolve_model_key(model_id)
         assert resolved in MODEL_MAP, (
             f"Seat model '{model_id}' resolved to '{resolved}' which is not canonical"
@@ -29,7 +29,7 @@ class TestDefaultArenaModelResolution:
     @pytest.mark.parametrize("model_id", _default_arena_seat_models())
     def test_model_has_litellm_target(self, model_id: str):
         """Resolved model must map to a valid LiteLLM model string."""
-        from model_gateway.model_map import resolve_model_key, MODEL_MAP
+        from model_gateway.model_map import MODEL_MAP, resolve_model_key
         resolved = resolve_model_key(model_id)
         record = MODEL_MAP[resolved]
         assert record.get("litellm_model"), f"{resolved} missing litellm_model"
@@ -37,7 +37,7 @@ class TestDefaultArenaModelResolution:
 
     def test_all_model_pool_references_valid(self):
         """Every canonical key referenced in DEFAULT_POOLS must exist in MODEL_MAP."""
-        from model_gateway.model_map import MODEL_MAP, MODEL_ALIASES
+        from model_gateway.model_map import MODEL_MAP
         from model_gateway.pools import load_pools_config
 
         config = load_pools_config()
@@ -59,8 +59,7 @@ class TestDefaultArenaModelResolution:
 
     def test_legacy_pool_mappings_valid(self):
         """Every model id in legacy_pools must resolve to a canonical key."""
-        from model_gateway.pools import load_pools_config
-        from model_gateway.model_map import resolve_model_key, ModelKeyError
+        from model_gateway.model_map import ModelKeyError, resolve_model_key
 
         # We read the internal legacy_pools dict by calling get_model_pool directly
         from model_gateway.pools import get_model_pool
@@ -85,7 +84,7 @@ class TestRunPipelineModelValidation:
 
     def test_default_panel_config_validates(self):
         """The default panel config must pass schema validation."""
-        from schemas import default_panel_config, PanelConfig
+        from schemas import PanelConfig, default_panel_config
         config = default_panel_config()
         validated = PanelConfig.model_validate(config.model_dump())
         assert len(validated.seats) > 0
@@ -99,8 +98,8 @@ class TestRunPipelineModelValidation:
         Uses MockAdapter to avoid real provider calls. Verifies that model
         resolution does not fail before the adapter is reached.
         """
-        from model_gateway.types import GatewayRequest, GatewayModelCallResult
         from model_gateway import route_llm_call
+        from model_gateway.types import GatewayRequest
 
         request = GatewayRequest(
             messages=[{"role": "user", "content": "Test prompt"}],

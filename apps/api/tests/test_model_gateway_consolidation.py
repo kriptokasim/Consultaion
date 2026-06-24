@@ -1,16 +1,13 @@
 import pytest
-
 from config import settings
-from model_gateway.model_map import (
-    MODEL_MAP,
-    MODEL_ALIASES,
-    ModelKeyError,
-    resolve_model_key,
-    is_free_model,
-    get_model_cost_class
-)
 from model_gateway import route_llm_call
-from model_gateway.types import GatewayRequest, GatewayModelRestrictedError
+from model_gateway.model_map import (
+    ModelKeyError,
+    is_free_model,
+    resolve_model_key,
+)
+from model_gateway.types import GatewayModelRestrictedError, GatewayRequest
+
 
 def test_resolve_canonical_key():
     """Canonical keys resolve to themselves."""

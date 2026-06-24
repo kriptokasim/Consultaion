@@ -32,8 +32,8 @@ async def check_api_key_rotations() -> int:
     with session_scope() as session:
         # Get all unexpired, unreminded, unrevoked keys
         stmt = select(APIKey).where(
-            APIKey.rotation_reminder_sent == False,
-            APIKey.revoked == False
+            APIKey.rotation_reminder_sent.is_(False),
+            APIKey.revoked.is_(False)
         )
         keys = session.exec(stmt).all()
         

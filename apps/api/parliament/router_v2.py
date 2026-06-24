@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-from parliament.model_registry import ModelInfo, get_model_info, list_enabled_models
+from parliament.model_registry import ModelInfo, get_model_info
 from parliament.provider_health import get_health_state
 
 
@@ -106,7 +106,8 @@ def choose_model(ctx: RouteContext) -> Tuple[str, List[CandidateDecision]]:
     
     # 3. Score candidates
     candidates: List[CandidateDecision] = []
-    enabled_models = list_enabled_models()
+    from parliament.model_registry import list_enabled_models_for_user
+    enabled_models = list_enabled_models_for_user(ctx.user_id)
     
     now = datetime.now(timezone.utc)
     

@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       const errBody = await response.json().catch(() => ({}));
       console.error("OAuth callback exchange failed:", errBody);
       return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(errBody.detail || "exchange_failed")}`, request.url)
+        new URL(`/login?error=${encodeURIComponent(errBody.code || errBody.detail || "exchange_failed")}`, request.url)
       );
     }
 

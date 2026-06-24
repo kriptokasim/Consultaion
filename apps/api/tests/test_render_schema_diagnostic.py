@@ -1,7 +1,6 @@
 """Tests for render schema diagnostic script to catch drift."""
 
 import importlib.util
-import os
 import sys
 from pathlib import Path
 

@@ -14,20 +14,16 @@ NOTE: Preflight (OPTIONS) requests are handled by CORSMiddleware in production,
 but the SSE endpoint sets its own CORS headers on the actual response.
 """
 
-import os
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pytest
-from fastapi.testclient import TestClient
-
 from config import settings
+from fastapi.testclient import TestClient
 from main import app
-from routes.debates.streaming import stream_events
 from sse_backend import get_sse_backend
-
 
 # ── Fixtures ───────────────────────────────────────────────────
 
@@ -72,7 +68,6 @@ def test_sse_streaming_allowed_origin_header(client):
     When WEB_APP_ORIGIN is set, the header should match it.
     When unset, it defaults to '*'.
     """
-    from routes.debates.streaming import stream_events as se
 
     # Inspect the header logic used by the SSE streaming endpoint
     # The endpoint does: allowed_origin = settings.WEB_APP_ORIGIN or "*"

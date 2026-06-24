@@ -41,7 +41,6 @@ async def debug_auth(
     # In production/staging (non-local), return only minimal info and audit server-side
     if not settings.IS_LOCAL_ENV:
         from audit import record_audit
-        from deps import get_session
         # Log sanitized audit event
         record_audit(
             "auth_debug_accessed",

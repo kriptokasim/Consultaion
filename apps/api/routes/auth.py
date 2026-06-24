@@ -401,7 +401,6 @@ async def google_callback_post(
     if not state_meta:
         internal_secret = request.headers.get("x-internal-secret")
         if not internal_secret or not settings.INTERNAL_SECRET or not secrets.compare_digest(internal_secret, settings.INTERNAL_SECRET):
-            # Patchset 136: Diagnostic — distinguish missing secret from mismatch
             if not settings.INTERNAL_SECRET:
                 logger.error(
                     "Google OAuth failed: INTERNAL_SECRET is not set in backend environment. "
@@ -410,7 +409,7 @@ async def google_callback_post(
                 raise ValidationError(
                     message="Google sign-in misconfigured: INTERNAL_SECRET is not set on the server. "
                             "An admin must set INTERNAL_SECRET in both backend and frontend environments.",
-                    code="auth.invalid_state",
+                    code="auth.configuration_error",
                 )
             elif not internal_secret:
                 logger.warning(
@@ -420,7 +419,7 @@ async def google_callback_post(
                 raise ValidationError(
                     message="Google sign-in failed: frontend is not sending the required internal secret. "
                             "Ensure INTERNAL_SECRET is set in the frontend (Vercel) environment.",
-                    code="auth.invalid_state",
+                    code="auth.configuration_error",
                 )
             else:
                 logger.warning(
@@ -429,7 +428,7 @@ async def google_callback_post(
                 )
                 raise ValidationError(
                     message="Google sign-in failed: internal secret mismatch between frontend and backend.",
-                    code="auth.invalid_state",
+                    code="auth.configuration_error",
                 )
 
         logger.info(

@@ -240,6 +240,7 @@ def test_retry_agent(authenticated_client, db_session: Session):
 
 def test_get_debate_with_continuation_row(authenticated_client, db_session: Session):
     import datetime
+
     from models import DebateContinuation
     
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()

@@ -132,3 +132,22 @@ export function shouldRedirectToLogin(error: ClientError): boolean {
 export function getCorrelationId(error: ClientError): string | undefined {
   return error.correlationId ?? error.requestId;
 }
+
+export function getFriendlyMessage(error: ClientError): string {
+  if (error.code === "auth.configuration_error") {
+    return "Sign-in is currently unavailable due to a server configuration issue. Please contact the administrator.";
+  }
+  if (error.code === "auth.invalid_state") {
+    return "Sign-in session expired or invalid. Please try signing in again.";
+  }
+  if (error.code === "auth.account_locked") {
+    return "Your account is temporarily locked due to multiple failed login attempts. Please try again later.";
+  }
+  if (error.code === "models.unavailable") {
+    return "No AI models are currently available on this platform. Please contact the administrator to configure model providers.";
+  }
+  if (error.code === "conversation.disabled") {
+    return "Conversation mode is currently disabled.";
+  }
+  return error.message;
+}

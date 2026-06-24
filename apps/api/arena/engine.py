@@ -266,6 +266,7 @@ async def run_arena(
                         max_tokens=arena_max,
                         on_delta=on_delta,
                         debate_id=debate_id,
+                        user_id=user_id,
                     )
 
                     await backend.publish(

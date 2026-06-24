@@ -16,9 +16,9 @@ os.environ.setdefault("USE_MOCK", "1")
 os.environ.setdefault("COOKIE_SECURE", "0")
 
 import pytest
-from fastapi.testclient import TestClient
 from auth import COOKIE_NAME
 from database import init_db
+from fastapi.testclient import TestClient
 from main import app
 from sse_backend import get_sse_backend
 

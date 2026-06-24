@@ -1,11 +1,9 @@
-import pytest
-import asyncio
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
-from models import CodingRun, CodingTurn, CodingLaneResult
-from worker.coding_tasks import _async_execute_turn, compute_similarity, LANE_MODELS
-from database import engine
-from sqlmodel import Session
+import pytest
+from models import CodingLaneResult, CodingRun, CodingTurn
+from worker.coding_tasks import LANE_MODELS, _async_execute_turn, compute_similarity
+
 
 # Setup mock for gateway
 @pytest.fixture
@@ -73,7 +71,9 @@ async def test_execute_turn_tier_2_judge(db_session, mock_gateway):
     async def mock_call(*args, **kwargs):
         model_id = kwargs.get("model_id")
         class MockUsage:
-            prompt_tokens = 10; completion_tokens = 20; total_tokens = 30
+            prompt_tokens = 10
+            completion_tokens = 20
+            total_tokens = 30
         
         # fast, thinking, verifier divergent
         content = f"Patch from {model_id}"

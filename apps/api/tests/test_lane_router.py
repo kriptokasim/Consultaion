@@ -1,5 +1,5 @@
-import pytest
-from coding_agent.lane_router import classify_tier, TierThresholds, RISK_KEYWORDS
+from coding_agent.lane_router import classify_tier
+
 
 def test_classify_tier_0_trivial():
     res = classify_tier(["app/main.py"], "Change the background color to red")

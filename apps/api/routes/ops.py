@@ -758,24 +758,9 @@ async def llm_smoke_test(
             "provider": target_provider,
             "model_id": model_id,
             "gateway_reached": True,
-            "provider_attempted": False,
+            "provider_attempted": True,
             "latency_ms": round(latency_ms, 2),
-            "error_code": failure.code.value,
-            "message": failure.message,
-        }
-    except Exception as e:
-        latency_ms = (_time.monotonic() - start_ts) * 1000
-        gateway_reached = True
-        from llm_errors import classify_provider_exception
-        failure = classify_provider_exception(e)
-        return {
-            "success": False,
-            "provider": target_provider,
-            "model_id": model_id,
-            "gateway_reached": gateway_reached,
-            "provider_attempted": provider_attempted,
-            "latency_ms": round(latency_ms, 2),
-            "error_code": failure.code.value,
+            "error_code": failure.code.value if hasattr(failure.code, "value") else str(failure.code),
             "message": failure.message,
         }
 

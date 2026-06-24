@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from models import UserProviderKey
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
@@ -89,8 +90,6 @@ def get_model_api_key(
 
     return None
 
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 async def resolve_provider_credential_async(
     session: AsyncSession,

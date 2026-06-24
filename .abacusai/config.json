@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /home/durmusahm/Consultaion && ls -la && echo \"---GIT---\" && git --no-pager log --oneline -10 2>&1 | head -20 || true)",
+      "Bash(cd /home/durmusahm/Consultaion && echo \"===WORKFLOWS===\" && ls -la .github/workflows/ 2>&1; echo \"===tracked .env files=…)"
+    ]
+  }
+}
