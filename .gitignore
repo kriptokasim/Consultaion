@@ -5,6 +5,7 @@ apps/web/.next-build/
 apps/web/test-results/
 apps/web/.tmp/
 apps/api/node_modules/
+.opencode/node_modules/
 *.log
 *.db
 *.sqlite3
