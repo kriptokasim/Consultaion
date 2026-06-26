@@ -96,7 +96,6 @@ interface DecisionReportViewProps {
   report: DecisionReport | null
   rawSynthesis?: string
   className?: string
-  mode?: "arena" | "debate"
   variant?: "arena" | "parliament"
   synthesisStatus?: "succeeded" | "failed" | "fallback"
   synthesisError?: string
@@ -175,7 +174,6 @@ export function DecisionReportView({
   report: rawReport,
   rawSynthesis,
   className,
-  mode = "debate",
   variant = "arena",
   synthesisStatus,
   synthesisError,
@@ -278,7 +276,7 @@ export function DecisionReportView({
         )}
 
         {/* Arena emphasis: lead with head-to-head Model Positions before the verdict */}
-        {mode === "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
+        {variant === "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
           <ReportSection id="report-positions" title="Model Positions">
             <ModelPositionsTable positions={activeReport.model_positions as any} />
           </ReportSection>
@@ -303,8 +301,8 @@ export function DecisionReportView({
           </ReportSection>
         )}
 
-        {/* Model Positions (Debate mode: after the verdict) */}
-        {mode !== "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
+        {/* Model Positions (Parliament mode: after the verdict) */}
+        {variant !== "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
           <ReportSection id="report-positions" title="Model Positions">
             <ModelPositionsTable positions={activeReport.model_positions as any} />
           </ReportSection>

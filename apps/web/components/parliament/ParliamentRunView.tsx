@@ -573,27 +573,38 @@ function ChampionSummary({
       )}
 
       {/* Structured Parliamentary Report — only when real backend report exists */}
-      {synthesisReport && (
-        <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-6">
-          <DecisionReportView
-            report={synthesisReport}
-            rawSynthesis={text}
-            variant="parliament"
-          />
-        </div>
-      )}
-      {!synthesisReport && text && (
-        <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-1">
-            Structured Parliamentary Report
-          </p>
-          <p className="text-xs text-stone-500">
-            Structured parliamentary report unavailable; showing recorded synthesis above.
-          </p>
-        </div>
-      )}
+      <ParliamentReportSection synthesisReport={synthesisReport} text={text} />
     </div>
   );
+}
+
+export function ParliamentReportSection({ synthesisReport, text }: { synthesisReport?: any; text?: string }) {
+  if (synthesisReport) {
+    return (
+      <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-6">
+        <DecisionReportView
+          report={synthesisReport}
+          rawSynthesis={text}
+          variant="parliament"
+        />
+      </div>
+    );
+  }
+
+  if (text) {
+    return (
+      <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-1">
+          Structured Parliamentary Report
+        </p>
+        <p className="text-xs text-stone-500">
+          Structured parliamentary report unavailable; showing recorded synthesis above.
+        </p>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function MiniChamberMap({ winnerPersona }: { winnerPersona?: string }) {
