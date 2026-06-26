@@ -12,7 +12,6 @@ import { isRenderableDecisionReport, fieldLooksCorrupt } from "../../lib/reportI
 import { ReportGenerationFailedCard } from "./ReportGenerationFailedCard"
 import { SemanticAlignmentSection } from "./SemanticAlignmentSection"
 import { DecisionReportShell } from "./DecisionReportShell"
-import { DecisionBrief } from "./DecisionBrief"
 import { FallbackResponseCard } from "./FallbackResponseCard"
 import { UnstructuredSynthesisCard } from "./UnstructuredSynthesisCard"
 
@@ -97,6 +96,7 @@ interface DecisionReportViewProps {
   rawSynthesis?: string
   className?: string
   variant?: "arena" | "parliament"
+  showChrome?: boolean
   synthesisStatus?: "succeeded" | "failed" | "fallback"
   synthesisError?: string
   fallbackModel?: string
@@ -175,6 +175,7 @@ export function DecisionReportView({
   rawSynthesis,
   className,
   variant = "arena",
+  showChrome = false,
   synthesisStatus,
   synthesisError,
   fallbackModel,
@@ -244,16 +245,9 @@ export function DecisionReportView({
         isCorrupted={isCorrupted}
         onExport={handleExport}
         variant={variant}
+        showChrome={showChrome}
         className={className}
       >
-        {/* Decision Stance, Stance Leaderboard, Contradiction Density */}
-        <DecisionBrief
-          verdict={activeReport.verdict || {}}
-          modelPositions={activeReport.model_positions || []}
-          divergenceBreakdown={activeReport.divergence_breakdown}
-          scores={(activeReport.quality_meta as any)?.scores || []}
-        />
-
         {/* Context Needed */}
         {activeReport.context_needed && activeReport.context_needed.length > 0 && (
           <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-xl p-5">
@@ -275,13 +269,6 @@ export function DecisionReportView({
           </div>
         )}
 
-        {/* Arena emphasis: lead with head-to-head Model Positions before the verdict */}
-        {variant === "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
-          <ReportSection id="report-positions" title="Model Positions">
-            <ModelPositionsTable positions={activeReport.model_positions as any} />
-          </ReportSection>
-        )}
-
         {/* Verdict */}
         {activeReport.verdict && (
           <ReportSection id="report-verdict" title="Verdict">
@@ -301,8 +288,8 @@ export function DecisionReportView({
           </ReportSection>
         )}
 
-        {/* Model Positions (Parliament mode: after the verdict) */}
-        {variant !== "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
+        {/* Model Positions */}
+        {activeReport.model_positions && activeReport.model_positions.length > 0 && (
           <ReportSection id="report-positions" title="Model Positions">
             <ModelPositionsTable positions={activeReport.model_positions as any} />
           </ReportSection>

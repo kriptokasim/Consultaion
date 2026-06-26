@@ -32,6 +32,7 @@ interface DecisionReportShellProps {
   onExport?: () => void
   className?: string
   variant?: "arena" | "parliament"
+  showChrome?: boolean
   children?: React.ReactNode
 }
 
@@ -49,6 +50,7 @@ export function DecisionReportShell({
   onExport,
   className,
   variant = "arena",
+  showChrome = false,
   children,
 }: DecisionReportShellProps) {
   const isFailed = synthesisStatus === "failed" || synthesisStatus === "fallback"
@@ -314,13 +316,15 @@ export function DecisionReportShell({
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setIsFocusMode(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-          >
-            <Maximize2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Focus Mode</span>
-          </button>
+          {showChrome && (
+            <button
+              onClick={() => setIsFocusMode(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+            >
+              <Maximize2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Focus Mode</span>
+            </button>
+          )}
           {onExport && !isFailed && (
             <button
               onClick={onExport}
@@ -339,7 +343,7 @@ export function DecisionReportShell({
       )}
 
       {/* Navigation */}
-      {!isFailed && activeSections.length > 0 && (
+      {showChrome && !isFailed && activeSections.length > 0 && (
         <ReportSectionNav sections={activeSections} className="rounded-xl border border-border/30 overflow-hidden shadow-xs" />
       )}
 

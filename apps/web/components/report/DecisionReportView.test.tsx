@@ -366,6 +366,55 @@ describe("DecisionReportView", () => {
     expect(screen.getByText("Export")).toBeInTheDocument();
   });
 
+  it("does not render DecisionBrief labels in default Arena report", () => {
+    render(<DecisionReportView report={mockReport} variant="arena" />);
+    expect(screen.queryByText("Final Decision Verdict")).not.toBeInTheDocument();
+    expect(screen.queryByText("Model Contribution Leaderboard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Contradiction Density Chart")).not.toBeInTheDocument();
+  });
+
+  it("does not render Focus Mode button in default Arena report", () => {
+    render(<DecisionReportView report={mockReport} variant="arena" />);
+    expect(screen.queryByText("Focus Mode")).not.toBeInTheDocument();
+  });
+
+  it("renders Focus Mode button when showChrome is true", () => {
+    render(<DecisionReportView report={mockReport} variant="arena" showChrome />);
+    expect(screen.getByText("Focus Mode")).toBeInTheDocument();
+  });
+
+  it("renders exact Arena section ordering: Context Needed → Verdict → Key Findings → Model Positions → Risks → Next Actions → Caveats", () => {
+    const fullReport = {
+      ...mockReport,
+      context_needed: ["Need MRR data"],
+    };
+    const { container } = render(<DecisionReportView report={fullReport} variant="arena" />);
+    const headings = Array.from(container.querySelectorAll("h3")).map((el) => el.textContent);
+    const contextIdx = headings.findIndex((h) => h?.includes("Context Needed"));
+    const verdictIdx = headings.findIndex((h) => h === "Verdict");
+    const findingsIdx = headings.findIndex((h) => h === "Key Findings");
+    const positionsIdx = headings.findIndex((h) => h === "Model Positions");
+    const risksIdx = headings.findIndex((h) => h === "Risks & Assumptions");
+    const actionsIdx = headings.findIndex((h) => h === "Next Actions");
+    const caveatsIdx = headings.findIndex((h) => h === "Caveats");
+    expect(contextIdx).toBeGreaterThanOrEqual(0);
+    expect(verdictIdx).toBeGreaterThan(contextIdx);
+    expect(findingsIdx).toBeGreaterThan(verdictIdx);
+    expect(positionsIdx).toBeGreaterThan(findingsIdx);
+    expect(risksIdx).toBeGreaterThan(positionsIdx);
+    expect(actionsIdx).toBeGreaterThan(risksIdx);
+    expect(caveatsIdx).toBeGreaterThan(actionsIdx);
+  });
+
+  it("Model Positions does not appear before Verdict in Arena", () => {
+    const { container } = render(<DecisionReportView report={mockReport} variant="arena" />);
+    const headings = Array.from(container.querySelectorAll("h3")).map((el) => el.textContent);
+    const verdictIdx = headings.findIndex((h) => h === "Verdict");
+    const positionsIdx = headings.findIndex((h) => h === "Model Positions");
+    expect(verdictIdx).toBeGreaterThanOrEqual(0);
+    expect(positionsIdx).toBeGreaterThan(verdictIdx);
+  });
+
   it("renders arena report with context needed when present", () => {
     const reportWithContext = {
       ...mockReport,
@@ -409,5 +458,3 @@ describe("DecisionReportView", () => {
     expect(container.innerHTML).toBe("");
   });
 });
-
-
