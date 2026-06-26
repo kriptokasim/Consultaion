@@ -42,7 +42,7 @@ export function ModelPositionsTable({ positions }: ModelPositionsTableProps) {
             {(pos.distinct_contribution || pos.strongest_point) && (
               <div className="space-y-1">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase block">Distinct Contribution</span>
-                <p className="text-xs text-slate-700 dark:text-slate-350 leading-relaxed">
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
                   {pos.distinct_contribution || pos.strongest_point}
                 </p>
               </div>
@@ -51,7 +51,7 @@ export function ModelPositionsTable({ positions }: ModelPositionsTableProps) {
             {(pos.blind_spot || pos.concern) && (
               <div className="space-y-1">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase block">Blind Spot / Limitation</span>
-                <p className="text-xs text-slate-605 dark:text-slate-400 leading-relaxed">
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                   {pos.blind_spot || pos.concern}
                 </p>
               </div>

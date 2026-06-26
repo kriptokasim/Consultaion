@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import { DecisionReportView } from "./DecisionReportView";
+import { DecisionReportView, exportToMarkdown } from "./DecisionReportView";
 
 describe("DecisionReportView", () => {
   const mockReport = {
@@ -268,6 +268,145 @@ describe("DecisionReportView", () => {
     expect(screen.getByText("Primary model failed")).toBeInTheDocument();
     expect(screen.getByText(/Fallback-Model/)).toBeInTheDocument();
     expect(screen.getByText("Raw model fallback response.")).toBeInTheDocument();
+  });
+
+  it("exportToMarkdown uses *100 for confidence, not *105", () => {
+    const report = {
+      title: "Export Test",
+      verdict: {
+        recommendation: "Proceed",
+        confidence: 0.85,
+        decision_type: "proceed",
+        rationale: "Strong evidence.",
+      },
+    };
+    const md = exportToMarkdown(report);
+    expect(md).toContain("**Confidence:** 85%");
+    expect(md).not.toContain("**Confidence:** 89%");
+  });
+
+  it("exportToMarkdown handles edge confidence values correctly", () => {
+    const report = {
+      title: "Edge Cases",
+      verdict: { confidence: 1.0, decision_type: "proceed" },
+    };
+    expect(exportToMarkdown(report)).toContain("**Confidence:** 100%");
+
+    const report2 = {
+      title: "Zero",
+      verdict: { confidence: 0, decision_type: "mixed" },
+    };
+    expect(exportToMarkdown(report2)).toContain("**Confidence:** 0%");
+  });
+
+  it("exportToMarkdown uses distinct_contribution and blind_spot for new schema", () => {
+    const report = {
+      title: "New Schema",
+      model_positions: [
+        {
+          model: "Claude-4",
+          stance: "supportive",
+          distinct_contribution: "Novel risk framework",
+          blind_spot: "Misses regulatory context",
+        },
+      ],
+    };
+    const md = exportToMarkdown(report);
+    expect(md).toContain("Novel risk framework");
+    expect(md).toContain("Blind Spot / Limitation: Misses regulatory context");
+  });
+
+  it("exportToMarkdown falls back to strongest_point and concern for legacy schema", () => {
+    const report = {
+      title: "Legacy Schema",
+      model_positions: [
+        {
+          model: "GPT-4o",
+          stance: "neutral",
+          strongest_point: "Great summary",
+          concern: "Missing detail",
+        },
+      ],
+    };
+    const md = exportToMarkdown(report);
+    expect(md).toContain("Great summary");
+    expect(md).toContain("Blind Spot / Limitation: Missing detail");
+  });
+
+  it("exportToMarkdown prefers distinct_contribution over strongest_point when both exist", () => {
+    const report = {
+      title: "Both Fields",
+      model_positions: [
+        {
+          model: "Gemini",
+          stance: "supportive",
+          distinct_contribution: "New insight",
+          strongest_point: "Old insight",
+        },
+      ],
+    };
+    const md = exportToMarkdown(report);
+    expect(md).toContain("New insight");
+    expect(md).not.toContain("Old insight");
+  });
+
+  it("renders full arena report structure with all expected sections", () => {
+    render(<DecisionReportView report={mockReport} variant="arena" />);
+    expect(screen.getByText("Test Decision Report")).toBeInTheDocument();
+    expect(screen.queryByText("Context Needed to Make This Report Specific")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Key Findings").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Security is adequate")).toBeInTheDocument();
+    expect(screen.getByText("Cost concern")).toBeInTheDocument();
+    expect(screen.getAllByText("GPT-4o").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Risks & Assumptions").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Budget overrun risk")).toBeInTheDocument();
+    expect(screen.getAllByText("Next Actions").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Caveats").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Analysis based on provided data only.")).toBeInTheDocument();
+    expect(screen.getByText("Export")).toBeInTheDocument();
+  });
+
+  it("renders arena report with context needed when present", () => {
+    const reportWithContext = {
+      ...mockReport,
+      context_needed: ["MRR data", "User count"],
+    };
+    render(<DecisionReportView report={reportWithContext} variant="arena" />);
+    expect(screen.getByText("Context Needed to Make This Report Specific")).toBeInTheDocument();
+    expect(screen.getByText("MRR data")).toBeInTheDocument();
+  });
+
+  it("renders parliament variant with 'Parliamentary Verification Passed' when verified", () => {
+    const verifiedReport = {
+      ...mockReport,
+      quality_meta: {
+        verification_status: "verified",
+        completeness_score: 0.9,
+        faithfulness_score: 0.9,
+      },
+    };
+    render(<DecisionReportView report={verifiedReport} variant="parliament" />);
+    expect(screen.getByText("Parliamentary Verification Passed")).toBeInTheDocument();
+    expect(screen.queryByText("Verified & Faithful")).not.toBeInTheDocument();
+  });
+
+  it("shows parliament fallback message when synthesisStatus is fallback with variant=parliament", () => {
+    render(
+      <DecisionReportView
+        report={null}
+        variant="parliament"
+        synthesisStatus="fallback"
+        fallbackModel="Fallback-Model"
+        fallbackReason="Primary model failed"
+        rawSynthesis="Raw synthesis text."
+      />
+    );
+    expect(screen.getByText("Fallback Response — No Fabricated Confidence")).toBeInTheDocument();
+  });
+
+  it("returns null when report is null and no rawSynthesis", () => {
+    const { container } = render(<DecisionReportView report={null} />);
+    expect(container.innerHTML).toBe("");
   });
 });
 

@@ -96,6 +96,8 @@ interface DecisionReportViewProps {
   report: DecisionReport | null
   rawSynthesis?: string
   className?: string
+  mode?: "arena" | "debate"
+  variant?: "arena" | "parliament"
   synthesisStatus?: "succeeded" | "failed" | "fallback"
   synthesisError?: string
   fallbackModel?: string
@@ -105,7 +107,7 @@ interface DecisionReportViewProps {
 }
 
 
-function exportToMarkdown(report: DecisionReport): string {
+export function exportToMarkdown(report: DecisionReport): string {
   const lines: string[] = []
   lines.push(`# ${report.title || "Decision Report"}`)
   lines.push("")
@@ -119,7 +121,7 @@ function exportToMarkdown(report: DecisionReport): string {
   if (report.verdict) {
     lines.push("## Verdict")
     lines.push(`**Recommendation:** ${report.verdict.decision_type?.toUpperCase() || "MIXED"}`)
-    lines.push(`**Confidence:** ${Math.round((report.verdict.confidence || 0) * 105)}%`)
+    lines.push(`**Confidence:** ${Math.round((report.verdict.confidence || 0) * 100)}%`)
     lines.push(`**Rationale:** ${report.verdict.rationale || report.verdict.recommendation || ""}`)
     lines.push("")
   }
@@ -135,8 +137,10 @@ function exportToMarkdown(report: DecisionReport): string {
   if (report.model_positions?.length) {
     lines.push("## Model Positions")
     report.model_positions.forEach((p) => {
-      lines.push(`- **${p.model}** (${p.stance}): ${p.strongest_point}`)
-      if (p.concern) lines.push(`  - Concern: ${p.concern}`)
+      const contribution = p.distinct_contribution || p.strongest_point || ""
+      const blindSpot = p.blind_spot || p.concern || ""
+      lines.push(`- **${p.model}** (${p.stance}): ${contribution}`)
+      if (blindSpot) lines.push(`  - Blind Spot / Limitation: ${blindSpot}`)
     })
     lines.push("")
   }
@@ -171,6 +175,8 @@ export function DecisionReportView({
   report: rawReport,
   rawSynthesis,
   className,
+  mode = "debate",
+  variant = "arena",
   synthesisStatus,
   synthesisError,
   fallbackModel,
@@ -239,6 +245,7 @@ export function DecisionReportView({
         fallbackResponse={fallbackResponse}
         isCorrupted={isCorrupted}
         onExport={handleExport}
+        variant={variant}
         className={className}
       >
         {/* Decision Stance, Stance Leaderboard, Contradiction Density */}
@@ -270,6 +277,13 @@ export function DecisionReportView({
           </div>
         )}
 
+        {/* Arena emphasis: lead with head-to-head Model Positions before the verdict */}
+        {mode === "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
+          <ReportSection id="report-positions" title="Model Positions">
+            <ModelPositionsTable positions={activeReport.model_positions as any} />
+          </ReportSection>
+        )}
+
         {/* Verdict */}
         {activeReport.verdict && (
           <ReportSection id="report-verdict" title="Verdict">
@@ -289,8 +303,8 @@ export function DecisionReportView({
           </ReportSection>
         )}
 
-        {/* Model Positions */}
-        {activeReport.model_positions && activeReport.model_positions.length > 0 && (
+        {/* Model Positions (Debate mode: after the verdict) */}
+        {mode !== "arena" && activeReport.model_positions && activeReport.model_positions.length > 0 && (
           <ReportSection id="report-positions" title="Model Positions">
             <ModelPositionsTable positions={activeReport.model_positions as any} />
           </ReportSection>

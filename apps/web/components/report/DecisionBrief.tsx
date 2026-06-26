@@ -35,7 +35,7 @@ interface DecisionBriefProps {
 const typeStyles: Record<string, { bg: string; text: string; label: string; border: string }> = {
   proceed: { bg: "bg-emerald-50 dark:bg-emerald-950/30", text: "text-emerald-700 dark:text-emerald-400", border: "border-emerald-200 dark:border-emerald-800", label: "Proceed" },
   revise: { bg: "bg-amber-50 dark:bg-amber-950/30", text: "text-amber-700 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800", label: "Revise" },
-  defer: { bg: "bg-blue-50 dark:bg-blue-950/30", text: "text-blue-700 dark:text-blue-450", border: "border-blue-200 dark:border-blue-800", label: "Defer" },
+  defer: { bg: "bg-blue-50 dark:bg-blue-950/30", text: "text-blue-700 dark:text-blue-400", border: "border-blue-200 dark:border-blue-800", label: "Defer" },
   reject: { bg: "bg-red-50 dark:bg-red-950/30", text: "text-red-700 dark:text-red-400", border: "border-red-200 dark:border-red-800", label: "Reject" },
   mixed: { bg: "bg-slate-50 dark:bg-slate-800/40", text: "text-slate-700 dark:text-slate-300", border: "border-slate-200 dark:border-slate-800", label: "Mixed" },
 }
@@ -134,7 +134,7 @@ export function DecisionBrief({
                   <span className={cn(
                     "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold border",
                     item.isWinner
-                      ? "bg-amber-100 text-amber-800 border-amber-250 dark:bg-amber-900/40 dark:text-amber-300"
+                      ? "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300"
                       : "bg-muted text-muted-foreground border-border"
                   )}>
                     {item.rank}

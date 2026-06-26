@@ -31,6 +31,7 @@ interface DecisionReportShellProps {
   isCorrupted?: boolean
   onExport?: () => void
   className?: string
+  variant?: "arena" | "parliament"
   children?: React.ReactNode
 }
 
@@ -47,6 +48,7 @@ export function DecisionReportShell({
   isCorrupted = false,
   onExport,
   className,
+  variant = "arena",
   children,
 }: DecisionReportShellProps) {
   const isFailed = synthesisStatus === "failed" || synthesisStatus === "fallback"
@@ -100,11 +102,13 @@ export function DecisionReportShell({
               <ShieldAlert className="h-5 w-5 text-amber-500" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                <span className="text-amber-600 dark:text-amber-400">Synthesis Validation Warning</span>
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
-                {synthesisError || "The synthesis engine experienced a format validation error. Displaying the top model response as a fallback."}
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="text-amber-600 dark:text-amber-400">Synthesis Validation Warning</span>
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
+              {synthesisError || (variant === "parliament"
+                ? "The parliamentary synthesis engine experienced a format validation error. Showing the recorded synthesis above."
+                : "The synthesis engine experienced a format validation error. Displaying the top model response as a fallback.")}
               </p>
             </div>
           </div>
@@ -147,7 +151,9 @@ export function DecisionReportShell({
               ) : qualityMeta.verification_status === "unverified" || qualityMeta.verification_error || qualityMeta.needs_revision ? (
                 <span className="text-amber-600 dark:text-amber-400">Unverified</span>
               ) : (
-                <span className="text-emerald-600 dark:text-emerald-400">Verified & Faithful</span>
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {variant === "parliament" ? "Parliamentary Verification Passed" : "Verified & Faithful"}
+                </span>
               )}
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">

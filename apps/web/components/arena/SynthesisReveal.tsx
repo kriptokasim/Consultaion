@@ -111,6 +111,7 @@ export function SynthesisReveal({
           <DecisionReportView
             report={synthesisReport}
             rawSynthesis={synthesis}
+            variant="arena"
             synthesisStatus={synthesisStatus || (isSynthesisFailed ? "failed" : "succeeded")}
             synthesisError={synthesisError}
             fallbackModel={fallbackModel}
