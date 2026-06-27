@@ -68,7 +68,7 @@ class DevFormatter(logging.Formatter):
         msg = record.getMessage()
         if record.exc_info:
             msg += "\n" + self.formatException(record.exc_info)
-        return f"[{datetime.now().strftime('%H:%M:%S')}] {record.levelname} [{request_id}] {record.name}: {msg}"
+        return f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {record.levelname} [{request_id}] {record.name}: {msg}"
 
 
 def log_event(event_name: str, level: int = logging.INFO, **kwargs: Any) -> None:

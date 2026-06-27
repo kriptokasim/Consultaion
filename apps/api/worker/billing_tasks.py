@@ -102,7 +102,7 @@ def reconcile_previous_day(self):
         reconcile_usage,
         record_reconciliation_time,
     )
-    from core.database import SessionLocal
+    from database import SessionLocal
     from observability.metrics import (
         record_reconciliation_failure,
         record_reconciliation_run,
@@ -164,7 +164,7 @@ def reconcile_current_period(self):
         reconcile_usage,
         record_reconciliation_time,
     )
-    from core.database import SessionLocal
+    from database import SessionLocal
     from observability.metrics import (
         record_reconciliation_failure,
         record_reconciliation_run,
@@ -225,7 +225,7 @@ def reconcile_closed_period(self, period: str):
         reconcile_usage,
         record_reconciliation_time,
     )
-    from core.database import SessionLocal
+    from database import SessionLocal
     from observability.metrics import (
         record_reconciliation_failure,
         record_reconciliation_run,

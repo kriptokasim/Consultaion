@@ -106,20 +106,60 @@ export function SynthesisReveal({
   if (revealed) {
     return (
       <div className="space-y-6 animate-fade-in">
-        {/* Canonical Decision Report View */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm animate-fade-in">
-          <DecisionReportView
-            report={synthesisReport}
-            rawSynthesis={synthesis}
-            variant="arena"
-            synthesisStatus={synthesisStatus || (isSynthesisFailed ? "failed" : "succeeded")}
-            synthesisError={synthesisError}
-            fallbackModel={fallbackModel}
-            fallbackReason={fallbackReason}
-            fallbackResponse={fallbackResponse}
-            divergenceBreakdown={divergenceBreakdown}
-          />
-        </div>
+        {/* Primary: Synthesis narrative text */}
+        {synthesis && !isSynthesisFailed && (
+          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/40 dark:from-emerald-950/30 dark:via-slate-900/80 dark:to-emerald-950/20 p-6 shadow-sm animate-fade-in">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="text-base font-bold text-foreground">Final Verdict</h3>
+            </div>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/90 leading-relaxed whitespace-pre-wrap">
+              {synthesis}
+            </div>
+          </div>
+        )}
+
+        {/* Secondary: Collapsible full structured report */}
+        {synthesisReport && (
+          <details className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 shadow-sm animate-fade-in">
+            <summary className="flex items-center gap-2 cursor-pointer p-5 select-none hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors rounded-2xl">
+              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
+              <Eye className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">View Full Report</span>
+              <span className="text-xs text-muted-foreground ml-1">— Detailed analysis with scoring</span>
+            </summary>
+            <div className="p-6 pt-0 border-t border-slate-100 dark:border-slate-800/50">
+              <DecisionReportView
+                report={synthesisReport}
+                rawSynthesis={synthesis}
+                variant="arena"
+                synthesisStatus={synthesisStatus || (isSynthesisFailed ? "failed" : "succeeded")}
+                synthesisError={synthesisError}
+                fallbackModel={fallbackModel}
+                fallbackReason={fallbackReason}
+                fallbackResponse={fallbackResponse}
+                divergenceBreakdown={divergenceBreakdown}
+              />
+            </div>
+          </details>
+        )}
+
+        {/* Fallback: show DecisionReportView directly if no synthesis text */}
+        {!synthesis && !synthesisReport && isSynthesisFailed && (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm animate-fade-in">
+            <DecisionReportView
+              report={synthesisReport}
+              rawSynthesis={synthesis}
+              variant="arena"
+              synthesisStatus="failed"
+              synthesisError={synthesisError}
+              fallbackModel={fallbackModel}
+              fallbackReason={fallbackReason}
+              fallbackResponse={fallbackResponse}
+              divergenceBreakdown={divergenceBreakdown}
+            />
+          </div>
+        )}
 
         {/* Post-Reveal Feedback Poll */}
         {!isSynthesisFailed && (

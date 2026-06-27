@@ -511,10 +511,24 @@ class AppSettings(BaseSettings):
         resolved = next((candidate for candidate in web_candidates if candidate), "http://localhost:3000")
         object.__setattr__(self, "WEB_APP_ORIGIN", resolved.rstrip("/"))
 
+        # FIND-012: Log which candidate was selected for WEB_APP_ORIGIN
+        if resolved != "http://localhost:3000":
+            logger.info(
+                "WEB_APP_ORIGIN resolved to '%s' from candidate list. "
+                "Verify this is the intended production origin.",
+                resolved.rstrip("/"),
+            )
+
         # Ensure CORS_ORIGINS includes the resolved WEB_APP_ORIGIN
         # This is critical for cross-domain authentication to work
         cors_origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
         if resolved not in cors_origins:
+            # FIND-015: Warn when CORS is auto-extended
+            logger.warning(
+                "Auto-injecting WEB_APP_ORIGIN '%s' into CORS_ORIGINS. "
+                "For explicit control, set both WEB_APP_ORIGIN and CORS_ORIGINS in env.",
+                resolved.rstrip("/"),
+            )
             cors_origins.append(resolved)
         object.__setattr__(self, "CORS_ORIGINS", ",".join(cors_origins))
         

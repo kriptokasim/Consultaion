@@ -120,6 +120,20 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
     return trimmed or None
 
 
+def _validate_avatar_url(url: Optional[str]) -> Optional[str]:
+    """Validate avatar URL to prevent SSRF — only allow http/https schemes."""
+    cleaned = _clean_optional(url)
+    if cleaned is None:
+        return None
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in ("http", "https"):
+        raise ValidationError(
+            message="Invalid avatar URL: only http and https URLs are allowed",
+            code="validation.invalid_avatar_url",
+        )
+    return cleaned
+
+
 from exceptions import AuthError, ProviderCircuitOpenError, RateLimitError, ValidationError
 from models import Debate
 from sqlalchemy import func
@@ -157,7 +171,7 @@ async def update_my_profile(
         current_user.display_name = _clean_optional(body.display_name)
         updated = True
     if body.avatar_url is not None:
-        current_user.avatar_url = _clean_optional(body.avatar_url)
+        current_user.avatar_url = _validate_avatar_url(body.avatar_url)
         updated = True
     if body.bio is not None:
         current_user.bio = _clean_optional(body.bio)

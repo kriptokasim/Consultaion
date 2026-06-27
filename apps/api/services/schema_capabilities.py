@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -36,13 +36,13 @@ class SchemaCapabilityRegistry:
         entry = self._cache.get(cache_key)
         if entry:
             caps, ts = entry
-            if datetime.utcnow() - ts < self._cache_ttl:
+            if datetime.now(timezone.utc) - ts < self._cache_ttl:
                 return caps
             del self._cache[cache_key]
         return None
 
     def set_cached(self, cache_key: str, caps: SchemaCapabilities) -> None:
-        self._cache[cache_key] = (caps, datetime.utcnow())
+        self._cache[cache_key] = (caps, datetime.now(timezone.utc))
 
     def invalidate(self, cache_key: Optional[str] = None) -> None:
         if cache_key:

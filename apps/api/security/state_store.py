@@ -15,7 +15,7 @@ class OAuthStateStore:
         self._owns_connection = False
         self._memory_store: dict[str, tuple[float, Any]] = {}
 
-        if settings.RATE_LIMIT_BACKEND == "redis" and settings.REDIS_URL:
+        if settings.REDIS_URL:  # Use Redis whenever REDIS_URL is set, regardless of RATE_LIMIT_BACKEND
             try:
                 from redis_pool import get_sync_redis_client
                 pooled = get_sync_redis_client()

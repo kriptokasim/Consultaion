@@ -419,12 +419,12 @@ async def route_llm_stream(
     adapter_cls: type = DirectProviderAdapter
     provider = "direct"
 
-    from model_gateway.model_map import MODEL_MAP
-    if model_id in MODEL_MAP:
-        provider = MODEL_MAP[model_id]["provider"]
-    elif model_id.startswith("openrouter/"):
+    from model_gateway.model_map import MODEL_MAP, _model_uses_openrouter
+    if _model_uses_openrouter(model_id) or model_id.startswith("openrouter/"):
         adapter_cls = OpenRouterAdapter
         provider = "openrouter"
+    elif model_id in MODEL_MAP:
+        provider = MODEL_MAP[model_id]["provider"]
 
     if is_circuit_open(provider):
         return GatewayModelCallResult(
@@ -446,9 +446,15 @@ async def route_llm_stream(
             async with async_session_scope() as session:
                 resolved = await get_model_api_key_async(session, user_id, provider)
                 if resolved:
-                    api_key = resolved.api_key
+                    api_key = resolved.key
         except Exception as e:
             logger.warning(f"Failed to resolve api key in stream: {e}")
+
+    # Server-key fallback: if no BYOK key resolved and provider is OpenRouter,
+    # use the server's OpenRouter API key
+    if provider == "openrouter" and not api_key:
+        from config import settings as _settings
+        api_key = _settings.OPENROUTER_API_KEY or None
 
     adapter = adapter_cls()
     result = await adapter.stream_llm(
