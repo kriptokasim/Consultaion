@@ -23,11 +23,11 @@ interface DecisionReportShellProps {
   executiveSummary?: string
   qualityMeta?: QualityMeta
   divergenceBreakdown?: DivergenceBreakdown
-  synthesisStatus?: "succeeded" | "failed" | "fallback"
+  synthesisStatus?: "pending" | "succeeded" | "failed" | "fallback"
   synthesisError?: string
   fallbackModel?: string
   fallbackReason?: string
-  fallbackResponse?: { model: string; content: string }
+  fallbackResponse?: { model?: string; content?: string } | null
   isCorrupted?: boolean
   onExport?: () => void
   className?: string
@@ -215,7 +215,7 @@ export function DecisionReportShell({
             <FallbackResponseCard
               model={fallbackModel || fallbackResponse.model}
               reason={fallbackReason}
-              content={fallbackResponse.content}
+              content={fallbackResponse.content || ""}
             />
           )}
           {divergenceBreakdown && (

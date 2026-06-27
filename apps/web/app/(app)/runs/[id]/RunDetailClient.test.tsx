@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import RunDetailClient from "./RunDetailClient";
+import RunDetailClient, { resolveRunViewKind } from "./RunDetailClient";
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 
 vi.mock("next/navigation", () => ({
@@ -66,15 +66,27 @@ describe("RunDetailClient Hydration", () => {
     (useRunWorkspace as any).mockReturnValue({
       debate: null,
       events: [],
+      responses: [],
       status: "loading",
       sseStatus: "connected",
       error: null,
       continueRun: vi.fn(),
       isContinuing: false,
       refetch: vi.fn(),
+      retryResponses: vi.fn(),
       hydrationQuality: "complete",
       timelineError: null,
       eventsError: null,
+      responsesState: "idle",
+      responsesError: null,
+      timelineState: "idle",
+      streamingState: { buffers: new Map() },
+      mergedStreamingResponses: [],
+      coreState: "loading",
+      coreErrorCode: null,
+      coreHttpStatus: null,
+      outcomeUnknown: false,
+      isPollingFallback: false,
     });
 
     const { container } = render(<RunDetailClient />);
@@ -82,24 +94,36 @@ describe("RunDetailClient Hydration", () => {
     expect(container.getElementsByClassName("animate-pulse").length).toBeGreaterThan(0);
   });
 
-  it("renders error alert when workspace status has error", async () => {
+  it("renders error alert when core state has a typed error", async () => {
     (useRunWorkspace as any).mockReturnValue({
       debate: null,
       events: [],
+      responses: [],
       status: "error",
       sseStatus: "connected",
-      error: "Test error description",
+      error: "Server encountered an internal error",
       continueRun: vi.fn(),
       isContinuing: false,
       refetch: vi.fn(),
+      retryResponses: vi.fn(),
       hydrationQuality: "failed",
       timelineError: null,
       eventsError: null,
+      responsesState: "idle",
+      responsesError: null,
+      timelineState: "idle",
+      streamingState: { buffers: new Map() },
+      mergedStreamingResponses: [],
+      coreState: "failed",
+      coreErrorCode: "server_error",
+      coreHttpStatus: 500,
+      outcomeUnknown: false,
+      isPollingFallback: false,
     });
 
     render(<RunDetailClient />);
-    expect(screen.getByText("Error loading debate")).toBeInTheDocument();
-    expect(screen.getByText("Test error description")).toBeInTheDocument();
+    expect(screen.getByText("Server Error")).toBeInTheDocument();
+    expect(screen.getByText("Server encountered an internal error")).toBeInTheDocument();
   });
 
   it("renders running workspace view when debate is active", async () => {
@@ -114,15 +138,27 @@ describe("RunDetailClient Hydration", () => {
       events: [
         { id: "e1", type: "arena_started", ts: new Date().toISOString() }
       ],
+      responses: [],
       status: "streaming",
       sseStatus: "connected",
       error: null,
       continueRun: vi.fn(),
       isContinuing: false,
       refetch: vi.fn(),
+      retryResponses: vi.fn(),
       hydrationQuality: "complete",
       timelineError: null,
       eventsError: null,
+      responsesState: "idle",
+      responsesError: null,
+      timelineState: "idle",
+      streamingState: { buffers: new Map() },
+      mergedStreamingResponses: [],
+      coreState: "ready",
+      coreErrorCode: null,
+      coreHttpStatus: null,
+      outcomeUnknown: false,
+      isPollingFallback: false,
     });
 
     render(<RunDetailClient />);
@@ -130,3 +166,43 @@ describe("RunDetailClient Hydration", () => {
     expect(screen.getByTestId("desktop-stage-rail")).toBeInTheDocument();
   });
 });
+
+// ─── P143: resolveRunViewKind tests ─────────────────────────────────
+describe("resolveRunViewKind — P143 mode fallback", () => {
+  it("returns 'arena' for undefined mode", () => {
+    expect(resolveRunViewKind(undefined)).toBe("arena");
+  });
+
+  it("returns 'arena' for null mode", () => {
+    expect(resolveRunViewKind(null)).toBe("arena");
+  });
+
+  it("returns 'arena' for 'arena' mode", () => {
+    expect(resolveRunViewKind("arena")).toBe("arena");
+  });
+
+  it("returns 'debate' for 'debate' mode", () => {
+    expect(resolveRunViewKind("debate")).toBe("debate");
+  });
+
+  it("returns 'debate' for 'parliament' mode", () => {
+    expect(resolveRunViewKind("parliament")).toBe("debate");
+  });
+
+  it("returns 'compare' for 'compare' mode", () => {
+    expect(resolveRunViewKind("compare")).toBe("compare");
+  });
+
+  it("returns 'conversation' for 'conversation' mode", () => {
+    expect(resolveRunViewKind("conversation")).toBe("conversation");
+  });
+
+  it("returns 'voting' for 'voting' mode", () => {
+    expect(resolveRunViewKind("voting")).toBe("voting");
+  });
+
+  it("returns 'debate' for unknown mode string", () => {
+    expect(resolveRunViewKind("something_unknown")).toBe("debate");
+  });
+});
+

@@ -93,14 +93,26 @@ export interface DebateDetail extends DebateSummary {
         error_type: string;
     }>;
     error_reason?: string;
+
+    // --- P143: Top-level synthesis fields (public + private serializers) ---
     synthesis_report?: any;
+    synthesis_success?: boolean;
+    synthesis_error?: string;
+    fallback_model?: string;
+    fallback_reason?: string;
+    fallback_response?: any;
+    semantic_analysis?: any;
+    divergence_breakdown?: any;
+    successful_count?: number;
+    total_count?: number;
+    models?: any[];
+
     model_warnings?: Array<{
         model_id: string;
         display_name: string;
         provider: string;
         error: string;
     }>;
-    // Add other fields as needed from the API response
 }
 
 export type Role = "agent" | "critic" | "judge" | "synthesizer";

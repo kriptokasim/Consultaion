@@ -42,7 +42,9 @@ type CompletedRunLoadState =
   | "failed";
 
 export function resolveRunViewKind(mode: string | undefined | null): "arena" | "compare" | "conversation" | "voting" | "debate" {
-  if (!mode) return "debate";
+  // P143: Default to "arena" (the primary product mode) instead of "debate"
+  // so legacy/stale runs with Arena artifacts render correctly.
+  if (!mode) return "arena";
   switch (mode) {
     case "arena":
     case "compare":
@@ -509,7 +511,7 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
 
           {/* Render the ArenaRunView with persisted responses */}
           {debate?.mode === "arena" ? (
-            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isCompleted} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
+            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={TERMINAL_STATUSES.has(debate.status)} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
           ) : (
             <ParliamentRunView
               id={id}

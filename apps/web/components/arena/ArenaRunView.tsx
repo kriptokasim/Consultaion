@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle, RefreshCw } from "lucide-react";
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
+import { getArenaSynthesisArtifacts } from "@/lib/arena/synthesisArtifacts";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
 import { ModelCard, StreamingModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
 import type { ModelResponse } from "./ModelCard";
@@ -107,6 +108,12 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
         return { modelResponses: eventResponses, synthesis: synthesisText };
     }, [events, debate, persistedResponses]);
 
+    // P143: Canonical synthesis artifacts — one normalizer for public & private shapes
+    const artifacts = useMemo(
+        () => getArenaSynthesisArtifacts(debate, synthesis),
+        [debate, synthesis],
+    );
+
     const handleRetryAgent = async (personaName: string) => {
         const res = await fetchWithAuth(`/debates/${debate.id}/retry-agent`, {
             method: "POST",
@@ -128,8 +135,8 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
 
     // FH121: Correct loading formula — terminal Runs never show skeletons
     const showResponseSkeletons = !isTerminal && (responsesState === "idle" || responsesState === "loading");
-    const isLoading = showResponseSkeletons && modelResponses.length === 0 && !synthesis;
-    const expectedModels = debate.final_meta?.models?.length || 4;
+    const isLoading = showResponseSkeletons && modelResponses.length === 0 && !artifacts.hasSynthesisOutput;
+    const expectedModels = debate.final_meta?.models?.length || debate.models?.length || 4;
     const [activeTab, setActiveTab] = useState<number>(0);
     const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -186,16 +193,16 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                 debateId={debate.id} 
                                 initiallyPublic={(debate.config as any)?.is_public} 
                                 modelCount={expectedModels}
-                                hasSynthesis={!!synthesis}
+                                hasSynthesis={artifacts.hasSynthesisOutput}
                             />
                         </div>
                     ) : null}
                 </div>
-                {debate.final_meta?.successful_count != null && (
+                {(debate.successful_count ?? debate.final_meta?.successful_count) != null && (
                     <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                            {debate.final_meta.successful_count}/{debate.final_meta.total_count} models responded
+                            {debate.successful_count ?? debate.final_meta?.successful_count}/{debate.total_count ?? debate.final_meta?.total_count} models responded
                         </span>
                     </div>
                 )}
@@ -439,30 +446,30 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 isCompleted={debate.status === "completed" || debate.status === "completed_budget"} 
             />
 
-            {/* Synthesis / Final Verdict */}
-            {synthesis && (() => {
-                const isSynthesisFailed = debate.final_meta?.synthesis_status === "failed" || 
-                                         debate.final_meta?.synthesis_success === false || 
-                                         (debate.final_meta?.synthesis_status === undefined && synthesis.startsWith("⚠️ Synthesis unavailable"));
+            {/* Synthesis / Final Verdict — P143: uses canonical normalizer */}
+            {artifacts.hasSynthesisOutput && (() => {
+                const isSynthesisFailed = artifacts.synthesisStatus === "failed" || 
+                                         (debate.synthesis_success === false || debate.final_meta?.synthesis_success === false) || 
+                                         (artifacts.synthesisStatus === undefined && artifacts.synthesisText.startsWith("⚠️ Synthesis unavailable"));
                 return (
                     <SynthesisReveal 
-                        synthesis={synthesis} 
+                        synthesis={artifacts.synthesisText} 
                         modelResponses={modelResponses} 
                         isSynthesisFailed={isSynthesisFailed} 
                         debateId={debate.id}
-                        synthesisReport={debate.synthesis_report || debate.final_meta?.synthesis_report}
-                        synthesisStatus={debate.final_meta?.synthesis_status}
-                        synthesisError={debate.final_meta?.synthesis_error}
-                        fallbackModel={debate.final_meta?.fallback_model}
-                        fallbackReason={debate.final_meta?.fallback_reason}
-                        fallbackResponse={debate.final_meta?.fallback_response}
-                        divergenceBreakdown={debate.final_meta?.divergence_breakdown}
+                        synthesisReport={artifacts.synthesisReport}
+                        synthesisStatus={artifacts.synthesisStatus}
+                        synthesisError={artifacts.synthesisError}
+                        fallbackModel={artifacts.fallbackModel}
+                        fallbackReason={artifacts.fallbackReason}
+                        fallbackResponse={artifacts.fallbackResponse}
+                        divergenceBreakdown={artifacts.divergenceBreakdown}
                     />
                 );
             })()}
 
-            {/* Loading synthesis indicator */}
-            {modelResponses.length > 0 && !synthesis && (
+            {/* Loading synthesis indicator — P143: suppressed when structured report exists */}
+            {modelResponses.length > 0 && !artifacts.hasSynthesisOutput && !artifacts.hasStructuredReport && (
                 <SynthesisLoading successfulCount={modelResponses.filter(r => r.success).length} />
             )}
 

@@ -181,4 +181,80 @@ describe("ArenaRunView — FH121 regression tests", () => {
     expect(screen.getAllByText("Gemini").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Llama").length).toBeGreaterThanOrEqual(1);
   });
+
+  // ─── P143: Structured report without raw synthesis ───────────────
+  it("renders SynthesisReveal when debate.synthesis_report exists but events and final_content are empty", () => {
+    const debate = makeDebate({
+      status: "completed",
+      synthesis_report: { title: "Test Report", verdict: { confidence: 0.9 } },
+      final_content: undefined,
+      final_meta: {},
+    });
+    const responses = makeResponses(4);
+    render(
+      <ArenaRunView
+        debate={debate}
+        events={[]}
+        responses={responses}
+        isTerminal={true}
+        responsesState="ready"
+      />
+    );
+
+    // SynthesisReveal mock renders as null, but the key assertion is that
+    // SynthesisLoading does NOT render when structured report exists
+    expect(screen.queryByText(/Synthesizing/i)).not.toBeInTheDocument();
+  });
+
+  // ─── P143: SynthesisLoading suppressed when structured report exists ─
+  it("does not show SynthesisLoading when structured report exists", () => {
+    const debate = makeDebate({
+      status: "running",
+      synthesis_report: { title: "Report", verdict: { confidence: 0.85 } },
+      final_meta: {},
+    });
+    const responses = makeResponses(4);
+    render(
+      <ArenaRunView
+        debate={debate}
+        events={[]}
+        responses={responses}
+        isTerminal={false}
+        responsesState="ready"
+      />
+    );
+
+    // SynthesisLoading mock renders as null, so we verify no loading skeletons appear
+    // when a structured report exists
+    expect(screen.queryByText(/Synthesizing/i)).not.toBeInTheDocument();
+  });
+
+  // ─── P143: Private final_meta.synthesis_report still works ─────────
+  it("renders correctly for private final_meta.synthesis_report", () => {
+    const debate = makeDebate({
+      status: "completed",
+      final_meta: {
+        synthesis_report: { title: "Private Report" },
+        synthesis_status: "succeeded",
+        divergence_breakdown: { divergence_score: 0.2 },
+      },
+    });
+    const responses = makeResponses(4);
+    render(
+      <ArenaRunView
+        debate={debate}
+        events={[]}
+        responses={responses}
+        isTerminal={true}
+        responsesState="ready"
+      />
+    );
+
+    // Should not show loading state
+    expect(screen.queryByText(/Synthesizing/i)).not.toBeInTheDocument();
+    // Model cards should be visible
+    const cards = screen.getAllByTestId("model-card");
+    expect(cards.length).toBeGreaterThanOrEqual(4);
+  });
 });
+

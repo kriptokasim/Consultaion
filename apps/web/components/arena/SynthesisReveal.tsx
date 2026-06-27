@@ -12,11 +12,11 @@ interface SynthesisRevealProps {
   isSynthesisFailed: boolean;
   debateId: string;
   synthesisReport?: any;
-  synthesisStatus?: "succeeded" | "failed" | "fallback";
+  synthesisStatus?: "pending" | "succeeded" | "failed" | "fallback";
   synthesisError?: string;
   fallbackModel?: string;
   fallbackReason?: string;
-  fallbackResponse?: { model: string; content: string };
+  fallbackResponse?: { model?: string; content?: string } | null;
   divergenceBreakdown?: any;
 }
 

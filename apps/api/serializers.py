@@ -115,6 +115,22 @@ class PrivateDebateDTO(BaseModel):
     final_meta: Optional[Dict[str, Any]] = None
     engine_version: Optional[str] = None
 
+    # P143: Mirror safe synthesis fields at top level for frontend consistency.
+    # These are the same fields PublicDebateDTO already exposes.
+    # Owner already has full final_meta; this is a convenience alias.
+    synthesis_report: Optional[Dict[str, Any]] = None
+    synthesis_status: Optional[str] = None
+    synthesis_error: Optional[str] = None
+    synthesis_success: Optional[bool] = None
+    fallback_model: Optional[str] = None
+    fallback_reason: Optional[str] = None
+    fallback_response: Optional[Dict[str, Any]] = None
+    semantic_analysis: Optional[Dict[str, Any]] = None
+    divergence_breakdown: Optional[Dict[str, Any]] = None
+    successful_count: Optional[int] = None
+    total_count: Optional[int] = None
+    models: Optional[List[Dict[str, Any]]] = None
+
     # Ownership
     user_id: Optional[str] = None
     team_id: Optional[str] = None
@@ -412,6 +428,9 @@ def serialize_debate_private(debate, continuation_status: Optional[str] = None, 
     query_failures = _get_query_failures(extra)
     read_quality = "degraded" if (missing_capabilities or query_failures) else "full"
 
+    # P143: Extract safe synthesis fields for top-level mirroring
+    safe_meta = _safe_final_meta(debate.final_meta)
+
     return PrivateDebateDTO(
         id=debate.id,
         prompt=debate.prompt,
@@ -430,6 +449,19 @@ def serialize_debate_private(debate, continuation_status: Optional[str] = None, 
         routing_meta=debate.routing_meta,
         final_meta=debate.final_meta,
         engine_version=debate.engine_version,
+        # P143: Top-level synthesis aliases (same fields PublicDebateDTO exposes)
+        synthesis_report=safe_meta.get("synthesis_report"),
+        synthesis_status=safe_meta.get("synthesis_status"),
+        synthesis_error=safe_meta.get("synthesis_error"),
+        synthesis_success=safe_meta.get("synthesis_success"),
+        fallback_model=safe_meta.get("fallback_model"),
+        fallback_reason=safe_meta.get("fallback_reason"),
+        fallback_response=safe_meta.get("fallback_response"),
+        semantic_analysis=safe_meta.get("semantic_analysis"),
+        divergence_breakdown=safe_meta.get("divergence_breakdown"),
+        successful_count=safe_meta.get("successful_count"),
+        total_count=safe_meta.get("total_count"),
+        models=safe_meta.get("models"),
         user_id=debate.user_id,
         team_id=debate.team_id,
         runner_id=debate.runner_id,
