@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp, Loader2, Wifi, WifiOff, Save } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp, Loader2, Wifi, WifiOff, Save, Copy } from "lucide-react";
 import Image from "next/image";
 
 import { sanitizeMarkdown } from "@/lib/sanitize";
@@ -84,7 +84,6 @@ export interface ModelResponse {
     content: string;
     logo_url?: string;
     persona_type?: string;
-    persona_tagline?: string;
     success: boolean;
 }
 
@@ -270,6 +269,17 @@ export function ModelCard({ resp, className = "", onRetry }: ModelCardProps) {
     const colors = getColors(resp.provider);
     const errorInfo = !resp.success ? extractFriendlyError(resp.content) : null;
     const isError = !resp.success && errorInfo;
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (resp.content) {
+            navigator.clipboard.writeText(resp.content);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    }, [resp.content]);
 
     return (
         <article
@@ -295,12 +305,21 @@ export function ModelCard({ resp, className = "", onRetry }: ModelCardProps) {
                             <XCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
                         )}
                     </div>
-                    {resp.persona_tagline && (
-                        <p className="text-xs text-muted-foreground truncate">
-                            {resp.persona_tagline}
-                        </p>
-                    )}
                 </div>
+                {resp.success && resp.content && (
+                    <button 
+                        onClick={handleCopy} 
+                        className="shrink-0 p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-md transition-colors group"
+                        aria-label="Copy response"
+                        title="Copy response text"
+                    >
+                        {copied ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                            <Copy className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                )}
             </div>
 
             {/* Card Body */}
@@ -312,7 +331,7 @@ export function ModelCard({ resp, className = "", onRetry }: ModelCardProps) {
                     onRetry={onRetry ? () => onRetry(resp.display_name) : undefined}
                 />
             ) : (
-                <div className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
+                <div className="p-5 flex-1 overflow-y-auto max-h-[400px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
                     {resp.content ? (
                         <div
                             className="text-sm leading-relaxed text-foreground/90"
@@ -332,7 +351,6 @@ interface StreamingModelCardProps {
     displayName: string;
     provider?: string;
     logoUrl?: string;
-    personaTagline?: string;
     state: ModelState;
     accumulatedText: string;
     errorCode?: string;
@@ -347,7 +365,6 @@ export function StreamingModelCard({
     displayName,
     provider,
     logoUrl,
-    personaTagline,
     state,
     accumulatedText,
     errorCode,
@@ -358,8 +375,19 @@ export function StreamingModelCard({
     const colors = getColors(provider);
     const bodyRef = useRef<HTMLDivElement>(null);
     const [displayedText, setDisplayedText] = useState("");
+    const [copied, setCopied] = useState(false);
     const lastFlushRef = useRef(0);
     const animFrameRef = useRef<number>(0);
+
+    const handleCopy = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (accumulatedText) {
+            navigator.clipboard.writeText(accumulatedText);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    }, [accumulatedText]);
 
     // Buffered rendering: flush every BUFFER_FLUSH_INTERVAL_MS
     useEffect(() => {
@@ -408,10 +436,21 @@ export function StreamingModelCard({
                         </p>
                         <StreamingStateBadge state={state} />
                     </div>
-                    {personaTagline && (
-                        <p className="text-xs text-muted-foreground truncate">{personaTagline}</p>
-                    )}
                 </div>
+                {(state === "completed" || state === "streaming") && accumulatedText && (
+                    <button 
+                        onClick={handleCopy} 
+                        className="shrink-0 p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-md transition-colors group"
+                        aria-label="Copy response"
+                        title="Copy response text"
+                    >
+                        {copied ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                            <Copy className="h-3.5 w-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        )}
+                    </button>
+                )}
             </div>
 
             {/* Card Body */}
@@ -425,7 +464,7 @@ export function StreamingModelCard({
             ) : (
                 <div
                     ref={bodyRef}
-                    className="p-5 flex-1 overflow-y-auto max-h-[500px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar"
+                    className="p-5 flex-1 overflow-y-auto max-h-[400px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar"
                 >
                     {displayedText ? (
                         isTerminal ? (

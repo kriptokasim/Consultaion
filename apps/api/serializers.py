@@ -59,6 +59,7 @@ class PublicDebateDTO(BaseModel):
     model_id: Optional[str] = None
     routed_model: Optional[str] = None
     continuation_status: Optional[str] = None
+    verdict: Optional[Dict[str, Any]] = None
 
     # Safe subset of final_meta
     successful_count: Optional[int] = None
@@ -107,6 +108,7 @@ class PrivateDebateDTO(BaseModel):
     routed_model: Optional[str] = None
     routing_policy: Optional[str] = None
     continuation_status: Optional[str] = None
+    verdict: Optional[Dict[str, Any]] = None
 
     # Full metadata for owners
     config: Optional[Dict[str, Any]] = None
@@ -229,6 +231,16 @@ def _safe_final_meta(final_meta: Optional[Dict[str, Any]]) -> Dict[str, Any]:
                 safe["models"] = safe_models
             else:
                 safe[key] = val
+                
+    if "synthesis_report" in final_meta and isinstance(final_meta["synthesis_report"], dict):
+        sr = final_meta["synthesis_report"]
+        if "verdict" in sr and isinstance(sr["verdict"], dict):
+            safe["verdict"] = {
+                "decision_type": sr["verdict"].get("decision_type"),
+                "confidence": sr["verdict"].get("confidence"),
+                "rationale": sr["verdict"].get("rationale"),
+            }
+                
     return safe
 
 
@@ -358,6 +370,7 @@ def serialize_debate_public(debate, continuation_status: Optional[str] = None, s
         model_id=debate.model_id,
         routed_model=debate.routed_model,
         continuation_status=extra["continuation_status"],
+        verdict=safe_meta.get("verdict"),
         successful_count=safe_meta.get("successful_count"),
         total_count=safe_meta.get("total_count"),
         synthesis_success=safe_meta.get("synthesis_success"),
@@ -444,6 +457,7 @@ def serialize_debate_private(debate, continuation_status: Optional[str] = None, 
         routed_model=debate.routed_model,
         routing_policy=debate.routing_policy,
         continuation_status=extra["continuation_status"],
+        verdict=safe_meta.get("verdict"),
         config=config,
         panel_config=debate.panel_config,
         routing_meta=debate.routing_meta,

@@ -30,6 +30,7 @@ interface DecisionReportShellProps {
   fallbackResponse?: { model?: string; content?: string } | null
   isCorrupted?: boolean
   onExport?: () => void
+  onCopy?: () => void
   className?: string
   variant?: "arena" | "parliament"
   showChrome?: boolean
@@ -48,6 +49,7 @@ export function DecisionReportShell({
   fallbackResponse,
   isCorrupted = false,
   onExport,
+  onCopy,
   className,
   variant = "arena",
   showChrome = false,
@@ -242,6 +244,14 @@ export function DecisionReportShell({
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {onCopy && !isFailed && (
+              <button
+                onClick={onCopy}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted/40 transition"
+              >
+                Copy
+              </button>
+            )}
             {onExport && !isFailed && (
               <button
                 onClick={onExport}
@@ -323,6 +333,14 @@ export function DecisionReportShell({
             >
               <Maximize2 className="h-4 w-4" />
               <span className="hidden sm:inline">Focus Mode</span>
+            </button>
+          )}
+          {onCopy && !isFailed && (
+            <button
+              onClick={onCopy}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Copy
             </button>
           )}
           {onExport && !isFailed && (

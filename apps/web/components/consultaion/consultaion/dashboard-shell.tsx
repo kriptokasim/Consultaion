@@ -351,7 +351,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
     return (
       <ToastProvider>
         <div className="flex min-h-screen flex-col bg-background text-foreground">
-          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur shadow-sm md:px-6">
+          <header className="sticky top-0 z-30 flex h-14 md:h-12 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur shadow-sm md:px-6">
             <div className="flex items-center gap-3">
               <Brand height={32} />
               <div className="leading-tight">
@@ -501,7 +501,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
         {/* Main content */}
         <div className="flex flex-1 flex-col overflow-hidden app-surface">
           {/* Header */}
-          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-card/90 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-slate-900/5 dark:border-slate-700 md:px-6">
+          <header className="sticky top-0 z-30 flex h-16 md:h-14 items-center justify-between border-b border-slate-200 bg-card/90 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md shadow-sm shadow-slate-900/5 dark:border-slate-700 md:px-6">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               <button
                 ref={sidebarTriggerRef}

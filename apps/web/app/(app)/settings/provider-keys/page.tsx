@@ -29,6 +29,7 @@ export default function ProviderKeysPage() {
   const [isValidating, setIsValidating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState<string | null>(null);
 
   const apiBase = API_ORIGIN;
 
@@ -108,6 +109,34 @@ export default function ProviderKeysPage() {
       }
     } catch (err) {
       setErrorMsg("Network error. Could not delete provider key.");
+    }
+  };
+
+  const handleTest = async (provider: string) => {
+    setIsTesting(provider);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    
+    try {
+      const res = await fetch(`${apiBase}/ops/probe/${provider}`, {
+        method: "POST",
+        credentials: "include"
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setSuccessMsg(`Test successful: ${provider.toUpperCase()} key is active and responding.`);
+        trackEvent("byok_test_succeeded", { provider });
+      } else {
+        setErrorMsg(`Test failed for ${provider.toUpperCase()}: ${data.message || 'Unknown error'}`);
+        trackEvent("byok_test_failed", { provider, error: data.message });
+      }
+    } catch (err) {
+      setErrorMsg(`Network error while testing ${provider.toUpperCase()} key.`);
+      trackEvent("byok_test_failed", { provider, error: "Network error" });
+    } finally {
+      setIsTesting(null);
     }
   };
 
@@ -235,12 +264,24 @@ export default function ProviderKeysPage() {
                         {keyRecord ? "Update Key" : "Add Key"}
                       </Button>
                       {keyRecord && (
-                        <button
-                          onClick={() => handleDelete(prov.id)}
-                          className="p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-rose-600 transition dark:border-slate-800 dark:hover:bg-slate-850"
-                        >
-                          <Trash2 className="h-4.5 w-4.5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="secondary"
+                            onClick={() => handleTest(prov.id)}
+                            disabled={isTesting === prov.id}
+                            className="text-sm font-semibold h-10 px-3 flex items-center gap-2"
+                          >
+                            <RefreshCw className={`h-4 w-4 ${isTesting === prov.id ? 'animate-spin' : ''}`} />
+                            {isTesting === prov.id ? "Testing..." : "Test Key"}
+                          </Button>
+                          <button
+                            onClick={() => handleDelete(prov.id)}
+                            className="p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-rose-600 transition dark:border-slate-800 dark:hover:bg-slate-850"
+                            title="Remove Key"
+                          >
+                            <Trash2 className="h-4.5 w-4.5" />
+                          </button>
+                        </div>
                       )}
                     </>
                   )}

@@ -10,6 +10,7 @@ import type { TimelineEvent } from "@/lib/timeline/types";
 import type { PersistedModelResponse } from "@/lib/api/types";
 import { streamingReducer, INITIAL_STREAMING_STATE, selectMergedResponses } from "@/lib/workspace/streamReducer";
 import type { StreamingState } from "@/lib/workspace/streamReducer";
+import { connectionReducer, INITIAL_CONNECTION_STATE } from "@/lib/workspace/connectionReducer";
 
 // ── FH116: Core load failure taxonomy ────────────────────────────────────
 
@@ -243,24 +244,16 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [debate, setDebate] = useState<any | null>(null);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isPollingFallback, setIsPollingFallback] = useState(false);
-  const [isContinuing, setIsContinuing] = useState(false);
+  const [connState, dispatchConn] = useReducer(connectionReducer, INITIAL_CONNECTION_STATE);
+  const { coreState, responsesState, responsesError, timelineState, coreErrorCode, coreHttpStatus, hydrationQuality, timelineError, eventsError, isPollingFallback } = connState;
+    const [isContinuing, setIsContinuing] = useState(false);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
-  const [hydrationQuality, setHydrationQuality] = useState<RunHydrationQuality>("complete");
-  const [timelineError, setTimelineError] = useState<string | null>(null);
-  const [eventsError, setEventsError] = useState<string | null>(null);
-  const [responses, setResponses] = useState<PersistedModelResponse[]>([]);
+        const [responses, setResponses] = useState<PersistedModelResponse[]>([]);
 
   // FH117: Decoupled states
-  const [coreState, setCoreState] = useState<CoreState>("idle");
-  const [responsesState, setResponsesState] = useState<ResponsesState>("idle");
-  const [responsesError, setResponsesError] = useState<string | null>(null);
-  const [timelineState, setTimelineState] = useState<TimelineState>("idle");
-
+        
   // FH116: Core error classification
-  const [coreErrorCode, setCoreErrorCode] = useState<CoreLoadFailure | null>(null);
-  const [coreHttpStatus, setCoreHttpStatus] = useState<number | null>(null);
-
+    
   // FH104: Streaming reducer
   const [streamingState, dispatchStreaming] = useReducer(streamingReducer, INITIAL_STREAMING_STATE);
 
@@ -315,9 +308,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── FH116+FH117: Fetch core debate with timeout and error classification ──
   const fetchCoreDebate = useCallback(async (id: string, signal?: AbortSignal) => {
     const gen = coreGenerationRef.current;
-    setCoreState("loading");
-    setCoreErrorCode(null);
-    setCoreHttpStatus(null);
+    dispatchConn({ type: "HYDRATION_START" });
+    
+    
 
     try {
       const debateData = await getDebate(id, { signal, timeoutMs: DEBATE_TIMEOUT_MS });
@@ -326,24 +319,25 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setDebate(debateData);
       debateSetOnceRef.current = true;
       setError(null);
-      setCoreState("ready");
+      dispatchConn({ type: "CORE_LOADED", isTerminal });
       return debateData;
     } catch (err: any) {
       if (gen !== coreGenerationRef.current) return null;
 
       // Don't show errors for intentional navigation aborts
       if (err?.name === "AbortError" && coreAbortRef.current?.signal?.aborted) {
-        setCoreState("idle");
+        dispatchConn({ type: "HYDRATION_START" });
         return null;
       }
 
       const { code, httpStatus } = classifyCoreError(err);
-      setCoreErrorCode(code);
-      setCoreHttpStatus(httpStatus);
+      dispatchConn({ type: "CORE_FAILED", code, httpStatus, error: err?.message || "Core failed" });
+      /* replaced */
       setError(coreFailureMessage(code));
-      setCoreState("failed");
+      // handled by CORE_FAILED
+
       if (!debateSetOnceRef.current) {
-        setHydrationQuality("failed");
+        dispatchConn({ type: "TIMELINE_FAILED" });
       }
       return null;
     }
@@ -352,27 +346,27 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── FH117: Fetch responses independently ───────────────────────────────
   const fetchResponses = useCallback(async (id: string, signal?: AbortSignal) => {
     const gen = responsesGenerationRef.current;
-    setResponsesState("loading");
-    setResponsesError(null);
+    dispatchConn({ type: "RESPONSES_LOADING" });
+    
 
     try {
       const responsesData = await getDebateResponses(id, { signal, timeoutMs: RESPONSES_TIMEOUT_MS });
       if (gen !== responsesGenerationRef.current) return;
 
       setResponses(responsesData.items);
-      setResponsesState(responsesData.items.length > 0 ? "ready" : "empty");
-      setResponsesError(null);
+      dispatchConn({ type: "RESPONSES_LOADED", count: responsesData.items.length });
+      
     } catch (err: any) {
       if (gen !== responsesGenerationRef.current) return;
 
       // FH119: Distinguish 404 (deployment mismatch) from other failures
       if (err instanceof ApiError && err.status === 404) {
-        setResponsesState("deployment_mismatch");
-        setResponsesError("Backend contract mismatch — /responses endpoint unavailable");
+        dispatchConn({ type: "RESPONSES_FAILED", isMismatch: true, error: "Backend contract mismatch — /responses endpoint unavailable" });
+        
       } else {
         console.warn("[useRunWorkspace] /responses fetch failed:", err?.message);
-        setResponsesState("failed");
-        setResponsesError(err?.message || "Failed to load persisted responses");
+        dispatchConn({ type: "RESPONSES_FAILED", isMismatch: false, error: err?.message || "Failed to load persisted responses" });
+        
       }
     }
   }, []);
@@ -380,21 +374,21 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── FH117: Fetch timeline independently ────────────────────────────────
   const fetchTimeline = useCallback(async (id: string, signal?: AbortSignal) => {
     const gen = timelineGenerationRef.current;
-    setTimelineState("loading");
+    dispatchConn({ type: "TIMELINE_LOADING" });
 
     try {
       const result = await loadTimelineWithFallback(id, signal);
       if (gen !== timelineGenerationRef.current) return;
 
       setEvents(result.events);
-      setHydrationQuality(result.quality);
-      setTimelineError(result.timelineError);
-      setEventsError(result.eventsError);
-      setTimelineState(result.quality === "debate_only" ? "failed" : result.quality === "events_fallback" ? "degraded" : "ready");
+      dispatchConn({ type: "TIMELINE_LOADED", quality: result.quality, timelineError: result.timelineError, eventsError: result.eventsError });
+      
+      
+      
     } catch (err: any) {
       if (gen !== timelineGenerationRef.current) return;
       console.error("[useRunWorkspace] Timeline fetch error:", err);
-      setTimelineState("failed");
+      dispatchConn({ type: "TIMELINE_FAILED" });
     }
   }, []);
 
@@ -407,14 +401,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
     // Reset all states
     setError(null);
-    setCoreErrorCode(null);
-    setCoreHttpStatus(null);
-    setResponsesState("idle");
-    setResponsesError(null);
-    setTimelineState("idle");
-    setTimelineError(null);
-    setEventsError(null);
-    setHydrationQuality("complete");
+    
+    
+    
+    
+    
+    
+    
+    
     debateSetOnceRef.current = false;
 
     // Abort any in-flight requests
@@ -460,18 +454,18 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       setDebate(null);
       setEvents([]);
       setResponses([]);
-      setCoreState("idle");
-      setResponsesState("idle");
-      setResponsesError(null);
-      setTimelineState("idle");
+      dispatchConn({ type: "HYDRATION_START" });
+      
+      
+      
       setError(null);
-      setCoreErrorCode(null);
-      setCoreHttpStatus(null);
-      setIsPollingFallback(false);
+      
+      
+      dispatchConn({ type: "STOP_POLLING" });
       setIsContinuing(false);
-      setHydrationQuality("complete");
-      setTimelineError(null);
-      setEventsError(null);
+      
+      
+      
       debateSetOnceRef.current = false;
     }
   }, [debateId, hydrate, abortAll]);
@@ -549,7 +543,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         getDebateResponses(debateId)
           .then((data) => {
             setResponses(data.items);
-            setResponsesState(data.items.length > 0 ? "ready" : "empty");
+            dispatchConn({ type: "RESPONSES_LOADED", count: data.items.length });
             dispatchStreaming({ type: "MERGE_PERSISTED", payloads: data.items });
           })
           .catch(() => {});
@@ -569,7 +563,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── Polling fallback ───────────────────────────────────────────────────
   const startPolling = useCallback((id: string) => {
     if (pollTimerRef.current) return;
-    setIsPollingFallback(true);
+    dispatchConn({ type: "START_POLLING" });
     const tick = async () => {
       if (pollInFlightRef.current) {
         pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
@@ -594,7 +588,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       pollTimerRef.current = null;
     }
     pollInFlightRef.current = false;
-    setIsPollingFallback(false);
+    dispatchConn({ type: "STOP_POLLING" });
   }, []);
 
   // Patchset 132 Track D: Silence detection — elapsed-time watchdog
@@ -754,18 +748,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   }, [debateId, hydrate]);
 
   // ── Status derivation ──────────────────────────────────────────────────
-  let status: RunWorkspaceStatus = "idle";
-  if (coreState === "loading") {
-    status = "loading";
-  } else if (isTerminal) {
-    status = debate?.status === "failed" ? "failed" : "completed";
-  } else if (isPollingFallback) {
-    status = "polling";
-  } else if (sseStatus === "connected" || sseStatus === "connecting" || sseStatus === "reconnecting") {
-    status = "streaming";
-  } else if (error) {
-    status = "error";
-  }
+  const status = connState.status;
 
   return {
     debate,

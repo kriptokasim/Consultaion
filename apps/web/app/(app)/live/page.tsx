@@ -29,6 +29,7 @@ import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistor
 import { normalizeSSEEnvelope, type DomainEvent, isErrorEvent, isTerminalEvent } from "@/lib/api/eventContract";
 import { normalizeApiError, type ClientError, shouldRedirectToLogin, getCorrelationId } from "@/lib/api/errorContract";
 import { ConnectionIndicator, type ConnectionStatus } from "@/components/connection/ConnectionIndicator";
+import { FirstRunGuide } from "@/components/onboarding/FirstRunGuide";
 
 import RunDetailClient from "../runs/[id]/RunDetailClient";
 
@@ -638,7 +639,7 @@ function ArenaPageContent() {
   }
 
   return (
-    <main id="main" className="space-y-6 p-4 lg:p-6">
+    <main id="main" className="relative min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center space-y-6 p-4 lg:p-6">
       {rateLimitNotice ? (
         <RateLimitBanner
           detail={rateLimitNotice.detail}
@@ -667,33 +668,43 @@ function ArenaPageContent() {
           </div>
         </div>
       ) : null}
-      <ParliamentHome
-        members={members}
-        activeMemberId={members.find((member) => member.name === activePersona)?.id}
-        speakerSeconds={speakerTime}
-        stats={sessionStats}
-        voteResults={latestScores}
-        onStart={focusPromptPanel}
-        running={running}
-      />
-      <SessionHUD
-        status={sessionStatus}
-        debateId={currentDebateId}
-        elapsedSeconds={elapsedSeconds}
-        activePersona={activePersona}
-        onCopy={handleCopyId}
-        runUrl={currentDebateId ? `/runs/${currentDebateId}` : null}
-      />
-      <ConnectionIndicator
-        status={streamStatus === 'connected' ? 'connected' :
-               streamStatus === 'connecting' || streamStatus === 'reconnecting' ? 'reconnecting' :
-               running ? 'degraded' : 'idle'}
-        className="ml-2"
-      />
+      <div className={sessionStatus === 'idle' ? "absolute inset-0 z-0 opacity-20 pointer-events-none blur-[2px] transition-all duration-1000 scale-[0.98]" : "hidden"}>
+        <div className="max-w-6xl mx-auto pt-8">
+          <ParliamentHome
+            members={members}
+            activeMemberId={members.find((member) => member.name === activePersona)?.id}
+            speakerSeconds={speakerTime}
+            stats={sessionStats}
+            voteResults={latestScores}
+            onStart={focusPromptPanel}
+            running={running}
+          />
+        </div>
+      </div>
 
-      {/* New centered prompt workspace */}
-      <div ref={promptSectionRef} className="space-y-4 scroll-mt-28">
-        <DebateProgressBar active={running} />
+      <div className="z-10 w-full max-w-4xl mx-auto flex flex-col space-y-6">
+        {sessionStatus !== 'idle' && (
+          <SessionHUD
+            status={sessionStatus}
+            debateId={currentDebateId}
+            elapsedSeconds={elapsedSeconds}
+            activePersona={activePersona}
+            onCopy={handleCopyId}
+            runUrl={currentDebateId ? `/runs/${currentDebateId}` : null}
+          />
+        )}
+        {sessionStatus !== 'idle' && (
+          <ConnectionIndicator
+            status={streamStatus === 'connected' ? 'connected' :
+                   streamStatus === 'connecting' || streamStatus === 'reconnecting' ? 'reconnecting' :
+                   running ? 'degraded' : 'idle'}
+            className="ml-2"
+          />
+        )}
+
+        {/* New centered prompt workspace */}
+        <div ref={promptSectionRef} className="space-y-4 scroll-mt-28 w-full mt-8 md:mt-16">
+          <DebateProgressBar active={running} />
 
         {errorState && (
           <ErrorBanner
@@ -705,14 +716,8 @@ function ArenaPageContent() {
           />
         )}
 
-        <OnboardingHint id="live_chamber" text={t("onboarding.live.chamberHint")} className="mb-4" />
-
         {!running && sessionStatus === 'idle' && (
-          <OnboardingHint
-            id="first_run_guide"
-            text="How it works: 1) Ask a decision question. 2) Compare how different AI models respond. 3) Read the structured decision report with verdict, findings, and next actions."
-            className="mb-4"
-          />
+          <FirstRunGuide onPrefill={(text) => { setPrompt(text); setAutoFocus(true); focusPromptPanel(); }} />
         )}
 
         <IdleDecisionComposer
@@ -734,8 +739,6 @@ function ArenaPageContent() {
           onConfigureModels={() => setModelPanelOpen(true)}
         />
 
-        <OnboardingHint id="live_prompt" text={t("onboarding.live.promptHint")} className="mt-2" />
-
         <PromptPresets onPresetSelected={handlePresetSelected} />
 
         {authStatus === 'authed' && (
@@ -753,6 +756,7 @@ function ArenaPageContent() {
             />
           </div>
         )}
+      </div>
       </div>
 
       {/* Keep existing LivePanel for events display */}

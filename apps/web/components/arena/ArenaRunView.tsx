@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle, RefreshCw } from "lucide-react";
+import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle, RefreshCw, ChevronRight } from "lucide-react";
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { getArenaSynthesisArtifacts } from "@/lib/arena/synthesisArtifacts";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
@@ -47,7 +47,6 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     content: r.content || "",
                     logo_url: r.metadata?.logo_url || undefined,
                     persona_type: r.metadata?.persona_type || undefined,
-                    persona_tagline: r.metadata?.persona_tagline || undefined,
                     success: r.success,
                 });
             }
@@ -63,7 +62,6 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         content: e.content || e.text || "",
                         logo_url: e.logo_url,
                         persona_type: e.persona_type,
-                        persona_tagline: e.persona_tagline,
                         success: e.success !== false,
                     });
                 }
@@ -99,7 +97,6 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     content: (matching as any)?.content || (matching as any)?.text || "",
                     logo_url: model.logo_url,
                     persona_type: model.persona_type,
-                    persona_tagline: model.persona_tagline,
                     success: model.success !== false,
                 });
             }
@@ -136,33 +133,16 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
     // FH121: Correct loading formula — terminal Runs never show skeletons
     const showResponseSkeletons = !isTerminal && (responsesState === "idle" || responsesState === "loading");
     const isLoading = showResponseSkeletons && modelResponses.length === 0 && !artifacts.hasSynthesisOutput;
-    const expectedModels = debate.final_meta?.models?.length || debate.models?.length || 4;
+    const expectedModels =
+        debate?.models_expected ||
+        debate?.panel_config?.seats?.length ||
+        debate?.final_meta?.models?.length ||
+        (debate?.config as any)?.models?.length ||
+        (debate as any)?.models?.length ||
+        2;
     const [activeTab, setActiveTab] = useState<number>(0);
     const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
-    const [touchStartX, setTouchStartX] = useState<number | null>(null);
     const { containerRef: cardContainerRef } = useCardKeyboardNav(modelResponses.length || expectedModels);
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        setTouchStartX(e.touches[0].clientX);
-    };
-
-    const handleTouchEnd = (e: React.TouchEvent) => {
-        if (touchStartX === null) return;
-        const touchEndX = e.changedTouches[0].clientX;
-        const diffX = touchStartX - touchEndX;
-
-        // Threshold of 50px for swipe gesture
-        if (Math.abs(diffX) > 50) {
-            if (diffX > 0) {
-                // Swipe left -> next card (clamped, no circular wrap)
-                setActiveTab((prev) => Math.min(prev + 1, modelResponses.length - 1));
-            } else {
-                // Swipe right -> previous card (clamped, no circular wrap)
-                setActiveTab((prev) => Math.max(prev - 1, 0));
-            }
-        }
-        setTouchStartX(null);
-    };
 
     return (
         <div className="flex flex-col gap-6 pb-8">
@@ -287,118 +267,88 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     Model Responses
                 </h2>
 
-                <div className="relative flex sm:hidden items-center w-full mb-4">
-                    {/* Left gradient fade overlay */}
-                    <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background via-background/60 to-transparent pointer-events-none z-10" />
-
-                    <div role="tablist" aria-label="Model responses" className="flex w-full overflow-x-auto gap-2 pb-2 px-6 custom-scrollbar">
+                {/* Mobile: full-width card with peek swipe */}
+                <div className="flex sm:hidden flex-col gap-3">
+                    {activeTab === 0 && modelResponses.length > 0 && (
+                        <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground animate-fade-in">
+                            <span>Swipe to compare</span>
+                            <ChevronRight className="h-3 w-3" />
+                        </div>
+                    )}
+                    <div
+                        className="flex overflow-x-auto snap-x snap-mandatory gap-3 px-4 pb-2 -mx-4"
+                        style={{ scrollbarWidth: "none" }}
+                        onScroll={(e) => {
+                            const el = e.currentTarget;
+                            const maxCards = Math.max(modelResponses.length || expectedModels, 1);
+                            const cardWidth = el.scrollWidth / maxCards;
+                            if (cardWidth > 0) {
+                                const idx = Math.round(el.scrollLeft / cardWidth);
+                                setActiveTab(idx);
+                            }
+                        }}
+                    >
                         {Array.from({ length: expectedModels }).map((_, i) => {
                             const resp = modelResponses[i];
                             if (!resp) {
-                                return <div key={`skeleton-tab-${i}`} className="h-9 w-24 bg-muted animate-pulse rounded-xl shrink-0" />;
+                                return (
+                                    <div key={`skeleton-mobile-${i}`} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
+                                        <SkeletonCard index={i} />
+                                    </div>
+                                );
                             }
-                            const colors = getColors(resp.provider);
-                            const isActive = activeTab === i;
-                            const tabId = `model-tab-${resp.model_id || i}`;
-                            const panelId = `model-panel-${resp.model_id || i}`;
+
+                            const streamBuf = streamingBuffers?.get(`resp-${debate.id}-${resp.model_id}`);
                             return (
-                                <button
-                                    key={resp.model_id || i}
-                                    role="tab"
-                                    id={tabId}
-                                    aria-selected={isActive}
-                                    aria-controls={panelId}
-                                    tabIndex={isActive ? 0 : -1}
-                                    onClick={() => setActiveTab(i)}
-                                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all shrink-0 ${
-                                        isActive
-                                            ? `${colors.accent} ${colors.text} ${colors.border} shadow-sm scale-105`
-                                            : "border-border bg-card text-muted-foreground hover:text-foreground"
-                                    }`}
-                                >
-                                    <ModelLogo
-                                        logoUrl={resp.logo_url}
-                                        displayName={resp.display_name}
-                                        size={14}
-                                    />
-                                    <span>{resp.display_name}</span>
-                                </button>
+                                <div key={resp.model_id || i} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
+                                    {streamBuf ? (
+                                        <StreamingModelCard
+                                            displayName={resp.display_name}
+                                            provider={resp.provider}
+                                            logoUrl={resp.logo_url}
+                                            state={streamBuf.state}
+                                            accumulatedText={streamBuf.accumulatedText}
+                                            errorCode={streamBuf.errorCode}
+                                            errorMessage={streamBuf.errorMessage}
+                                            className="min-h-[350px]"
+                                            onRetry={handleRetryAgent}
+                                        />
+                                    ) : (
+                                        <ModelCard
+                                            resp={resp}
+                                            className="min-h-[350px]"
+                                            onRetry={handleRetryAgent}
+                                        />
+                                    )}
+                                </div>
                             );
                         })}
+                        {/* Right-edge peek spacer */}
+                        <div className="shrink-0 w-8" aria-hidden />
                     </div>
-
-                    {/* Right gradient fade overlay */}
-                    <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background via-background/60 to-transparent pointer-events-none z-10" />
-                </div>
-
-                {/* Mobile counter and progress dots */}
-                <div className="flex sm:hidden items-center justify-between px-6 mb-3">
-                    <span className="text-xs font-medium text-muted-foreground">
-                        {activeTab + 1} of {modelResponses.length || expectedModels}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                        {Array.from({ length: expectedModels }).map((_, i) => (
-                            <button
-                                key={i}
-                                onClick={() => setActiveTab(i)}
-                                className={`h-1.5 rounded-full transition-all duration-200 ${
-                                    i === activeTab
-                                        ? 'w-4 bg-primary'
-                                        : i < modelResponses.length
-                                            ? 'w-1.5 bg-primary/40'
-                                            : 'w-1.5 bg-muted-foreground/20'
-                                }`}
-                                aria-label={`Go to model ${i + 1}`}
-                            />
-                        ))}
-                    </div>
-                </div>
-
-                {/* Mobile View: Render only active card with swipe gesture handlers */}
-                <div
-                    role="tabpanel"
-                    id={`model-panel-${modelResponses[activeTab]?.model_id || activeTab}`}
-                    aria-labelledby={`model-tab-${modelResponses[activeTab]?.model_id || activeTab}`}
-                    className="block sm:hidden outline-none"
-                    onTouchStart={handleTouchStart}
-                    onTouchEnd={handleTouchEnd}
-                >
-                    {(() => {
-                        const resp = modelResponses[activeTab];
-                        if (!resp) return <SkeletonCard index={activeTab} />;
-
-                        const streamBuf = streamingBuffers?.get(`resp-${debate.id}-${resp.model_id}`);
-                        if (streamBuf) {
-                            return (
-                                <StreamingModelCard
-                                    displayName={resp.display_name}
-                                    provider={resp.provider}
-                                    logoUrl={resp.logo_url}
-                                    personaTagline={resp.persona_tagline}
-                                    state={streamBuf.state}
-                                    accumulatedText={streamBuf.accumulatedText}
-                                    errorCode={streamBuf.errorCode}
-                                    errorMessage={streamBuf.errorMessage}
-                                    className="min-h-[350px]"
-                                    onRetry={handleRetryAgent}
+                    {/* Dot indicators */}
+                    {(modelResponses.length || expectedModels) > 1 && (
+                        <div className="flex justify-center gap-1.5">
+                            {Array.from({ length: expectedModels }).map((_, i) => (
+                                <div
+                                    key={i}
+                                    className={`h-1.5 rounded-full transition-all ${
+                                        i === activeTab
+                                            ? "w-4 bg-primary"
+                                            : i < modelResponses.length
+                                                ? "w-1.5 bg-primary/40"
+                                                : "w-1.5 bg-muted-foreground/20"
+                                    }`}
                                 />
-                            );
-                        }
-
-                        return (
-                            <ModelCard
-                                resp={resp}
-                                className="min-h-[350px]"
-                                onRetry={handleRetryAgent}
-                            />
-                        );
-                    })()}
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Desktop View: Render grid of all cards with keyboard navigation */}
                 <div
                     ref={cardContainerRef}
-                    className="hidden sm:grid grid-cols-2 xl:grid-cols-4 gap-4"
+                    className="hidden sm:grid grid-cols-1 md:grid-cols-2 gap-6"
                     role="group"
                     aria-label="Model responses (use arrow keys to navigate)"
                 >
@@ -417,7 +367,6 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                         displayName={resp.display_name}
                                         provider={resp.provider}
                                         logoUrl={resp.logo_url}
-                                        personaTagline={resp.persona_tagline}
                                         state={streamBuf.state}
                                         accumulatedText={streamBuf.accumulatedText}
                                         errorCode={streamBuf.errorCode}
@@ -444,6 +393,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             <DivergenceMeter 
                 debateId={debate.id} 
                 isCompleted={debate.status === "completed" || debate.status === "completed_budget"} 
+                synthesisStatus={artifacts.synthesisStatus || debate.synthesis_status || debate.final_meta?.synthesis_status}
             />
 
             {/* Synthesis / Final Verdict — P143: uses canonical normalizer */}

@@ -56,7 +56,7 @@ export function IdleDecisionComposer({
       : 'What controversial or multi-faceted topic should the AI models debate?'
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-6 pb-48 sm:pb-8">
       {/* 1. Mode Cards (Arena & Debate only) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Arena Card */}
@@ -126,8 +126,12 @@ export function IdleDecisionComposer({
       </div>
 
       {/* 2. Main Input Box */}
-      <div className="rounded-3xl border border-border/80 bg-card/60 p-4 shadow-smooth-lg backdrop-blur-md relative">
-        <textarea
+      <div className={cn(
+        "fixed inset-x-0 bottom-16 sm:bottom-auto z-40 p-3 pb-3 bg-background/80 backdrop-blur-xl border-t border-border/40 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]",
+        "sm:relative sm:z-auto sm:p-4 sm:pb-4 sm:bg-card/60 sm:border sm:border-border/80 sm:rounded-3xl sm:shadow-smooth-lg sm:backdrop-blur-md"
+      )}>
+        <div className="w-full max-w-4xl mx-auto relative rounded-2xl sm:rounded-none bg-card sm:bg-transparent p-1 sm:p-0 shadow-sm sm:shadow-none border border-border/40 sm:border-0">
+          <textarea
           ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -172,6 +176,7 @@ export function IdleDecisionComposer({
               {isLoading ? 'Launching...' : mode === 'arena' ? 'Launch Arena' : 'Start Debate'}
             </Button>
           </div>
+        </div>
         </div>
       </div>
     </div>

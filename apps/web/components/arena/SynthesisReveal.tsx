@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Eye, Trophy, ChevronRight, MessageSquare } from "lucide-react";
+import { Eye, Trophy, ChevronRight, MessageSquare, BookOpen } from "lucide-react";
 import { apiRequest } from "@/lib/apiClient";
 import { DecisionReportView } from "@/components/report/DecisionReportView";
 import type { ModelResponse } from "./ModelCard";
@@ -104,54 +104,91 @@ export function SynthesisReveal({
   };
 
   if (revealed) {
+    const verdict = synthesisReport?.verdict;
+    const decisionType = verdict?.decision_type?.toLowerCase() || "mixed";
+    const confidence = verdict?.confidence ? Math.round(verdict.confidence * 100) : null;
+
+    const verdictConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
+      proceed: {
+        label: "PROCEED",
+        bg: "bg-emerald-50 dark:bg-emerald-950/30",
+        text: "text-emerald-700 dark:text-emerald-300",
+        border: "border-emerald-200 dark:border-emerald-800",
+      },
+      reject: {
+        label: "REJECT",
+        bg: "bg-rose-50 dark:bg-rose-950/30",
+        text: "text-rose-700 dark:text-rose-300",
+        border: "border-rose-200 dark:border-rose-800",
+      },
+      investigate: {
+        label: "INVESTIGATE",
+        bg: "bg-amber-50 dark:bg-amber-950/30",
+        text: "text-amber-700 dark:text-amber-300",
+        border: "border-amber-200 dark:border-amber-800",
+      },
+      mixed: {
+        label: "MIXED",
+        bg: "bg-slate-50 dark:bg-slate-900/30",
+        text: "text-slate-700 dark:text-slate-300",
+        border: "border-slate-200 dark:border-slate-700",
+      },
+    };
+
+    const vc = verdictConfig[decisionType] || verdictConfig.mixed;
+
     return (
-      <div className="space-y-6 animate-fade-in">
-        {/* Primary: Synthesis narrative text */}
-        {synthesis && !isSynthesisFailed && (
-          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/40 dark:from-emerald-950/30 dark:via-slate-900/80 dark:to-emerald-950/20 p-6 shadow-sm animate-fade-in">
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              <h3 className="text-base font-bold text-foreground">Final Verdict</h3>
+      <div className="space-y-4 animate-fade-in">
+        {/* ── Verdict Hero ── */}
+        {verdict && !isSynthesisFailed && (
+          <div className={`rounded-2xl border-2 ${vc.border} ${vc.bg} px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-4`}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-black tracking-widest uppercase ${vc.bg} ${vc.text} border ${vc.border}`}>
+                  {vc.label}
+                </span>
+                {confidence !== null && (
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {confidence}% confidence
+                  </span>
+                )}
+              </div>
+              {verdict.rationale && (
+                <p className="mt-2 text-sm text-foreground leading-relaxed">
+                  {verdict.rationale}
+                </p>
+              )}
             </div>
-            <div className="prose prose-sm dark:prose-invert max-w-none text-foreground/90 leading-relaxed whitespace-pre-wrap">
-              {synthesis}
-            </div>
+            {/* Quality indicator */}
+            {synthesisReport?.quality_meta?.completeness_score != null && (
+              <div className="shrink-0 text-center">
+                <div className="text-2xl font-black text-foreground">
+                  {Math.round(synthesisReport.quality_meta.completeness_score * 100)}
+                  <span className="text-xs font-normal text-muted-foreground">/100</span>
+                </div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-0.5">
+                  Report quality
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Secondary: Collapsible full structured report */}
-        {synthesisReport && (
-          <details className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 shadow-sm animate-fade-in">
-            <summary className="flex items-center gap-2 cursor-pointer p-5 select-none hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors rounded-2xl">
-              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
-              <Eye className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold text-foreground">View Full Report</span>
-              <span className="text-xs text-muted-foreground ml-1">— Detailed analysis with scoring</span>
-            </summary>
-            <div className="p-6 pt-0 border-t border-slate-100 dark:border-slate-800/50">
-              <DecisionReportView
-                report={synthesisReport}
-                rawSynthesis={synthesis}
-                variant="arena"
-                synthesisStatus={synthesisStatus || (isSynthesisFailed ? "failed" : "succeeded")}
-                synthesisError={synthesisError}
-                fallbackModel={fallbackModel}
-                fallbackReason={fallbackReason}
-                fallbackResponse={fallbackResponse}
-                divergenceBreakdown={divergenceBreakdown}
-              />
-            </div>
-          </details>
-        )}
-
-        {/* Fallback: show DecisionReportView directly if no synthesis text */}
-        {!synthesis && !synthesisReport && isSynthesisFailed && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 p-6 shadow-sm animate-fade-in">
+        {/* ── Full Report (collapsible) ── */}
+        <details className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/50 overflow-hidden">
+          <summary className="flex cursor-pointer items-center justify-between px-6 py-4 text-sm font-semibold text-foreground hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors select-none list-none">
+            <span className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              Full decision report
+            </span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="px-6 pb-6 pt-2 border-t border-slate-100 dark:border-slate-800">
             <DecisionReportView
               report={synthesisReport}
               rawSynthesis={synthesis}
               variant="arena"
-              synthesisStatus="failed"
+              synthesisStatus={synthesisStatus || (isSynthesisFailed ? "failed" : "succeeded")}
               synthesisError={synthesisError}
               fallbackModel={fallbackModel}
               fallbackReason={fallbackReason}
@@ -159,7 +196,9 @@ export function SynthesisReveal({
               divergenceBreakdown={divergenceBreakdown}
             />
           </div>
-        )}
+        </details>
+
+
 
         {/* Post-Reveal Feedback Poll */}
         {!isSynthesisFailed && (
@@ -248,7 +287,7 @@ export function SynthesisReveal({
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/95 shadow-md shadow-primary/20 hover:shadow-lg transition-all text-sm"
           >
             <Eye className="h-4 w-4" />
-            Reveal Final Verdict
+            View Verdict & Report
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>

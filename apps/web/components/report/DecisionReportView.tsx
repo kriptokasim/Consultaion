@@ -170,6 +170,74 @@ export function exportToMarkdown(report: DecisionReport): string {
   return lines.join("\n")
 }
 
+export function exportToHtml(report: DecisionReport): string {
+  const lines: string[] = []
+  lines.push(`<h1>${report.title || "Decision Report"}</h1>`)
+
+  if (report.executive_summary) {
+    lines.push(`<h2>Executive Summary</h2>`)
+    lines.push(`<p>${report.executive_summary}</p>`)
+  }
+
+  if (report.verdict) {
+    lines.push(`<h2>Verdict</h2>`)
+    lines.push(`<p><strong>Recommendation:</strong> ${report.verdict.decision_type?.toUpperCase() || "MIXED"}</p>`)
+    lines.push(`<p><strong>Confidence:</strong> ${Math.round((report.verdict.confidence || 0) * 100)}%</p>`)
+    lines.push(`<p><strong>Rationale:</strong> ${report.verdict.rationale || report.verdict.recommendation || ""}</p>`)
+  }
+
+  if (report.key_findings?.length) {
+    lines.push(`<h2>Key Findings</h2>`)
+    lines.push(`<ul>`)
+    report.key_findings.forEach((f, i) => {
+      lines.push(`<li><strong>[${f.importance?.toUpperCase() || "MEDIUM"}]</strong> ${f.title}: ${f.summary}</li>`)
+    })
+    lines.push(`</ul>`)
+  }
+
+  if (report.model_positions?.length) {
+    lines.push(`<h2>Model Positions</h2>`)
+    lines.push(`<ul>`)
+    report.model_positions.forEach((p) => {
+      const contribution = p.distinct_contribution || p.strongest_point || ""
+      const blindSpot = p.blind_spot || p.concern || ""
+      lines.push(`<li><strong>${p.model}</strong> (${p.stance}): ${contribution}`)
+      if (blindSpot) lines.push(`<ul><li>Blind Spot / Limitation: ${blindSpot}</li></ul>`)
+      lines.push(`</li>`)
+    })
+    lines.push(`</ul>`)
+  }
+
+  if (report.risks_and_assumptions?.length) {
+    lines.push(`<h2>Risks & Assumptions</h2>`)
+    lines.push(`<ul>`)
+    report.risks_and_assumptions.forEach((r) => {
+      lines.push(`<li>[${r.severity?.toUpperCase() || "MEDIUM"}] (${r.type}): ${r.item}`)
+      if (r.mitigation) lines.push(`<ul><li>Mitigation: ${r.mitigation}</li></ul>`)
+      lines.push(`</li>`)
+    })
+    lines.push(`</ul>`)
+  }
+
+  if (report.next_actions?.length) {
+    lines.push(`<h2>Next Actions</h2>`)
+    lines.push(`<ul>`)
+    report.next_actions.forEach((a) => {
+      lines.push(`<li>[${a.priority?.toUpperCase() || "NEXT"}] ${a.action}</li>`)
+    })
+    lines.push(`</ul>`)
+  }
+
+  if (report.caveats?.length) {
+    lines.push(`<h2>Caveats</h2>`)
+    lines.push(`<ul>`)
+    report.caveats.forEach((c) => lines.push(`<li>${c}</li>`))
+    lines.push(`</ul>`)
+  }
+
+  return lines.join("\n")
+}
+
 export function DecisionReportView({
   report: rawReport,
   rawSynthesis,
@@ -231,6 +299,26 @@ export function DecisionReportView({
       URL.revokeObjectURL(url)
     }
 
+    const handleCopy = async () => {
+      try {
+        const html = exportToHtml(activeReport)
+        const text = exportToMarkdown(activeReport)
+        
+        const typeHtml = "text/html"
+        const typeText = "text/plain"
+        
+        const blobHtml = new Blob([html], { type: typeHtml })
+        const blobText = new Blob([text], { type: typeText })
+        
+        const data = [new ClipboardItem({ [typeHtml]: blobHtml, [typeText]: blobText })]
+        await navigator.clipboard.write(data)
+        
+        // Could show a toast here if we had access to useToast
+      } catch (err) {
+        console.error("Failed to copy rich text", err)
+      }
+    }
+
     return (
       <DecisionReportShell
         title={activeReport.title}
@@ -244,6 +332,7 @@ export function DecisionReportView({
         fallbackResponse={fallbackResponse}
         isCorrupted={isCorrupted}
         onExport={handleExport}
+        onCopy={handleCopy}
         variant={variant}
         showChrome={showChrome}
         className={className}

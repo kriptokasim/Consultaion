@@ -27,10 +27,10 @@ vi.mock("@/lib/config/runtime", () => ({
 vi.mock("@/lib/sse", () => ({
   useEventSource: vi.fn((url, options: any) => {
     // If the test has set a global mock handler, call it so tests can access onEvent
-    if (globalThis.__mockUseEventSourceCallback) {
-      globalThis.__mockUseEventSourceCallback(url, options);
+    if ((globalThis as any).__mockUseEventSourceCallback) {
+      (globalThis as any).__mockUseEventSourceCallback(url, options);
     }
-    return { status: globalThis.__mockSseStatus || "idle" };
+    return { status: (globalThis as any).__mockSseStatus || "idle" };
   }),
 }));
 

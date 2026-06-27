@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, BarChart3, Trophy } from "lucide-react";
 import { PromotionArea } from "@/components/PromotionArea";
-import type { DebateSummary } from "./types";
+import type { DebateSummary } from "@/lib/api/types";
 import { useI18n } from "@/lib/i18n/client";
 import { trackEvent } from "@/lib/analytics";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
@@ -28,7 +28,7 @@ export default function DashboardClient({ email }: { email?: string }) {
   const [step3Reviewed, setStep3Reviewed] = useState(false);
 
   const { data: debatesData, isLoading: debatesLoading } = useDebatesList();
-  const debates = (debatesData?.items || []) as DebateSummary[];
+  const debates = debatesData?.items || [];
 
   const { data: billing } = useQuery({
     queryKey: ["billing", "me"],
@@ -82,33 +82,113 @@ export default function DashboardClient({ email }: { email?: string }) {
             </div>
           ) : null}
         </div>
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => { trackEvent("overview_go_to_arena_clicked"); router.push("/live?focus=prompt"); }} />
-          <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
-          {maxDebates ? (
-            <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-smooth transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-smooth-lg">
-              <div className="flex items-start gap-3">
-                <span className="rounded-xl bg-accent-secondary/10 p-2 text-accent-secondary">
-                  <Trophy className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-lg font-semibold text-foreground">Usage</p>
-                  <p className="text-sm text-muted-foreground">
-                    {debatesUsed} / {maxDebates} debates used
-                  </p>
+        {debates.length > 0 ? (
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            <div className="md:col-span-2 space-y-6">
+              <div className="bg-background/50 backdrop-blur rounded-2xl border border-border/60 p-1">
+                <div className="relative flex items-center">
+                  <input 
+                    type="text" 
+                    placeholder="Ask a new question to start an Arena run..." 
+                    className="w-full bg-transparent text-sm px-4 py-3 outline-none"
+                    onKeyDown={(e) => {
+                      if(e.key === 'Enter' && e.currentTarget.value.trim()) {
+                        router.push(`/live?prefill_prompt=${encodeURIComponent(e.currentTarget.value)}`)
+                      }
+                    }}
+                  />
+                  <button 
+                    onClick={(e) => {
+                      const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+                      if(input?.value.trim()) router.push(`/live?prefill_prompt=${encodeURIComponent(input.value)}`);
+                      else router.push("/live?focus=prompt");
+                    }}
+                    className="shrink-0 bg-primary text-primary-foreground h-8 w-8 rounded-xl flex items-center justify-center mr-1 shadow-sm hover:opacity-90 transition-opacity"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-              <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-secondary">
-                <div
-                  className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-error" : "bg-accent-secondary"}`}
-                  style={{ width: `${Math.min((debatesUsed / maxDebates) * 100, 100)}%` }}
-                />
-              </div>
+
+              {/* Latest Run Card */}
+              {debates[0] && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground px-1">Latest Run</h3>
+                  <Link 
+                    href={`/runs/${debates[0].id}`}
+                    className="block bg-card hover:bg-card/80 border border-border shadow-sm hover:shadow-md transition-all duration-200 rounded-2xl p-5"
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      <p className="font-medium text-foreground line-clamp-2 leading-relaxed">{debates[0].prompt}</p>
+                      <span className="shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                        {debates[0].status}
+                      </span>
+                    </div>
+                    <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{debates[0].created_at ? new Date(debates[0].created_at).toLocaleDateString() : 'Unknown date'}</span>
+                      <span>{debates[0].models_expected || 4} models</span>
+                    </div>
+                  </Link>
+                </div>
+              )}
             </div>
-          ) : (
-            <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title={t("dashboard.cards.leaderboard.title")} description={t("dashboard.cards.leaderboard.description")} />
-          )}
-        </div>
+            
+            <div className="space-y-4">
+              <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
+              {maxDebates ? (
+                <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-smooth transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-smooth-lg">
+                  <div className="flex items-start gap-3">
+                    <span className="rounded-xl bg-accent-secondary/10 p-2 text-accent-secondary">
+                      <Trophy className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-lg font-semibold text-foreground">Usage</p>
+                      <p className="text-sm text-muted-foreground">
+                        {debatesUsed} / {maxDebates} debates
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-error" : "bg-accent-secondary"}`}
+                      style={{ width: `${Math.min((debatesUsed / maxDebates) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title={t("dashboard.cards.leaderboard.title")} description={t("dashboard.cards.leaderboard.description")} />
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => { trackEvent("overview_go_to_arena_clicked"); router.push("/live?focus=prompt"); }} />
+            <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
+            {maxDebates ? (
+              <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-smooth transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-smooth-lg">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-xl bg-accent-secondary/10 p-2 text-accent-secondary">
+                    <Trophy className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-lg font-semibold text-foreground">Usage</p>
+                    <p className="text-sm text-muted-foreground">
+                      {debatesUsed} / {maxDebates} debates used
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className={`h-full rounded-full ${debatesUsed >= maxDebates ? "bg-error" : "bg-accent-secondary"}`}
+                    style={{ width: `${Math.min((debatesUsed / maxDebates) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <LinkCard href="/leaderboard" icon={<Trophy className="h-5 w-5" />} title={t("dashboard.cards.leaderboard.title")} description={t("dashboard.cards.leaderboard.description")} />
+            )}
+          </div>
+        )}
       </section>
 
       {/* Onboarding Templates - Show only for first-time users */}

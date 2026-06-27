@@ -26,12 +26,13 @@ interface DivergenceReport {
 interface DivergenceMeterProps {
   debateId: string;
   isCompleted: boolean;
+  synthesisStatus?: string;
 }
 
 const POLL_INTERVALS = [2000, 3000, 4500, 6750, 10000, 15000, 15000, 15000, 15000, 15000];
-const MAX_POLLS = POLL_INTERVALS.length;
+const MAX_POLLS = 60; // 2 minutes max
 
-export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps) {
+export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: DivergenceMeterProps) {
   const [report, setReport] = useState<DivergenceReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +149,13 @@ export function DivergenceMeter({ debateId, isCompleted }: DivergenceMeterProps)
   };
 
   if (!isCompleted) {
+    if (synthesisStatus === "failed") {
+      return (
+        <div className="rounded-2xl border border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20 p-4 text-sm text-rose-700 dark:text-rose-300">
+          Divergence analysis unavailable — synthesis did not complete.
+        </div>
+      );
+    }
     return (
       <div className="rounded-2xl border border-dashed border-primary/20 bg-card/40 p-6 flex flex-col items-center justify-center text-center gap-3">
         <Sparkles className="h-6 w-6 text-muted-foreground animate-pulse" />

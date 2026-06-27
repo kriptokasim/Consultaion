@@ -36,7 +36,14 @@ export function ModelListRow({ model, isSelected, onToggle }: ModelListRowProps)
               </Badge>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">{model.description}</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-xs text-muted-foreground">{model.description}</p>
+            {model.estimatedCost && (
+              <p className="text-[10px] text-muted-foreground/80 font-mono">
+                Est: {model.estimatedCost}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className={cn(

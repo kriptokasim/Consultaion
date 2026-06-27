@@ -16,6 +16,7 @@ export interface ModelOption {
   capability: 'Fast' | 'Deep Reasoning' | 'Multimodal' | 'General'
   description: string
   byokRequired?: boolean
+  estimatedCost?: string
 }
 
 export const AVAILABLE_MODELS: ModelOption[] = [
@@ -26,6 +27,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     providerKey: 'openai',
     capability: 'Fast',
     description: 'Fast, lightweight model optimal for quick checks and high-throughput tasks.',
+    estimatedCost: '$0.15 / 1M tokens',
   },
   {
     id: 'gpt-4o',
@@ -34,6 +36,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     providerKey: 'openai',
     capability: 'General',
     description: 'Standard flagship model with high accuracy across reasoning and structuring.',
+    estimatedCost: '$5.00 / 1M tokens',
   },
   {
     id: 'claude-3-5-sonnet',
@@ -42,6 +45,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     providerKey: 'anthropic',
     capability: 'Deep Reasoning',
     description: 'State-of-the-art reasoning, excellent for critical debates and complex analysis.',
+    estimatedCost: '$3.00 / 1M tokens',
   },
   {
     id: 'claude-3-5-haiku',
@@ -50,6 +54,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     providerKey: 'anthropic',
     capability: 'Fast',
     description: 'Highly responsive model designed for speed and structured instructions.',
+    estimatedCost: '$0.25 / 1M tokens',
   },
   {
     id: 'gemini-1.5-flash',
@@ -58,6 +63,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     providerKey: 'google',
     capability: 'Multimodal',
     description: 'Google’s highly efficient multimodal engine with a large context window.',
+    estimatedCost: '$0.35 / 1M tokens',
   },
   {
     id: 'gemini-1.5-pro',
@@ -67,6 +73,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     capability: 'Deep Reasoning',
     description: 'Excellent analytical skills, perfect for code review and broad context synthesis.',
     byokRequired: true, // Example BYOK model
+    estimatedCost: '$3.50 / 1M tokens',
   },
 ]
 

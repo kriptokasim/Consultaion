@@ -34,6 +34,7 @@ export function useEventSource<T = unknown>(
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptsRef = useRef(0);
+  const lastEventIdRef = useRef<string | null>(null);
   const onEventRef = useRef(onEvent);
   const onErrorRef = useRef(onError);
 
@@ -62,6 +63,12 @@ export function useEventSource<T = unknown>(
   }, [clearRetryTimer]);
 
   useEffect(() => {
+    lastEventIdRef.current = null;
+    setRetryCount(0);
+    attemptsRef.current = 0;
+  }, [url]);
+
+  useEffect(() => {
     if (!url || !enabled) {
       close();
       setStatus("idle");
@@ -75,7 +82,19 @@ export function useEventSource<T = unknown>(
       const attempt = attemptsRef.current;
       setStatus(attempt > 0 ? "reconnecting" : "connecting");
 
-      const source = new EventSource(url, { withCredentials });
+      let finalUrl = url;
+      if (lastEventIdRef.current !== null) {
+        try {
+          const urlObj = new URL(url, window.location.origin);
+          urlObj.searchParams.set("last_sequence", lastEventIdRef.current);
+          finalUrl = urlObj.toString();
+        } catch {
+          const separator = url.includes("?") ? "&" : "?";
+          finalUrl = `${url}${separator}last_sequence=${lastEventIdRef.current}`;
+        }
+      }
+
+      const source = new EventSource(finalUrl, { withCredentials });
       eventSourceRef.current = source;
 
       source.onopen = () => {
@@ -92,6 +111,9 @@ export function useEventSource<T = unknown>(
       source.onmessage = (event) => {
         if (cancelled) return;
         try {
+          if (event.lastEventId) {
+            lastEventIdRef.current = event.lastEventId;
+          }
           const payload = parseJson ? (JSON.parse(event.data) as T) : ((event.data as unknown) as T);
           setLastEvent(payload);
           onEventRef.current?.(payload, event);
