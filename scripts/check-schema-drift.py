@@ -13,6 +13,9 @@ from alembic.runtime.migration import MigrationContext
 from config import AppSettings
 from sqlalchemy import create_engine
 from sqlmodel import SQLModel
+import models
+import billing.models
+import promotions.models
 
 
 def main():
@@ -26,6 +29,9 @@ def main():
     engine = create_engine(url)
     with engine.connect() as conn:
         context = MigrationContext.configure(conn)
+        
+        assert SQLModel.metadata.tables, "SQLModel.metadata is empty! Ensure models are imported."
+        
         diff = compare_metadata(context, SQLModel.metadata)
 
     # Filter out common SQLite-specific false positives if necessary, or check for critical drifts

@@ -56,12 +56,31 @@ function stateForLifecycle(s: ModelState): ModelState {
   return s;
 }
 
+export function isValidLifecyclePayload(payload: any): payload is ModelResponseLifecyclePayload {
+  if (!payload || typeof payload !== "object") return false;
+  if (typeof payload.response_id !== "string") return false;
+  if (payload.model_id !== undefined && typeof payload.model_id !== "string") return false;
+  return true;
+}
+
+export function isValidDeltaPayload(payload: any): payload is ModelResponseDeltaPayload {
+  if (!payload || typeof payload !== "object") return false;
+  if (typeof payload.response_id !== "string") return false;
+  if (typeof payload.text !== "string") return false;
+  if (typeof payload.delta_sequence !== "number") return false;
+  return true;
+}
+
 export function streamingReducer(
   state: StreamingState,
   action: StreamingAction,
 ): StreamingState {
   switch (action.type) {
     case "RESPONSE_QUEUED": {
+      if (!isValidLifecyclePayload(action.payload)) {
+        console.warn("[streamingReducer] Invalid RESPONSE_QUEUED payload", action.payload);
+        return state;
+      }
       const { response_id, model_id, display_name, provider } = action.payload;
       const buf: StreamingModelBuffer = {
         responseId: response_id,
@@ -78,6 +97,7 @@ export function streamingReducer(
     }
 
     case "RESPONSE_CONNECTING": {
+      if (!isValidLifecyclePayload(action.payload)) return state;
       const buf = state.buffers.get(action.payload.response_id);
       if (!buf) return state;
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
@@ -86,6 +106,7 @@ export function streamingReducer(
     }
 
     case "RESPONSE_STARTED": {
+      if (!isValidLifecyclePayload(action.payload)) return state;
       const buf = state.buffers.get(action.payload.response_id);
       if (!buf) return state;
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
@@ -94,6 +115,10 @@ export function streamingReducer(
     }
 
     case "RESPONSE_DELTA": {
+      if (!isValidDeltaPayload(action.payload)) {
+        console.warn("[streamingReducer] Invalid RESPONSE_DELTA payload", action.payload);
+        return state;
+      }
       const { response_id, text, delta_sequence } = action.payload;
       const buf = state.buffers.get(response_id);
       if (!buf) return state;
@@ -109,6 +134,7 @@ export function streamingReducer(
     }
 
     case "RESPONSE_PERSISTING": {
+      if (!action.payload || typeof action.payload.response_id !== "string") return state;
       const buf = state.buffers.get(action.payload.response_id);
       if (!buf) return state;
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
@@ -117,6 +143,7 @@ export function streamingReducer(
     }
 
     case "RESPONSE_COMPLETED": {
+      if (!isValidLifecyclePayload(action.payload)) return state;
       const { response_id } = action.payload;
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
       next.delete(response_id);
@@ -124,6 +151,7 @@ export function streamingReducer(
     }
 
     case "RESPONSE_FAILED": {
+      if (!isValidLifecyclePayload(action.payload)) return state;
       const { response_id, error, error_code } = action.payload;
       const buf = state.buffers.get(response_id);
       if (!buf) return state;

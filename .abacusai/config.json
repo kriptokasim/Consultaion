@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(cd /home/durmusahm/Consultaion && ls -la && echo \"---GIT---\" && git --no-pager log --oneline -10 2>&1 | head -20 || true)",
-      "Bash(cd /home/durmusahm/Consultaion && echo \"===WORKFLOWS===\" && ls -la .github/workflows/ 2>&1; echo \"===tracked .env files=…)"
+      "Bash(cd /home/durmusahm/Consultaion && echo \"===WORKFLOWS===\" && ls -la .github/workflows/ 2>&1; echo \"===tracked .env files=…)",
+      "Bash(cd /home/durmusahm/Consultaion && echo \"===TRACKED ARTIFACTS===\" && git --no-pager ls-files | grep -iE '\\.(db|sqlite|cov…)",
+      "Bash(cd /home/durmusahm/Consultaion && echo \"===WORKFLOWS===\"; ls .github/workflows/ 2>&1; echo \"===Is apps/api/.env TRACKED?…)",
+      "Bash(cd /home/durmusahm/Consultaion && git --no-pager grep -nE 're_[A-Za-z0-9]{16}|phx_[A-Za-z0-9]{20}|sk-[A-Za-z0-9]{20}|hoo…)",
+      "Bash(cd /home/durmusahm/Consultaion && git --no-pager log --oneline -3 && echo \"---STATUS---\" && git --no-pager status --shor…)",
+      "Bash(cd /home/durmusahm/Consultaion && git --no-pager show --stat f3e9f30 | head -45)"
     ]
   }
 }

@@ -1,7 +1,7 @@
-import { renderHook } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { fetchWithAuth } from "@/lib/auth";
-import { requestWithTimeout } from "@/lib/api";
+import { requestWithTimeout, getDebate } from "@/lib/api";
 import { useRunWorkspace } from "./useRunWorkspace";
 
 vi.mock("@/lib/api", () => ({
@@ -12,6 +12,7 @@ vi.mock("@/lib/api", () => ({
   requestWithTimeout: vi.fn().mockResolvedValue([]),
   extractEventItems: vi.fn((data: unknown) => Array.isArray(data) ? data : []),
   TimeoutError: class TimeoutError extends Error { name = "TimeoutError" },
+  ApiError: class ApiError extends Error { status = 500 },
   REQUEST_TIMEOUT: "REQUEST_TIMEOUT",
 }));
 
@@ -24,7 +25,13 @@ vi.mock("@/lib/config/runtime", () => ({
 }));
 
 vi.mock("@/lib/sse", () => ({
-  useEventSource: vi.fn(() => ({ status: "idle" })),
+  useEventSource: vi.fn((url, options: any) => {
+    // If the test has set a global mock handler, call it so tests can access onEvent
+    if (globalThis.__mockUseEventSourceCallback) {
+      globalThis.__mockUseEventSourceCallback(url, options);
+    }
+    return { status: globalThis.__mockSseStatus || "idle" };
+  }),
 }));
 
 vi.mock("@/lib/api/normalizeEvent", () => {
@@ -226,5 +233,72 @@ describe("useRunWorkspace -- timeline and fallback events", () => {
     expect(result.current.timelineError).toBe("Timeline fetch failed");
     expect(result.current.eventsError).toBe("Events fetch failed");
     expect(result.current.debate.id).toBe("mock"); // Debate data should still be there
+  });
+});
+
+describe("useRunWorkspace -- SSE watchdog and terminal handling", () => {
+  let mockHandleEvent: any;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    (globalThis as any).__mockSseStatus = "connected";
+    (globalThis as any).__mockUseEventSourceCallback = (url: any, options: any) => {
+      mockHandleEvent = options?.onEvent;
+    };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete (globalThis as any).__mockSseStatus;
+    delete (globalThis as any).__mockUseEventSourceCallback;
+  });
+
+  it("connected-but-silent SSE starts polling", async () => {
+    const { result } = renderHook(() => useRunWorkspace("test-debate"));
+    expect(result.current.isPollingFallback).toBe(false);
+    
+    // Advance past silence timeout (10000ms)
+    act(() => {
+      vi.advanceTimersByTime(11000);
+    });
+    expect(result.current.isSilent).toBe(true);
+    expect(result.current.isPollingFallback).toBe(true);
+  });
+
+  it("incoming event stops polling", async () => {
+    const { result } = renderHook(() => useRunWorkspace("test-debate"));
+    
+    // Silence starts polling
+    act(() => {
+      vi.advanceTimersByTime(11000);
+    });
+    expect(result.current.isPollingFallback).toBe(true);
+
+    // Incoming event should reset silence and stop polling
+    act(() => {
+      mockHandleEvent({ type: "message", ts: new Date().toISOString() });
+    });
+    
+    expect(result.current.isSilent).toBe(false);
+    expect(result.current.isPollingFallback).toBe(false);
+  });
+
+  it("terminal run clears watchdog timers and polling", async () => {
+    // Mock getDebate to return terminal status
+    vi.mocked(getDebate).mockResolvedValueOnce({ id: "test", status: "completed" });
+    
+    const { result } = renderHook(() => useRunWorkspace("test-debate"));
+    
+    await vi.waitFor(() => {
+      expect(result.current.debate?.status).toBe("completed");
+    });
+
+    // Advance time, shouldn't start polling because it's terminal
+    act(() => {
+      vi.advanceTimersByTime(11000);
+    });
+    
+    expect(result.current.isPollingFallback).toBe(false);
+    expect(result.current.isSilent).toBe(false);
   });
 });
