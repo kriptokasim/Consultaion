@@ -145,6 +145,10 @@ def init_db() -> None:
 
 
 
+from sqlalchemy.orm import sessionmaker
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=Session)
+
 def get_session():
     session = Session(engine)
     try:
