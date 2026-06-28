@@ -285,7 +285,7 @@ MODEL_ALIASES: dict[str, str] = {
     "gemini/gemini-2.5-pro-preview-06-05": "gemini_pro",
     "groq/llama-3.3-70b-versatile": "groq_fast",
     "mistral/mistral-large-latest": "mistral_large",
-    "openrouter/deepseek/deepseek-r1": "openrouter_fallback",
+    "openrouter/deepseek/deepseek-r1": "deepseek-r1",
 }
 
 

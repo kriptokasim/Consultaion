@@ -248,6 +248,46 @@ class DirectProviderAdapter(BaseAdapter):
         )
 
 class OpenRouterAdapter(BaseAdapter):
+    """Adapter that routes all calls through OpenRouter."""
+
+    # ── Static fallback mapping (used when model_id is NOT in MODEL_MAP) ──
+    _STATIC_MAPPING: Dict[str, str] = {
+        "gpt4o-mini": "openrouter/openai/gpt-4o-mini",
+        "gpt4o-deep": "openrouter/openai/gpt-4o",
+        "claude-sonnet": "openrouter/anthropic/claude-3.5-sonnet",
+        "claude-haiku": "openrouter/anthropic/claude-3-haiku",
+        "gemini-2-flash": "openrouter/google/gemini-2.0-flash",
+        "gemini-2-5-pro": "openrouter/google/gemini-2.5-pro",
+        "groq-llama-3-3": "openrouter/meta-llama/llama-3.3-70b-instruct",
+        "mistral-large": "openrouter/mistralai/mistral-large",
+        "deepseek-r1": "openrouter/deepseek/deepseek-r1",
+        "openai_fast": "openrouter/openai/gpt-4o-mini",
+        "openai_premium": "openrouter/openai/gpt-4o",
+        "anthropic_reasoning": "openrouter/anthropic/claude-3.5-sonnet",
+        "gemini_general": "openrouter/google/gemini-2.0-flash",
+        "gemini_pro": "openrouter/google/gemini-2.5-pro",
+        "groq_fast": "openrouter/meta-llama/llama-3.3-70b-instruct",
+        "mistral_large": "openrouter/mistralai/mistral-large",
+        "openrouter_fallback": "openrouter/openai/gpt-4o-mini",
+    }
+
+    @staticmethod
+    def _resolve_model(model_id: str) -> str:
+        """Resolve model_id to an OpenRouter-prefixed litellm model string.
+
+        Priority: MODEL_MAP litellm_model → static fallback → f"openrouter/{model_id}".
+        """
+        from model_gateway.model_map import MODEL_MAP
+        record = MODEL_MAP.get(model_id)
+        if record and record.get("provider") == "openrouter":
+            return record["litellm_model"]
+        if model_id in OpenRouterAdapter._STATIC_MAPPING:
+            return OpenRouterAdapter._STATIC_MAPPING[model_id]
+        # Last resort: prefix with openrouter/
+        if model_id.startswith("openrouter/"):
+            return model_id
+        return f"openrouter/{model_id}"
+
     async def stream_llm(
         self,
         messages: List[Dict[str, str]],
@@ -261,18 +301,7 @@ class OpenRouterAdapter(BaseAdapter):
         user_id: Optional[str] = None,
         api_key: Optional[str] = None,
     ) -> GatewayModelCallResult:
-        OPENROUTER_MODEL_MAPPING = {
-            "gpt4o-mini": "openrouter/openai/gpt-4o-mini",
-            "gpt4o-deep": "openrouter/openai/gpt-4o",
-            "claude-sonnet": "openrouter/anthropic/claude-3.5-sonnet",
-            "claude-haiku": "openrouter/anthropic/claude-3-haiku",
-            "gemini-2-flash": "openrouter/google/gemini-2.0-flash",
-            "gemini-2-5-pro": "openrouter/google/gemini-2.5-pro",
-            "groq-llama-3-3": "openrouter/meta-llama/llama-3.3-70b-instruct",
-            "mistral-large": "openrouter/mistralai/mistral-large",
-            "deepseek-r1": "openrouter/deepseek/deepseek-r1",
-        }
-        target_model = OPENROUTER_MODEL_MAPPING.get(model_id, f"openrouter/{model_id}")
+        target_model = self._resolve_model(model_id)
 
         start_ts = time.monotonic()
         accumulated = ""
@@ -350,29 +379,7 @@ class OpenRouterAdapter(BaseAdapter):
         tool_choice: Optional[Dict[str, Any]] = None,
         api_key: Optional[str] = None,
     ) -> GatewayModelCallResult:
-        OPENROUTER_MODEL_MAPPING = {
-            "gpt4o-mini": "openrouter/openai/gpt-4o-mini",
-            "gpt4o-deep": "openrouter/openai/gpt-4o",
-            "claude-sonnet": "openrouter/anthropic/claude-3.5-sonnet",
-            "claude-haiku": "openrouter/anthropic/claude-3-haiku",
-            "gemini-2-flash": "openrouter/google/gemini-2.0-flash",
-            "gemini-2-5-pro": "openrouter/google/gemini-2.5-pro",
-            "groq-llama-3-3": "openrouter/meta-llama/llama-3.3-70b-instruct",
-            "mistral-large": "openrouter/mistralai/mistral-large",
-            "deepseek-r1": "openrouter/deepseek/deepseek-r1",
-            "openai_fast": "openrouter/openai/gpt-4o-mini",
-            "openai_premium": "openrouter/openai/gpt-4o",
-            "anthropic_reasoning": "openrouter/anthropic/claude-3.5-sonnet",
-            "gemini_general": "openrouter/google/gemini-2.0-flash",
-            "gemini_pro": "openrouter/google/gemini-2.5-pro",
-            "groq_fast": "openrouter/meta-llama/llama-3.3-70b-instruct",
-            "mistral_large": "openrouter/mistralai/mistral-large",
-            "openrouter_fallback": "openrouter/openai/gpt-4o-mini",
-            "router-smart": "openrouter/router",
-            "router-deep": "openrouter/auto",
-        }
-        
-        target_model = OPENROUTER_MODEL_MAPPING.get(model_id, f"openrouter/{model_id}")
+        target_model = self._resolve_model(model_id)
         
         start_ts = time.monotonic()
         kwargs = {}

@@ -255,7 +255,7 @@ def diagnose(debate_id: str) -> str:
         # 7. Provider failures from LLMUsageLog
         failures = session.exec(
             select(LLMUsageLog).where(
-                LLMUsageLog.debate_id == debate_id, LLMUsageLog.success is False
+                LLMUsageLog.debate_id == debate_id, LLMUsageLog.success.is_(False)
             ).order_by(LLMUsageLog.created_at.desc())
         ).all()
 

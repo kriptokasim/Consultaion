@@ -363,7 +363,7 @@ async def get_debate_diagnostics(
     # 3. Query provider failures from LLMUsageLog
     failures_query = select(LLMUsageLog).where(
         LLMUsageLog.debate_id == debate_id,
-        LLMUsageLog.success is False
+        LLMUsageLog.success.is_(False)  # noqa: E712 — must use SQLAlchemy .is_(), not Python `is`
     ).order_by(LLMUsageLog.created_at.desc())
     failed_logs = session.exec(failures_query).all()
 
@@ -456,7 +456,7 @@ async def get_providers_readiness(
         # 3. Last failure from DB
         last_fail_query = select(LLMUsageLog).where(
             LLMUsageLog.provider == provider,
-            LLMUsageLog.success is False
+            LLMUsageLog.success.is_(False)  # noqa: E712 — must use SQLAlchemy .is_(), not Python `is`
         ).order_by(LLMUsageLog.created_at.desc())
         last_fail = session.exec(last_fail_query).first()
         

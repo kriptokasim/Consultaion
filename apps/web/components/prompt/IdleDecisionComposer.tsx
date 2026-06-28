@@ -199,8 +199,8 @@ export function IdleDecisionComposer({
               className={cn(
                 'rounded-xl px-5 font-semibold text-sm shadow-sm transition-all',
                 mode === 'arena'
-                  ? 'bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-655'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-655'
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600'
               )}
             >
               {isLoading ? 'Launching...' : mode === 'arena' ? 'Launch Arena' : 'Start Debate'}

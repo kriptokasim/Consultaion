@@ -129,7 +129,7 @@ export default function ProviderKeysPage() {
         setSuccessMsg(`Test successful: ${provider.toUpperCase()} key is active and responding.`);
         trackEvent("byok_test_succeeded", { provider });
       } else {
-        setErrorMsg(`Test failed for ${provider.toUpperCase()}: ${data.message || 'Unknown error'}`);
+        setErrorMsg(`Test failed for ${provider.toUpperCase()}: ${data.error || data.message || 'Unknown error'}`);
         trackEvent("byok_test_failed", { provider, error: data.message });
       }
     } catch (err) {
