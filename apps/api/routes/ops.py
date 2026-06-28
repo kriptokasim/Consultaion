@@ -6,7 +6,7 @@ import os
 import time
 from typing import Any
 
-from auth import get_current_admin
+from auth import get_current_admin, get_current_user
 from checks import check_db_readiness, check_sse_readiness
 from config import settings
 from database import get_session
@@ -845,3 +845,53 @@ async def probe_provider(
         }
 
 
+@router.post("/ops/probe/{provider}")
+async def probe_provider_user(
+    provider: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """
+    User-facing provider key probe. Tests the calling user's stored BYOK key
+    for the given provider. Does NOT use server-side keys.
+    Returns {"success": bool, "latency_ms": float, "error": str|None}.
+    """
+    PROBEABLE = {"openai", "anthropic", "gemini", "openrouter", "groq", "mistral"}
+    if provider not in PROBEABLE:
+        raise HTTPException(status_code=400, detail=f"Provider '{provider}' is not probeable.")
+
+    # Resolve user's BYOK key
+    from services.provider_credentials import get_model_api_key
+    import asyncio
+    def _get_key():
+        return get_model_api_key(session, current_user.id, provider)
+    resolved = await asyncio.get_running_loop().run_in_executor(None, _get_key)
+
+    if not resolved or not resolved.key:
+        return {"success": False, "latency_ms": None, "error": f"No {provider} key stored. Add one above."}
+
+    PROBE_MODELS = {
+        "openai": "openai/gpt-4o-mini",
+        "anthropic": "anthropic/claude-3-haiku-20240307",
+        "gemini": "gemini/gemini-2.0-flash",
+        "openrouter": "openrouter/openai/gpt-4o-mini",
+        "groq": "groq/llama-3.3-70b-versatile",
+        "mistral": "mistral/mistral-large-latest",
+    }
+
+    start_ts = time.monotonic()
+    try:
+        resp = await acompletion(
+            model=PROBE_MODELS[provider],
+            messages=[{"role": "user", "content": "Reply with the single word: OK"}],
+            max_tokens=5,
+            api_key=resolved.key,
+        )
+        latency_ms = (time.monotonic() - start_ts) * 1000
+        text = resp.choices[0].message.content or ""
+        return {"success": True, "latency_ms": round(latency_ms, 0), "response_preview": text[:50]}
+    except Exception as e:
+        latency_ms = (time.monotonic() - start_ts) * 1000
+        sanitized = "Connection failed" if "key" in str(e).lower() else str(e)[:120]
+        return {"success": False, "latency_ms": round(latency_ms, 0), "error": sanitized}

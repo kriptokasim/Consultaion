@@ -192,6 +192,70 @@ MODEL_MAP: dict[str, dict[str, Any]] = {
         "free_tier_source": None,
         "free_tier_limit_notes": "Cost depends on upstream model routing",
     },
+    # ── Router meta-models ─────────────────────────────────────────────
+    # NOTE: "openrouter/router" and "openrouter/auto" are NOT valid litellm
+    # strings — we map to concrete cheap models instead.
+    "router-smart": {
+        "provider": "openrouter",
+        "provider_model_id": "openai/gpt-4o-mini",
+        "litellm_model": "openrouter/openai/gpt-4o-mini",
+        "cost_class": "low",
+        "deprecated": False,
+        "replacement": None,
+        "last_verified_at": "2026-06-28",
+        "free_tier_verified_at": None,
+        "free_tier_source": None,
+        "free_tier_limit_notes": None,
+    },
+    "router-deep": {
+        "provider": "openrouter",
+        "provider_model_id": "openai/gpt-4o",
+        "litellm_model": "openrouter/openai/gpt-4o",
+        "cost_class": "medium",
+        "deprecated": False,
+        "replacement": None,
+        "last_verified_at": "2026-06-28",
+        "free_tier_verified_at": None,
+        "free_tier_source": None,
+        "free_tier_limit_notes": None,
+    },
+    # ── Free-tier OpenRouter models ────────────────────────────────────
+    "llama-3-free": {
+        "provider": "openrouter",
+        "provider_model_id": "meta-llama/llama-3-8b-instruct:free",
+        "litellm_model": "openrouter/meta-llama/llama-3-8b-instruct:free",
+        "cost_class": "free",
+        "deprecated": False,
+        "replacement": None,
+        "last_verified_at": "2026-06-28",
+        "free_tier_verified_at": "2026-06-28",
+        "free_tier_source": "openrouter",
+        "free_tier_limit_notes": "Rate limited; free tier via OpenRouter",
+    },
+    "mimo-v2-free": {
+        "provider": "openrouter",
+        "provider_model_id": "xiaomi/mimo-vl-1b-v2:free",
+        "litellm_model": "openrouter/xiaomi/mimo-vl-1b-v2:free",
+        "cost_class": "free",
+        "deprecated": False,
+        "replacement": None,
+        "last_verified_at": "2026-06-28",
+        "free_tier_verified_at": "2026-06-28",
+        "free_tier_source": "openrouter",
+        "free_tier_limit_notes": "Rate limited; free tier via OpenRouter",
+    },
+    "deepseek-r1": {
+        "provider": "openrouter",
+        "provider_model_id": "deepseek/deepseek-r1",
+        "litellm_model": "openrouter/deepseek/deepseek-r1",
+        "cost_class": "medium",
+        "deprecated": False,
+        "replacement": None,
+        "last_verified_at": "2026-06-28",
+        "free_tier_verified_at": None,
+        "free_tier_source": None,
+        "free_tier_limit_notes": None,
+    },
 }
 
 # ── Backward-compatible aliases ─────────────────────────────────────────
@@ -208,9 +272,8 @@ MODEL_ALIASES: dict[str, str] = {
     "gemini-2-5-pro": "gemini_pro",
     "groq-llama-3-3": "groq_fast",
     "mistral-large": "mistral_large",
-    "deepseek-r1": "openrouter_fallback",
-    "router-smart": "openrouter_fallback",
-    "router-deep": "openrouter_fallback",
+    # deepseek-r1, router-smart, router-deep, llama-3-free, mimo-v2-free
+    # are now first-class MODEL_MAP entries — no alias needed.
 
     # Litellm-format model strings (reverse lookups — arena engine passes litellm_model
     # as model_override, which flows through to resolve_model_key via the gateway).

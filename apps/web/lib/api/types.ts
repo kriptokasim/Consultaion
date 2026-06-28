@@ -79,6 +79,12 @@ export interface DebateSummary {
     scores_received?: number;
     synthesis_status?: "pending" | "succeeded" | "failed" | "fallback";
     verification_status?: "pending" | "verified" | "unverified" | "failed" | "unavailable";
+    // BE-01: verdict extracted from final_meta by serializer — available on list items
+    verdict?: {
+        decision_type?: string;
+        confidence?: number;
+        rationale?: string;
+    } | null;
 }
 
 export interface DebateDetail extends DebateSummary {

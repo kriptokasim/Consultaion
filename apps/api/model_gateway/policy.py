@@ -10,6 +10,43 @@ from model_gateway.adapters import (
 from model_gateway.types import GatewayRequest
 
 
+def _model_uses_openrouter(model_id: str) -> bool:
+    """Return True if *model_id* should be routed through OpenRouter.
+
+    Checks four paths (in order):
+    1. Explicit ``openrouter/`` prefix in the model_id string.
+    2. Canonical key exists in MODEL_MAP with ``provider == "openrouter"``.
+    3. Alias resolves to a canonical key whose provider is ``"openrouter"``.
+    4. Parliament model registry entry with ``provider == "openrouter"``.
+    """
+    if model_id.startswith("openrouter/"):
+        return True
+
+    # Check MODEL_MAP (fast path)
+    from model_gateway.model_map import MODEL_ALIASES, MODEL_MAP
+
+    record = MODEL_MAP.get(model_id)
+    if record:
+        return record.get("provider") == "openrouter"
+
+    canonical = MODEL_ALIASES.get(model_id)
+    if canonical:
+        record = MODEL_MAP.get(canonical)
+        if record:
+            return record.get("provider") == "openrouter"
+
+    # Check parliament registry (catches free-tier models not in MODEL_MAP)
+    try:
+        from parliament.model_registry import get_model_info
+        info = get_model_info(model_id)
+        if info:
+            return info.provider == "openrouter"
+    except Exception:
+        pass
+
+    return False
+
+
 def determine_routing_strategy(
     request: GatewayRequest,
     force_real: bool = False

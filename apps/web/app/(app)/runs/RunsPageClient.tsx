@@ -103,7 +103,7 @@ export default function RunsPageClient({ initialQuery, initialStatus }: RunsPage
     }
 
     return (
-        <main id="main" className="h-full space-y-8 py-6">
+        <main id="main" className="h-full space-y-8 py-6 pb-20 sm:pb-6">
             <header className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-amber-50/70 p-6 shadow-[0_24px_60px_#1e3a5f14] dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900">
                 <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-700 dark:text-amber-400">{t("runs.hero.kicker")}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-3">

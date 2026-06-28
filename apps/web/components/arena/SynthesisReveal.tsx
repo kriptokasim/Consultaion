@@ -140,7 +140,7 @@ export function SynthesisReveal({
     return (
       <div className="space-y-4 animate-fade-in">
         {/* ── Verdict Hero ── */}
-        {verdict && !isSynthesisFailed && (
+        {verdict && verdict.decision_type && !isSynthesisFailed && (
           <div className={`rounded-2xl border-2 ${vc.border} ${vc.bg} px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-4`}>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap">

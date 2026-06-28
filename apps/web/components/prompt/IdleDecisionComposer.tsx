@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { Scale, MessageSquare, Sparkles } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { usePromptHistory } from '@/hooks/usePromptHistory'
 
 interface IdleDecisionComposerProps {
   value: string
@@ -30,6 +31,8 @@ export function IdleDecisionComposer({
   onConfigureModels,
 }: IdleDecisionComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { history, addToHistory } = usePromptHistory()
+  const [showHistory, setShowHistory] = useState(false)
 
   // Auto-grow textarea logic
   useEffect(() => {
@@ -41,11 +44,18 @@ export function IdleDecisionComposer({
     textarea.style.height = `${newHeight}px`
   }, [value])
 
+  const handleSubmit = () => {
+    if (value.trim().length >= 10) {
+      addToHistory(value.trim())
+    }
+    onSubmit()
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && value.trim().length > 0) {
       e.preventDefault()
       if (!disabled && !isLoading) {
-        onSubmit()
+        handleSubmit()
       }
     }
   }
@@ -131,11 +141,14 @@ export function IdleDecisionComposer({
         "sm:relative sm:z-auto sm:p-4 sm:pb-4 sm:bg-card/60 sm:border sm:border-border/80 sm:rounded-3xl sm:shadow-smooth-lg sm:backdrop-blur-md"
       )}>
         <div className="w-full max-w-4xl mx-auto relative rounded-2xl sm:rounded-none bg-card sm:bg-transparent p-1 sm:p-0 shadow-sm sm:shadow-none border border-border/40 sm:border-0">
+          <div className="relative">
           <textarea
           ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onFocus={() => history.length > 0 && setShowHistory(true)}
+          onBlur={() => setTimeout(() => setShowHistory(false), 150)}
           disabled={disabled || isLoading}
           placeholder={placeholder || defaultPlaceholder}
           style={{ fontSize: '16px' }} // Ensures no auto-zoom on iOS
@@ -145,6 +158,23 @@ export function IdleDecisionComposer({
             (disabled || isLoading) && 'cursor-not-allowed opacity-60'
           )}
         />
+          {showHistory && history.length > 0 && (
+            <div className="absolute left-0 right-0 bottom-full mb-1 z-30 rounded-2xl border border-border bg-popover shadow-xl overflow-hidden">
+              <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground border-b border-border/50">
+                Recent prompts
+              </div>
+              {history.slice(0, 5).map((h, i) => (
+                <button
+                  key={i}
+                  onMouseDown={(e) => { e.preventDefault(); onChange(h); setShowHistory(false); }}
+                  className="w-full text-left px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors truncate border-b border-border/30 last:border-0"
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
+          )}
+          </div>
 
         {/* Action Bar */}
         <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-3">
@@ -164,7 +194,7 @@ export function IdleDecisionComposer({
               </Button>
             )}
             <Button
-              onClick={onSubmit}
+              onClick={handleSubmit}
               disabled={disabled || isLoading || !value.trim()}
               className={cn(
                 'rounded-xl px-5 font-semibold text-sm shadow-sm transition-all',

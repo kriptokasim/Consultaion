@@ -91,6 +91,9 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
         }, nextInterval);
       } else {
         setIsPolling(false);
+        if (!data.ready && pollCount >= MAX_POLLS) {
+          setError("Divergence analysis timed out. The run may still be processing — refresh to retry.");
+        }
       }
       return data;
     } catch (err: any) {
@@ -203,7 +206,15 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
     );
   }
 
-  if (error || !report || !report.ready) {
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20 p-4 text-sm text-rose-700 dark:text-rose-300">
+        {error}
+      </div>
+    );
+  }
+
+  if (!report || !report.ready) {
     return null;
   }
 

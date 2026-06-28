@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Compass, User, ListPlus } from "lucide-react";
+import { Home, Compass, User, Key } from "lucide-react";
 
 export function MobileBottomNav() {
   const pathname = usePathname();
 
   const links = [
-    { href: "/live", icon: Home, label: "Arena" },
-    { href: "/runs", icon: Compass, label: "History" },
-    { href: "/models", icon: ListPlus, label: "Models" },
-    { href: "/dashboard", icon: User, label: "Profile" },
+    { href: "/live",                      icon: Home,       label: "Arena" },
+    { href: "/runs",                      icon: Compass,    label: "History" },
+    { href: "/settings/provider-keys",    icon: Key,        label: "Providers" },
+    { href: "/dashboard",                 icon: User,       label: "Profile" },
   ];
 
   return (

@@ -419,7 +419,11 @@ async def route_llm_stream(
     adapter_cls: type = DirectProviderAdapter
     provider = "direct"
 
-    from model_gateway.model_map import MODEL_MAP, _model_uses_openrouter
+    # Use policy._model_uses_openrouter — it checks the parliament registry
+    # in addition to MODEL_MAP, so free-tier models (llama-3-free, mimo-v2-free)
+    # that live in the registry but not MODEL_MAP are correctly detected.
+    from model_gateway.policy import _model_uses_openrouter
+    from model_gateway.model_map import MODEL_MAP
     if _model_uses_openrouter(model_id) or model_id.startswith("openrouter/"):
         adapter_cls = OpenRouterAdapter
         provider = "openrouter"

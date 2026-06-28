@@ -6,11 +6,12 @@ interface FirstRunGuideProps {
 }
 
 export function FirstRunGuide({ onPrefill }: FirstRunGuideProps) {
-  const [dismissed, setDismissed] = useState(true);
+  // Use null as initial state to distinguish "not yet checked" from "dismissed"
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const isDismissed = localStorage.getItem("first_run_guide_dismissed");
-    if (!isDismissed) setDismissed(false);
+    const isDismissed = !!localStorage.getItem("first_run_guide_dismissed");
+    setDismissed(isDismissed);
   }, []);
 
   const handleDismiss = () => {
@@ -18,7 +19,7 @@ export function FirstRunGuide({ onPrefill }: FirstRunGuideProps) {
     setDismissed(true);
   };
 
-  if (dismissed) return null;
+  if (dismissed === null || dismissed) return null;  // null = SSR / not yet checked
 
   const examplePrompt = "Should our startup migrate from AWS to GCP given our focus on machine learning?";
 
