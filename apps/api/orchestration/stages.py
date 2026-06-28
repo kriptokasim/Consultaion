@@ -36,8 +36,7 @@ class DraftStage(BaseStage):
             return state
 
         round_id = await self.state_manager.start_round(1, "draft", "candidate drafting")
-        
-        agent_configs = context.config.get("agents", [])
+        agent_configs = context.config.agents
         if not agent_configs:
             raise ValueError("No agents configured for draft stage")
 
@@ -127,7 +126,7 @@ class JudgeStage(BaseStage):
     async def run(self, context: DebateContext, state: DebateState) -> DebateState:
         round_id = await self.state_manager.start_round(3, "judge", "rubric scoring")
         
-        judge_configs = context.config.get("judges", [])
+        judge_configs = context.config.judges
         candidates_to_judge = state.revised_candidates or state.candidates
         
         aggregate_scores, judge_details, judge_usage = await judge_scores(

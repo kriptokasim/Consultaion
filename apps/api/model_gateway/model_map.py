@@ -337,25 +337,3 @@ def is_free_model(model_key: str) -> bool:
     return get_model_cost_class(model_key) == "free"
 
 
-def _model_uses_openrouter(model_id: str) -> bool:
-    """Return True if *model_id* should be routed through OpenRouter.
-
-    Checks three paths:
-    1. Explicit ``openrouter/`` prefix in the model_id string.
-    2. Canonical key exists in MODEL_MAP with ``provider == "openrouter"``.
-    3. Alias resolves to a canonical key whose provider is ``"openrouter"``.
-    """
-    if model_id.startswith("openrouter/"):
-        return True
-
-    record = MODEL_MAP.get(model_id)
-    if record:
-        return record.get("provider") == "openrouter"
-
-    canonical = MODEL_ALIASES.get(model_id)
-    if canonical:
-        record = MODEL_MAP.get(canonical)
-        if record:
-            return record.get("provider") == "openrouter"
-
-    return False

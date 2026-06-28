@@ -26,15 +26,10 @@ class FinalizationService:
 
         for i in range(n):
             for j in range(i + 1, n):
-                first = sorted_scores[i]
-                second = sorted_scores[j]
-                if first["score"] >= second["score"]:
-                    condorcet[first["persona"]] += 1
-                else:
-                    condorcet[second["persona"]] += 1
+                pass # Removed naive Condorcet implementation that duplicated Borda due to pre-sorting
 
         combined = {
-            persona: borda[persona] + condorcet[persona]
+            persona: borda[persona]
             for persona in borda
         }
 

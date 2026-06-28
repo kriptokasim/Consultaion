@@ -38,7 +38,7 @@ def _reconciliation_module_patches():
             reconcile_usage=MagicMock(return_value={"status": "ok"}),
             record_reconciliation_time=MagicMock(),
         ),
-        "core.database": MagicMock(
+        "database": MagicMock(
             SessionLocal=MagicMock(return_value=mock_session_ctx),
         ),
         "observability.metrics": MagicMock(

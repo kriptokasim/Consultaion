@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 from agents import UsageAccumulator
 
 
+from schemas import DebateConfig
+
 @dataclass
 class DebateContext:
     """
@@ -13,7 +15,7 @@ class DebateContext:
     """
     debate_id: str
     prompt: str
-    config: Dict[str, Any]
+    config: DebateConfig
     channel_id: str
     model_id: Optional[str] = None
     # Shared resources

@@ -121,7 +121,9 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
 
 
 def _validate_avatar_url(url: Optional[str]) -> Optional[str]:
-    """Validate avatar URL to prevent SSRF — only allow http/https schemes."""
+    """Scheme allowlist for avatar URLs.
+    # TODO: extend with private-IP block if avatar is ever fetched server-side to prevent SSRF
+    """
     cleaned = _clean_optional(url)
     if cleaned is None:
         return None

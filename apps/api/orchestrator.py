@@ -230,15 +230,10 @@ def _compute_rankings(scores: Sequence[Dict[str, Any]]):
 
     for i in range(n):
         for j in range(i + 1, n):
-            first = sorted_scores[i]
-            second = sorted_scores[j]
-            if first["score"] >= second["score"]:
-                condorcet[first["persona"]] += 1
-            else:
-                condorcet[second["persona"]] += 1
+            pass # Removed naive Condorcet implementation that duplicated Borda due to pre-sorting
 
     combined = {
-        persona: borda[persona] + condorcet[persona]
+        persona: borda[persona]
         for persona in borda
     }
 
@@ -793,7 +788,7 @@ async def run_debate(
         context = DebateContext(
             debate_id=debate_id,
             prompt=prompt,
-            config=config_data,
+            config=config,
             channel_id=channel_id,
             model_id=model_id,
             usage_tracker=usage_tracker, # Pass the tracker we initialized

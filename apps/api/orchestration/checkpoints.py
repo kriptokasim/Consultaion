@@ -58,8 +58,12 @@ async def run_with_checkpoint(
                     if checkpoint and checkpoint.status == "completed" and checkpoint.input_hash == input_hash:
                         logger.info("Debate %s: stage %s completed after wait. Skipping.", debate_id, stage_key)
                         return await load_fn(session)
-                    if not checkpoint or checkpoint.status != "running":
+                    if not checkpoint:
+                        raise RuntimeError(f"Debate {debate_id}: stage {stage_key} checkpoint was deleted while waiting.")
+                    if checkpoint.status != "running":
                         break
+                else:
+                    raise RuntimeError(f"Debate {debate_id}: stage {stage_key} is currently locked by another worker.")
 
             # Update status to running
             checkpoint.status = "running"

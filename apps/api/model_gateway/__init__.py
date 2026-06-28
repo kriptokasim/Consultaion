@@ -224,11 +224,14 @@ async def route_llm_call(
 
     # Filter out models with open circuits
     from model_gateway.provider_health import is_circuit_open, record_failure, record_success
+    from model_gateway.policy import _model_uses_openrouter
     filtered_direct_models = []
     for m in available_direct_models:
         # Resolve provider
         provider = "unknown"
-        if m in MODEL_MAP:
+        if _model_uses_openrouter(m) or m.startswith("openrouter/"):
+            provider = "openrouter"
+        elif m in MODEL_MAP:
             provider = MODEL_MAP[m]["provider"]
         elif "-" in m:
             provider = m.split("-")[0]
@@ -242,7 +245,9 @@ async def route_llm_call(
     for idx, model_to_call in enumerate(filtered_direct_models):
         # Resolve provider
         provider = "unknown"
-        if model_to_call in MODEL_MAP:
+        if _model_uses_openrouter(model_to_call) or model_to_call.startswith("openrouter/"):
+            provider = "openrouter"
+        elif model_to_call in MODEL_MAP:
             provider = MODEL_MAP[model_to_call]["provider"]
         elif "-" in model_to_call:
             provider = model_to_call.split("-")[0]
@@ -275,6 +280,10 @@ async def route_llm_call(
                     logger.info("Using user BYOK key for provider=%s model=%s user=%s", provider, model_to_call, request.user_id)
             except Exception as e:
                 logger.warning(f"Failed to lookup BYOK key for provider {provider}: {e}")
+
+        if provider == "openrouter" and not current_api_key:
+            from config import settings as _settings
+            current_api_key = _settings.OPENROUTER_API_KEY or None
 
         try:
             adapter = DirectProviderAdapter()

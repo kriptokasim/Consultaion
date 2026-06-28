@@ -62,7 +62,7 @@ class StandardDebatePipeline(DebatePipeline):
             if stage.name == "draft":
                 input_data = {
                     "prompt": context.prompt,
-                    "agents": [a.name for a in context.config.get("agents", [])] if context.config else [],
+                    "agents": [a.name for a in context.config.agents] if context.config else [],
                     "model_id": context.model_id
                 }
             elif stage.name == "critique":
@@ -75,7 +75,7 @@ class StandardDebatePipeline(DebatePipeline):
                 input_data = {
                     "prompt": context.prompt,
                     "candidates": state.revised_candidates or state.candidates,
-                    "judges": [j.name for j in context.config.get("judges", [])] if context.config else [],
+                    "judges": [j.name for j in context.config.judges] if context.config else [],
                     "model_id": context.model_id
                 }
             elif stage.name == "synthesis":

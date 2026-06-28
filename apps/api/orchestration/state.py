@@ -105,6 +105,7 @@ class DebateStateManager:
                     rankings={"order": ranking},
                     weights={"borda_weight": 1.0, "condorcet_weight": 1.0},
                     result=details,
+                    attempt_id=self.attempt_id,
                 )
             )
             await session.commit()
@@ -150,7 +151,7 @@ class DebateStateManager:
                                     s,
                                     user_id=self.user_id,
                                     debate_id=self.debate_id,
-                                    attempt_id=getattr(self, "_attempt_id", None),
+                                    attempt_id=self.attempt_id,
                                     tokens=tokens,
                                 )
                         loop = asyncio.get_running_loop()
