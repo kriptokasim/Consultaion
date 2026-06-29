@@ -668,8 +668,9 @@ function ArenaPageContent() {
           </div>
         </div>
       ) : null}
-      <div className={sessionStatus === 'idle' ? "absolute inset-0 z-0 opacity-20 pointer-events-none blur-[2px] transition-all duration-1000 scale-[0.98]" : "hidden"}>
-        <div className="max-w-6xl mx-auto pt-8">
+      <div className={`w-full max-w-[1600px] mx-auto flex flex-col ${sessionStatus === 'idle' ? 'xl:flex-row' : ''} gap-8 xl:gap-16 items-start justify-center transition-all duration-500`}>
+        {/* Background / Info Banner on the left when idle */}
+        <div className={sessionStatus === 'idle' ? "hidden xl:block xl:flex-[1.1] xl:max-w-[700px] transition-all duration-1000 origin-left opacity-100" : "hidden"}>
           <ParliamentHome
             members={members}
             activeMemberId={members.find((member) => member.name === activePersona)?.id}
@@ -680,9 +681,9 @@ function ArenaPageContent() {
             running={running}
           />
         </div>
-      </div>
 
-      <div className="z-10 w-full max-w-4xl mx-auto flex flex-col space-y-6">
+        {/* Main composer and workspace (center-left) */}
+        <div className={`z-10 w-full mx-auto ${sessionStatus === 'idle' ? 'xl:flex-1 max-w-4xl xl:max-w-[800px] xl:mx-0' : 'max-w-4xl'} flex flex-col space-y-6 transition-all duration-500`}>
         {sessionStatus !== 'idle' && (
           <SessionHUD
             status={sessionStatus}
@@ -756,6 +757,7 @@ function ArenaPageContent() {
             />
           </div>
         )}
+      </div>
       </div>
       </div>
 
