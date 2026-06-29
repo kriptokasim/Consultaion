@@ -286,7 +286,11 @@ async def route_llm_call(
             current_api_key = _settings.OPENROUTER_API_KEY or None
 
         try:
-            adapter = DirectProviderAdapter()
+            # Use the correct adapter for the resolved provider
+            if provider == "openrouter":
+                adapter = OpenRouterAdapter()
+            else:
+                adapter = DirectProviderAdapter()
             result = await adapter.call_llm(
                 messages=request.messages,
                 model_id=model_to_call,

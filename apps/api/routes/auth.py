@@ -426,6 +426,7 @@ async def google_callback_post(
                     message="Google sign-in misconfigured: INTERNAL_SECRET is not set on the server. "
                             "An admin must set INTERNAL_SECRET in both backend and frontend environments.",
                     code="auth.configuration_error",
+                    status_code=503,
                 )
             elif not internal_secret:
                 logger.warning(
@@ -436,6 +437,7 @@ async def google_callback_post(
                     message="Google sign-in failed: frontend is not sending the required internal secret. "
                             "Ensure INTERNAL_SECRET is set in the frontend (Vercel) environment.",
                     code="auth.configuration_error",
+                    status_code=503,
                 )
             else:
                 logger.warning(
@@ -445,6 +447,7 @@ async def google_callback_post(
                 raise ValidationError(
                     message="Google sign-in failed: internal secret mismatch between frontend and backend.",
                     code="auth.configuration_error",
+                    status_code=503,
                 )
 
         logger.info(
