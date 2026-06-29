@@ -668,9 +668,9 @@ function ArenaPageContent() {
           </div>
         </div>
       ) : null}
-      <div className={`w-full max-w-[1600px] mx-auto flex flex-col ${sessionStatus === 'idle' ? 'xl:flex-row' : ''} gap-8 xl:gap-16 items-start justify-center transition-all duration-500`}>
+      <div className={`w-full max-w-[1800px] mx-auto flex flex-col ${sessionStatus === 'idle' ? 'xl:flex-row' : ''} gap-8 xl:gap-12 2xl:gap-24 items-start justify-center transition-all duration-500`}>
         {/* Background / Info Banner on the left when idle */}
-        <div className={sessionStatus === 'idle' ? "hidden xl:block xl:flex-[1.1] xl:max-w-[700px] transition-all duration-1000 origin-left opacity-100" : "hidden"}>
+        <div className={sessionStatus === 'idle' ? "hidden xl:block xl:flex-[1.3] xl:max-w-[950px] transition-all duration-1000 origin-left opacity-100" : "hidden"}>
           <ParliamentHome
             members={members}
             activeMemberId={members.find((member) => member.name === activePersona)?.id}
@@ -683,7 +683,7 @@ function ArenaPageContent() {
         </div>
 
         {/* Main composer and workspace (center-left) */}
-        <div className={`z-10 w-full mx-auto ${sessionStatus === 'idle' ? 'xl:flex-1 max-w-4xl xl:max-w-[800px] xl:mx-0' : 'max-w-4xl'} flex flex-col space-y-6 transition-all duration-500`}>
+        <div className={`z-10 w-full mx-auto ${sessionStatus === 'idle' ? 'xl:flex-[1.1] max-w-4xl xl:max-w-[850px] xl:mx-0' : 'max-w-4xl'} flex flex-col space-y-6 transition-all duration-500`}>
         {sessionStatus !== 'idle' && (
           <SessionHUD
             status={sessionStatus}
