@@ -82,10 +82,11 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             synthesisText = debate.final_content;
         }
 
-        // Fallback: try to extract model responses from final_meta
-        if (eventResponses.length === 0 && debate.final_meta?.models) {
+        // Fallback: try to extract model responses from top-level models or final_meta
+        const fallbackModels = debate.models ?? debate.final_meta?.models;
+        if (eventResponses.length === 0 && fallbackModels) {
             const seatMessages = events.filter((e: any) => e.type === "seat_message");
-            for (const model of debate.final_meta.models) {
+            for (const model of fallbackModels) {
                 const matching = seatMessages.find((e: any) =>
                     (e as any).display_name === model.display_name ||
                     (e as any).seat_name === model.display_name
