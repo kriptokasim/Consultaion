@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { SkeletonLoader } from "@/components/ui/skeleton"
 import { login } from "@/lib/auth"
 import { useI18n } from "@/lib/i18n/client"
+import { getUserFriendlyError } from "@/lib/api/getUserFriendlyError"
 
 export default function LoginClient() {
   const router = useRouter()
@@ -35,9 +36,7 @@ export default function LoginClient() {
       if (err === "google_not_configured") {
         setError("Google Sign-In is not configured on this server. Please check your environment variables.")
       } else {
-        import("@/lib/api/errorContract").then(({ getFriendlyMessage }) => {
-          setError(getFriendlyMessage({ code: err, message: err } as any))
-        })
+        setError(getUserFriendlyError({ code: err, message: err }).message)
       }
     }
   }, [searchParams])
@@ -50,10 +49,7 @@ export default function LoginClient() {
       await login(email, password)
       router.push(nextPath)
     } catch (err) {
-      import("@/lib/api/errorContract").then(({ normalizeApiError, getFriendlyMessage }) => {
-        const clientError = normalizeApiError(err)
-        setError(getFriendlyMessage(clientError))
-      })
+      setError(getUserFriendlyError(err).message)
     } finally {
       setLoading(false)
     }

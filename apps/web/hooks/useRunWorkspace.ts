@@ -277,6 +277,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const responsesGenerationRef = useRef(0);
   const timelineGenerationRef = useRef(0);
 
+  // Patchset 148 B1: O(1) event dedup via Set instead of O(n) .some()
+  const seenEventIdsRef = useRef<Set<string>>(new Set());
+
   // Patchset 132: Silence detection for connected-but-silent streams
   const lastEventTimestampRef = useRef<number>(Date.now());
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -470,6 +473,18 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     }
   }, [debateId, hydrate, abortAll]);
 
+  // Patchset 148 B1: Reset seen event IDs when debateId changes
+  useEffect(() => {
+    seenEventIdsRef.current.clear();
+  }, [debateId]);
+
+  // Patchset 148 B1: O(1) append helper
+  const appendEventOnce = useCallback((event: TimelineEvent) => {
+    if (seenEventIdsRef.current.has(event.id)) return;
+    seenEventIdsRef.current.add(event.id);
+    setEvents((prev) => [...prev, event]);
+  }, []);
+
   // ── Cleanup on unmount ─────────────────────────────────────────────────
   useEffect(() => {
     return () => { abortAll("unmount"); };
@@ -518,7 +533,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
           type: eventType, round: lastEvent.round || 0, seat: lastEvent.seat,
           payload: normalizeEvent(lastEvent) as unknown as Record<string, unknown>,
         };
-        setEvents((prev) => prev.some((e) => e.id === newEvent.id) ? prev : [...prev, newEvent]);
+        appendEventOnce(newEvent);
         return;
       }
 
@@ -529,10 +544,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         type: eventType, round: lastEvent.round || 0, seat: lastEvent.seat,
         payload: normalized as unknown as Record<string, unknown>,
       };
-      setEvents((prev) => prev.some((e) => e.id === newEvent.id) ? prev : [...prev, newEvent]);
+      appendEventOnce(newEvent);
 
-      // Refetch debate on state-change events
-      if (["arena_synthesis", "arena_response", "message", "seat_message", "model_response", "score", "stage_checkpoint", "final", "debate_failed", "perspectives_ready", "debate_completed"].includes(eventType)) {
+      // B3: Refetch debate only on low-frequency structural events (not deltas/streaming)
+      if (["arena_synthesis", "debate_failed", "perspectives_ready", "debate_completed", "stage_checkpoint"].includes(eventType)) {
         getDebate(debateId)
           .then((updated) => setDebate(updated))
           .catch(() => {});

@@ -121,19 +121,21 @@ def _clean_optional(value: Optional[str]) -> Optional[str]:
 
 
 def _validate_avatar_url(url: Optional[str]) -> Optional[str]:
-    """Scheme allowlist for avatar URLs.
-    # TODO: extend with private-IP block if avatar is ever fetched server-side to prevent SSRF
+    """Validate avatar URL using the shared hardened validator (Patchset 148 D1c).
+
+    Allows http:// only in local/test environments; blocks SSRF-dangerous targets.
     """
-    cleaned = _clean_optional(url)
-    if cleaned is None:
-        return None
-    parsed = urlparse(cleaned)
-    if parsed.scheme not in ("http", "https"):
+    from config import settings
+    from utils.avatar_validator import validate_avatar_url
+
+    is_local = getattr(settings, "IS_LOCAL_ENV", False)
+    try:
+        return validate_avatar_url(url, allow_http=is_local)
+    except ValueError as exc:
         raise ValidationError(
-            message="Invalid avatar URL: only http and https URLs are allowed",
+            message=str(exc),
             code="validation.invalid_avatar_url",
         )
-    return cleaned
 
 
 from exceptions import AuthError, ProviderCircuitOpenError, RateLimitError, ValidationError

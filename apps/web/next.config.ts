@@ -45,8 +45,28 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://app.posthog.com";
     const { hostname } = new URL(appUrl);
+
+    // Patchset 148 D2: Content-Security-Policy
+    // Conservative starter policy — allows Next.js, Sentry, PostHog, SSE.
+    // TODO: Follow-up for nonce-based strict CSP to remove unsafe-inline/unsafe-eval.
+    const csp = [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'self'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "style-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      `connect-src 'self' ${apiOrigin} ${posthogHost} https: wss:`,
+      "form-action 'self'",
+      "upgrade-insecure-requests",
+    ].join("; ");
+
     return [
       {
         // Security headers for all routes
@@ -57,6 +77,7 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Content-Security-Policy", value: csp },
         ],
       },
       {

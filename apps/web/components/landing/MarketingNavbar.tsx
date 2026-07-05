@@ -3,7 +3,7 @@
 import { Link } from 'next-view-transitions'
 import { useRouter, usePathname } from "next/navigation"
 import { Brain, Menu, X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/client"
 import { trackEvent } from "@/lib/analytics"
@@ -15,6 +15,15 @@ export function MarketingNavbar() {
     const { t } = useI18n()
     const [scrolled, setScrolled] = useState(false)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    const menuButtonRef = useRef<HTMLButtonElement>(null)
+    const prevOpen = useRef(mobileMenuOpen)
+
+    useEffect(() => {
+        if (prevOpen.current && !mobileMenuOpen) {
+            menuButtonRef.current?.focus()
+        }
+        prevOpen.current = mobileMenuOpen
+    }, [mobileMenuOpen])
 
     useEffect(() => {
         const handleScroll = () => {
@@ -100,6 +109,7 @@ export function MarketingNavbar() {
 
                         {/* Mobile Menu Button */}
                         <button
+                            ref={menuButtonRef}
                             onClick={() => {
                                 setMobileMenuOpen(true);
                                 trackEvent("mobile_nav_opened");

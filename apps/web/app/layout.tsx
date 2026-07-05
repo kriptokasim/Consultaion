@@ -6,11 +6,11 @@ import { Providers } from './providers';
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
   title: {
-    default: 'Consultaion — Ask Once, Get Answers from Every Top AI',
+    default: 'Consultaion — One Question, Multiple AI Perspectives, One Decision Report',
     template: '%s | Consultaion',
   },
-  description: 'Submit one question and get simultaneous answers from GPT-4o, Claude, Gemini, and DeepSeek. Compare AI perspectives side-by-side and get a synthesized final verdict.',
-  keywords: ['AI comparison', 'multi-model AI', 'GPT-4o', 'Claude', 'Gemini', 'DeepSeek', 'AI arena', 'LLM comparison'],
+  description: 'Submit one question and get structured comparison across multiple AI models. Consultaion surfaces where models agree or disagree and delivers a clear decision report with verdict, risks, and next actions.',
+  keywords: ['AI comparison', 'multi-model AI', 'GPT-4o', 'Claude', 'Gemini', 'DeepSeek', 'AI arena', 'LLM comparison', 'decision report'],
   icons: {
     icon: '/icon.png',
   },
@@ -18,8 +18,8 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_US',
     siteName: 'Consultaion',
-    title: 'Consultaion — Ask Once, Get Answers from Every Top AI',
-  description: 'Submit one question and get simultaneous answers from GPT-4o, Claude, Gemini, and DeepSeek. Compare AI perspectives side-by-side and get a synthesized decision report.',
+    title: 'Consultaion — One Question, Multiple AI Perspectives, One Decision Report',
+  description: 'Submit one question and get structured comparison across multiple AI models. Consultaion surfaces where models agree or disagree and delivers a clear decision report with verdict, risks, and next actions.',
     images: [
       {
         url: '/api/og?title=Consultaion&models=4',
@@ -31,8 +31,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Consultaion — Ask Once, Get Answers from Every Top AI',
-    description: 'Compare GPT-4o, Claude, Gemini, and DeepSeek answers side-by-side.',
+    title: 'Consultaion — One Question, Multiple AI Perspectives, One Decision Report',
+    description: 'Submit one question and get structured comparison across multiple AI models.',
     images: ['/api/og?title=Consultaion&models=4'],
   },
   robots: {

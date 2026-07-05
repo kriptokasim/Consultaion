@@ -203,7 +203,8 @@ async def run_arena(
             via SSE as tokens arrive, then persists the final response.
             """
             from config import settings as _settings
-            stream_enabled = getattr(_settings, "STREAMING_RESPONSES_ENABLED", False)
+            stream_enabled = getattr(_settings, "STREAMING_RESPONSES_ENABLED", True)
+            timeout_seconds = getattr(_settings, "ARENA_MODEL_TIMEOUT_SECONDS", 45)
 
             system_prompt = get_compiled_model_prompt(
                 model_display_name=model_info.display_name,
@@ -259,15 +260,25 @@ async def run_arena(
 
                     from model_gateway import route_llm_stream
                     arena_max = getattr(_settings, "ARENA_MAX_TOKENS", 1200)
-                    result = await route_llm_stream(
-                        messages=messages,
-                        model_id=model_info.litellm_model or model_info.id,
-                        temperature=0.7,
-                        max_tokens=arena_max,
-                        on_delta=on_delta,
-                        debate_id=debate_id,
-                        user_id=user_id,
-                    )
+
+                    # A3: Per-model timeout for streaming path
+                    try:
+                        result = await asyncio.wait_for(
+                            route_llm_stream(
+                                messages=messages,
+                                model_id=model_info.litellm_model or model_info.id,
+                                temperature=0.7,
+                                max_tokens=arena_max,
+                                on_delta=on_delta,
+                                debate_id=debate_id,
+                                user_id=user_id,
+                            ),
+                            timeout=timeout_seconds,
+                        )
+                    except asyncio.TimeoutError:
+                        raise RuntimeError(
+                            f"Model {model_info.display_name} timed out after {timeout_seconds} seconds."
+                        )
 
                     await backend.publish(
                         f"debate:{debate_id}",
@@ -300,6 +311,7 @@ async def run_arena(
                             "model_id": model_info.id,
                             "display_name": model_info.display_name,
                             "error": str(e)[:200],
+                            "error_code": "model_timeout" if isinstance(e, RuntimeError) and "timed out" in str(e) else None,
                         },
                     )
                     raise
@@ -307,15 +319,26 @@ async def run_arena(
             # Non-streaming fallback
             try:
                 arena_max = getattr(settings, "ARENA_MAX_TOKENS", 1200)
-                content, call_usage = await call_llm_for_role(
-                    messages,
-                    role=f"Arena:{model_info.display_name}",
-                    temperature=0.7,
-                    max_tokens=arena_max,
-                    model_override=model_info.litellm_model,
-                    debate_id=debate_id,
-                    extra_tags={"mode": "arena", "arena_model": model_info.id},
-                )
+
+                # A4: Per-model timeout for non-streaming path
+                try:
+                    content, call_usage = await asyncio.wait_for(
+                        call_llm_for_role(
+                            messages,
+                            role=f"Arena:{model_info.display_name}",
+                            temperature=0.7,
+                            max_tokens=arena_max,
+                            model_override=model_info.litellm_model,
+                            debate_id=debate_id,
+                            extra_tags={"mode": "arena", "arena_model": model_info.id},
+                        ),
+                        timeout=timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    raise RuntimeError(
+                        f"Model {model_info.display_name} timed out after {timeout_seconds} seconds."
+                    )
+
                 return ArenaModelResponse(
                     model_id=model_info.id,
                     display_name=model_info.display_name,
@@ -362,26 +385,22 @@ async def run_arena(
                     error_code=err_code,
                 ), None
 
-        # Fan-out: call all models in parallel
-        results = await asyncio.gather(
-            *[_call_model(m) for m in arena_models],
-            return_exceptions=True,
-        )
-
-        responses = []
-        # Process results
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"Arena model task exception: {result}")
-                model_info = arena_models[i]
-                
+        # A5: Persist/publish each model response as it completes (not after all finish).
+        # Uses asyncio.as_completed so fast models become visible immediately.
+        async def _call_and_persist(model_info):
+            """Call a model and persist/publish its response immediately."""
+            try:
+                result = await _call_model(model_info)
+                response, call_usage = result
+            except Exception as exc:
+                logger.error(f"Arena model task exception for {model_info.id}: {exc}")
                 err_code = "unknown"
                 from llm_errors import ProviderFailureCode, classify_provider_exception
-                classified_code = classify_provider_exception(result)
+                classified_code = classify_provider_exception(exc)
                 if classified_code:
                     err_code = classified_code.value
-                    
-                friendly_message = f"⚠️ This model encountered an error: {result}"
+
+                friendly_message = f"⚠️ This model encountered an error: {exc}"
                 if err_code == ProviderFailureCode.INVALID_CREDENTIALS.value:
                     friendly_message = "⚠️ This model provider configuration is invalid (invalid credentials)."
                 elif err_code == ProviderFailureCode.INSUFFICIENT_BALANCE.value:
@@ -402,22 +421,30 @@ async def run_arena(
                     logo_url=model_info.logo_url,
                     persona_type=model_info.persona_type,
                     persona_tagline=model_info.persona_tagline,
-                    error=str(result),
+                    error=str(exc),
                     error_code=err_code,
                 )
-                responses.append(response)
-                async with async_session_scope() as session:
-                    await persist_and_publish_arena_response(session, backend, debate_id, response)
-                continue
+                call_usage = None
 
-            response, call_usage = result
+            # Persist and publish immediately — this is the key change.
+            # Each model card appears in the UI as soon as that model finishes.
+            async with async_session_scope() as session:
+                await persist_and_publish_arena_response(session, backend, debate_id, response)
+
+            return response, call_usage
+
+        # Fan-out: call all models, collect as each completes
+        tasks = [_call_and_persist(m) for m in arena_models]
+        responses = []
+        for coro in asyncio.as_completed(tasks):
+            response, call_usage = await coro
             responses.append(response)
-
             if call_usage:
                 usage.add_call(call_usage)
 
-            async with async_session_scope() as session:
-                await persist_and_publish_arena_response(session, backend, debate_id, response)
+        # A6: Synthesis trigger policy — keep synthesis after all model calls settle.
+        # TODO: Early synthesis when MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS is reached
+        # while slow models continue should be a separate product decision.
         return responses
 
     from orchestration.checkpoints import run_with_checkpoint

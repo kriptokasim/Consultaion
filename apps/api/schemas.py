@@ -257,6 +257,14 @@ class UserProfileUpdate(BaseModel):
     timezone: Optional[str] = Field(default=None)
     email_summaries_enabled: Optional[bool] = Field(default=None)
 
+    @field_validator("avatar_url", mode="before")
+    @classmethod
+    def validate_avatar_url(cls, v: str | None) -> str | None:
+        """Patchset 148 D1b: Schema-level avatar URL validation."""
+        from utils.avatar_validator import validate_avatar_url
+        # allow_http=False enforces https-only; local/test override at route level if needed
+        return validate_avatar_url(v, allow_http=False)
+
 
 class ContinuationRequest(BaseModel):
     retry_of_continuation_id: Optional[str] = None

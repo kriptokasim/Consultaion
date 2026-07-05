@@ -85,7 +85,9 @@ export function composeAbortSignal(
   return { signal: controller.signal, cleanup };
 }
 
-const AUTH_STATUSES = new Set([401, 403]);
+// Patchset 148 D3: Only redirect to login on 401 (session expired).
+// 403 (access denied) should NOT redirect — surface an error instead.
+const AUTH_REDIRECT_STATUSES = new Set([401]);
 
 export class ApiError extends Error {
   status?: number;
@@ -150,7 +152,7 @@ export function extractEventItems(payload: unknown): unknown[] {
 }
 
 const handleClientAuthRedirect = (status: number | undefined) => {
-  if (typeof window !== "undefined" && status && AUTH_STATUSES.has(status)) {
+  if (typeof window !== "undefined" && status && AUTH_REDIRECT_STATUSES.has(status)) {
     window.location.href = "/login";
   }
 };
@@ -445,7 +447,7 @@ export function normalizeRunStatus(status: string | null | undefined): string {
 }
 
 export function isAuthError(error: unknown): error is ApiError {
-  return error instanceof ApiError && !!error.status && AUTH_STATUSES.has(error.status);
+  return error instanceof ApiError && !!error.status && AUTH_REDIRECT_STATUSES.has(error.status);
 }
 
 export function getRateLimitInfo(error: unknown): { detail: string; resetAt?: string } | null {

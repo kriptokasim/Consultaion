@@ -284,7 +284,10 @@ export function useSessionStream(
 
           // Deduplication / gap verification
           if (seq !== undefined && lastReceivedSequenceRef.current !== null && seq <= lastReceivedSequenceRef.current) {
-            console.log(`[SSE] Discarding duplicate event sequence: ${seq}`);
+            // F2: Guard console spam in production (Patchset 148)
+            if (process.env.NODE_ENV !== "production") {
+              console.log(`[SSE] Discarding duplicate event sequence: ${seq}`);
+            }
             return;
           }
 

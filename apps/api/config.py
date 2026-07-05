@@ -174,7 +174,8 @@ class AppSettings(BaseSettings):
     # Stage-specific max_tokens limits
     ARENA_MAX_TOKENS: int = Field(1200, ge=100, description="Max tokens per arena model response")
     SYNTHESIS_MAX_TOKENS: int = Field(2000, ge=100, description="Max tokens for synthesis step")
-    STREAMING_RESPONSES_ENABLED: bool = Field(False, description="Enable streaming deltas via SSE (FH101/FH102)")
+    STREAMING_RESPONSES_ENABLED: bool = Field(True, description="Enable streaming deltas via SSE")
+    ARENA_MODEL_TIMEOUT_SECONDS: int = Field(45, ge=5, le=300, description="Per-model timeout for Arena perspective calls")
 
     RESPONSES_CONTRACT_VERSION: int = 1
 
