@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getDebate } from '../../apiClient';
+import { getDebate } from '@/lib/api';
 import { useRef } from 'react';
 import { ApiClientError } from '../../apiClient';
 

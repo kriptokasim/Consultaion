@@ -8,13 +8,14 @@
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 
 export function useArenaSession(debateId: string) {
-  const workspace = useRunWorkspace(debateId, true); // true = hydrate
+  const workspace = useRunWorkspace(debateId);
 
   const isTerminal = workspace.debate?.status === "completed" || 
                      workspace.debate?.status === "completed_budget" ||
                      workspace.debate?.status === "failed";
                      
-  const hasSynthesis = workspace.debate?.synthesis_status === "completed" ||
+  const hasSynthesis = workspace.debate?.synthesis_status === "succeeded" ||
+                       workspace.debate?.synthesis_report != null ||
                        workspace.events.some(e => e.type === "arena_synthesis");
 
   const expectedModelsCount = workspace.debate?.models_expected ||

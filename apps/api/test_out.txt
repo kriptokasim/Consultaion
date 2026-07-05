@@ -1,0 +1,214 @@
+/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/pytest_asyncio/plugin.py:217: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+......F........................F...F.......Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+FF................F.......FFF [  9%]
+...FF...............................................sException ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+F...........F...... [ 18%]
+.......F............s........................FF......................... [ 27%]
+............EE.FFF....................FFFFF..F.............FF........... [ 36%]
+...........EE........................................................... [ 45%]
+sssss...................................................F......F........ [ 54%]
+.............................................FF......................... [ 63%]
+......FF.....................................F.......................... [ 72%]
+.........s...sEEEE...........s.................Exception ignored in: <function Connection.__del__ at 0x7f73774a5e40>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 429, in __del__
+    self._stop_running()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/site-packages/aiosqlite/core.py", line 101, in _stop_running
+    future = asyncio.get_event_loop().create_future()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/events.py", line 681, in get_event_loop
+    raise RuntimeError('There is no current event loop in thread %r.'
+RuntimeError: There is no current event loop in thread 'MainThread'.
+F.FFFFFFFFFF..F..FFFFFFF. [ 81%]
+.FFFF.Exception ignored in: <coroutine object Queue.get at 0x7f7330129a80>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/queues.py", line 160, in get
+    getter.cancel()  # Just in case getter is not done yet.
+    ^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 762, in call_soon
+    self._check_closed()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 520, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+Exception ignored in: <coroutine object Queue.get at 0x7f7370223840>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/queues.py", line 160, in get
+    getter.cancel()  # Just in case getter is not done yet.
+    ^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 762, in call_soon
+    self._check_closed()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 520, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+Exception ignored in: <coroutine object Queue.get at 0x7f73702235a0>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/queues.py", line 160, in get
+    getter.cancel()  # Just in case getter is not done yet.
+    ^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 762, in call_soon
+    self._check_closed()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 520, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+Exception ignored in: <coroutine object Queue.get at 0x7f7373398200>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/queues.py", line 160, in get
+    getter.cancel()  # Just in case getter is not done yet.
+    ^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 762, in call_soon
+    self._check_closed()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 520, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+Exception ignored in: <coroutine object Queue.get at 0x7f7330336ce0>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/queues.py", line 160, in get
+    getter.cancel()  # Just in case getter is not done yet.
+    ^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 762, in call_soon
+    self._check_closed()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 520, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+Exception ignored in: <coroutine object Queue.get at 0x7f7311b403c0>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/queues.py", line 160, in get
+    getter.cancel()  # Just in case getter is not done yet.
+    ^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 762, in call_soon
+    self._check_closed()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 520, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+Exception ignored in: <coroutine object Queue.get at 0x7f731241ac00>
+Traceback (most recent call last):
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/queues.py", line 160, in get
+    getter.cancel()  # Just in case getter is not done yet.
+    ^^^^^^^^^^^^^^^
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 762, in call_soon
+    self._check_closed()
+  File "/home/durmusahm/.pyenv/versions/3.11.9/lib/python3.11/asyncio/base_events.py", line 520, in _check_closed
+    raise RuntimeError('Event loop is closed')
+RuntimeError: Event loop is closed
+F..FFF..F............ss..F..FFFFFFF

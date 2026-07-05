@@ -145,6 +145,37 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
     const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
     const { containerRef: cardContainerRef } = useCardKeyboardNav(modelResponses.length || expectedModels);
 
+    const renderSlots = useMemo(() => {
+        const slots: Array<{
+            type: "persisted" | "stream" | "skeleton";
+            resp?: any;
+            streamBuf?: any;
+            key: string;
+        }> = [];
+
+        modelResponses.forEach((resp) => {
+            slots.push({ type: "persisted", resp, key: (resp as any).model_id || (resp as any).id || Math.random().toString() });
+        });
+
+        // 2. Map streaming buffers that don't have a persisted response yet
+        if (streamingBuffers) {
+            Array.from(streamingBuffers.values()).forEach(buf => {
+                if (!modelResponses.some(r => r.model_id === buf.modelId)) {
+                    slots.push({ type: "stream", streamBuf: buf, key: buf.modelId || buf.responseId });
+                }
+            });
+        }
+
+        // 3. Fill the rest with skeletons to reach expectedModels
+        const currentLen = slots.length;
+        if (currentLen < expectedModels) {
+            for (let i = currentLen; i < expectedModels; i++) {
+                slots.push({ type: "skeleton", key: `skeleton-${i}` });
+            }
+        }
+        return slots;
+    }, [modelResponses, streamingBuffers, expectedModels]);
+
     return (
         <div className="flex flex-col gap-6 pb-8">
             {!profile && (
@@ -289,24 +320,23 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                             }
                         }}
                     >
-                        {Array.from({ length: expectedModels }).map((_, i) => {
-                            const resp = modelResponses[i];
-                            if (!resp) {
+                        {renderSlots.map((slot, i) => {
+                            if (slot.type === "skeleton") {
                                 return (
-                                    <div key={`skeleton-mobile-${i}`} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
+                                    <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
                                         <SkeletonCard index={i} />
                                     </div>
                                 );
                             }
 
-                            const streamBuf = streamingBuffers?.get(`resp-${debate.id}-${resp.model_id}`);
-                            return (
-                                <div key={resp.model_id || i} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
-                                    {streamBuf ? (
+                            if (slot.type === "stream") {
+                                const streamBuf = slot.streamBuf;
+                                return (
+                                    <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
                                         <StreamingModelCard
-                                            displayName={resp.display_name}
-                                            provider={resp.provider}
-                                            logoUrl={resp.logo_url}
+                                            displayName={streamBuf.displayName}
+                                            provider={streamBuf.provider}
+                                            logoUrl={streamBuf.logoUrl}
                                             state={streamBuf.state}
                                             accumulatedText={streamBuf.accumulatedText}
                                             errorCode={streamBuf.errorCode}
@@ -314,13 +344,18 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                             className="min-h-[350px]"
                                             onRetry={handleRetryAgent}
                                         />
-                                    ) : (
-                                        <ModelCard
-                                            resp={resp}
-                                            className="min-h-[350px]"
-                                            onRetry={handleRetryAgent}
-                                        />
-                                    )}
+                                    </div>
+                                );
+                            }
+
+                            const resp = slot.resp;
+                            return (
+                                <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
+                                    <ModelCard
+                                        resp={resp}
+                                        className="min-h-[350px]"
+                                        onRetry={handleRetryAgent}
+                                    />
                                 </div>
                             );
                         })}
@@ -353,21 +388,19 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     role="group"
                     aria-label="Model responses (use arrow keys to navigate)"
                 >
-                    {Array.from({ length: expectedModels }).map((_, i) => {
-                        const resp = modelResponses[i];
-                        if (!resp) {
-                            return <SkeletonCard key={`skeleton-card-${i}`} index={i} />;
+                    {renderSlots.map((slot, i) => {
+                        if (slot.type === "skeleton") {
+                            return <SkeletonCard key={slot.key} index={i} />;
                         }
 
-                        // FH103: Use StreamingModelCard when a streaming buffer exists for this model
-                        const streamBuf = streamingBuffers?.get(`resp-${debate.id}-${resp.model_id}`);
-                        if (streamBuf) {
+                        if (slot.type === "stream") {
+                            const streamBuf = slot.streamBuf;
                             return (
-                                <div key={resp.model_id || i} data-model-card tabIndex={0}>
+                                <div key={slot.key} data-model-card tabIndex={0}>
                                     <StreamingModelCard
-                                        displayName={resp.display_name}
-                                        provider={resp.provider}
-                                        logoUrl={resp.logo_url}
+                                        displayName={streamBuf.displayName}
+                                        provider={streamBuf.provider}
+                                        logoUrl={streamBuf.logoUrl}
                                         state={streamBuf.state}
                                         accumulatedText={streamBuf.accumulatedText}
                                         errorCode={streamBuf.errorCode}
@@ -378,8 +411,9 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                             );
                         }
 
+                        const resp = slot.resp;
                         return (
-                            <div key={resp.model_id || i} data-model-card tabIndex={0}>
+                            <div key={slot.key} data-model-card tabIndex={0}>
                                 <ModelCard
                                     resp={resp}
                                     onRetry={handleRetryAgent}

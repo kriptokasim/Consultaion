@@ -220,6 +220,15 @@ async def run_arena(
             response_id = f"resp-{debate_id}-{model_info.id}"
 
             if stream_enabled:
+                await backend.publish(
+                    f"debate:{debate_id}",
+                    {
+                        "type": "model_response_queued",
+                        "response_id": response_id,
+                        "model_id": model_info.id,
+                        "display_name": model_info.display_name,
+                    },
+                )
                 # Streaming path: publish deltas via SSE
                 seq_counter = {"seq": 0}
 
@@ -439,6 +448,10 @@ async def run_arena(
         for coro in asyncio.as_completed(tasks):
             response, call_usage = await coro
             responses.append(response)
+            
+        # Sort responses back to original arena_models order
+        order_map = {m.id: i for i, m in enumerate(arena_models)}
+        responses.sort(key=lambda r: order_map.get(r.model_id, 999))
             if call_usage:
                 usage.add_call(call_usage)
 

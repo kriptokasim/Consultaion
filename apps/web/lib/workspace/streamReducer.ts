@@ -98,19 +98,41 @@ export function streamingReducer(
 
     case "RESPONSE_CONNECTING": {
       if (!isValidLifecyclePayload(action.payload)) return state;
-      const buf = state.buffers.get(action.payload.response_id);
-      if (!buf) return state;
+      const { response_id, model_id, display_name, provider } = action.payload;
+      let buf = state.buffers.get(response_id);
+      if (!buf) {
+        buf = {
+          responseId: response_id,
+          modelId: model_id || "",
+          displayName: display_name || "",
+          provider: provider || "",
+          state: "connecting",
+          accumulatedText: "",
+          lastSequence: 0,
+        };
+      }
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      next.set(action.payload.response_id, { ...buf, state: "connecting" });
+      next.set(response_id, { ...buf, state: "connecting" });
       return { ...state, buffers: next };
     }
 
     case "RESPONSE_STARTED": {
       if (!isValidLifecyclePayload(action.payload)) return state;
-      const buf = state.buffers.get(action.payload.response_id);
-      if (!buf) return state;
+      const { response_id, model_id, display_name, provider } = action.payload;
+      let buf = state.buffers.get(response_id);
+      if (!buf) {
+        buf = {
+          responseId: response_id,
+          modelId: model_id || "",
+          displayName: display_name || "",
+          provider: provider || "",
+          state: "streaming",
+          accumulatedText: "",
+          lastSequence: 0,
+        };
+      }
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      next.set(action.payload.response_id, { ...buf, state: "streaming" });
+      next.set(response_id, { ...buf, state: "streaming" });
       return { ...state, buffers: next };
     }
 
@@ -119,9 +141,20 @@ export function streamingReducer(
         console.warn("[streamingReducer] Invalid RESPONSE_DELTA payload", action.payload);
         return state;
       }
+      const payloadAny = action.payload as any;
       const { response_id, text, delta_sequence } = action.payload;
-      const buf = state.buffers.get(response_id);
-      if (!buf) return state;
+      let buf = state.buffers.get(response_id);
+      if (!buf) {
+        buf = {
+          responseId: response_id,
+          modelId: payloadAny.model_id || "",
+          displayName: payloadAny.display_name || "",
+          provider: payloadAny.provider || "",
+          state: "streaming",
+          accumulatedText: "",
+          lastSequence: 0,
+        };
+      }
       if (!isValidSequence(delta_sequence, buf.lastSequence)) return state; // stale
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
       next.set(response_id, {
