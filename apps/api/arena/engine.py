@@ -310,7 +310,69 @@ async def run_arena(
                             persona_tagline=model_info.persona_tagline,
                         ), None
                     else:
-                        raise Exception(result.error_message or "Stream call failed")
+                        # Streaming returned failure — try non-streaming fallback
+                        # within the same timeout window before giving up.
+                        logger.warning(
+                            f"Streaming failed for {model_info.display_name}: "
+                            f"{result.error_message}. Attempting non-streaming fallback."
+                        )
+                        try:
+                            arena_max_fb = getattr(_settings, "ARENA_MAX_TOKENS", 1200)
+                            fallback_content, fallback_usage = await asyncio.wait_for(
+                                call_llm_for_role(
+                                    messages,
+                                    role=f"Arena:{model_info.display_name}",
+                                    temperature=0.7,
+                                    max_tokens=arena_max_fb,
+                                    model_override=model_info.litellm_model,
+                                    debate_id=debate_id,
+                                    extra_tags={"mode": "arena", "arena_model": model_info.id},
+                                ),
+                                timeout=timeout_seconds,
+                            )
+                            return ArenaModelResponse(
+                                model_id=model_info.id,
+                                display_name=model_info.display_name,
+                                provider=model_info.provider,
+                                content=fallback_content,
+                                success=True,
+                                logo_url=model_info.logo_url,
+                                persona_type=model_info.persona_type,
+                                persona_tagline=model_info.persona_tagline,
+                            ), fallback_usage
+                        except Exception as fb_exc:
+                            logger.warning(
+                                f"Non-streaming fallback also failed for "
+                                f"{model_info.display_name}: {fb_exc}"
+                            )
+                            # Convert to failed ArenaModelResponse — do NOT raise
+                            err_msg = result.error_message or str(fb_exc)
+                            err_code = result.error_code or "stream_and_fallback_failed"
+                            await backend.publish(
+                                f"debate:{debate_id}",
+                                {
+                                    "type": "model_response_failed",
+                                    "response_id": response_id,
+                                    "model_id": model_info.id,
+                                    "display_name": model_info.display_name,
+                                    "error": err_msg[:200],
+                                    "error_code": err_code,
+                                },
+                            )
+                            from llm_errors import classify_provider_exception
+                            failure = classify_provider_exception(fb_exc)
+                            return ArenaModelResponse(
+                                model_id=model_info.id,
+                                display_name=model_info.display_name,
+                                provider=model_info.provider,
+                                content=f"⚠️ This model failed to respond: {failure.message}",
+                                success=False,
+                                logo_url=model_info.logo_url,
+                                persona_type=model_info.persona_type,
+                                persona_tagline=model_info.persona_tagline,
+                                error=err_msg,
+                                error_code=failure.code.value,
+                            ), None
                 except Exception as e:
                     await backend.publish(
                         f"debate:{debate_id}",
@@ -360,16 +422,12 @@ async def run_arena(
                 ), call_usage
             except Exception as e:
                 logger.error(f"Arena model {model_info.id} failed: {e}")
-                err_code = "unknown"
-                if hasattr(e, "error_code"):
-                    err_code = e.error_code
 
                 from llm_errors import ProviderFailureCode, classify_provider_exception
-                classified_code = classify_provider_exception(e)
-                if classified_code:
-                    err_code = classified_code.value
+                failure = classify_provider_exception(e)
+                err_code = failure.code.value
+                friendly_message = failure.message
 
-                friendly_message = f"⚠️ This model failed to respond: {e}"
                 if err_code == ProviderFailureCode.INVALID_CREDENTIALS.value:
                     friendly_message = "⚠️ This model provider configuration is invalid (invalid credentials)."
                 elif err_code == ProviderFailureCode.INSUFFICIENT_BALANCE.value:
@@ -380,6 +438,8 @@ async def run_arena(
                     friendly_message = "⚠️ The model provider request timed out."
                 elif err_code == ProviderFailureCode.API_ERROR.value:
                     friendly_message = "⚠️ The model provider API returned an error."
+                else:
+                    friendly_message = f"⚠️ This model failed to respond: {failure.message}"
 
                 return ArenaModelResponse(
                     model_id=model_info.id,
@@ -397,19 +457,22 @@ async def run_arena(
         # A5: Persist/publish each model response as it completes (not after all finish).
         # Uses asyncio.as_completed so fast models become visible immediately.
         async def _call_and_persist(model_info):
-            """Call a model and persist/publish its response immediately."""
+            """Call a model and persist/publish its response immediately.
+
+            Contract: this function NEVER raises. Provider/model errors are
+            converted into ArenaModelResponse(success=False) and persisted.
+            """
             try:
                 result = await _call_model(model_info)
                 response, call_usage = result
             except Exception as exc:
                 logger.error(f"Arena model task exception for {model_info.id}: {exc}")
-                err_code = "unknown"
-                from llm_errors import ProviderFailureCode, classify_provider_exception
-                classified_code = classify_provider_exception(exc)
-                if classified_code:
-                    err_code = classified_code.value
 
-                friendly_message = f"⚠️ This model encountered an error: {exc}"
+                from llm_errors import ProviderFailureCode, classify_provider_exception
+                failure = classify_provider_exception(exc)
+                err_code = failure.code.value
+                friendly_message = failure.message
+
                 if err_code == ProviderFailureCode.INVALID_CREDENTIALS.value:
                     friendly_message = "⚠️ This model provider configuration is invalid (invalid credentials)."
                 elif err_code == ProviderFailureCode.INSUFFICIENT_BALANCE.value:
@@ -420,6 +483,8 @@ async def run_arena(
                     friendly_message = "⚠️ The model provider request timed out."
                 elif err_code == ProviderFailureCode.API_ERROR.value:
                     friendly_message = "⚠️ The model provider API returned an error."
+                else:
+                    friendly_message = f"⚠️ This model encountered an error: {failure.message}"
 
                 response = ArenaModelResponse(
                     model_id=model_info.id,
@@ -448,12 +513,12 @@ async def run_arena(
         for coro in asyncio.as_completed(tasks):
             response, call_usage = await coro
             responses.append(response)
-            
+            if call_usage:
+                usage.add_call(call_usage)
+
         # Sort responses back to original arena_models order
         order_map = {m.id: i for i, m in enumerate(arena_models)}
         responses.sort(key=lambda r: order_map.get(r.model_id, 999))
-            if call_usage:
-                usage.add_call(call_usage)
 
         # A6: Synthesis trigger policy — keep synthesis after all model calls settle.
         # TODO: Early synthesis when MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS is reached
