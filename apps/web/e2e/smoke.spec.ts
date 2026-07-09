@@ -54,6 +54,73 @@ test.describe("Smoke Tests", () => {
     });
 });
 
+test.describe("Homepage Not Blank", () => {
+    test("homepage renders visible content (not blank)", async ({ page }) => {
+        const cspErrors: string[] = [];
+        page.on("console", (msg) => {
+            const text = msg.text();
+            if (text.includes("Refused to execute inline script") || text.includes("violates Content Security Policy")) {
+                cspErrors.push(text);
+            }
+        });
+
+        await page.goto("/");
+        await page.waitForLoadState("networkidle");
+
+        // Assert page has substantial content
+        const bodyText = await page.evaluate(() => document.body.innerText.trim());
+        expect(bodyText.length).toBeGreaterThan(100);
+
+        // Assert key landing elements
+        await expect(page.getByText("Consultaion")).toBeVisible();
+        await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        await expect(page.getByRole("link", { name: /Pricing/i })).toBeVisible();
+
+        // Fail if CSP is blocking scripts
+        expect(cspErrors).toEqual([]);
+    });
+
+    test("Try Interactive Demo link is visible on homepage", async ({ page }) => {
+        await page.goto("/");
+        await expect(page.getByRole("link", { name: /Try.*demo|Try.*sample/i })).toBeVisible();
+    });
+});
+
+test.describe("CSP Headers Regression", () => {
+    const WEB_BASE = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${process.env.PORT || "3000"}`;
+
+    test("enforced CSP contains required directives", async ({ request }) => {
+        const response = await request.get(`${WEB_BASE}/`);
+        const csp = response.headers()["content-security-policy"];
+
+        expect(csp).toBeDefined();
+        expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+        expect(csp).toContain("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
+        expect(csp).toContain("font-src 'self' data: https://fonts.gstatic.com");
+        expect(csp).toContain("default-src 'self'");
+        expect(csp).toContain("object-src 'none'");
+        expect(csp).toContain("frame-ancestors 'self'");
+        expect(csp).toContain("form-action 'self'");
+    });
+
+    test("strict CSP exists only in Report-Only header", async ({ request }) => {
+        const response = await request.get(`${WEB_BASE}/`);
+        const enforcedCsp = response.headers()["content-security-policy"];
+        const reportOnlyCsp = response.headers()["content-security-policy-report-only"];
+
+        expect(enforcedCsp).toBeDefined();
+        expect(reportOnlyCsp).toBeDefined();
+
+        // Report-Only should have strict script-src (no unsafe-inline/eval)
+        expect(reportOnlyCsp).toContain("script-src 'self'");
+        expect(reportOnlyCsp).not.toContain("'unsafe-inline'");
+        expect(reportOnlyCsp).not.toContain("'unsafe-eval'");
+
+        // Enforced should have the relaxed script-src
+        expect(enforcedCsp).toContain("'unsafe-inline'");
+    });
+});
+
 test.describe("API Health", () => {
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
