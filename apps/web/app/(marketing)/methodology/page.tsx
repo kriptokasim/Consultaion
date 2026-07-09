@@ -73,7 +73,7 @@ export default async function MethodologyPage() {
         {sections.map((section) => (
           <article key={section.title} className="border-b border-slate-100 last:border-0 pb-6 last:pb-0 dark:border-slate-700">
             <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{section.title}</h2>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300" dangerouslySetInnerHTML={{ __html: section.body }} />
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{section.body}</p>
           </article>
         ))}
       </section>

@@ -29,6 +29,25 @@ from routes.common import (
 
 logger = logging.getLogger(__name__)
 
+
+def _parse_allowed_origins() -> set[str]:
+    """Build allowed CORS origins from settings.WEB_APP_ORIGIN and settings.CORS_ORIGINS."""
+    origins: set[str] = set()
+    if settings.WEB_APP_ORIGIN:
+        origins.add(settings.WEB_APP_ORIGIN.rstrip("/"))
+    raw = settings.CORS_ORIGINS
+    if isinstance(raw, str):
+        for item in raw.split(","):
+            item = item.strip().rstrip("/")
+            if item:
+                origins.add(item)
+    elif isinstance(raw, list):
+        for item in raw:
+            if item:
+                origins.add(str(item).strip().rstrip("/"))
+    return origins
+
+
 router = APIRouter()
 
 
@@ -419,17 +438,35 @@ async def stream_events(
 
     # Explicit CORS headers — CORSMiddleware does not reliably inject on streaming responses
     # BUG-API-2: Never fall back to "*" — fail-closed in production, localhost in dev
-    allowed_origin = settings.WEB_APP_ORIGIN
-    if not allowed_origin:
+    # Patchset 151: Validate incoming Origin against allowlist + add Vary: Origin
+    allowed_origins = _parse_allowed_origins()
+    origin = request.headers.get("origin")
+
+    if origin and allowed_origins:
+        normalized = origin.rstrip("/")
+        if normalized not in allowed_origins:
+            logger.warning("SSE CORS denied: origin=%s not in allowlist", origin)
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=403,
+                detail="Origin not allowed",
+            )
+        allowed_origin = normalized
+    elif allowed_origins:
+        # No Origin header (same-origin / non-browser) — use first configured origin
+        allowed_origin = next(iter(allowed_origins))
+    else:
+        # No allowed origins configured
         if getattr(settings, "IS_LOCAL_ENV", False):
             allowed_origin = "http://localhost:3000"
         else:
-            logger.error("SSE CORS denied: WEB_APP_ORIGIN is not configured in production")
+            logger.error("SSE CORS denied: no allowed origins configured in production")
             from fastapi import HTTPException
             raise HTTPException(
                 status_code=500,
-                detail="Server misconfiguration: WEB_APP_ORIGIN is not set",
+                detail="Server misconfiguration: no allowed origins configured",
             )
+
     return StreamingResponse(
         eventgen(),
         media_type="text/event-stream",
@@ -438,5 +475,6 @@ async def stream_events(
             "X-Accel-Buffering": "no",
             "Access-Control-Allow-Origin": allowed_origin,
             "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
         },
     )

@@ -99,13 +99,13 @@ async def debug_cookie_config(current_user: User = Depends(get_current_admin)):
     """
     import os
 
-    from auth import COOKIE_DOMAIN, COOKIE_SAMESITE, COOKIE_SECURE
+    from auth import get_cookie_domain, get_cookie_samesite, get_cookie_secure
     
     return {
         "is_local_env": settings.IS_LOCAL_ENV,
-        "cookie_secure": COOKIE_SECURE,
-        "cookie_samesite": COOKIE_SAMESITE,
-        "cookie_domain": COOKIE_DOMAIN or "(not set)",
+        "cookie_secure": get_cookie_secure(),
+        "cookie_samesite": get_cookie_samesite(),
+        "cookie_domain": get_cookie_domain() or "(not set)",
         "render_env_var": os.environ.get("RENDER", "(not set)"),
         "env": settings.ENV,
         "cors_origins": settings.CORS_ORIGINS,

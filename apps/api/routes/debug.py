@@ -7,7 +7,7 @@ Debug endpoints for auth diagnostics. Only available when AUTH_DEBUG=True.
 import logging
 from typing import Optional
 
-from auth import COOKIE_NAME, get_optional_user
+from auth import get_cookie_name, get_optional_user
 from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import User
@@ -33,7 +33,7 @@ async def debug_auth(
         raise HTTPException(status_code=404, detail="Not found")
     
     cookies = request.cookies
-    has_auth_cookie = COOKIE_NAME in cookies
+    has_auth_cookie = get_cookie_name() in cookies
     
     # Redact cookie values for security
     cookie_keys = {k: "<present>" if v else "<empty>" for k, v in cookies.items()}
@@ -46,7 +46,7 @@ async def debug_auth(
         },
         "cookies_present": cookie_keys,
         "has_auth_cookie": has_auth_cookie,
-        "cookie_name": COOKIE_NAME,
+        "cookie_name": get_cookie_name(),
         "cookie_secure": settings.COOKIE_SECURE,
         "cookie_samesite": settings.COOKIE_SAMESITE,
         "cookie_domain": settings.COOKIE_DOMAIN,

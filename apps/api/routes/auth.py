@@ -8,17 +8,17 @@ from urllib.parse import urlencode, urlparse
 import httpx
 from audit import record_audit
 from auth import (
-    COOKIE_DOMAIN,
-    COOKIE_NAME,
-    COOKIE_SAMESITE,
-    COOKIE_SECURE,
-    ENABLE_CSRF,
     clear_auth_cookie,
     clear_csrf_cookie,
     create_access_token,
     generate_csrf_token,
+    get_cookie_domain,
+    get_cookie_name,
+    get_cookie_samesite,
+    get_cookie_secure,
     get_current_user,
     hash_password,
+    is_csrf_enabled,
     set_auth_cookie,
     set_csrf_cookie,
     verify_password,
@@ -365,15 +365,15 @@ async def google_callback(
             "[AUTH_DEBUG] Auth cookie set for Google login",
             extra={
                 "user_id": user.id,
-                "cookie_name": COOKIE_NAME,
-                "cookie_secure": COOKIE_SECURE,
-                "cookie_samesite": COOKIE_SAMESITE,
-                "cookie_domain": COOKIE_DOMAIN or "<not_set>",
+                "cookie_name": get_cookie_name(),
+                "cookie_secure": get_cookie_secure(),
+                "cookie_samesite": get_cookie_samesite(),
+                "cookie_domain": get_cookie_domain() or "<not_set>",
                 "redirect_target": redirect_target,
             },
         )
     
-    if ENABLE_CSRF:
+    if is_csrf_enabled():
         set_csrf_cookie(redirect_resp, generate_csrf_token())
     
     # State cookie cleanup no longer needed as we didn't set it.
@@ -555,7 +555,7 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
     session.add(user)
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
-    if ENABLE_CSRF:
+    if is_csrf_enabled():
         set_csrf_cookie(response, generate_csrf_token())
     record_audit(
         "register",
@@ -650,14 +650,14 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
             "[AUTH_DEBUG] Auth cookie set for email login",
             extra={
                 "user_id": user.id,
-                "cookie_name": COOKIE_NAME,
-                "cookie_secure": COOKIE_SECURE,
-                "cookie_samesite": COOKIE_SAMESITE,
-                "cookie_domain": COOKIE_DOMAIN or "<not_set>",
+                "cookie_name": get_cookie_name(),
+                "cookie_secure": get_cookie_secure(),
+                "cookie_samesite": get_cookie_samesite(),
+                "cookie_domain": get_cookie_domain() or "<not_set>",
             },
         )
     
-    if ENABLE_CSRF:
+    if is_csrf_enabled():
         set_csrf_cookie(response, generate_csrf_token())
     # Login is read-only — use standalone audit session
     record_audit(
@@ -674,7 +674,7 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
 @router.post("/auth/logout")
 async def logout_user(response: Response):
     clear_auth_cookie(response)
-    if ENABLE_CSRF:
+    if is_csrf_enabled():
         clear_csrf_cookie(response)
     return {"ok": True}
 

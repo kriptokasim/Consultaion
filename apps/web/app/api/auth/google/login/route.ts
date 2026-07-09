@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { sanitizeInternalPath } from "@/lib/security/internalPath";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URL || `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/auth/google/callback`;
@@ -19,24 +20,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const nextParam = searchParams.get("next") || "/live";
-  
-  let nextPath = "/live";
-  if (
-    nextParam.startsWith("/") &&
-    !nextParam.startsWith("//") &&
-    !nextParam.startsWith("/\\")
-  ) {
-    try {
-      const base = new URL(request.url).origin;
-      const resolved = new URL(nextParam, base);
-      if (resolved.origin === base) {
-        nextPath = resolved.pathname + resolved.search + resolved.hash;
-      }
-    } catch {
-      nextPath = "/live";
-    }
-  }
+  const nextPath = sanitizeInternalPath(searchParams.get("next"), "/live");
 
   // 1. Generate cryptographically random state nonce
   const state = crypto.randomBytes(32).toString("hex");

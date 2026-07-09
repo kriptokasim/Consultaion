@@ -48,45 +48,44 @@ def _get_cookie_samesite() -> str:
     return "none" if val == "none" else val.capitalize()
 
 # BUG-API-3: Dynamic accessors — never cache settings at module level.
-# All call-sites that used the old constants (COOKIE_NAME, COOKIE_SECURE, etc.)
-# now read through these properties, which respect runtime reloads.
+# All call-sites use these functions, which read settings at call time.
+# Module-level constants below are DEPRECATED and kept only for backward
+# compatibility with external imports. Internal code MUST use the helpers.
 
 
-@property
-def _cookie_name():
+def get_cookie_name() -> str:
     return settings.COOKIE_NAME
 
 
-# Convenience aliases that read settings at call time (not import time).
-# Usage: `COOKIE_NAME` still works everywhere, but now it's a function call.
-def _get_cookie_name() -> str:
-    return settings.COOKIE_NAME
-
-
-def _get_cookie_secure() -> bool:
+def get_cookie_secure() -> bool:
     return settings.COOKIE_SECURE
 
 
-def _get_cookie_path() -> str:
+def get_cookie_path() -> str:
     return settings.COOKIE_PATH
 
 
-def _get_cookie_domain() -> str | None:
+def get_cookie_domain() -> str | None:
     return settings.COOKIE_DOMAIN
 
 
-def _get_enable_csrf() -> bool:
+def get_cookie_samesite() -> str:
+    val = settings.COOKIE_SAMESITE.strip().lower()
+    if val not in {"lax", "strict", "none"}:
+        return "Lax"
+    return "none" if val == "none" else val.capitalize()
+
+
+def is_csrf_enabled() -> bool:
     return settings.ENABLE_CSRF
 
 
-def _get_csrf_cookie_name() -> str:
+def get_csrf_cookie_name() -> str:
     return settings.CSRF_COOKIE_NAME
 
 
-# Module-level names preserved for backward compat — now dynamic via __getattr__.
-# Any file that does `from auth import COOKIE_NAME` will get the module-level
-# constant below. Files that do `auth.COOKIE_NAME` will hit __getattr__.
-# For safety we keep these as initial snapshots AND install __getattr__.
+# DEPRECATED: backward-compat constants — prefer the helpers above.
+# These snapshot at import time and will NOT reflect runtime reloads.
 COOKIE_NAME = settings.COOKIE_NAME
 JWT_SECRET = settings.JWT_SECRET
 JWT_TTL_SECONDS = settings.JWT_TTL_SECONDS
@@ -96,7 +95,7 @@ COOKIE_PATH = settings.COOKIE_PATH
 COOKIE_DOMAIN = settings.COOKIE_DOMAIN
 ENABLE_CSRF = settings.ENABLE_CSRF
 CSRF_COOKIE_NAME = settings.CSRF_COOKIE_NAME
-COOKIE_SAMESITE = _get_cookie_samesite()
+COOKIE_SAMESITE = get_cookie_samesite()
 
 JWT_ALGORITHM = "HS256"
 
@@ -229,38 +228,37 @@ def get_current_admin(user: User = Depends(get_current_user)) -> User:
 
 
 def set_auth_cookie(response: Response, token: str) -> None:
-    # TODO: For browser auth in production, add CSRF tokens for state-changing routes when using cookies.
     response.set_cookie(
-        key=settings.COOKIE_NAME,
+        key=get_cookie_name(),
         value=token,
         httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=_get_cookie_samesite(),
+        secure=get_cookie_secure(),
+        samesite=get_cookie_samesite(),
         max_age=settings.JWT_TTL_SECONDS,
-        path=settings.COOKIE_PATH,
-        domain=settings.COOKIE_DOMAIN,
+        path=get_cookie_path(),
+        domain=get_cookie_domain(),
     )
 
 
 def set_csrf_cookie(response: Response, token: str) -> None:
     response.set_cookie(
-        key=settings.CSRF_COOKIE_NAME,
+        key=get_csrf_cookie_name(),
         value=token,
         httponly=False,
-        secure=settings.COOKIE_SECURE,
-        samesite=_get_cookie_samesite(),
+        secure=get_cookie_secure(),
+        samesite=get_cookie_samesite(),
         max_age=settings.JWT_TTL_SECONDS,
-        path=settings.COOKIE_PATH,
-        domain=settings.COOKIE_DOMAIN,
+        path=get_cookie_path(),
+        domain=get_cookie_domain(),
     )
 
 
 def clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie(settings.COOKIE_NAME, path=settings.COOKIE_PATH, domain=settings.COOKIE_DOMAIN)
+    response.delete_cookie(get_cookie_name(), path=get_cookie_path(), domain=get_cookie_domain())
 
 
 def clear_csrf_cookie(response: Response) -> None:
-    response.delete_cookie(settings.CSRF_COOKIE_NAME, path=settings.COOKIE_PATH, domain=settings.COOKIE_DOMAIN)
+    response.delete_cookie(get_csrf_cookie_name(), path=get_cookie_path(), domain=get_cookie_domain())
 
 
 def generate_csrf_token() -> str:

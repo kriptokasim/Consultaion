@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { sanitizeInternalPath } from "@/lib/security/internalPath";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -67,22 +68,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Set HttpOnly/Secure/SameSite cookie
-    const nextParam = request.cookies.get("oauth_next")?.value || "/dashboard";
-    let nextPath = "/dashboard";
-    try {
-      const base = new URL(request.url).origin;
-      const resolved = new URL(nextParam, base);
-      // BUG-WEB-1: Strict open redirect protection
-      const isSameOrigin = resolved.origin === base;
-      const hasNoBackslash = !resolved.pathname.includes("\\");
-      const isNotProtocolRelative = !nextParam.startsWith("//");
-      const isNotDangerousScheme = !nextParam.match(/^(javascript|data|vbscript):/i);
-      if (isSameOrigin && hasNoBackslash && isNotProtocolRelative && isNotDangerousScheme) {
-        nextPath = resolved.pathname + resolved.search + resolved.hash;
-      }
-    } catch {
-      nextPath = "/dashboard";
-    }
+    const nextPath = sanitizeInternalPath(
+      request.cookies.get("oauth_next")?.value,
+      "/dashboard"
+    );
     const redirectUrl = new URL(nextPath, request.url);
     const responseNext = NextResponse.redirect(redirectUrl);
 

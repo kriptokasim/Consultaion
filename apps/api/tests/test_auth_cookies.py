@@ -40,6 +40,7 @@ def test_production_env_cookie_settings(monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key-at-least-32-chars-long")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    monkeypatch.setenv("INTERNAL_SECRET", "a" * 32)
     
     # Force reload
     from config import settings

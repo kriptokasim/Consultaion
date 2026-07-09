@@ -1,4 +1,4 @@
-.PHONY: api-dev-db-migrate api-dev-db-reset api-dev-db-verify api-dev-db-seed export-openapi
+.PHONY: api-dev-db-migrate api-dev-db-reset api-dev-db-verify api-dev-db-seed export-openapi scan-secrets
 
 api-dev-db-migrate:
 	cd apps/api && . .venv/bin/activate && python -m scripts.dev_db migrate
@@ -14,4 +14,8 @@ api-dev-db-seed:
 
 export-openapi:
 	cd apps/api && . .venv/bin/activate && python ../../scripts/export_openapi.py
+
+scan-secrets:
+	@command -v gitleaks >/dev/null 2>&1 || { echo "ERROR: gitleaks not installed. Install: https://github.com/gitleaks/gitleaks#install"; exit 1; }
+	gitleaks detect --source . --redact --verbose
 

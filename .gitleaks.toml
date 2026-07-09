@@ -1,0 +1,73 @@
+# gitleaks configuration — Patchset 151
+# https://github.com/gitleaks/gitleaks
+
+title = "Consultaion secret scanning config"
+
+[extend]
+# Use default gitleaks rules as baseline
+useDefault = true
+
+[allowlist]
+  description = "Global allowlist — test fixtures, generated artifacts, docs"
+  paths = [
+    '''node_modules''',
+    '''.next''',
+    '''.venv''',
+    '''venv''',
+    '''__pycache__''',
+    '''.git''',
+    '''coverage''',
+    '''out''',
+    '''dist''',
+    '''build''',
+    '''\.mypy_cache''',
+    '''\.ruff_cache''',
+    '''\.pytest_cache''',
+    '''apps/web/e2e/.*\.ts$''',  # E2E test helpers with mock tokens
+    '''test-results''',
+    '''\.playwright''',
+    '''CHANGELOG\.md''',
+    '''docs/audits/.*''',
+  ]
+
+  # Allow specific documented false-positive patterns
+  [[allowlist.regexes]]
+    description = "Example URLs in documentation"
+    regex = '''https?://(example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0)'''
+    # Only in markdown and config docs
+    paths = ['''\.md$''', '''\.txt$''', '''\.example$''', '''\.env\.example$''']
+
+  [[allowlist.regexes]]
+    description = "Test JWT tokens (short-lived, test-only)"
+    regex = '''eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+    paths = ['''tests/.*''', '''test/.*''', '''e2e/.*''']
+
+  [[allowlist.regexs]]
+    description = "Dev-only bcrypt hashes in test fixtures"
+    regex = '''\$2[aby]?\$\d{1,2}\$[A-Za-z0-9/.]{53}'''
+    paths = ['''tests/.*''', '''test/.*''']
+
+# Custom rules for this project
+[[rules]]
+  id = "supabase-pooler-url"
+  description = "Supabase pooler connection URL with password"
+  regex = '''postgres(?:ql)?://[^:\s]+:[^@\s]+@[^:\s]+\.pooler\.supabase\.com'''
+  tags = ["postgres", "supabase", "credential"]
+
+[[rules]]
+  id = "generic-postgres-url"
+  description = "PostgreSQL connection URL with embedded password"
+  regex = '''postgres(?:ql)?://[^:\s]+:[^@\s]+@[^\s]+'''
+  tags = ["postgres", "credential"]
+  [rules.allowlist]
+    paths = ['''\.env\.example$''', '''\.example$''', '''tests/.*''', '''docs/.*''']
+
+[[rules]]
+  id = "hardcoded-password-assignment"
+  description = "Hardcoded password in variable assignment"
+  regex = '''(?i)(?:password|passwd|pwd|secret|api_?key|token)\s*[=:]\s*["'][^"']{8,}["']'''
+  tags = ["password", "credential"]
+  [rules.allowlist]
+    paths = ['''tests/.*''', '''\.env\.example$''', '''tests/.*\.py$''']
+    # Allow settings.py / config.py defaults
+    regexes = ['''(?i)change_me|default|placeholder|example''']

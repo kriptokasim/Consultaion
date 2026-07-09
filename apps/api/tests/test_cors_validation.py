@@ -21,6 +21,7 @@ def test_cors_validation_prod_disallows_wildcard(monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("INTERNAL_SECRET", "a" * 32)
 
     with pytest.raises(ValidationError) as excinfo:
         AppSettings()
@@ -38,6 +39,7 @@ def test_cors_validation_prod_allows_valid_origins(monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_INSECURE_DEV", "0")
     monkeypatch.setenv("REQUIRE_REAL_LLM", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("INTERNAL_SECRET", "a" * 32)
     
     settings = AppSettings()
     assert "https://example.com" in settings.CORS_ORIGINS
