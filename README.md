@@ -1,215 +1,377 @@
+<div align="center">
+
+<img src="docs/assets/hero-screenshot.png" alt="Consultaion — One question. Multiple AI perspectives. One decision report." width="900" />
+
+<br/>
+
 # Consultaion
 
-Consultaion is an enterprise-oriented B2B SaaS platform for multi-model AI decision reports. It runs Arena and Debate workflows across multiple LLM providers, detects consensus and disagreement, and produces structured decision reports with verification metadata, usage controls, team-scoped access, and audit logging foundations.
+**One question. Multiple AI perspectives. One decision report.**
 
-> **Brand note:** The spelling “Consultaion” is intentional – it’s the product name for this multi-agent AI parliament, not a typo. Keep it consistent across docs, UI, and deploys.
+Consultaion runs structured Arena and Debate workflows across multiple LLM
+providers simultaneously, surfaces where models agree or disagree, and produces
+a verified, structured decision report — not just a chatbot answer.
 
-## B2B SaaS & Enterprise Capabilities
-- **Side-by-Side Model Arenas**: Run real-time, multi-LLM tournaments with custom criteria to determine the best model configurations for specific business domains.
-- **Unbiased Multi-Agent Consensus**: Prevent model bias via critique-and-revision debate rounds judged by independent agent panels using Elo rating comparisons.
-- **Team-scoped Access Controls & Multi-Tenancy**: Granular access control mapping team ownership and sharing limits, providing solid logical separation of run and arena data.
-- **Enterprise Rate Limiting & Quotas**: Advanced composite request fingerprinting to prevent service abuse, coupled with configurable monthly token and run limits per user/team.
-- **Auditable Observability**: Complete audit logs tracking auth events, sharing controls, billing activities, and model health metrics.
+[![CI](https://github.com/kriptokasim/Consultaion/actions/workflows/ci.yml/badge.svg)](https://github.com/kriptokasim/Consultaion/actions/workflows/ci.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
+[![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE)
+
+[**Live Demo**](https://consultaion.com/live) · [**Example Report**](https://consultaion.com) · [**API Docs**](docs/API.md)
+
+</div>
+
+---
+
+## What is Consultaion?
+
+> **Brand note:** The spelling *Consultaion* is intentional — it's the product
+> name, not a typo.
+
+Most AI tools give you one answer. Consultaion gives you a **structured
+multi-model debate** — then synthesises it into a decision.
+
+| Without Consultaion | With Consultaion |
+|---|---|
+| Ask one AI, get one opinion | Run 2–4 models in parallel |
+| No way to know if the AI is overconfident | See where models agree and where they clash |
+| Raw text you interpret yourself | Structured report: verdict, confidence, key findings, risks |
+| Trust the black box | Auditable: every model's reasoning is preserved |
+
+---
+
+## Modes
+
+| Mode | What it does |
+|---|---|
+| **Arena** | All selected models answer simultaneously; synthesis engine produces a PROCEED / INVESTIGATE / REJECT verdict |
+| **Debate** | Parliamentary-style: models take positions, critique each other through rounds, judge panel scores |
+| **Compare** | Side-by-side output from multiple models on the same prompt |
+| **Oracle** | Single deep-reasoning model for research-grade synthesis |
+| **RedTeam** | Adversarial challenge mode — one model argues against a draft decision |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Next.js 15 / React 19 frontend  (apps/web)             │
+│  Tailwind · Zustand · TanStack Query · SSE streaming    │
+└──────────────────────────┬──────────────────────────────┘
+                           │  HTTP + Server-Sent Events
+┌──────────────────────────▼──────────────────────────────┐
+│  FastAPI backend  (apps/api)                            │
+│  SQLModel · PostgreSQL · Alembic migrations             │
+│  Celery + Redis (async tasks, SSE broker)               │
+│  LiteLLM adapter (OpenAI · Anthropic · Gemini · Groq…) │
+│  BYOK encryption  (AES-256-GCM, per-user AAD)          │
+└─────────────┬───────────────────────────┬───────────────┘
+              │                           │
+  ┌───────────▼───────┐       ┌───────────▼──────────┐
+  │  Arena Engine     │       │  Reporting Engine     │
+  │  asyncio.gather   │       │  Embedding cosine     │
+  │  per-model SSE    │       │  G-Eval rubric        │
+  │  delta streaming  │       │  Critique-revise loop │
+  └───────────────────┘       └──────────────────────┘
+```
+
+**Tech stack:**
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15.5, React 19, Tailwind CSS, Radix UI, Zustand |
+| Backend | FastAPI 0.138, Python 3.11, SQLModel, Alembic |
+| Database | PostgreSQL (prod) · SQLite (CI) |
+| Task queue | Celery 5.4, Redis |
+| LLM routing | LiteLLM 1.84+ with OpenRouter fallback |
+| Auth | PyJWT 2.13, bcrypt, Google OAuth, progressive account lockout |
+| Observability | Sentry, PostHog, Prometheus, OpenTelemetry, Langfuse |
+| CI | GitHub Actions — Bandit, pip-audit, npm audit, ruff, mypy, pytest (≥75% coverage) |
+
+---
 
 ## Quick Start
-1. `cp .env.example .env` and set `DATABASE_URL`/LLM keys.
-2. Backend: `cd apps/api && python3.11 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
-3. Run migrations: `alembic upgrade head`.
-4. Frontend: `cd apps/web && npm install`.
-5. `cd infra && docker compose up --build` (starts FastAPI, Next.js, Postgres).
-6. Optional for local smoketests: set `FAST_DEBATE=1` to bypass the full LLM loop and return mock events instantly.
 
-📚 Need endpoint details or diagrams? See [API.md](docs/API.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- **[Error Codes](apps/api/ERROR_CODES.md)**: Standardized error codes for API consumers.
-- **[Observability](docs/OBSERVABILITY.md)**: Logging, telemetry, and operational monitoring.
+### Prerequisites
 
-## Diligence and Trust
+- Python 3.11 (the backend **must** run on 3.11 — newer versions cause ASGI test hangs)
+- Node.js 20+
+- Docker + Docker Compose
 
-Consultaion is in pre-seed / early product stage. The repository includes a diligence pack describing current trust foundations and planned enterprise hardening.
+### 1 — Clone and configure
 
-- [SECURITY_OVERVIEW.md](docs/diligence/SECURITY_OVERVIEW.md)
-- [DATA_RETENTION.md](docs/diligence/DATA_RETENTION.md)
-- [SOC2_READINESS.md](docs/diligence/SOC2_READINESS.md)
-- [GOVERNANCE.md](docs/diligence/GOVERNANCE.md)
-- [POSTGRES_TESTING_PLAN.md](docs/diligence/POSTGRES_TESTING_PLAN.md)
-- [MULTI_TENANCY_HARDENING.md](docs/diligence/MULTI_TENANCY_HARDENING.md)
-- [CI_OVERVIEW.md](docs/diligence/CI_OVERVIEW.md)
+```bash
+git clone https://github.com/kriptokasim/Consultaion.git
+cd Consultaion
+cp apps/api/.env.example apps/api/.env
+```
 
-These documents describe readiness work and roadmap items; they are not compliance certifications.
+Edit `apps/api/.env` — the minimum required variables:
 
-## Repository Source of Truth
+```env
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/consultaion_dev
+JWT_SECRET=<random-32-char-string>
+INTERNAL_SECRET=<same-32-char-string-in-vercel>
+OPENROUTER_API_KEY=sk-or-...          # one key unlocks all models
+STREAMING_RESPONSES_ENABLED=1         # stream tokens as they arrive
+ARENA_MAX_TOKENS=800                  # faster responses
+RATE_LIMIT_BACKEND=redis
+REDIS_URL=redis://localhost:6379/0
+```
 
-GitHub is the source of truth for Consultaion development, CI, pull requests, and release tracking. Any GitLab mirrors are read-only distribution mirrors unless explicitly documented otherwise.
+### 2 — Start infrastructure
+
+```bash
+cd infra && docker compose up -d db redis
+```
+
+### 3 — Backend
+
+```bash
+cd apps/api
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn main:app --reload --port 8000
+```
+
+### 4 — Frontend
+
+```bash
+cd apps/web
+npm install
+cp .env.local.example .env.local   # set NEXT_PUBLIC_API_URL=http://localhost:8000
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+### 5 — Run with mock LLMs (no API keys needed)
+
+```bash
+# In apps/api/.env:
+USE_MOCK=1
+STREAMING_RESPONSES_ENABLED=1
+```
+
+---
+
+## Environment Variables Reference
+
+### Backend (`apps/api/.env`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | ✅ | — | PostgreSQL connection string |
+| `JWT_SECRET` | ✅ | — | 32+ char random secret for auth tokens |
+| `INTERNAL_SECRET` | ✅ | — | Must match Vercel/frontend env var exactly |
+| `OPENROUTER_API_KEY` | ✅* | — | One key gives access to all models via OpenRouter |
+| `REDIS_URL` | ✅ | — | Required for SSE, task queue, and OAuth state |
+| `RATE_LIMIT_BACKEND` | ✅ | `memory` | Set to `redis` in production |
+| `STREAMING_RESPONSES_ENABLED` | ⚠️ | `False` | **Set to `1` for real-time token streaming** |
+| `ARENA_MAX_TOKENS` | — | `1200` | Max tokens per model per run (800 = faster) |
+| `ARENA_MODEL_TIMEOUT_SECONDS` | — | `45` | Per-model timeout before marking as failed |
+| `GOOGLE_CLIENT_ID` | — | — | For Google OAuth sign-in |
+| `GOOGLE_CLIENT_SECRET` | — | — | For Google OAuth sign-in |
+| `GOOGLE_REDIRECT_URL` | — | — | Must be `https://your-frontend.vercel.app/api/auth/google/callback` |
+| `REQUIRE_REAL_LLM` | — | `0` | Set `1` in production to reject mock mode |
+| `USE_MOCK` | — | `0` | Set `1` for dev with no API keys |
+| `ENV` | — | `development` | `production` / `staging` / `development` / `test` |
+| `STRIPE_SECRET_KEY` | — | — | For billing integration |
+| `STRIPE_WEBHOOK_SECRET` | — | — | For Stripe webhook signature verification |
+| `SENTRY_DSN` | — | — | Error tracking |
+
+\* Or set individual provider keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`
+
+### Frontend (`apps/web/.env.local`)
+
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | ✅ | Backend URL (e.g. `https://your-api.onrender.com`) |
+| `INTERNAL_SECRET` | ✅ | Must match backend exactly (used for Google OAuth handoff) |
+| `GOOGLE_CLIENT_ID` | — | Google OAuth client ID |
+| `GOOGLE_REDIRECT_URL` | — | `https://your-frontend/api/auth/google/callback` |
+| `NEXT_PUBLIC_POSTHOG_KEY` | — | Analytics |
+| `NEXT_PUBLIC_SITE_URL` | — | Full frontend URL for OG tags |
+
+---
+
+## Google OAuth Setup
+
+The OAuth state is stored in Redis on the backend. Both environments must be configured:
+
+1. In **Google Cloud Console** → Credentials → add `https://your-frontend.vercel.app/api/auth/google/callback` as an Authorised redirect URI.
+2. In **Render** (backend): set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URL`, `INTERNAL_SECRET`, `REDIS_URL`, `RATE_LIMIT_BACKEND=redis`.
+3. In **Vercel** (frontend): set `INTERNAL_SECRET` to the **exact same string** as Render.
+
+If you see `auth.invalid_state` — the most common cause is `INTERNAL_SECRET` mismatch or `RATE_LIMIT_BACKEND=memory` on Render (OAuth state is lost between dynos).
+
+---
+
+## Deployment (Render + Vercel)
+
+### Backend (Render Web Service)
+
+```
+Build command:  pip install -r apps/api/requirements.txt
+Start command:  cd apps/api && python scripts/migrate_database.py && uvicorn main:app --host 0.0.0.0 --port $PORT
+Root directory: apps/api
+```
+
+**Required Render env vars:** `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `INTERNAL_SECRET`, `OPENROUTER_API_KEY`, `RATE_LIMIT_BACKEND=redis`, `STREAMING_RESPONSES_ENABLED=1`, `ENV=production`, `REQUIRE_REAL_LLM=1`
+
+### Frontend (Vercel)
+
+```
+Framework:    Next.js
+Root:         apps/web
+Build cmd:    npm run build
+Output dir:   .next
+```
+
+**Required Vercel env vars:** `NEXT_PUBLIC_API_URL`, `INTERNAL_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_REDIRECT_URL`
+
+---
+
+## BYOK (Bring Your Own Key)
+
+Users can add their own provider API keys in **Settings → Provider Keys**. Keys are:
+- Encrypted at rest with AES-256-GCM
+- AAD-bound to `(user_id, provider)` — a stolen ciphertext cannot be decrypted under a different account
+- Never logged or exposed in API responses
+- Resolved at runtime per-request by the model gateway
+
+---
+
+## Development
+
+### Run tests
+
+```bash
+# Backend (requires Python 3.11, Postgres running)
+cd apps/api
+pytest                          # full suite + coverage report
+pytest -q --no-cov              # fast run, no coverage
+
+# Frontend
+cd apps/web
+npx vitest run                  # unit tests
+npm run test:e2e                # Playwright e2e (app must be running)
+```
+
+### Code quality
+
+```bash
+# From repo root:
+ruff check apps/api             # lint
+ruff check apps/api --fix       # lint + auto-fix
+mypy apps/api                   # type check
+
+# From apps/web:
+npx tsc --noEmit                # TypeScript check
+```
+
+**CI gates:** ruff, mypy, pytest ≥75% coverage, Bandit (SAST), pip-audit, npm audit — all must pass on every PR.
+
+### Project structure
+
+```
+Consultaion/
+├── apps/
+│   ├── api/                    # FastAPI backend
+│   │   ├── arena/              # Arena mode engine (asyncio.gather fan-out)
+│   │   ├── model_gateway/      # LiteLLM adapter, routing, BYOK resolution
+│   │   ├── orchestration/      # Pipeline, checkpoints, finalization
+│   │   ├── parliament/         # Model registry, router, debate engine
+│   │   ├── reporting/          # Synthesizer, G-Eval, claim similarity
+│   │   ├── routes/             # FastAPI route handlers
+│   │   ├── security/           # Encryption, OAuth state store
+│   │   ├── worker/             # Celery tasks (billing, arena, debate)
+│   │   └── alembic/            # DB migrations
+│   └── web/                    # Next.js 15 frontend
+│       ├── app/                # App Router pages
+│       ├── components/         # UI components (arena/, parliament/, report/…)
+│       ├── hooks/              # React hooks (useRunWorkspace, usePromptHistory…)
+│       └── lib/                # API client, types, utilities
+├── infra/                      # Docker Compose (dev)
+├── docs/                       # Architecture, API docs, diligence pack
+└── scripts/                    # Migration, model freshness, audit tools
+```
+
+---
+
+## Supported Models (via OpenRouter)
+
+With a single `OPENROUTER_API_KEY` the following models are available:
+
+| Model ID | Provider | Notes |
+|---|---|---|
+| `deepseek-r1` | DeepSeek | Best reasoning quality |
+| `router-smart` | OpenRouter → GPT-4o-mini | Fast, cheap default |
+| `router-deep` | OpenRouter → GPT-4o | Premium quality |
+| `llama-3-free` | Meta via OpenRouter | Free tier, rate limited |
+| `mimo-v2-free` | Xiaomi via OpenRouter | Free tier, rate limited |
+
+Direct provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`) unlock those providers directly without OpenRouter.
+
+Users can also add their own keys per-provider in Settings → Provider Keys (BYOK).
+
+---
+
+## Diligence & Trust
+
+Consultaion is in pre-seed / internal beta. The repository includes a diligence pack:
+
+| Document | Summary |
+|---|---|
+| [SECURITY.md](SECURITY.md) | Deployment security guidance |
+| [SECURITY_OVERVIEW.md](docs/diligence/SECURITY_OVERVIEW.md) | Auth, encryption, secret management |
+| [SOC2_READINESS.md](docs/diligence/SOC2_READINESS.md) | Planned compliance roadmap |
+| [DATA_RETENTION.md](docs/diligence/DATA_RETENTION.md) | Data handling and deletion policies |
+| [CI_OVERVIEW.md](docs/diligence/CI_OVERVIEW.md) | CI pipeline and gates |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+
+*These documents describe readiness work and roadmap; they are not compliance certifications.*
+
+---
+
+## Roadmap
+
+- [x] SSE streaming, mock agents, final synthesis
+- [x] Real LLM calls via LiteLLM
+- [x] PostgreSQL schema + Alembic migrations
+- [x] Arena mode with parallel fan-out
+- [x] BYOK key encryption (AES-256-GCM)
+- [x] Google OAuth + progressive account lockout
+- [x] Stripe billing + webhook atomicity
+- [x] Bandit / pip-audit / npm audit in CI
+- [x] Mobile bottom navigation + swipe card UI
+- [ ] SOC 2 Type I audit
+- [ ] SSO / SAML for enterprise
+- [ ] SCIM provisioning
+- [ ] Async synthesis triggered before all models finish
+- [ ] Per-model call timeout dashboard
+
+---
+
+## Contributing
+
+This is a proprietary product. External contributions are not accepted at this time.
+If you've found a security issue, please email the maintainer directly rather than opening a public issue.
+
+---
 
 ## License
 
-Proprietary. All rights reserved. See [LICENSE](LICENSE) for full text.
+Proprietary and Confidential. All rights reserved. See [LICENSE](LICENSE).
 
-> **Python runtime:** The FastAPI backend and its pytest suite currently target **Python 3.11.x**. Running under newer interpreters (3.12/3.13) causes ASGI/TestClient hangs on POST requests, so stick to 3.11 for local dev, CI, and Docker builds until upstream fixes land.
+---
 
+<div align="center">
 
-### Local Database Setup
+Built by [@kriptokasim](https://github.com/kriptokasim)
 
-**Prerequisites**
-```bash
-cd infra
-docker compose up -d db redis
-```
+*"Consultaion" is intentional — it's the product name.*
 
-**First‑time setup**
-```bash
-cd apps/api
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-
-export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/consultaion_dev
-
-# One‑shot dev DB reset + migrations
-make api-dev-db-reset
-
-# Optional: seed demo data
-make api-dev-db-seed
-```
-
-**After pulling new code that changes models**
-```bash
-cd apps/api
-. .venv/bin/activate
-make api-dev-db-migrate
-# or, if schema is badly out of sync and you're okay losing dev data:
-make api-dev-db-reset
-```
-
-**Important notes**
-- `api-dev-db-reset` is **destructive** and intended only for local/dev environments.
-- The startup check will fail fast with a clear log if required tables (e.g. `auditlog`, `api_keys`, `usagequota`, `teammember`) are missing.
-
-
-### Environment Flags
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | Required Postgres connection string in production. |
-| `JWT_SECRET` | Required unique signing secret; app now refuses to boot if unchanged. |
-| `LOG_LEVEL` | Controls backend JSON log verbosity (`INFO`, `DEBUG`, etc.). |
-| `USE_MOCK` / `FAST_DEBATE` / `DISABLE_AUTORUN` | Control LiteLLM mocks, instant runs, and manual-start mode. |
-| `DEFAULT_MAX_RUNS_PER_HOUR` / `DEFAULT_MAX_TOKENS_PER_DAY` | Per-user quotas. |
-| `SENTRY_DSN` / `SENTRY_ENV` / `SENTRY_SAMPLE_RATE` | Optional backend error/trace reporting. |
-| `NEXT_PUBLIC_SENTRY_DSN` | Optional web error capture (guards CDN script). |
-| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` / `DB_POOL_RECYCLE` | Postgres pooling (ignored on SQLite). |
-| `ENABLE_METRICS` | Toggle `/metrics` counters for debates/SSE/exports. |
-| `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_VOTE_THRESHOLD` | Client API origin & Aye threshold. |
-| `WEB_APP_ORIGIN` | Frontend base used for OAuth redirects (default `http://localhost:3000`). |
-| `BILLING_PROVIDER` / `STRIPE_*` / `BILLING_CHECKOUT_*` | Billing provider selection, Stripe keys, and checkout redirect URLs. |
-| `N8N_WEBHOOK_URL` | Optional automation webhook target for subscription/usage events. |
-| `DEBATE_DISPATCH_MODE` | Debate execution strategy (`inline` for dev, `celery` in production). |
-| `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Celery broker/backend (defaults to the Redis SSE URL when omitted). |
-| `COOKIE_SECURE` | Defaults to `True` in non-local environments (`IS_LOCAL_ENV=False`). Set to `0` explicitly if running behind non-SSL proxy. |
-| `WORKERS` | Number of Gunicorn workers. If > 1, `SSE_BACKEND` must be `redis` to ensure event delivery. |
-
-### Model catalog & providers
-- Consultaion uses LiteLLM as an internal gateway and supports OpenRouter, OpenAI, Anthropic, and Gemini (server-side keys only; users do not supply their own).
-- Configure provider API keys in `.env` (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`); models auto-enable when keys are present.
-- A curated catalog is exposed via `GET /models`; the recommended model is set in the registry (`ModelConfig.recommended`) and used as the default when creating debates.
-
-### Async debate workers
-- Keep `DEBATE_DISPATCH_MODE=inline` for local/dev environments so debates run inside the FastAPI process and honor `FAST_DEBATE` mock flows.
-- Switch to `DEBATE_DISPATCH_MODE=celery` in production to enqueue runs on the worker. This requires Redis-backed SSE so the API process and worker share channels.
-- Start the worker via `celery -A worker.celery_app worker -l info` (or `docker compose up worker`). The API automatically schedules `debates.run` tasks whenever a debate is created or manually started.
-
-
-### Production Checklist
-
-- [ ] Set unique `JWT_SECRET`, `DATABASE_URL`, `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`; avoid default DB creds.
-- [ ] Serve behind HTTPS and update `CORS_ORIGINS`; keep `ENABLE_CSRF=1`.
-- [ ] Run `alembic upgrade head` before first deploy.
-- [ ] Configure rate/usage limits (`RL_MAX_CALLS`, quotas) and use Redis-backed IP rate limiting in prod (`RATE_LIMIT_BACKEND=redis`, `REDIS_URL` set); monitor `/metrics`.
-- [ ] Keep `FAST_DEBATE=0`, `USE_MOCK=0`, and set `REQUIRE_REAL_LLM=1` when using real LLMs.
-- [ ] Enable Sentry + structured JSON logs for observability and ensure `/healthz` passes.
-- [ ] Verify Nginx proxy buffering is disabled (SSE) and cookies forward correctly.
-
-## Features
-- Multi-agent debate pipeline with configurable agents/judges/budget per run.
-- SSE runner UI plus `/runs` history, Hansard transcript, Voting Chamber, analytics, and downloadable reports.
-- Email/password auth with JWT cookies, per-user `/runs` visibility, team sharing controls, and an admin console with audit logs.
-- Alembic migrations, Postgres persistence, health/version endpoints, usage quotas, and structured rate limits.
-- Pairwise vote tracking → Elo & Wilson confidence intervals powering a public leaderboard and Methodology brief.
-- Web UI uses an “Amber-Mocha” cockpit theme (warm cream background with amber accents) across landing, dashboard, and live views.
-
-### Reliability, Safety & Secrets
-- Provider/model health tracking with a circuit breaker surfaces in the admin Ops view; unhealthy providers cool down automatically.
-- PII scrubbing runs on LLM inputs before they leave the API process to reduce accidental leakage.
-- Production boot validation enforces strong, non-default secrets (JWT, Stripe webhook) and requires real provider keys when `REQUIRE_REAL_LLM=1`.
-- See `SECURITY.md` for deployment guidance.
-
-### Test coverage
-- `pytest -q` in `apps/api` now includes the audit-derived suites for orchestrator helpers, ratings, rate limits, SSE channel hygiene, and the multi-LLM registry (`apps/api/tests/test_*.py`). Run them locally after migrations to catch regressions early.
-- Backend smoke: `cd apps/api && pytest -q`
-- Web E2E (app must be running): `cd apps/web && npm run test:e2e`
-
-### Dev Tooling & Quality Gates
-
-The backend enforces code quality through automated linting, type checking, and coverage requirements.
-
-**Install dev dependencies:**
-```bash
-cd apps/api
-pip install -r requirements-dev.txt
-```
-
-**Run quality checks:**
-```bash
-# From repo root
-ruff check apps/api          # Linting (auto-fix with --fix)
-mypy apps/api                # Type checking
-
-# From apps/api
-pytest                       # Tests with 75% coverage requirement
-```
-
-**Pre-commit hooks:**
-```bash
-# From repo root
-pre-commit install           # One-time setup
-pre-commit run --all-files   # Manual run
-
-# Hooks run automatically on git commit:
-# - ruff (linting + formatting)
-# - mypy (type checking)
-# - pytest (fast subset)
-```
-
-**CI enforcement:**
-- All PRs must pass ruff, mypy, and pytest with ≥75% coverage
-- Configuration: `ruff.toml`, `mypy.ini`, `pytest.ini`, `.pre-commit-config.yaml`
-
-### API Router Layout
-- `apps/api/routes/auth.py`: login/register/session endpoints.
-- `apps/api/routes/stats.py`: health/ready/metrics plus model/hall-of-fame stats.
-- `apps/api/routes/debates.py`: debate/run lifecycle, exports, and streams.
-- `apps/api/routes/teams.py`: team creation and membership/sharing.
-
-### Teams & Sharing
-- Create teams, invite collaborators, and assign debates to a team via the `/runs` “Share” control.
-- User-scoped `/runs` filters (Mine / Team / All for admins) ensure the archive stays organized.
-
-### Rate Limits & Quotas
-- API enforces IP-based burst limits plus per-user hourly run counts and daily token quotas (`DEFAULT_MAX_RUNS_PER_HOUR`, `DEFAULT_MAX_TOKENS_PER_DAY`).
-- When a limit is hit the UI surfaces a dismissible banner with the reset ETA countdown, and audit logs capture the violation.
-
-### Audit Log
-- Every critical action (register, login, share run, exports, rate-limit block) lands in `audit_log`.
-- Admins can review the latest entries under `/admin` → “Audit log” tab.
-
-### Voting Mapping
-- Judge score events stream into the Voting Chamber; scores above `NEXT_PUBLIC_VOTE_THRESHOLD` march through the Aye lobby.
-- Run detail pages now show Hansard, Scoreboard, Voting Chamber, Voting Section, and raw timeline using the new Sepia/Amber palette.
-
-## Roadmap
-- v0.1: SSE streaming, mock agents, mock judges, final synthesis ✅
-- v0.2: LiteLLM real LLM calls, simple rubrics ✅
-- v0.3: Postgres schema (debates, rounds, messages, scores), persistent logs ✅
-- v0.4: Configurable depth for critique/revision rounds
-- v0.5: Borda + Condorcet voting; Elo weighting
-- v0.6: Safety/PII module, citation enforcement
+</div>
