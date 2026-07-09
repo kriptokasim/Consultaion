@@ -117,9 +117,11 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
             "usage_limit_exceeded",
             {"user_id": _normalize_user_id(user_id), "metric": "debates", "limit": max_debates},
         )
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={"code": "BILLING_LIMIT_DEBATES", "max": max_debates},
+        from exceptions import RateLimitError
+        raise RateLimitError(
+            message="Billing limit for debates exceeded.",
+            code="BILLING_LIMIT_DEBATES",
+            details={"max": max_debates},
         )
 
     exports_flag = limits.get("exports_enabled", True)
@@ -130,9 +132,10 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
             "usage_limit_exceeded",
             {"user_id": _normalize_user_id(user_id), "metric": "exports"},
         )
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={"code": "BILLING_LIMIT_EXPORTS_DISABLED"},
+        from exceptions import RateLimitError
+        raise RateLimitError(
+            message="Exports are disabled for this account.",
+            code="BILLING_LIMIT_EXPORTS_DISABLED",
         )
 
 

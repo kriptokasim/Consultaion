@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useEffect } from "react"
-import { isFeatureEnabled, FeatureFlag } from "../lib/feature-flags"
+import React, { useEffect, useState } from "react"
+import { isFeatureEnabled, FeatureFlag, subscribeToFeatureFlags } from "../lib/feature-flags"
 
 interface FeatureGateProps {
   flag: FeatureFlag
@@ -23,8 +23,22 @@ function trackFeatureGate(flag: string, enabled: boolean, usedFallback: boolean)
   }
 }
 
+export function useFeatureFlag(flag: FeatureFlag): boolean {
+  const [enabled, setEnabled] = useState(() => isFeatureEnabled(flag))
+
+  useEffect(() => {
+    const unsubscribe = subscribeToFeatureFlags(() => {
+      setEnabled(isFeatureEnabled(flag))
+    })
+    setEnabled(isFeatureEnabled(flag))
+    return unsubscribe
+  }, [flag])
+
+  return enabled
+}
+
 export function FeatureGate({ flag, children, fallback = null }: FeatureGateProps) {
-  const enabled = isFeatureEnabled(flag)
+  const enabled = useFeatureFlag(flag)
   const usedFallback = !enabled && fallback !== null
 
   useEffect(() => {
@@ -32,8 +46,4 @@ export function FeatureGate({ flag, children, fallback = null }: FeatureGateProp
   }, [flag, enabled, usedFallback])
 
   return <>{enabled ? children : fallback}</>
-}
-
-export function useFeatureFlag(flag: FeatureFlag): boolean {
-  return isFeatureEnabled(flag)
 }

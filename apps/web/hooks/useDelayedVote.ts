@@ -69,6 +69,10 @@ export function useDelayedVote(
 
         const handleScroll = () => {
             const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+            if (scrollHeight <= 0) {
+                setHasScrolledPast(true);
+                return;
+            }
             const scrolled = window.scrollY / scrollHeight;
 
             if (scrolled >= scrollThreshold) {

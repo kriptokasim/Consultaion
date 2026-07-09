@@ -6,7 +6,6 @@ Reads the docs/release-manifest.json and generates docs/STATE.md and a
 CHANGELOG.md entry for the current patchset.
 """
 import json
-import re
 import sys
 from pathlib import Path
 

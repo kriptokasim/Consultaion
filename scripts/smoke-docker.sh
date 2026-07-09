@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker-compose.smoke.yml"
+API_URL="${API_URL:-http://localhost:8000}"
+WEB_URL="${WEB_URL:-http://localhost:3000}"
 
 cleanup() {
   echo ""
@@ -55,7 +57,7 @@ docker compose -f "$COMPOSE_FILE" up -d api
 
 echo "Waiting for API health..."
 for i in $(seq 1 30); do
-  if curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then
+  if curl -sf "$API_URL/healthz" > /dev/null 2>&1; then
     echo "API is healthy!"
     break
   fi
@@ -68,10 +70,10 @@ for i in $(seq 1 30); do
 done
 
 echo "Verifying API /healthz..."
-curl -sf http://localhost:8000/healthz | python3 -m json.tool
+curl -sf "$API_URL/healthz" | python3 -m json.tool
 
 echo "Verifying API /readyz..."
-if ! curl -sf http://localhost:8000/readyz > /dev/null 2>&1; then
+if ! curl -sf "$API_URL/readyz" > /dev/null 2>&1; then
   echo "WARNING: /readyz endpoint not available"
 else
   echo "/readyz OK"
@@ -82,7 +84,7 @@ docker compose -f "$COMPOSE_FILE" up -d web
 
 echo "Waiting for Web health..."
 for i in $(seq 1 30); do
-  if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+  if curl -sf "$WEB_URL" > /dev/null 2>&1; then
     echo "Web is healthy!"
     break
   fi
@@ -96,7 +98,7 @@ done
 echo "Web server OK"
 
 echo "Verifying web-to-API proxy..."
-if curl -sf http://localhost:3000/api/healthz > /dev/null 2>&1; then
+if curl -sf "$WEB_URL/api/healthz" > /dev/null 2>&1; then
   echo "Web-to-API proxy OK"
 else
   echo "WARNING: Web-to-API proxy not responding"

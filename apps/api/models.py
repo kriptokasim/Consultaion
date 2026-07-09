@@ -105,7 +105,9 @@ class DebateCheckpoint(SQLModel, table=True):
     __tablename__ = "debate_checkpoint"
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
-    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    debate_id: str = Field(
+        sa_column=Column(String, ForeignKey("debate.id", ondelete="CASCADE"), nullable=False, index=True),
+    )
     
     # State machine
     step: str = Field(nullable=False, index=True)  # e.g., "draft", "critique", "judge", "done"

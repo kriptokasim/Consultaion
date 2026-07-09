@@ -14,12 +14,11 @@ ignore = [
   "E501",  # line length handled separately
   "B008",  # FastAPI uses Depends() in function defaults - this is intentional
   "B007",  # Loop variables not used - sometimes intentional for unpacking
-  "F841",  # Unused local variables - many are intentional for state tracking
 ]
 
 [lint.per-file-ignores]
-"tests/*.py" = ["E402"]  # Test files
-"**/tests/*.py" = ["E402"]  # Test files in subdirectories
+"tests/*.py" = ["E402", "F841"]  # Test files
+"**/tests/*.py" = ["E402", "F841"]  # Test files in subdirectories
 "apps/api/parliament/engine.py" = ["E402"]  # Conditional imports
 "apps/api/routes/auth.py" = ["E402"]  # Conditional imports
 "apps/api/ratelimit.py" = ["E402"]  # Late import
@@ -28,6 +27,10 @@ ignore = [
 "apps/api/main.py" = ["E402"]  # Late import
 "apps/api/agents.py" = ["B904"]  # Custom exception wrapping
 "apps/api/alembic/versions/*.py" = ["F841"]  # Migration files
+"scripts/*.sh" = ["F841"]  # Shell scripts with intentional unused vars
+"scripts/*.py" = ["F841", "E402"]  # Python scripts with intentional unused vars and late imports
+"apps/api/routes/debug.py" = ["F841"]  # Debug endpoints with intentional unused vars
+"apps/api/database.py" = ["E402"]  # Late import
 
 [lint.isort]
 known-first-party = ["apps"]

@@ -1,8 +1,10 @@
-import pytest
 from datetime import datetime, timedelta, timezone
-from sqlmodel import Session
+
+import pytest
 from models import Debate
 from orchestrator_cleanup import cleanup_stale_debates
+from sqlmodel import Session
+
 
 @pytest.mark.asyncio
 async def test_lease_timeout_retries_exceeded(db_session: Session):

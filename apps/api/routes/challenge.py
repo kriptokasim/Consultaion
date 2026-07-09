@@ -189,7 +189,7 @@ async def submit_challenge_round(
 
     debate = require_debate_access(session.get(Debate, challenge_sess.debate_id), current_user, session)
 
-    require_llm_action_allowed(
+    await require_llm_action_allowed(
         user=current_user,
         action="challenge_round",
         session=session,

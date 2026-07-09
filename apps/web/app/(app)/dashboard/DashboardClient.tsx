@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, BarChart3, Trophy } from "lucide-react";
@@ -35,11 +35,15 @@ export default function DashboardClient({ email }: { email?: string }) {
     queryFn: getBillingMe
   });
 
+  const hasRedirectedRef = useRef(false);
+
   // FH109: Direct first-run activation — redirect zero-runs users to live composer
   useEffect(() => {
     if (!debatesLoading && debates.length === 0) {
       const redirectEnabled = process.env.NEXT_PUBLIC_FIRST_RUN_LIVE_REDIRECT_ENABLED !== "false";
       if (redirectEnabled) {
+        if (hasRedirectedRef.current) return;
+        hasRedirectedRef.current = true;
         trackEvent("first_run_redirect_to_live");
         router.replace("/live?focus=prompt");
         return;

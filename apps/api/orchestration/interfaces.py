@@ -3,9 +3,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from agents import UsageAccumulator
-
-
 from schemas import DebateConfig
+
 
 @dataclass
 class DebateContext:

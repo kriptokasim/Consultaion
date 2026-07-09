@@ -72,7 +72,12 @@ export async function GET(request: NextRequest) {
     try {
       const base = new URL(request.url).origin;
       const resolved = new URL(nextParam, base);
-      if (resolved.origin === base && !resolved.pathname.includes("\\")) {
+      // BUG-WEB-1: Strict open redirect protection
+      const isSameOrigin = resolved.origin === base;
+      const hasNoBackslash = !resolved.pathname.includes("\\");
+      const isNotProtocolRelative = !nextParam.startsWith("//");
+      const isNotDangerousScheme = !nextParam.match(/^(javascript|data|vbscript):/i);
+      if (isSameOrigin && hasNoBackslash && isNotProtocolRelative && isNotDangerousScheme) {
         nextPath = resolved.pathname + resolved.search + resolved.hash;
       }
     } catch {

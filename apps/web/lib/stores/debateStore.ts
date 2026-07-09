@@ -39,7 +39,10 @@ export const useDebateStore = create<DebateState>((set) => ({
     setActiveDebate: (id) => set({ activeDebateId: id }),
     setRound: (round) => set({ currentRound: round }),
     setConnectionStatus: (status) => set({ connectionStatus: status }),
-    addEvent: (event) => set((state) => ({ events: [...state.events, event] })),
+    addEvent: (event) => set((state) => {
+        state.events.push(event);
+        return { events: state.events };
+    }),
     setEvents: (events) => set({ events }),
 
     setIsPlaying: (isPlaying) => set({ isPlaying }),

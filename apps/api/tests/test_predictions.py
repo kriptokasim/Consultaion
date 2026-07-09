@@ -6,7 +6,8 @@ from sqlmodel import select
 
 def test_cast_prediction_success(authenticated_client, db_session, monkeypatch):
     """Test creating, updating, and locking a prediction successfully."""
-    monkeypatch.setattr("routes.voting.require_llm_action_allowed", lambda **kwargs: None)
+    async def mock_guard(**kwargs): return None
+    monkeypatch.setattr("routes.voting.require_llm_action_allowed", mock_guard)
     debate_id = "test-voting-debate-1"
     
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
@@ -71,7 +72,8 @@ def test_cast_prediction_success(authenticated_client, db_session, monkeypatch):
 
 def test_cast_prediction_completed_debate(authenticated_client, db_session, monkeypatch):
     """Test that predictions are disabled once a debate is completed."""
-    monkeypatch.setattr("routes.voting.require_llm_action_allowed", lambda **kwargs: None)
+    async def mock_guard(**kwargs): return None
+    monkeypatch.setattr("routes.voting.require_llm_action_allowed", mock_guard)
     debate_id = "test-voting-debate-completed"
     
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
@@ -97,7 +99,8 @@ def test_cast_prediction_completed_debate(authenticated_client, db_session, monk
 @pytest.mark.anyio
 async def test_reveal_prediction_and_reasons(authenticated_client, db_session, monkeypatch):
     """Test prediction resolution and LLM reason extraction during reveal."""
-    monkeypatch.setattr("routes.voting.require_llm_action_allowed", lambda **kwargs: None)
+    async def mock_guard(**kwargs): return None
+    monkeypatch.setattr("routes.voting.require_llm_action_allowed", mock_guard)
     debate_id = "test-voting-debate-reveal"
     
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()

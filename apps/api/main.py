@@ -206,7 +206,7 @@ async def lifespan(app: FastAPI):
         from alembic.migration import MigrationContext
         
         # Assume alembic.ini is in the root or accessible
-        alembic_cfg = config.Config("alembic.ini") 
+        _alembic_cfg = config.Config("alembic.ini") 
         # We need to set the script location relative to where we are or use absolute path
         # If alembic.ini relies on recursive search or specific paths, this might be tricky.
         # Simplification: Just verify alembic_version table is readable and has a revision.
@@ -377,7 +377,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             trace_id=trace_id,
         )
-        corr_token = set_correlation_context(ctx)
+        _corr_token = set_correlation_context(ctx)
 
         start = time.perf_counter()
         status_code = 500

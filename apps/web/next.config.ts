@@ -60,9 +60,9 @@ const nextConfig: NextConfig = {
       "frame-ancestors 'self'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      `connect-src 'self' ${apiOrigin} ${posthogHost} https: wss:`,
+      "style-src 'self'",
+      "script-src 'self'",
+      `connect-src 'self' ${apiOrigin} ${posthogHost} wss:`,
       "form-action 'self'",
       "upgrade-insecure-requests",
     ].join("; ");
@@ -84,7 +84,7 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         headers: [
           { key: "X-Forwarded-Host", value: hostname },
-          { key: "X-Forwarded-Proto", value: "https" },
+          { key: "X-Forwarded-Proto", value: process.env.NODE_ENV === 'production' ? 'https' : 'http' },
         ],
       },
     ];

@@ -151,9 +151,18 @@ export function extractEventItems(payload: unknown): unknown[] {
   return [];
 }
 
+// BUG-WEB-2: Debounce 401 redirects to prevent infinite redirect loops
+// when multiple concurrent requests all return 401 simultaneously.
+let _lastAuthRedirectTs = 0;
+const AUTH_REDIRECT_DEBOUNCE_MS = 2000;
+
 const handleClientAuthRedirect = (status: number | undefined) => {
   if (typeof window !== "undefined" && status && AUTH_REDIRECT_STATUSES.has(status)) {
-    window.location.href = "/login";
+    const now = Date.now();
+    if (now - _lastAuthRedirectTs > AUTH_REDIRECT_DEBOUNCE_MS) {
+      _lastAuthRedirectTs = now;
+      window.location.href = "/login";
+    }
   }
 };
 
@@ -219,7 +228,9 @@ export async function startDebate(payload: { prompt: string; config?: any; model
 }
 
 export function streamDebate(id: string) {
-  return new EventSource(`${API}/debates/${id}/stream`, { withCredentials: true });
+  // BUG-WEB-4: Use relative path so requests go through the Next.js proxy,
+  // ensuring cookies are sent and CORS policy is enforced correctly.
+  return new EventSource(`/api/debates/${id}/stream`, { withCredentials: true });
 }
 
 export async function startDebateRun(debateId: string) {

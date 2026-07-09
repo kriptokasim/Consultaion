@@ -71,10 +71,13 @@ async def validate_key_with_provider(provider: str, key: str) -> bool:
                         code="provider_key.validation_failed"
                     )
             elif provider == "gemini":
-                # POST generate content
+                # POST generate content — key via header, never in URL (BUG-API-1)
                 response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}",
-                    headers={"Content-Type": "application/json"},
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-goog-api-key": key,
+                    },
                     json={"contents": [{"parts": [{"text": "Hello"}]}]}
                 )
                 if response.status_code != 200:

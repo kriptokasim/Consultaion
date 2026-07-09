@@ -192,9 +192,9 @@ async def run_arena(
         )
 
         # Build locale instruction if set
-        locale_instruction = ""
+        _locale_instruction = ""
         if locale and locale != "en":
-            locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
+            _locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
 
         async def _call_model(model_info):
             """Call a single SOTA model and return its response.
@@ -287,7 +287,7 @@ async def run_arena(
                     except asyncio.TimeoutError:
                         raise RuntimeError(
                             f"Model {model_info.display_name} timed out after {timeout_seconds} seconds."
-                        )
+                        ) from None
 
                     await backend.publish(
                         f"debate:{debate_id}",
@@ -408,7 +408,7 @@ async def run_arena(
                 except asyncio.TimeoutError:
                     raise RuntimeError(
                         f"Model {model_info.display_name} timed out after {timeout_seconds} seconds."
-                    )
+                    ) from None
 
                 return ArenaModelResponse(
                     model_id=model_info.id,

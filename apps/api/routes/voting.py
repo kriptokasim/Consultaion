@@ -64,7 +64,7 @@ async def cast_prediction(
     if not debate or not can_access_debate(debate, current_user, session):
         raise HTTPException(status_code=404, detail="Debate not found.")
 
-    require_llm_action_allowed(
+    await require_llm_action_allowed(
         user=current_user,
         action="voting_prediction",
         session=session,
@@ -183,7 +183,7 @@ async def reveal_prediction_and_reasons(
 
         # Trigger vote reasons LLM extraction if not pre-computed
         if not debate.final_meta or "vote_reasons" not in debate.final_meta:
-            require_llm_action_allowed(
+            await require_llm_action_allowed(
                 user=current_user,
                 action="voting_prediction",
                 session=session,

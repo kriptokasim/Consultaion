@@ -9,7 +9,7 @@ Usage:
         current_user: User = Depends(get_current_user),
         session: Session = Depends(get_session),
     ):
-        require_llm_action_allowed(
+        await require_llm_action_allowed(
             user=current_user,
             action="oracle_session",
             session=session,
@@ -19,6 +19,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Optional
@@ -42,11 +43,20 @@ ACTION_RATE_LIMITS: dict[str, tuple[int, int]] = {
     "voting_prediction":   (60, 20),
 }
 
+# H-API-1: Per-user asyncio locks to prevent concurrent credit consumption
+_user_locks: dict[str, asyncio.Lock] = {}
 # Simple per-user in-memory cooldown tracker (resets on process restart)
 _user_last_action: dict[str, dict[str, float]] = {}
 
 
-def require_llm_action_allowed(
+def _get_user_lock(user_id: str) -> asyncio.Lock:
+    """Get or create an asyncio.Lock for a specific user (thread-safe via GIL)."""
+    if user_id not in _user_locks:
+        _user_locks[user_id] = asyncio.Lock()
+    return _user_locks[user_id]
+
+
+async def require_llm_action_allowed(
     *,
     user: User,
     action: str,
@@ -58,6 +68,9 @@ def require_llm_action_allowed(
     """Enforce rate limit, quota, and access checks for LLM-triggering actions.
 
     Raises RateLimitError, ValidationError, or PermissionError on failure.
+
+    H-API-2: Order is credit check → rate limit → cooldown → consume credit.
+    This prevents burning rate limit budget when credits are exhausted.
     """
     # 1. Account active check
     if not user.is_active:
@@ -66,7 +79,15 @@ def require_llm_action_allowed(
             code="llm.account_inactive",
         )
 
-    # 2. Per-action rate limit
+    # 2. Credit check FIRST (H-API-2: don't consume rate limit budget if out of credits)
+    if user.hosted_credits_used >= user.hosted_credits_limit:
+        raise ValidationError(
+            message="Monthly AI credits exhausted. Upgrade your plan for more.",
+            code="llm.credits_exhausted",
+            hint="Visit Settings > Billing to upgrade your plan.",
+        )
+
+    # 3. Per-action rate limit (only consumed after credit check passes)
     window, max_requests = ACTION_RATE_LIMITS.get(action, (60, 10))
     allowed, retry_after = increment_ip_bucket(
         ip=ip_address,
@@ -82,44 +103,38 @@ def require_llm_action_allowed(
             details={"action": action, "retry_after": retry_after},
         )
 
-    # 3. Per-user cooldown (minimum seconds between same action)
-    now = time.time()
-    user_actions = _user_last_action.setdefault(user.id, {})
-    last_time = user_actions.get(action, 0.0)
-    cooldown = 2.0  # minimum 2s between same action
-    if now - last_time < cooldown:
-        raise RateLimitError(
-            message=f"Please wait {cooldown:.0f}s before performing this action again.",
-            code="llm.cooldown",
-            retry_after_seconds=int(cooldown - (now - last_time)) + 1,
-        )
-    user_actions[action] = now
+    # 4. Per-user cooldown with lock (H-API-1: prevents concurrent double-spending)
+    lock = _get_user_lock(user.id)
+    async with lock:
+        now = time.time()
+        user_actions = _user_last_action.setdefault(user.id, {})
+        last_time = user_actions.get(action, 0.0)
+        cooldown = 2.0  # minimum 2s between same action
+        if now - last_time < cooldown:
+            raise RateLimitError(
+                message=f"Please wait {cooldown:.0f}s before performing this action again.",
+                code="llm.cooldown",
+                retry_after_seconds=int(cooldown - (now - last_time)) + 1,
+            )
+        user_actions[action] = now
 
-    # 4. Hosted credit check
-    if user.hosted_credits_used >= user.hosted_credits_limit:
-        raise ValidationError(
-            message="Monthly AI credits exhausted. Upgrade your plan for more.",
-            code="llm.credits_exhausted",
-            hint="Visit Settings > Billing to upgrade your plan.",
-        )
-
-    # 5. Debate access check (if debate_id provided)
-    if debate_id:
-        debate = session.get(Debate, debate_id)
-        if not debate:
+        # 5. Debate access check (if debate_id provided)
+        if debate_id:
+            debate = session.get(Debate, debate_id)
+            if not debate:
+                from routes.common import can_access_debate
+                raise PermissionError(
+                    message="Debate not found",
+                    code="llm.debate_not_found",
+                )
             from routes.common import can_access_debate
-            raise PermissionError(
-                message="Debate not found",
-                code="llm.debate_not_found",
-            )
-        from routes.common import can_access_debate
-        if not can_access_debate(debate, user, session):
-            raise PermissionError(
-                message="You do not have access to this debate",
-                code="llm.permission_denied",
-            )
+            if not can_access_debate(debate, user, session):
+                raise PermissionError(
+                    message="You do not have access to this debate",
+                    code="llm.permission_denied",
+                )
 
-    # 6. Consume credit
-    user.hosted_credits_used += estimated_cost_units
-    session.add(user)
-    session.commit()
+        # 6. Consume credit (inside lock to prevent double-spending)
+        user.hosted_credits_used += estimated_cost_units
+        session.add(user)
+        session.commit()

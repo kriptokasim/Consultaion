@@ -223,8 +223,8 @@ async def route_llm_call(
     successful_result = None
 
     # Filter out models with open circuits
-    from model_gateway.provider_health import is_circuit_open, record_failure, record_success
     from model_gateway.policy import _model_uses_openrouter
+    from model_gateway.provider_health import is_circuit_open, record_failure, record_success
     filtered_direct_models = []
     for m in available_direct_models:
         # Resolve provider
@@ -376,7 +376,7 @@ async def route_llm_call(
                         last_error = result.error_message
                         last_error_code = result.error_code
                         record_failure("openrouter", result.error_code or "unknown", result.error_message or "")
-                        last_error_reason = f"Direct failed ({last_error}) and Fallback failed ({result.error_message})"
+                        _last_error_reason = f"Direct failed ({last_error}) and Fallback failed ({result.error_message})"
                 except Exception as fallback_error:
                     logger.error(f"Fallback model gateway route also failed: {fallback_error}")
                     last_error = f"Direct failed ({last_error}) and Fallback failed ({fallback_error})"
@@ -435,8 +435,8 @@ async def route_llm_stream(
     # Use policy._model_uses_openrouter — it checks the parliament registry
     # in addition to MODEL_MAP, so free-tier models (llama-3-free, mimo-v2-free)
     # that live in the registry but not MODEL_MAP are correctly detected.
-    from model_gateway.policy import _model_uses_openrouter
     from model_gateway.model_map import MODEL_MAP
+    from model_gateway.policy import _model_uses_openrouter
     if _model_uses_openrouter(model_id) or model_id.startswith("openrouter/"):
         adapter_cls = OpenRouterAdapter
         provider = "openrouter"

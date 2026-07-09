@@ -153,8 +153,8 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             key: string;
         }> = [];
 
-        modelResponses.forEach((resp) => {
-            slots.push({ type: "persisted", resp, key: (resp as any).model_id || (resp as any).id || Math.random().toString() });
+        modelResponses.forEach((resp, i) => {
+            slots.push({ type: "persisted", resp, key: (resp as any).model_id || (resp as any).id || (resp as any).display_name || `persisted-${i}` });
         });
 
         // 2. Map streaming buffers that don't have a persisted response yet

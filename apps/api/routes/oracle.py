@@ -161,7 +161,7 @@ async def start_oracle_session(
     """
     Initiates a user-facing reasoning summary session.
     """
-    require_llm_action_allowed(
+    await require_llm_action_allowed(
         user=current_user,
         action="oracle_session",
         session=session,
@@ -264,7 +264,7 @@ async def fork_oracle_branch(
     if not (current_user.role == "admin" or oracle_sess.user_id == current_user.id):
         raise PermissionError(message="Insufficient permissions", code="permission.denied")
 
-    require_llm_action_allowed(
+    await require_llm_action_allowed(
         user=current_user,
         action="oracle_fork",
         session=session,

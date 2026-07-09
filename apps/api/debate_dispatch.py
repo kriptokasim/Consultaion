@@ -5,12 +5,13 @@ import logging
 from config import settings
 from orchestrator import run_debate
 
+logger = logging.getLogger(__name__)
+
 try:
     from worker.debate_tasks import run_debate_task
-except Exception:  # pragma: no cover - Celery optional in some envs
+except Exception as exc:  # pragma: no cover - Celery optional in some envs
+    logger.warning("Could not import worker.debate_tasks: Celery dispatch unavailable", exc_info=exc)
     run_debate_task = None  # type: ignore
-
-logger = logging.getLogger(__name__)
 
 
 def choose_queue_for_debate(config_data: dict | None, settings_obj=settings) -> str:

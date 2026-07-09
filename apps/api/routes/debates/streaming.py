@@ -266,7 +266,7 @@ async def export_scores_csv(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    _debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     
     # Check export quota BEFORE doing expensive work (Patchset 65.B1)
     from billing.service import check_export_quota
@@ -281,11 +281,10 @@ async def export_scores_csv(
     loop = asyncio.get_running_loop()
     content = await loop.run_in_executor(None, lambda: generate_csv_content(scores))
     
-    # Increment and commit after successful generation
     increment_export_usage(session, current_user.id)
     from usage_limits import increment_export_usage_daily
     increment_export_usage_daily(session, current_user.id)
-    session.commit()
+    await loop.run_in_executor(None, session.commit)
     
     filename = f"scores_{debate_id}.csv"
     from audit import record_audit
@@ -419,7 +418,18 @@ async def stream_events(
                     await monitor_task
 
     # Explicit CORS headers — CORSMiddleware does not reliably inject on streaming responses
-    allowed_origin = settings.WEB_APP_ORIGIN or "*"
+    # BUG-API-2: Never fall back to "*" — fail-closed in production, localhost in dev
+    allowed_origin = settings.WEB_APP_ORIGIN
+    if not allowed_origin:
+        if getattr(settings, "IS_LOCAL_ENV", False):
+            allowed_origin = "http://localhost:3000"
+        else:
+            logger.error("SSE CORS denied: WEB_APP_ORIGIN is not configured in production")
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=500,
+                detail="Server misconfiguration: WEB_APP_ORIGIN is not set",
+            )
     return StreamingResponse(
         eventgen(),
         media_type="text/event-stream",

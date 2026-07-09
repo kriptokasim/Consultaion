@@ -13,9 +13,6 @@ from alembic.runtime.migration import MigrationContext
 from config import AppSettings
 from sqlalchemy import create_engine
 from sqlmodel import SQLModel
-import models
-import billing.models
-import promotions.models
 
 
 def main():

@@ -1,7 +1,7 @@
 """Official Consultaion API client for Python."""
 
 import json
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 
 import httpx
 
@@ -27,7 +27,7 @@ class ConsultaionClient:
         base_url: str,
         api_key: Optional[str] = None,
         timeout: float = 30.0,
-        **httpx_kwargs: any,
+        **httpx_kwargs: Any,
     ) -> None:
         """Initialize the Consultaion client.
         
@@ -49,7 +49,7 @@ class ConsultaionClient:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, *args: any) -> None:
+    async def __aexit__(self, *args: Any) -> None:
         """Async context manager exit."""
         await self.close()
 

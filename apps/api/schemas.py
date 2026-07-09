@@ -55,6 +55,7 @@ class JudgeConfig(BaseModel):
 
 
 class DebateConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     agents: List[AgentConfig] = Field(
         default_factory=list,
         max_length=20,

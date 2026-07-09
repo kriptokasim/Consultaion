@@ -1,4 +1,4 @@
-version: "3.9"
+
 services:
   api:
     build: ../apps/api
@@ -12,7 +12,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
   worker:
     build: ../apps/api
     env_file: ../.env
@@ -30,8 +30,10 @@ services:
     build: ../apps/web
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-    ports: ["3000:3000"]
-    depends_on: [api]
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      api:
+        condition: service_started
   db:
     image: postgres:16
     environment:
@@ -50,7 +52,7 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -62,7 +64,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
 volumes:
   pg_data:

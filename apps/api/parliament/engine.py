@@ -454,7 +454,7 @@ async def _execute_round(
             
         async def _run_seat(seat, ctx_transcript):
             role_profile = ROLE_PROFILES.get(seat.role_profile)
-            seat_role = role_profile.title if role_profile else seat.role_profile
+            _seat_role = role_profile.title if role_profile else seat.role_profile
             try:
                 messages = build_messages_for_seat(
                     debate_id=debate_id,

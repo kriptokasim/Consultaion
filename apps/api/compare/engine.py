@@ -24,7 +24,7 @@ async def run_compare_debate(
         prompt = debate.prompt
         config = debate.config or {}
         compare_models = config.get("compare_models", [])
-        user_id = debate.user_id
+        _user_id = debate.user_id
 
     if not compare_models:
         compare_models = [debate.model_id] if debate.model_id else []

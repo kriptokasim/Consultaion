@@ -64,7 +64,7 @@ async def start_red_team_session(
     Starts an adversarial critique Red Team session for the given proposal text.
     Runs the risk evaluation asynchronously in the background.
     """
-    require_llm_action_allowed(
+    await require_llm_action_allowed(
         user=current_user,
         action="redteam_session",
         session=session,

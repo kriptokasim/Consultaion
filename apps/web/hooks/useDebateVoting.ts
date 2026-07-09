@@ -40,14 +40,21 @@ export function useDebateVoting({ events, threshold = DEFAULT_VOTE_THRESHOLD }: 
 
     const voteBasis: 'pairwise' | 'threshold' = pairwiseEvents.length ? 'pairwise' : 'threshold';
 
-    const voteStats: ArenaVoteStats = useMemo(
-        () => ({
-            aye: judgeVotes.filter((entry) => entry.vote === 'aye').length,
-            nay: judgeVotes.filter((entry) => entry.vote === 'nay').length,
+    const voteStats: ArenaVoteStats = useMemo(() => {
+        // H-WEB-2: Deduplicate votes by persona + judge, keeping the latest one
+        const uniqueVotesMap = new Map<string, JudgeVoteFlow>();
+        judgeVotes.forEach((entry) => {
+            const key = `${entry.persona}-${entry.judge}`;
+            uniqueVotesMap.set(key, entry);
+        });
+        const uniqueVotes = Array.from(uniqueVotesMap.values());
+
+        return {
+            aye: uniqueVotes.filter((entry) => entry.vote === 'aye').length,
+            nay: uniqueVotes.filter((entry) => entry.vote === 'nay').length,
             threshold: threshold,
-        }),
-        [judgeVotes, threshold]
-    );
+        };
+    }, [judgeVotes, threshold]);
 
     return {
         eventScores,

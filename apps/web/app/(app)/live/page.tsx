@@ -51,7 +51,7 @@ type VoteMeta = {
 const ENABLE_CONVERSATION_MODE = true
 
 function ArenaPageContent() {
-  const [prompt, setPrompt] = useState('Draft a national EV policy')
+  const [prompt, setPrompt] = useState('')
   const [panelConfig, setPanelConfig] = useState(() => defaultPanelConfig())
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState<DomainEvent[]>([])
@@ -197,18 +197,20 @@ function ArenaPageContent() {
       setEvents((prev) => [...prev, event])
 
       if (event.type === 'seat_message' || event.type === 'message') {
-        setActivePersona(event.agent_name)
+        if ('agent_name' in event) setActivePersona((event as any).agent_name)
         setSpeakerTime(0)
       } else if (event.type === 'stage_start') {
         setActivePersona(undefined)
         setSpeakerTime(0)
       } else if (event.type === 'score') {
-        setLatestScores((prev) => {
-          const persona = event.agent_name;
-          const score = event.value;
-          const newScores = [...prev, { persona: persona, score: score }]
-          return newScores.slice(-5)
-        })
+        if ('agent_name' in event && 'value' in event && typeof (event as any).value === 'number') {
+          setLatestScores((prev) => {
+            const persona = (event as any).agent_name;
+            const score = (event as any).value;
+            const newScores = [...prev, { persona: persona, score: score }]
+            return newScores.slice(-5)
+          })
+        }
       }
 
       if (isTerminalEvent(event)) {

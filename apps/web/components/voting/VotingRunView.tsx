@@ -37,9 +37,9 @@ export function VotingRunView({
     const [isRevealed, setIsRevealed] = useState(false);
     const [loadingReveal, setLoadingReveal] = useState(false);
 
-    const fetchReveal = useCallback(async () => {
+    const fetchReveal = useCallback(async (signal?: AbortSignal) => {
         try {
-            const res = await fetchWithAuth(`/voting/${debate.id}/reveal`);
+            const res = await fetchWithAuth(`/voting/${debate.id}/reveal`, { signal });
             if (res.ok) {
                 const data = await res.json();
                 setRevealData(data);
@@ -56,7 +56,9 @@ export function VotingRunView({
     }, [debate.id]);
 
     useEffect(() => {
-        fetchReveal();
+        const controller = new AbortController();
+        fetchReveal(controller.signal);
+        return () => controller.abort();
     }, [fetchReveal]);
 
     // Handle prediction lock-in

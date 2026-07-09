@@ -134,7 +134,7 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
     error_code = _getattr_safely(meta, "error_code")
     error_message = _getattr_safely(meta, "safe_error") or _getattr_safely(meta, "error_message")
     retryable = _coerce_bool(_getattr_safely(meta, "retryable", default=False))
-    error_http_status = _getattr_safely(meta, "error_http_status")
+    _error_http_status = _getattr_safely(meta, "error_http_status")
 
     content = msg.content or _getattr_safely(meta, "content") or _getattr_safely(meta, "text") or ""
 

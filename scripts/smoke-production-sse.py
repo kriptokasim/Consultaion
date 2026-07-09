@@ -36,7 +36,7 @@ async def smoke_test():
     # 1. Fresh Connection
     print("[*] Test 1: Fresh Connection...")
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
             async with client.stream("GET", stream_url, headers=headers) as response:
                 if response.status_code != 200:
                     print(f"[!] FAILED: Expected 200, got {response.status_code}")
@@ -60,7 +60,7 @@ async def smoke_test():
     reconnect_headers["Last-Event-ID"] = "5"
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
             async with client.stream("GET", stream_url, headers=reconnect_headers) as response:
                 if response.status_code != 200:
                     print(f"[!] FAILED: Expected 200, got {response.status_code}")

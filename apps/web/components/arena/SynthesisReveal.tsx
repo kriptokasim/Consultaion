@@ -224,7 +224,7 @@ export function SynthesisReveal({
                 ].map((item) => (
                   <button
                     key={item.value}
-                    onClick={() => handleFeedbackSubmit(item.label)}
+                    onClick={() => handleFeedbackSubmit(item.value)}
                     disabled={submittingFeedback}
                     className="px-3.5 py-1.5 rounded-xl border border-border bg-card text-xs font-medium text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all"
                   >

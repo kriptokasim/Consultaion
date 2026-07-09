@@ -862,8 +862,9 @@ async def probe_provider_user(
         raise HTTPException(status_code=400, detail=f"Provider '{provider}' is not probeable.")
 
     # Resolve user's BYOK key
-    from services.provider_credentials import get_model_api_key
     import asyncio
+
+    from services.provider_credentials import get_model_api_key
     def _get_key():
         return get_model_api_key(session, current_user.id, provider)
     resolved = await asyncio.get_running_loop().run_in_executor(None, _get_key)

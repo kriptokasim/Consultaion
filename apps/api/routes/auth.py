@@ -48,9 +48,6 @@ DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-guard")
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-
-
-GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 OAUTH_STATE_COOKIE = "google_oauth_state"
@@ -135,7 +132,7 @@ def _validate_avatar_url(url: Optional[str]) -> Optional[str]:
         raise ValidationError(
             message=str(exc),
             code="validation.invalid_avatar_url",
-        )
+        ) from exc
 
 
 from exceptions import AuthError, ProviderCircuitOpenError, RateLimitError, ValidationError
@@ -452,6 +449,22 @@ async def google_callback_post(
                     status_code=503,
                 )
 
+        # H-API-9: Even with valid internal secret, verify the request origin
+        # to prevent abuse if the secret is leaked.
+        origin = request.headers.get("origin") or ""
+        referer = request.headers.get("referer") or ""
+        expected_origin = settings.WEB_APP_ORIGIN or ""
+        if expected_origin and not origin.startswith(expected_origin) and not referer.startswith(expected_origin):
+            logger.warning(
+                "Google OAuth internal-secret bypass rejected: origin/referer mismatch. "
+                "origin=%s referer=%s expected=%s IP=%s",
+                origin[:50], referer[:50], expected_origin, ip,
+            )
+            raise ValidationError(
+                message="Google sign-in rejected: request origin does not match expected frontend.",
+                code="auth.origin_mismatch",
+            )
+
         logger.info(
             f"Google OAuth state {state[:8]}... not found in backend state_store. "
             f"Proceeding as it was validated by the frontend server (trusted). IP={ip}"
@@ -511,10 +524,15 @@ async def google_callback_post(
         )
     
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
-    return {
-        "access_token": token,
-        "token_type": "bearer"
-    }
+    response.set_cookie(
+        key="consultaion_session",
+        value=token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=3600 * 24 * 7,
+    )
+    return {"message": "Success"}
 
 
 @csrf_exempt
@@ -774,7 +792,9 @@ async def delete_my_account(
     current_user.avatar_url = None
     current_user.bio = None
     current_user.timezone = None
-    current_user.password_hash = "[DELETED]"
+    # H-API-4: Use a valid password hash format instead of "[DELETED]"
+    # to avoid crashing verify_password() which expects pbkdf2_sha256$salt$hash format.
+    current_user.password_hash = hash_password(secrets.token_urlsafe(32))
     current_user.deleted_at = utcnow()
     current_user.is_active = False
     session.add(current_user)

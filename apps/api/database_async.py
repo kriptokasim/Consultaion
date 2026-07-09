@@ -59,6 +59,9 @@ def reset_async_engine():
     if "sqlite" in settings.DATABASE_URL_ASYNC:
         connect_args["check_same_thread"] = False
 
+    if ":6543" in settings.DATABASE_URL_ASYNC or "pooler.supabase.com" in settings.DATABASE_URL_ASYNC:
+        connect_args["prepare_threshold"] = None
+
     # Create new engine
     new_engine = create_async_engine(
         settings.DATABASE_URL_ASYNC,

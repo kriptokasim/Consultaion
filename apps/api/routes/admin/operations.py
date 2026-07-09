@@ -105,7 +105,7 @@ async def admin_ops_summary(
         "celery_configured": bool(settings.CELERY_BROKER_URL),
     }
 
-    provider_health = get_provider_health_snapshot(now)
+    _provider_health = get_provider_health_snapshot(now)
 
     return {
         "debates_24h": debates_24h,

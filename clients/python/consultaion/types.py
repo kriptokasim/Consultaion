@@ -67,7 +67,7 @@ class Debate(TypedDict):
 
     id: str
     prompt: str
-    status: Literal["queued", "running", "completed", "failed"]
+    status: Literal["queued", "running", "completed", "failed", "cancelled", "degraded", "completed_with_warnings", "completed_budget"]
     created_at: str
     updated_at: NotRequired[str]
     user_id: str

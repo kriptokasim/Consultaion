@@ -43,6 +43,7 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
   const [isPolling, setIsPolling] = useState(false);
   const { pushToast } = useToast();
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollCountRef = useRef(0);
   const prefersReducedMotion = useRef(false);
 
   useEffect(() => {
@@ -83,15 +84,17 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
         method: "GET",
       });
       setReport(data);
-      if (!data.ready && pollCount < MAX_POLLS) {
+      if (!data.ready && pollCountRef.current < MAX_POLLS) {
         setIsPolling(true);
-        const nextInterval = POLL_INTERVALS[pollCount] || 15000;
+        const nextInterval = POLL_INTERVALS[pollCountRef.current] || 15000;
         pollTimerRef.current = setTimeout(() => {
-          setPollCount((c) => c + 1);
+          pollCountRef.current += 1;
+          setPollCount(pollCountRef.current);
+          fetchReport();
         }, nextInterval);
       } else {
         setIsPolling(false);
-        if (!data.ready && pollCount >= MAX_POLLS) {
+        if (!data.ready && pollCountRef.current >= MAX_POLLS) {
           setError("Divergence analysis timed out. The run may still be processing — refresh to retry.");
         }
       }
@@ -102,17 +105,19 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
       setIsPolling(false);
       return null;
     }
-  }, [debateId, pollCount]);
+  }, [debateId]);
 
   useEffect(() => {
     if (!isCompleted) return;
     setLoading(true);
+    pollCountRef.current = 0;
+    setPollCount(0);
     fetchReport().finally(() => setLoading(false));
 
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [debateId, isCompleted, pollCount, fetchReport]);
+  }, [debateId, isCompleted, fetchReport]);
 
   // Load voted state from localStorage for UX stickiness
   useEffect(() => {

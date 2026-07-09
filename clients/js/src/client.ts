@@ -16,7 +16,7 @@ export class ConsultaionClient {
     constructor(options: ConsultaionClientOptions) {
         this.baseUrl = options.baseUrl.replace(/\/$/, ''); // Remove trailing slash
         this.apiKey = options.apiKey;
-        this.fetchFn = options.fetch || (typeof fetch !== 'undefined' ? fetch : require('node-fetch'));
+        this.fetchFn = options.fetch || globalThis.fetch;
     }
 
     /**
@@ -70,87 +70,63 @@ export class ConsultaionClient {
         const url = `${this.baseUrl}/debates/${id}/stream`;
         const headers = this.getHeaders();
 
-        let controller: AbortController | undefined;
         let stopped = false;
+        const controller = new AbortController();
 
-        // Use EventSource if available (browser), otherwise fall back to fetch streaming
-        if (typeof EventSource !== 'undefined') {
-            // Browser environment
-            const eventSource = new EventSource(url);
+        // H-SDK-1: Use fetch+ReadableStream for SSE instead of EventSource.
+        // EventSource does not support custom headers (X-API-Key, Authorization),
+        // so auth was silently dropped. Fetch streaming works in both browser and Node.
+        (async () => {
+            try {
+                const response = await this.fetchFn(url, {
+                    method: 'GET',
+                    headers: { ...headers, 'Accept': 'text/event-stream' },
+                    signal: controller.signal,
+                });
 
-            eventSource.onmessage = (e) => {
-                try {
-                    const data = JSON.parse(e.data);
-                    onEvent({ type: 'message', data });
-                } catch (err) {
-                    if (onError) onError(err as Error);
+                if (!response.ok) {
+                    throw new Error(`Failed to stream events: ${response.statusText}`);
                 }
-            };
 
-            eventSource.onerror = (err) => {
-                if (!stopped && onError) {
-                    onError(new Error('EventSource error'));
+                const reader = response.body?.getReader();
+                const decoder = new TextDecoder();
+
+                if (!reader) {
+                    throw new Error('Response body is not readable');
                 }
-                eventSource.close();
-            };
 
-            return () => {
-                stopped = true;
-                eventSource.close();
-            };
-        } else {
-            // Node.js environment - use fetch streaming
-            controller = new AbortController();
+                let buffer = '';
+                while (!stopped) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-            (async () => {
-                try {
-                    const response = await this.fetchFn(url, {
-                        method: 'GET',
-                        headers,
-                        signal: controller!.signal,
-                    });
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    // Keep incomplete last line in buffer
+                    buffer = lines.pop() || '';
 
-                    if (!response.ok) {
-                        throw new Error(`Failed to stream events: ${response.statusText}`);
-                    }
-
-                    const reader = response.body?.getReader();
-                    const decoder = new TextDecoder();
-
-                    if (!reader) {
-                        throw new Error('Response body is not readable');
-                    }
-
-                    while (!stopped) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split('\n');
-
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                try {
-                                    const data = JSON.parse(line.slice(6));
-                                    onEvent({ type: 'message', data });
-                                } catch (err) {
-                                    if (onError) onError(err as Error);
-                                }
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                onEvent({ type: 'message', data });
+                            } catch (err) {
+                                if (onError) onError(err as Error);
                             }
                         }
                     }
-                } catch (err) {
-                    if (!stopped && onError) {
-                        onError(err as Error);
-                    }
                 }
-            })();
+            } catch (err) {
+                if (!stopped && onError) {
+                    onError(err as Error);
+                }
+            }
+        })();
 
-            return () => {
-                stopped = true;
-                controller?.abort();
-            };
-        }
+        return () => {
+            stopped = true;
+            controller.abort();
+        };
     }
 
     private getHeaders(): Record<string, string> {

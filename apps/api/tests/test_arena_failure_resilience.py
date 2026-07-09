@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Lightweight stubs (no DB required — these test engine logic in isolation)
 # ---------------------------------------------------------------------------
@@ -110,7 +109,7 @@ async def test_one_model_timeout_others_succeed():
     """When one model times out, the run must still complete with the
     successful models, and the failed model must produce a persisted
     ArenaModelResponse(success=False)."""
-    from arena.engine import ArenaModelResponse, ArenaResult, run_arena
+    from arena.engine import ArenaResult, run_arena
 
     call_count = {"n": 0}
 
@@ -173,7 +172,7 @@ async def test_one_model_timeout_others_succeed():
 async def test_gateway_failure_result_no_crash():
     """When route_llm_stream returns success=False, the arena must NOT
     crash — it should produce a failed model response card."""
-    from arena.engine import ArenaModelResponse, ArenaResult, run_arena
+    from arena.engine import ArenaResult, run_arena
 
     call_index = {"n": 0}
 
@@ -254,7 +253,7 @@ async def test_all_models_fail_graceful():
 async def test_as_completed_immediate_publish():
     """Verify that each model response is published as soon as it completes,
     not after all models finish."""
-    from arena.engine import ArenaResult, run_arena
+    from arena.engine import run_arena
 
     publish_log = []
     delays = {"model-a": 0.01, "model-b": 0.05, "model-c": 0.03}
@@ -307,7 +306,7 @@ async def test_as_completed_immediate_publish():
 async def test_final_meta_model_order():
     """Regardless of completion order, final_meta.models must follow the
     configured arena_models order."""
-    from arena.engine import ArenaResult, run_arena
+    from arena.engine import run_arena
 
     # Reverse order: C finishes first, then A, then B
     delays = {"model-a": 0.03, "model-b": 0.05, "model-c": 0.01}

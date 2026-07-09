@@ -133,11 +133,13 @@ export async function apiRequest<TResponse = unknown, TBody = unknown>(
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
+  const abortHandler = () => controller.abort(externalSignal?.reason);
+
   if (externalSignal) {
     if (externalSignal.aborted) {
       controller.abort(externalSignal.reason);
     } else {
-      externalSignal.addEventListener("abort", () => controller.abort(externalSignal.reason));
+      externalSignal.addEventListener("abort", abortHandler);
     }
   }
   if (timeoutMs) {
@@ -198,8 +200,12 @@ export async function apiRequest<TResponse = unknown, TBody = unknown>(
     throw err;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", abortHandler);
+    }
   }
 }
 
-// Patchset 148 E1: Compatibility re-export for gradual migration
-export { ApiClientError as ApiError };
+// BUG-WEB-3: Removed `ApiClientError as ApiError` alias — it collided with
+// the ApiError class in api.ts, causing instanceof checks to fail silently.
+// Use ApiClientError directly if needed.

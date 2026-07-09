@@ -64,7 +64,7 @@ async def get_divergence_report(
                 "ready": False
             }
 
-        require_llm_action_allowed(
+        await require_llm_action_allowed(
             user=current_user,
             action="divergence_recompute",
             session=session,
@@ -106,7 +106,7 @@ async def cast_arena_vote(
     session: Session = Depends(get_session)
 ) -> Dict[str, Any]:
     """Cast a user agreement vote on a claim. Requires debate access."""
-    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    _debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
 
     user_id = current_user.id
 

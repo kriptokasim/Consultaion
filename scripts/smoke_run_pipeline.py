@@ -39,7 +39,7 @@ def _request(method: str, url: str, token: str | None = None, body: dict | None 
     except urllib.error.HTTPError as exc:
         body_text = exc.read().decode() if exc.fp else ""
         print(f"  HTTP {exc.code}: {body_text[:200]}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
 
 def main() -> None:
@@ -49,6 +49,7 @@ def main() -> None:
     parser.add_argument("--provider", default="openrouter", help="Provider to smoke test")
     parser.add_argument("--model-id", default=None, help="Model ID for smoke test")
     parser.add_argument("--poll-timeout", type=int, default=300, help="Max seconds to poll debate status")
+    parser.add_argument("--poll-interval", type=int, default=5, help="Seconds between status polls")
     args = parser.parse_args()
 
     base = args.base_url.rstrip("/")
@@ -140,7 +141,7 @@ def main() -> None:
     # 4. Poll Status
     if debate_id:
         print(f"\n[4/4] Polling debate status (max {args.poll_timeout}s)...")
-        terminal_statuses = {"completed", "completed_with_warnings", "failed", "cancelled", "degraded"}
+        terminal_statuses = {"completed", "completed_with_warnings", "failed", "cancelled", "degraded", "completed_budget"}
         start = time.time()
         final_status = None
         while time.time() - start < args.poll_timeout:
@@ -155,7 +156,7 @@ def main() -> None:
                 break
             except Exception as exc:
                 print(f"  poll error: {exc}", file=sys.stderr)
-            time.sleep(5)
+            time.sleep(args.poll_interval)
 
         if final_status in ("completed", "completed_with_warnings"):
             print(f"  debate status: {final_status}")
@@ -164,7 +165,7 @@ def main() -> None:
             print(f"  debate status: {final_status}")
             failed.append("debate_failed")
         elif final_status == "cancelled":
-            print(f"  debate was cancelled")
+            print("  debate was cancelled")
             failed.append("debate_cancelled")
         else:
             print(f"  debate stuck in status: {final_status}")

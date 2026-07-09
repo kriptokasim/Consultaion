@@ -75,10 +75,11 @@ def _get_or_create_quota(session: Session, user_id: str, period: str) -> UsageQu
     return quota
 
 
-def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit: bool = False) -> UsageCounter:
-    counter = session.exec(
-        select(UsageCounter).where(UsageCounter.user_id == user_id, UsageCounter.period == period)
-    ).first()
+def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit: bool = False, lock: bool = False) -> UsageCounter:
+    stmt = select(UsageCounter).where(UsageCounter.user_id == user_id, UsageCounter.period == period)
+    if lock:
+        stmt = stmt.with_for_update()
+    counter = session.exec(stmt).first()
     now = utcnow()
     if not counter:
         counter = UsageCounter(user_id=user_id, period=period, window_start=now)
@@ -190,7 +191,7 @@ def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
 def _apply_token_usage(session: Session, user_id: str, tokens_int: int, *, commit: bool) -> None:
     quota = _get_or_create_quota(session, user_id, "day")
     _ = quota  # ensure quota exists, even if unused
-    counter = _get_or_reset_counter(session, user_id, "day", commit=False)
+    counter = _get_or_reset_counter(session, user_id, "day", commit=False, lock=True)
     counter.tokens_used += tokens_int
     session.add(counter)
     if commit:
@@ -216,7 +217,7 @@ def record_token_usage(
 
 def increment_export_usage_daily(session: Session, user_id: str) -> None:
     """FH125 E-5: Increment the daily export counter on UsageCounter."""
-    counter = _get_or_reset_counter(session, user_id, "day", commit=False)
+    counter = _get_or_reset_counter(session, user_id, "day", commit=False, lock=True)
     counter.exports_used += 1
     session.add(counter)
 

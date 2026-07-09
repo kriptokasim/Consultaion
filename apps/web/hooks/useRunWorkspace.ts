@@ -298,6 +298,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     : false;
   const isPaused = debate?.status === "perspectives_ready";
 
+  const isTerminalRef = useRef(isTerminal);
+  useEffect(() => {
+    isTerminalRef.current = isTerminal;
+  }, [isTerminal]);
+
   // ── FH117: Abort all controllers ───────────────────────────────────────
   const abortAll = useCallback((reason?: string) => {
     [coreAbortRef, responsesAbortRef, timelineAbortRef, enrichmentAbortRef].forEach((ref) => {
@@ -319,10 +324,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       const debateData = await getDebate(id, { signal, timeoutMs: DEBATE_TIMEOUT_MS });
       if (gen !== coreGenerationRef.current) return null;
 
+      const isDebateTerminal = debateData
+        ? ["completed", "success", "completed_budget", "failed"].includes(debateData.status)
+        : false;
+
       setDebate(debateData);
       debateSetOnceRef.current = true;
       setError(null);
-      dispatchConn({ type: "CORE_LOADED", isTerminal });
+      dispatchConn({ type: "CORE_LOADED", isTerminal: isDebateTerminal });
       return debateData;
     } catch (err: any) {
       if (gen !== coreGenerationRef.current) return null;
@@ -494,7 +503,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const streamUrl = debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
 
   const handleStreamEvent = useCallback((lastEvent: any) => {
-    if (!lastEvent || !debateId) return;
+    if (!lastEvent || !debateId || isTerminalRef.current) return;
     try {
       const eventType = lastEvent.type;
 

@@ -484,7 +484,7 @@ async def list_debates(
     if isinstance(q, str):
         query_text = q.strip()
         if query_text:
-            search_term = f"%{query_text.lower()}%"
+            _search_term = f"%{query_text.lower()}%"
             filters.append(
                 sa.or_(
                     sa.func.lower(Debate.prompt).contains(query_text.lower()),
@@ -512,8 +512,11 @@ async def list_debates(
             from redis_pool import get_sync_redis_client
             redis_client = get_sync_redis_client()
             if redis_client:
+                import hashlib
                 key_parts = [str(current_user.id), str(status), str(q)]
-                cache_key = f"count:debates:{hash(''.join(key_parts))}"
+                key_str = "".join(key_parts)
+                cache_hash = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
+                cache_key = f"count:debates:{cache_hash}"
                 cached = redis_client.get(cache_key)
                 if cached:
                     total = int(cached)

@@ -32,46 +32,51 @@ class TestRequireLLMActionAllowed:
     def setup_method(self):
         _user_last_action.clear()
 
+    @pytest.mark.asyncio
     @patch("guards.llm_action_guard.increment_ip_bucket", return_value=(True, 0))
-    def test_inactive_user_raises(self, _mock_bucket):
+    async def test_inactive_user_raises(self, _mock_bucket):
         user = _make_user(is_active=False)
         session = _make_session()
         with pytest.raises(PermissionError, match="not active"):
-            require_llm_action_allowed(user=user, action="oracle_session", session=session)
+            await require_llm_action_allowed(user=user, action="oracle_session", session=session)
 
+    @pytest.mark.asyncio
     @patch("guards.llm_action_guard.increment_ip_bucket", return_value=(True, 0))
-    def test_credits_exhausted_raises(self, _mock_bucket):
+    async def test_credits_exhausted_raises(self, _mock_bucket):
         user = _make_user(hosted_credits_used=10, hosted_credits_limit=10)
         session = _make_session()
         with pytest.raises(ValidationError, match="credits exhausted"):
-            require_llm_action_allowed(user=user, action="oracle_session", session=session)
+            await require_llm_action_allowed(user=user, action="oracle_session", session=session)
 
+    @pytest.mark.asyncio
     @patch("guards.llm_action_guard.increment_ip_bucket", return_value=(True, 0))
-    def test_consume_credit_on_success(self, _mock_bucket):
+    async def test_consume_credit_on_success(self, _mock_bucket):
         user = _make_user(hosted_credits_used=5, hosted_credits_limit=10)
         session = _make_session()
-        require_llm_action_allowed(user=user, action="oracle_session", session=session)
+        await require_llm_action_allowed(user=user, action="oracle_session", session=session)
         assert user.hosted_credits_used == 6
         session.add.assert_called_once_with(user)
         session.commit.assert_called_once()
 
+    @pytest.mark.asyncio
     @patch("guards.llm_action_guard.increment_ip_bucket", return_value=(True, 0))
-    def test_cooldown_enforced(self, _mock_bucket):
+    async def test_cooldown_enforced(self, _mock_bucket):
         user = _make_user()
         session = _make_session()
         # First call succeeds
-        require_llm_action_allowed(user=user, action="oracle_session", session=session)
+        await require_llm_action_allowed(user=user, action="oracle_session", session=session)
         # Second call immediately should hit cooldown
         with pytest.raises(RateLimitError, match="wait"):
-            require_llm_action_allowed(user=user, action="oracle_session", session=session)
+            await require_llm_action_allowed(user=user, action="oracle_session", session=session)
 
+    @pytest.mark.asyncio
     @patch("guards.llm_action_guard.increment_ip_bucket", return_value=(True, 0))
-    def test_different_actions_not_cooldown(self, _mock_bucket):
+    async def test_different_actions_not_cooldown(self, _mock_bucket):
         user = _make_user()
         session = _make_session()
-        require_llm_action_allowed(user=user, action="oracle_session", session=session)
+        await require_llm_action_allowed(user=user, action="oracle_session", session=session)
         # Different action should not be blocked by cooldown
-        require_llm_action_allowed(user=user, action="redteam_session", session=session)
+        await require_llm_action_allowed(user=user, action="redteam_session", session=session)
 
     def test_action_rate_limits_defined(self):
         expected_actions = [

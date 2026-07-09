@@ -170,27 +170,33 @@ export function exportToMarkdown(report: DecisionReport): string {
   return lines.join("\n")
 }
 
+function escapeHtml(val: any): string {
+  if (val === null || val === undefined) return "";
+  const str = String(val);
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
 export function exportToHtml(report: DecisionReport): string {
   const lines: string[] = []
-  lines.push(`<h1>${report.title || "Decision Report"}</h1>`)
+  lines.push(`<h1>${escapeHtml(report.title || "Decision Report")}</h1>`)
 
   if (report.executive_summary) {
     lines.push(`<h2>Executive Summary</h2>`)
-    lines.push(`<p>${report.executive_summary}</p>`)
+    lines.push(`<p>${escapeHtml(report.executive_summary)}</p>`)
   }
 
   if (report.verdict) {
     lines.push(`<h2>Verdict</h2>`)
-    lines.push(`<p><strong>Recommendation:</strong> ${report.verdict.decision_type?.toUpperCase() || "MIXED"}</p>`)
+    lines.push(`<p><strong>Recommendation:</strong> ${escapeHtml(report.verdict.decision_type?.toUpperCase() || "MIXED")}</p>`)
     lines.push(`<p><strong>Confidence:</strong> ${Math.round((report.verdict.confidence || 0) * 100)}%</p>`)
-    lines.push(`<p><strong>Rationale:</strong> ${report.verdict.rationale || report.verdict.recommendation || ""}</p>`)
+    lines.push(`<p><strong>Rationale:</strong> ${escapeHtml(report.verdict.rationale || report.verdict.recommendation || "")}</p>`)
   }
 
   if (report.key_findings?.length) {
     lines.push(`<h2>Key Findings</h2>`)
     lines.push(`<ul>`)
     report.key_findings.forEach((f, i) => {
-      lines.push(`<li><strong>[${f.importance?.toUpperCase() || "MEDIUM"}]</strong> ${f.title}: ${f.summary}</li>`)
+      lines.push(`<li><strong>[${escapeHtml(f.importance?.toUpperCase() || "MEDIUM")}]</strong> ${escapeHtml(f.title || "")}: ${escapeHtml(f.summary || "")}</li>`)
     })
     lines.push(`</ul>`)
   }
@@ -201,8 +207,8 @@ export function exportToHtml(report: DecisionReport): string {
     report.model_positions.forEach((p) => {
       const contribution = p.distinct_contribution || p.strongest_point || ""
       const blindSpot = p.blind_spot || p.concern || ""
-      lines.push(`<li><strong>${p.model}</strong> (${p.stance}): ${contribution}`)
-      if (blindSpot) lines.push(`<ul><li>Blind Spot / Limitation: ${blindSpot}</li></ul>`)
+      lines.push(`<li><strong>${escapeHtml(p.model || "")}</strong> (${escapeHtml(p.stance || "")}): ${escapeHtml(contribution)}`)
+      if (blindSpot) lines.push(`<ul><li>Blind Spot / Limitation: ${escapeHtml(blindSpot)}</li></ul>`)
       lines.push(`</li>`)
     })
     lines.push(`</ul>`)
@@ -212,8 +218,8 @@ export function exportToHtml(report: DecisionReport): string {
     lines.push(`<h2>Risks & Assumptions</h2>`)
     lines.push(`<ul>`)
     report.risks_and_assumptions.forEach((r) => {
-      lines.push(`<li>[${r.severity?.toUpperCase() || "MEDIUM"}] (${r.type}): ${r.item}`)
-      if (r.mitigation) lines.push(`<ul><li>Mitigation: ${r.mitigation}</li></ul>`)
+      lines.push(`<li>[${escapeHtml(r.severity?.toUpperCase() || "MEDIUM")}] (${escapeHtml(r.type || "")}): ${escapeHtml(r.item || "")}`)
+      if (r.mitigation) lines.push(`<ul><li>Mitigation: ${escapeHtml(r.mitigation)}</li></ul>`)
       lines.push(`</li>`)
     })
     lines.push(`</ul>`)
@@ -223,7 +229,7 @@ export function exportToHtml(report: DecisionReport): string {
     lines.push(`<h2>Next Actions</h2>`)
     lines.push(`<ul>`)
     report.next_actions.forEach((a) => {
-      lines.push(`<li>[${a.priority?.toUpperCase() || "NEXT"}] ${a.action}</li>`)
+      lines.push(`<li>[${escapeHtml(a.priority?.toUpperCase() || "NEXT")}] ${escapeHtml(a.action || "")}</li>`)
     })
     lines.push(`</ul>`)
   }
@@ -231,7 +237,7 @@ export function exportToHtml(report: DecisionReport): string {
   if (report.caveats?.length) {
     lines.push(`<h2>Caveats</h2>`)
     lines.push(`<ul>`)
-    report.caveats.forEach((c) => lines.push(`<li>${c}</li>`))
+    report.caveats.forEach((c) => lines.push(`<li>${escapeHtml(c)}</li>`))
     lines.push(`</ul>`)
   }
 

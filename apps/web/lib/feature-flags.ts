@@ -19,6 +19,15 @@ export type FeatureFlag = keyof typeof ENV_FLAGS;
 
 let _serverFlags: Record<string, boolean> | null = null;
 let _fetchPromise: Promise<void> | null = null;
+const _listeners: (() => void)[] = [];
+
+export function subscribeToFeatureFlags(listener: () => void) {
+  _listeners.push(listener);
+  return () => {
+    const idx = _listeners.indexOf(listener);
+    if (idx > -1) _listeners.splice(idx, 1);
+  };
+}
 
 async function fetchServerFlags(): Promise<void> {
   try {
@@ -34,6 +43,7 @@ async function fetchServerFlags(): Promise<void> {
   } catch {
     _serverFlags = {};
   }
+  _listeners.forEach(fn => fn());
 }
 
 function ensureServerFlags(): void {

@@ -130,7 +130,7 @@ def reconcile_previous_day(self):
     try:
         start = time.monotonic()
         with SessionLocal() as db:
-            report = reconcile_usage(db, window=window, run_type="daily")
+            _report = reconcile_usage(db, window=window, run_type="daily")
         elapsed = time.monotonic() - start
         record_reconciliation_run("daily", "completed", elapsed)
         record_reconciliation_time()
@@ -193,7 +193,7 @@ def reconcile_current_period(self):
     try:
         start = time.monotonic()
         with SessionLocal() as db:
-            report = reconcile_usage(db, window=window, run_type="monthly")
+            _report = reconcile_usage(db, window=window, run_type="monthly")
         elapsed = time.monotonic() - start
         record_reconciliation_run("monthly", "completed", elapsed)
         record_reconciliation_time()
@@ -253,7 +253,7 @@ def reconcile_closed_period(self, period: str):
     try:
         start = time.monotonic()
         with SessionLocal() as db:
-            report = reconcile_usage(db, window=window, run_type="manual")
+            _report = reconcile_usage(db, window=window, run_type="manual")
         elapsed = time.monotonic() - start
         record_reconciliation_run("manual", "completed", elapsed)
         record_reconciliation_time()

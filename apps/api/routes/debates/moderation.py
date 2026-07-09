@@ -67,7 +67,7 @@ async def moderate_debate(
     current_user: User = Depends(get_current_user),
 ):
     from models import DebateTurn
-    debate = require_debate_mutation_access(session.get(Debate, debate_id), current_user, session)
+    _debate = require_debate_mutation_access(session.get(Debate, debate_id), current_user, session)
 
     stmt = select(DebateTurn).where(
         DebateTurn.debate_id == debate_id,
@@ -103,7 +103,7 @@ async def get_argument_tree(
     current_user: User = Depends(get_current_user),
 ):
     from models import DebateTurn
-    debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
+    _debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     
     stmt = select(DebateTurn).where(DebateTurn.debate_id == debate_id).order_by(DebateTurn.round_index.asc())
     turns = session.exec(stmt).all()

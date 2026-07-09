@@ -509,24 +509,24 @@ async def run_debate(
 
     config = DebateConfig.model_validate(config_data or {})
     agent_configs = config.agents or default_agents()
-    judge_configs = config.judges or default_judges()
-    budget = config.budget
+    _judge_configs = config.judges or default_judges()
+    _budget = config.budget
     backend = get_sse_backend()
     await backend.publish(channel_id, {"type": "notice", "round": 0, "payload": {"message": "Debate run started", "note": "plan"}})
 
     usage_tracker = UsageAccumulator()
     debate_user_id: str | None = None
-    start_time = datetime.now(timezone.utc)
+    _start_time = datetime.now(timezone.utc)
     
     # State variables
-    aggregate_scores: List[Dict[str, Any]] = []
-    ranking: List[str] = []
-    vote_details: Dict[str, Any] = {}
-    source_candidates: List[Dict[str, Any]] = []
-    selected_override: List[str] | None = None
-    budget_reason: str | None = None
-    early_stop_reason: str | None = None
-    budget_notice_sent = False
+    _aggregate_scores: List[Dict[str, Any]] = []
+    _ranking: List[str] = []
+    _vote_details: Dict[str, Any] = {}
+    _source_candidates: List[Dict[str, Any]] = []
+    _selected_override: List[str] | None = None
+    _budget_reason: str | None = None
+    _early_stop_reason: str | None = None
+    _budget_notice_sent = False
 
     # Lease & Heartbeat
     runner_id = _get_runner_id()

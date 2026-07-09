@@ -22,14 +22,20 @@ export async function GET(request: NextRequest) {
   const nextParam = searchParams.get("next") || "/live";
   
   let nextPath = "/live";
-  try {
-    const base = new URL(request.url).origin;
-    const resolved = new URL(nextParam, base);
-    if (resolved.origin === base && !resolved.pathname.includes("\\")) {
-      nextPath = resolved.pathname + resolved.search + resolved.hash;
+  if (
+    nextParam.startsWith("/") &&
+    !nextParam.startsWith("//") &&
+    !nextParam.startsWith("/\\")
+  ) {
+    try {
+      const base = new URL(request.url).origin;
+      const resolved = new URL(nextParam, base);
+      if (resolved.origin === base) {
+        nextPath = resolved.pathname + resolved.search + resolved.hash;
+      }
+    } catch {
+      nextPath = "/live";
     }
-  } catch {
-    nextPath = "/live";
   }
 
   // 1. Generate cryptographically random state nonce

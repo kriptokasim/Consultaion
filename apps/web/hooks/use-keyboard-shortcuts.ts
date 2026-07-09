@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 type Shortcut = {
   combo: string;
@@ -8,10 +8,16 @@ type Shortcut = {
   enabled?: boolean;
 };
 
-export function useKeyboardShortcuts(shortcuts: Shortcut[], deps: unknown[] = []) {
+export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
+  const shortcutsRef = useRef(shortcuts);
+  
+  useEffect(() => {
+    shortcutsRef.current = shortcuts;
+  }, [shortcuts]);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      shortcuts.forEach((shortcut) => {
+      shortcutsRef.current.forEach((shortcut) => {
         if (shortcut.enabled === false) return;
         if (matchCombo(event, shortcut.combo)) {
           event.preventDefault();
@@ -21,8 +27,7 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[], deps: unknown[] = []
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, []);
 }
 
 function matchCombo(event: KeyboardEvent, combo: string) {

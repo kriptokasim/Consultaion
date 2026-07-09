@@ -233,7 +233,7 @@ def reconcile_usage(
             select(BillingUsage).where(BillingUsage.period == target_period)
         ).all()
 
-        pricing = _get_model_pricing()
+        _pricing = _get_model_pricing()
         discrepancies: List[Dict[str, object]] = []
 
         # Only perform BillingUsage comparisons for full monthly runs

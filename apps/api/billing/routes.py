@@ -6,7 +6,7 @@ import uuid
 from types import SimpleNamespace
 from typing import Dict, List, Optional
 
-from auth import get_current_user
+from auth import get_current_admin, get_current_user
 from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -230,7 +230,10 @@ async def billing_webhook(
                     secret,
                 )
                 payload = event.to_dict_recursive() if hasattr(event, "to_dict_recursive") else dict(event)
-            except Exception as exc:  # pragma: no cover - external dependency
+            except ValueError as exc:  # H-API-8: narrow catch — let SignatureVerificationError propagate
+                logger.warning("Stripe webhook payload invalid: %s", exc)
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid payload") from exc
+            except Exception as exc:  # pragma: no cover - SignatureVerificationError and others
                 logger.warning("Stripe webhook signature invalid: %s", exc)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid signature") from exc
         else:
@@ -290,12 +293,9 @@ def admin_list_reconciliation_runs(
     limit: int = 10,
     period: Optional[str] = None,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """List recent reconciliation runs (admin only)."""
-    from security.owner import is_owner
-    if not is_owner(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
     runs = get_reconciliation_runs(session, limit=limit, period=period)
     return {"items": runs}
 
@@ -304,12 +304,9 @@ def admin_list_reconciliation_runs(
 def admin_get_reconciliation_discrepancies(
     run_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Get discrepancies for a specific reconciliation run (admin only)."""
-    from security.owner import is_owner
-    if not is_owner(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
     import uuid as _uuid
     try:
         run_uuid = _uuid.UUID(run_id)
@@ -323,12 +320,9 @@ def admin_get_reconciliation_discrepancies(
 def admin_trigger_reconciliation(
     period: Optional[str] = None,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Manually trigger a reconciliation run (admin only)."""
-    from security.owner import is_owner
-    if not is_owner(current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
     report = reconcile_usage(db=session, period=period, run_type="manual")
     return report
 

@@ -56,6 +56,8 @@ def _utc_timestamp() -> str:
 
 class MemoryRateLimiterBackend(BaseRateLimiterBackend):
     def __init__(self) -> None:
+        import threading
+        self._lock = threading.Lock()
         self._buckets: dict[str, dict[str, float]] = {}
         self._recent: deque[dict] = deque(maxlen=RECENT_EVENTS_MAX)
         self._sse_leases: dict[str, dict[str, float]] = {}
@@ -63,14 +65,15 @@ class MemoryRateLimiterBackend(BaseRateLimiterBackend):
     def allow(self, key: str, window_seconds: int, max_requests: int) -> tuple[bool, int | None]:
         """Check if request is allowed and return retry_after_seconds if not."""
         now = time.time()
-        bucket = self._buckets.get(key)
-        if not bucket or bucket.get("reset", 0) < now:
-            bucket = {"count": 0, "reset": now + window_seconds}
-        bucket["count"] = bucket.get("count", 0) + 1
-        self._buckets[key] = bucket
-        allowed = bucket["count"] <= max_requests
-        retry_after = None if allowed else max(1, int(bucket["reset"] - now))
-        return allowed, retry_after
+        with self._lock:
+            bucket = self._buckets.get(key)
+            if not bucket or bucket.get("reset", 0) < now:
+                bucket = {"count": 0, "reset": now + window_seconds}
+            bucket["count"] = bucket.get("count", 0) + 1
+            self._buckets[key] = bucket
+            allowed = bucket["count"] <= max_requests
+            retry_after = None if allowed else max(1, int(bucket["reset"] - now))
+            return allowed, retry_after
 
     def allow_weighted(
         self, key: str, window_seconds: int, max_requests: int, weight: int
@@ -80,57 +83,62 @@ class MemoryRateLimiterBackend(BaseRateLimiterBackend):
         Returns (allowed, retry_after_seconds, remaining_budget, reset_epoch).
         """
         now = time.time()
-        bucket = self._buckets.get(key)
-        if not bucket or bucket.get("reset", 0) < now:
-            bucket = {"count": 0.0, "reset": now + window_seconds}
-        
-        current = bucket.get("count", 0.0)
-        ttl = max(1, int(bucket["reset"] - now))
-        reset_epoch = int(bucket["reset"])
+        with self._lock:
+            bucket = self._buckets.get(key)
+            if not bucket or bucket.get("reset", 0) < now:
+                bucket = {"count": 0.0, "reset": now + window_seconds}
+            
+            current = bucket.get("count", 0.0)
+            ttl = max(1, int(bucket["reset"] - now))
+            reset_epoch = int(bucket["reset"])
 
-        if current + weight <= max_requests:
-            bucket["count"] = current + weight
-            self._buckets[key] = bucket
-            remaining = int(max_requests - bucket["count"])
-            return True, None, remaining, reset_epoch
-        else:
-            self._buckets[key] = bucket
-            remaining = int(max_requests - current)
-            return False, ttl, remaining, reset_epoch
+            if current + weight <= max_requests:
+                bucket["count"] = current + weight
+                self._buckets[key] = bucket
+                remaining = int(max_requests - bucket["count"])
+                return True, None, remaining, reset_epoch
+            else:
+                self._buckets[key] = bucket
+                remaining = int(max_requests - current)
+                return False, ttl, remaining, reset_epoch
 
     def acquire_sse_lease(self, key: str, lease_id: str, max_active: int, ttl: int = 30) -> bool:
         """Acquire or refresh SSE lease in memory."""
         now = time.time()
-        leases = self._sse_leases.setdefault(key, {})
+        with self._lock:
+            leases = self._sse_leases.setdefault(key, {})
 
-        # Clean expired leases
-        expired = [lid for lid, exp in leases.items() if exp < now]
-        for lid in expired:
-            leases.pop(lid, None)
+            # Clean expired leases
+            expired = [lid for lid, exp in leases.items() if exp < now]
+            for lid in expired:
+                leases.pop(lid, None)
 
-        # If already exists, refresh
-        if lease_id in leases:
+            # If already exists, refresh
+            if lease_id in leases:
+                leases[lease_id] = now + ttl
+                return True
+
+            # Check limit
+            if len(leases) >= max_active:
+                return False
+
+            # Add lease
             leases[lease_id] = now + ttl
             return True
 
-        # Check limit
-        if len(leases) >= max_active:
-            return False
-
-        # Add lease
-        leases[lease_id] = now + ttl
-        return True
-
     def release_sse_lease(self, key: str, lease_id: str) -> None:
         """Release SSE lease in memory."""
-        if key in self._sse_leases:
-            self._sse_leases[key].pop(lease_id, None)
+        with self._lock:
+            if key in self._sse_leases:
+                self._sse_leases[key].pop(lease_id, None)
 
     def record_429(self, ip: str, path: str) -> None:
-        self._recent.append({"ip": ip, "path": path, "ts": _utc_timestamp()})
+        with self._lock:
+            self._recent.append({"ip": ip, "path": path, "ts": _utc_timestamp()})
 
     def recent_429(self) -> list[dict]:
-        return list(self._recent)
+        with self._lock:
+            return list(self._recent)
 
 
 class RedisRateLimiterBackend(BaseRateLimiterBackend):
