@@ -181,7 +181,7 @@ export function streamingReducer(
         accumulatedText,
         lastSequence: delta_sequence,
         state: "streaming",
-        truncated: true,
+        truncated: Boolean(buf.truncated || truncated),
       });
       return { ...state, buffers: next };
     }
