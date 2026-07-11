@@ -286,6 +286,7 @@ def process_scheduled_deletions(db: Session) -> Dict[str, int]:
     Each user is processed in an isolated savepoint so one failure
     does not block others. Returns processed and failed counts.
     """
+    from models import User
     from services.account_erasure import erase_user_account
 
     now = datetime.now(timezone.utc)
@@ -322,5 +323,13 @@ def process_scheduled_deletions(db: Session) -> Dict[str, int]:
                     pass
             failed_count += 1
             logger.error("Failed to delete user %s: %s", user.id, exc)
+
+    # Persist the outer transaction. Releasing nested savepoints alone does not
+    # survive Session.close(), because get_session() does not auto-commit.
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return {"processed_count": processed_count, "failed_count": failed_count}
