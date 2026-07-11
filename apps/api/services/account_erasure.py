@@ -19,6 +19,10 @@ from models import (
     AuditLog,
     ChallengeRound,
     ChallengeSession,
+    CodingLaneResult,
+    CodingPatchArtifact,
+    CodingRun,
+    CodingTurn,
     ConversationVote,
     Debate,
     DebateAttempt,
@@ -60,6 +64,21 @@ class AccountErasureResult:
     api_keys_deleted: bool
     provider_keys_deleted: bool
     completed_at: datetime
+
+
+PII_KEYS = {"email", "ip_address", "ip", "remote_addr", "email_address"}
+
+
+def _scrub_pii(value):
+    """Recursively redact PII-bearing keys in JSON-compatible metadata."""
+    if isinstance(value, dict):
+        return {
+            key: "[REDACTED]" if str(key).lower() in PII_KEYS else _scrub_pii(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_scrub_pii(item) for item in value]
+    return value
 
 
 def erase_user_account(
@@ -120,6 +139,17 @@ def erase_user_account(
     session.execute(sa.delete(UsageLedgerEntry).where(UsageLedgerEntry.user_id == user_id))
     session.execute(sa.delete(ConversationVote).where(ConversationVote.user_id == user_id))
 
+    # Coding-agent artifacts can contain user prompts, source diffs, and model output.
+    coding_run_ids = sa.select(CodingRun.id).where(CodingRun.user_id == user_id)
+    session.execute(
+        sa.delete(CodingPatchArtifact).where(CodingPatchArtifact.coding_run_id.in_(coding_run_ids))
+    )
+    session.execute(
+        sa.delete(CodingLaneResult).where(CodingLaneResult.coding_run_id.in_(coding_run_ids))
+    )
+    session.execute(sa.delete(CodingTurn).where(CodingTurn.coding_run_id.in_(coding_run_ids)))
+    session.execute(sa.delete(CodingRun).where(CodingRun.user_id == user_id))
+
     # Challenge/oracle/red-team sessions
     session.execute(sa.delete(ChallengeRound).where(
         ChallengeRound.session_id.in_(
@@ -176,25 +206,12 @@ def erase_user_account(
         session.execute(sa.delete(DebateTurn).where(DebateTurn.debate_id.in_(debate_ids)))
 
     # ── Scrub PII from retained AuditLog metadata ──────────────────
-    PII_KEYS = {"email", "ip_address", "ip", "remote_addr", "email_address"}
     audit_logs = session.exec(
         select(AuditLog).where(AuditLog.user_id == user_id)
     ).all()
     for log in audit_logs:
         if log.meta:
-            scrubbed = {}
-            for k, v in log.meta.items():
-                if k.lower() in PII_KEYS:
-                    scrubbed[k] = "[REDACTED]"
-                elif isinstance(v, dict):
-                    # Recursively scrub nested PII
-                    scrubbed[k] = {
-                        nk: "[REDACTED]" if nk.lower() in PII_KEYS else nv
-                        for nk, nv in v.items()
-                    }
-                else:
-                    scrubbed[k] = v
-            log.meta = scrubbed
+            log.meta = _scrub_pii(log.meta)
             session.add(log)
 
     return AccountErasureResult(
