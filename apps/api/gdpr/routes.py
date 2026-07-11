@@ -150,8 +150,14 @@ def admin_process_deletions(
     if not is_owner(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
 
-    count = process_scheduled_deletions(session)
-    return {"processed": count, "message": f"Processed {count} scheduled deletions."}
+    result = process_scheduled_deletions(session)
+    processed = result["processed_count"]
+    failed = result["failed_count"]
+    return {
+        "processed": processed,
+        "failed": failed,
+        "message": f"Processed {processed} scheduled deletions, {failed} failed.",
+    }
 
 
 gdpr_router = router

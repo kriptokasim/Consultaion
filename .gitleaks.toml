@@ -42,7 +42,7 @@ useDefault = true
     regex = '''eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
     paths = ['''tests/.*''', '''test/.*''', '''e2e/.*''']
 
-  [[allowlist.regexs]]
+  [[allowlist.regexes]]
     description = "Dev-only bcrypt hashes in test fixtures"
     regex = '''\$2[aby]?\$\d{1,2}\$[A-Za-z0-9/.]{53}'''
     paths = ['''tests/.*''', '''test/.*''']

@@ -94,6 +94,7 @@ export interface StreamingModelBuffer {
   lastSequence: number;
   errorCode?: string;
   errorMessage?: string;
+  truncated?: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { apiRequest } from "@/lib/apiClient";
 import { sanitizeMarkdown } from "@/lib/sanitize";
+import { normalizeError } from "@/lib/errors";
 import { MessageSquareCode, ShieldAlert, Sparkles, Send, RefreshCw, CheckCircle, HelpCircle } from "lucide-react";
 
 interface Round {
@@ -71,7 +72,8 @@ export default function SynthesisChallenge({
       }
     } catch (err: any) {
       console.error("Failed to start challenge session", err);
-      setError(err.message || "Failed to initialize Synthesis Challenge.");
+      const normalized = normalizeError(err);
+      setError(normalized.message || "Failed to initialize Synthesis Challenge.");
     } finally {
       setIsStarting(false);
     }
@@ -122,7 +124,8 @@ export default function SynthesisChallenge({
     } catch (err: any) {
       console.error("Failed to submit pushback", err);
       setPushbackText(originalText);
-      setError(err.message || "Failed to process pushback. Please try again.");
+      const normalized = normalizeError(err);
+      setError(normalized.message || "Failed to process pushback. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

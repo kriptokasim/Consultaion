@@ -27,6 +27,7 @@ from typing import Optional
 from exceptions import PermissionError, RateLimitError, ValidationError
 from models import Debate, User
 from ratelimit import increment_ip_bucket
+from sqlalchemy import update
 from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
@@ -43,14 +44,17 @@ ACTION_RATE_LIMITS: dict[str, tuple[int, int]] = {
     "voting_prediction":   (60, 20),
 }
 
-# H-API-1: Per-user asyncio locks to prevent concurrent credit consumption
+# E2: Process-local asyncio lock — optimization only, NOT cross-worker safe.
 _user_locks: dict[str, asyncio.Lock] = {}
-# Simple per-user in-memory cooldown tracker (resets on process restart)
 _user_last_action: dict[str, dict[str, float]] = {}
 
 
 def _get_user_lock(user_id: str) -> asyncio.Lock:
-    """Get or create an asyncio.Lock for a specific user (thread-safe via GIL)."""
+    """Get or create an asyncio.Lock for a specific user.
+
+    Process-local only — prevents concurrent credit consumption within
+    a single worker. Cross-worker safety is handled by the database.
+    """
     if user_id not in _user_locks:
         _user_locks[user_id] = asyncio.Lock()
     return _user_locks[user_id]
@@ -69,8 +73,9 @@ async def require_llm_action_allowed(
 
     Raises RateLimitError, ValidationError, or PermissionError on failure.
 
-    H-API-2: Order is credit check → rate limit → cooldown → consume credit.
-    This prevents burning rate limit budget when credits are exhausted.
+    E1: Credit consumption uses DB-level SELECT ... FOR UPDATE to prevent
+    overspending across multiple workers. The in-memory lock is only an
+    optimization to reduce contention within a single process.
     """
     # 1. Account active check
     if not user.is_active:
@@ -79,7 +84,7 @@ async def require_llm_action_allowed(
             code="llm.account_inactive",
         )
 
-    # 2. Credit check FIRST (H-API-2: don't consume rate limit budget if out of credits)
+    # 2. Credit check FIRST (don't consume rate limit budget if out of credits)
     if user.hosted_credits_used >= user.hosted_credits_limit:
         raise ValidationError(
             message="Monthly AI credits exhausted. Upgrade your plan for more.",
@@ -103,7 +108,7 @@ async def require_llm_action_allowed(
             details={"action": action, "retry_after": retry_after},
         )
 
-    # 4. Per-user cooldown with lock (H-API-1: prevents concurrent double-spending)
+    # 4. Per-user cooldown with lock (process-local optimization)
     lock = _get_user_lock(user.id)
     async with lock:
         now = time.time()
@@ -134,7 +139,32 @@ async def require_llm_action_allowed(
                     code="llm.permission_denied",
                 )
 
-        # 6. Consume credit (inside lock to prevent double-spending)
-        user.hosted_credits_used += estimated_cost_units
-        session.add(user)
+        # 6. E1: Atomic credit consumption via conditional UPDATE
+        # This is the correctness boundary for multi-worker safety.
+        result = session.exec(
+            update(User)
+            .where(
+                User.id == user.id,
+                User.is_active == True,  # noqa: E712
+                User.hosted_credits_used + estimated_cost_units <= User.hosted_credits_limit,
+            )
+            .values(hosted_credits_used=User.hosted_credits_used + estimated_cost_units)
+        )
         session.commit()
+
+        if result.rowcount == 0:
+            # Refresh to determine the actual failure reason
+            session.refresh(user)
+            if not user.is_active:
+                raise PermissionError(
+                    message="Account is not active",
+                    code="llm.account_inactive",
+                )
+            raise ValidationError(
+                message="Monthly AI credits exhausted. Upgrade your plan for more.",
+                code="llm.credits_exhausted",
+                hint="Visit Settings > Billing to upgrade your plan.",
+            )
+
+        # Refresh the in-memory user object to reflect the DB update
+        session.refresh(user)

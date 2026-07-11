@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,18 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
     """Export all user data as a JSON-serializable dictionary.
 
     Covers: profile, billing, debates, API keys, audit logs, usage.
+    Excludes: password hashes, provider-key ciphertext, raw API secrets.
     """
     from billing.models import BillingSubscription, BillingUsage
-    from models import AuditLog, User
+    from models import (
+        APIKey,
+        AuditLog,
+        Debate,
+        LLMUsageLog,
+        UsageCounter,
+        User,
+        UserProviderKey,
+    )
 
     user = db.get(User, user_id)
     if not user:
@@ -34,14 +43,76 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
     export: Dict[str, Any] = {
         "export_id": str(uuid.uuid4()),
         "exported_at": datetime.now(timezone.utc).isoformat(),
-        "user": {
+        "profile": {
             "id": user.id,
-            "email": getattr(user, "email", None),
-            "name": getattr(user, "name", None),
-            "created_at": getattr(user, "created_at", None).isoformat() if getattr(user, "created_at", None) else None,
-            "plan": getattr(user, "plan", None),
+            "email": user.email,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "bio": user.bio,
+            "timezone": user.timezone,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "plan": user.plan,
+            "analytics_opt_out": user.analytics_opt_out,
+            "email_summaries_enabled": user.email_summaries_enabled,
+            "deletion_requested_at": user.deletion_requested_at.isoformat() if user.deletion_requested_at else None,
+            "deleted_at": user.deleted_at.isoformat() if user.deleted_at else None,
         },
     }
+
+    # Debates (anonymized content not included — only structural metadata)
+    try:
+        debates = db.exec(
+            select(Debate).where(Debate.user_id == user_id).order_by(Debate.created_at.desc()).limit(500)
+        ).all()
+        export["debates"] = [
+            {
+                "id": d.id,
+                "status": d.status,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "mode": d.mode,
+            }
+            for d in debates
+        ]
+    except Exception as exc:
+        logger.warning("Failed to export debates for %s: %s", user_id, exc)
+        export["debates"] = []
+
+    # API keys (metadata only, no secrets)
+    try:
+        api_keys = db.exec(
+            select(APIKey).where(APIKey.user_id == user_id)
+        ).all()
+        export["api_keys"] = [
+            {
+                "id": k.id,
+                "name": k.name,
+                "prefix": k.prefix,
+                "created_at": k.created_at.isoformat() if k.created_at else None,
+                "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+            }
+            for k in api_keys
+        ]
+    except Exception as exc:
+        logger.warning("Failed to export API keys for %s: %s", user_id, exc)
+        export["api_keys"] = []
+
+    # Provider keys (metadata only, no encrypted material)
+    try:
+        provider_keys = db.exec(
+            select(UserProviderKey).where(UserProviderKey.user_id == user_id)
+        ).all()
+        export["provider_keys"] = [
+            {
+                "id": k.id,
+                "provider": k.provider,
+                "masked_key": k.masked_key,
+                "created_at": k.created_at.isoformat() if k.created_at else None,
+            }
+            for k in provider_keys
+        ]
+    except Exception as exc:
+        logger.warning("Failed to export provider keys for %s: %s", user_id, exc)
+        export["provider_keys"] = []
 
     # Billing data
     try:
@@ -55,7 +126,6 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
                     "debates_created": u.debates_created,
                     "exports_count": u.exports_count,
                     "tokens_used": u.tokens_used,
-                    "model_tokens": u.model_tokens or {},
                 }
                 for u in billing_usage
             ]
@@ -78,7 +148,44 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
         logger.warning("Failed to export billing data for %s: %s", user_id, exc)
         export["billing"] = {"error": "export failed"}
 
-    # Audit logs
+    # Usage counters
+    try:
+        usage_counters = db.exec(
+            select(UsageCounter).where(UsageCounter.user_id == user_id)
+        ).all()
+        export["usage"] = [
+            {
+                "period": u.period,
+                "runs_used": u.runs_used,
+                "tokens_used": u.tokens_used,
+                "exports_used": u.exports_used,
+            }
+            for u in usage_counters
+        ]
+    except Exception as exc:
+        logger.warning("Failed to export usage for %s: %s", user_id, exc)
+        export["usage"] = []
+
+    # LLM usage logs (metadata only)
+    try:
+        llm_logs = db.exec(
+            select(LLMUsageLog).where(LLMUsageLog.user_id == user_id).order_by(LLMUsageLog.created_at.desc()).limit(200)
+        ).all()
+        export["llm_usage"] = [
+            {
+                "provider": l.provider,
+                "model": l.model,
+                "total_tokens": l.total_tokens,
+                "cost_usd": l.cost_usd,
+                "created_at": l.created_at.isoformat() if l.created_at else None,
+            }
+            for l in llm_logs
+        ]
+    except Exception as exc:
+        logger.warning("Failed to export LLM usage for %s: %s", user_id, exc)
+        export["llm_usage"] = []
+
+    # Audit logs (PII already scrubbed at write time in erasure, but export raw for user)
     try:
         audit_logs = db.exec(
             select(AuditLog).where(AuditLog.user_id == user_id).order_by(AuditLog.created_at.desc()).limit(1000)
@@ -87,7 +194,7 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
             {
                 "action": a.action,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
-                "details": getattr(a, "details", None),
+                "meta": a.meta,
             }
             for a in audit_logs
         ]
@@ -101,7 +208,8 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
 def create_deletion_request(db: Session, user_id: str) -> Dict[str, Any]:
     """Create a deletion request with grace period.
 
-    Returns the request details including the scheduled deletion date.
+    Sets deletion_requested_at but keeps the user active so they can
+    cancel during the grace period.
     """
     from models import User
 
@@ -114,7 +222,7 @@ def create_deletion_request(db: Session, user_id: str) -> Dict[str, Any]:
     scheduled_deletion = now + grace_period
 
     # Check if there's already a pending request
-    existing = getattr(user, "deletion_requested_at", None)
+    existing = user.deletion_requested_at
     if existing and existing > now - grace_period:
         return {
             "status": "already_requested",
@@ -124,9 +232,8 @@ def create_deletion_request(db: Session, user_id: str) -> Dict[str, Any]:
             "message": "A deletion request is already pending.",
         }
 
-    # Mark user for deletion (soft delete)
-    object.__setattr__(user, "deletion_requested_at", now)
-    object.__setattr__(user, "is_active", False)
+    # B2: Set deletion_requested_at but keep is_active = True
+    user.deletion_requested_at = now
     db.add(user)
     db.commit()
 
@@ -148,14 +255,14 @@ def create_deletion_request(db: Session, user_id: str) -> Dict[str, Any]:
 
 
 def cancel_deletion_request(db: Session, user_id: str) -> Dict[str, Any]:
-    """Cancel a pending deletion request and reactivate the account."""
+    """Cancel a pending deletion request and keep the account active."""
     from models import User
 
     user = db.get(User, user_id)
     if not user:
         raise ValueError("User not found")
 
-    existing = getattr(user, "deletion_requested_at", None)
+    existing = user.deletion_requested_at
     if not existing:
         return {"status": "no_pending_request", "message": "No deletion request to cancel."}
 
@@ -164,56 +271,56 @@ def cancel_deletion_request(db: Session, user_id: str) -> Dict[str, Any]:
     if existing + grace_period <= now:
         return {"status": "too_late", "message": "Deletion is already scheduled and cannot be cancelled."}
 
-    object.__setattr__(user, "deletion_requested_at", None)
-    object.__setattr__(user, "is_active", True)
+    # B3: Clear timestamp and ensure active
+    user.deletion_requested_at = None
+    user.is_active = True
     db.add(user)
     db.commit()
 
     return {"status": "cancelled", "message": "Deletion request cancelled. Your account has been reactivated."}
 
 
-def process_scheduled_deletions(db: Session) -> int:
+def process_scheduled_deletions(db: Session) -> Dict[str, int]:
     """Process users whose grace period has elapsed.
 
-    Should be called periodically (e.g., daily cron).
-    Returns the number of users processed.
+    Each user is processed in an isolated savepoint so one failure
+    does not block others. Returns processed and failed counts.
     """
-    from models import User
+    from services.account_erasure import erase_user_account
 
     now = datetime.now(timezone.utc)
     grace_period = timedelta(days=GDPR_DELETION_GRACE_DAYS)
     cutoff = now - grace_period
 
+    # B4: Query against the persisted column, exclude already-deleted users
+    # B5: Use FOR UPDATE SKIP LOCKED to prevent concurrent processing
     pending = db.exec(
         select(User).where(
             User.deletion_requested_at.isnot(None),
             User.deletion_requested_at <= cutoff,
-        )
+            User.deleted_at.is_(None),
+        ).with_for_update(skip_locked=True)
     ).all()
 
-    count = 0
+    processed_count = 0
+    failed_count = 0
+
     for user in pending:
+        # B5: Isolated transaction per user via savepoint
+        savepoint = None
         try:
-            _anonymize_user(db, user)
-            count += 1
-            logger.info("GDPR deletion executed user=%s", user.id)
+            savepoint = db.begin_nested()
+            erase_user_account(db, user, reason="gdpr_scheduled")
+            savepoint.commit()
+            processed_count += 1
+            logger.info("GDPR scheduled deletion executed user=%s", user.id)
         except Exception as exc:
+            if savepoint is not None:
+                try:
+                    savepoint.rollback()
+                except Exception:
+                    pass
+            failed_count += 1
             logger.error("Failed to delete user %s: %s", user.id, exc)
 
-    return count
-
-
-def _anonymize_user(db: Session, user) -> None:
-    """Anonymize user data instead of hard-delete to preserve referential integrity."""
-
-    # Anonymize PII fields
-    anonymized_email = f"deleted-{user.id[:8]}@anonymized.local"
-    object.__setattr__(user, "email", anonymized_email)
-    object.__setattr__(user, "name", None)
-    object.__setattr__(user, "password_hash", None)
-    object.__setattr__(user, "google_id", None)
-    object.__setattr__(user, "deletion_requested_at", None)
-    object.__setattr__(user, "is_active", False)
-    object.__setattr__(user, "anonymized_at", datetime.now(timezone.utc))
-    db.add(user)
-    db.commit()
+    return {"processed_count": processed_count, "failed_count": failed_count}

@@ -51,6 +51,10 @@ class User(SQLModel, table=True):
     
     # Patchset 58.0: Privacy controls
     deleted_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True, index=True))
+    deletion_requested_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True, index=True),
+    )
     analytics_opt_out: bool = Field(default=False, nullable=False)
 
     # FH125 C-5: Account lockout (progressive: 5→15min, 10→1h, 20→24h)

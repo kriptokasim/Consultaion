@@ -55,7 +55,16 @@ OAUTH_NEXT_COOKIE = "google_oauth_next"
 SAFE_NEXT_DEFAULT = "/dashboard"
 SAFE_NEXT_PREFIXES = ("/dashboard", "/runs", "/live", "/leaderboard", "/")
 
-WEB_APP_ORIGIN = settings.WEB_APP_ORIGIN
+def get_web_app_origin() -> str:
+    """Runtime accessor for WEB_APP_ORIGIN — never stale."""
+    from exceptions import ProviderCircuitOpenError
+    origin = settings.WEB_APP_ORIGIN
+    if not origin:
+        raise ProviderCircuitOpenError(
+            message="Web application origin is not configured",
+            code="auth.configuration_error",
+        )
+    return origin.rstrip("/")
 
 
 def sanitize_next_path(raw_next: Optional[str]) -> str:
@@ -90,7 +99,7 @@ def sanitize_next_path(raw_next: Optional[str]) -> str:
 
 def build_frontend_redirect(path: str) -> str:
     cleaned = path if path.startswith("/") else f"/{path}"
-    return f"{WEB_APP_ORIGIN}{cleaned}"
+    return f"{get_web_app_origin()}{cleaned}"
 
 
 def _profile_payload(user: User, debate_count: int = 0) -> UserProfileSchema:
@@ -740,166 +749,31 @@ async def delete_my_account(
     """
     Soft-delete user account and anonymize their data (FH125 H-1).
 
-    Classification:
-    - DELETE: api_keys, user_provider_keys, support_notes, user_interactions,
-      user_predictions, challenge_sessions, challenge_rounds, oracle_sessions,
-      oracle_branches, team_memberships, usage_counters, usage_quotas,
-      debate_attempts, vote_records, red_team_sessions, conversation_votes,
-      llm_usage_logs
-    - ANONYMIZE: user (email→deleted@invalid.local, name, avatar, bio, password),
-      debates (prompt→[DELETED]), messages (content→[DELETED])
-    - RETAIN: audit_log (for compliance, PII removed)
+    Uses the shared AccountErasureService for consistent behavior
+    with scheduled GDPR deletion.
     """
-    import secrets
-
-    import sqlalchemy as sa
-    from models import (
-        APIKey,
-        ChallengeRound,
-        ChallengeSession,
-        ConversationVote,
-        Debate,
-        DebateAttempt,
-        DebateRound,
-        DebateStageCheckpoint,
-        DebateTurn,
-        LLMUsageLog,
-        Message,
-        OracleBranch,
-        OracleSession,
-        PairwiseVote,
-        RedTeamSession,
-        Score,
-        SupportNote,
-        TeamMember,
-        UsageCounter,
-        UsageLedgerEntry,
-        UsageQuota,
-        UserInteraction,
-        UserPrediction,
-        UserProviderKey,
-        Vote,
-        VoteRecord,
-        utcnow,
-    )
+    from services.account_erasure import erase_user_account
 
     user_id = current_user.id
-    deleted_email = f"deleted+{secrets.token_hex(8)}@invalid.local"
 
-    # Anonymize user PII
-    current_user.email = deleted_email
-    current_user.display_name = None
-    current_user.avatar_url = None
-    current_user.bio = None
-    current_user.timezone = None
-    # H-API-4: Use a valid password hash format instead of "[DELETED]"
-    # to avoid crashing verify_password() which expects pbkdf2_sha256$salt$hash format.
-    current_user.password_hash = hash_password(secrets.token_urlsafe(32))
-    current_user.deleted_at = utcnow()
-    current_user.is_active = False
-    session.add(current_user)
+    result = erase_user_account(session, current_user, reason="user_request")
 
-    # DELETE: Direct user-owned records
-    session.execute(sa.delete(APIKey).where(APIKey.user_id == user_id))
-    session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
-    session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
-    # Anonymize support notes ABOUT the user (retained for support history)
-    # Set FK to NULL instead of invalid placeholder string
-    session.execute(
-        sa.update(SupportNote)
-        .where(SupportNote.user_id == user_id)
-        .values(user_id=None, note="[User deleted]")
-    )
-    session.execute(sa.delete(UserInteraction).where(UserInteraction.user_id == user_id))
-    session.execute(sa.delete(UserPrediction).where(UserPrediction.user_id == user_id))
-    session.execute(sa.delete(TeamMember).where(TeamMember.user_id == user_id))
-    session.execute(sa.delete(UsageCounter).where(UsageCounter.user_id == user_id))
-    session.execute(sa.delete(UsageQuota).where(UsageQuota.user_id == user_id))
-    session.execute(sa.delete(DebateAttempt).where(DebateAttempt.debate_id.in_(
-        sa.select(Debate.id).where(Debate.user_id == user_id)
-    )))
-
-    # DELETE: Challenge/oracle/red-team sessions
-    session.execute(sa.delete(ChallengeRound).where(
-        ChallengeRound.session_id.in_(
-            sa.select(ChallengeSession.id).where(ChallengeSession.user_id == user_id)
-        )
-    ))
-    session.execute(sa.delete(ChallengeSession).where(ChallengeSession.user_id == user_id))
-    session.execute(sa.delete(OracleBranch).where(
-        OracleBranch.session_id.in_(
-            sa.select(OracleSession.id).where(OracleSession.user_id == user_id)
-        )
-    ))
-    session.execute(sa.delete(OracleSession).where(OracleSession.user_id == user_id))
-    session.execute(sa.delete(RedTeamSession).where(RedTeamSession.user_id == user_id))
-    session.execute(sa.delete(ConversationVote).where(ConversationVote.user_id == user_id))
-    session.execute(sa.delete(LLMUsageLog).where(LLMUsageLog.user_id == user_id))
-    session.execute(sa.delete(UsageLedgerEntry).where(UsageLedgerEntry.user_id == user_id))
-    session.execute(sa.delete(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id.in_(
-        sa.select(Debate.id).where(Debate.user_id == user_id)
-    )))
-
-    # ANONYMIZE: Debates
-    user_debates = session.exec(
-        select(Debate).where(Debate.user_id == user_id)
-    ).all()
-    debate_ids = [d.id for d in user_debates]
-    anonymized_count = 0
-    for debate in user_debates:
-        if debate.prompt != "[DELETED]":
-            debate.prompt = "[DELETED]"
-            debate.final_content = None
-            debate.final_meta = None
-            debate.config = None
-            debate.panel_config = None
-            debate.user_id = None
-            anonymized_count += 1
-    session.add_all(user_debates)
-
-    # ANONYMIZE/DELETE: Related debate data
-    if debate_ids:
-        session.execute(
-            sa.update(Message)
-            .where(Message.debate_id.in_(debate_ids))
-            .values(content="[DELETED]", persona=None, meta=None)
-        )
-        session.execute(sa.delete(Score).where(Score.debate_id.in_(debate_ids)))
-        session.execute(sa.delete(Vote).where(Vote.debate_id.in_(debate_ids)))
-        session.execute(sa.delete(PairwiseVote).where(PairwiseVote.debate_id.in_(debate_ids)))
-        session.execute(sa.delete(VoteRecord).where(VoteRecord.debate_id.in_(debate_ids)))
-        session.execute(sa.delete(DebateRound).where(DebateRound.debate_id.in_(debate_ids)))
-        session.execute(sa.delete(DebateTurn).where(DebateTurn.debate_id.in_(debate_ids)))
-
-    # Audit log — staged before commit, persists atomically with deletion
     record_audit(
         "account_deleted",
         user_id=user_id,
         target_type="user",
         target_id=user_id,
         meta={
-            "debates_anonymized": anonymized_count,
-            "api_keys_deleted": True,
-            "provider_keys_deleted": True,
+            "debates_anonymized": result.debates_anonymized,
+            "api_keys_deleted": result.api_keys_deleted,
+            "provider_keys_deleted": result.provider_keys_deleted,
         },
         session=session,
     )
 
-    # Scrub PII from retained AuditLog metadata
-    from models import AuditLog
-    audit_logs = session.exec(
-        select(AuditLog).where(AuditLog.user_id == user_id)
-    ).all()
-    PII_KEYS = {"email", "ip_address", "ip", "remote_addr", "email_address"}
-    for log in audit_logs:
-        if log.meta:
-            scrubbed = {k: "[REDACTED]" if k.lower() in PII_KEYS else v for k, v in log.meta.items()}
-            log.meta = scrubbed
-            session.add(log)
-
     session.commit()
 
-    logger.info("User account deleted: %s, debates anonymized: %d", user_id, anonymized_count)
+    logger.info("User account deleted: %s, debates anonymized: %d", user_id, result.debates_anonymized)
 
     # Clear auth cookies
     clear_auth_cookie(response)

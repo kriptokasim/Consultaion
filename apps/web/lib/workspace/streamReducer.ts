@@ -17,6 +17,13 @@ import { isValidSequence } from "../streaming/types";
 import type { PersistedModelResponse } from "../api/types";
 
 // ---------------------------------------------------------------------------
+// Buffer bounds
+// ---------------------------------------------------------------------------
+
+/** Maximum characters retained in a live streaming preview buffer. */
+export const MAX_STREAM_BUFFER_CHARS = 120_000;
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -156,12 +163,25 @@ export function streamingReducer(
         };
       }
       if (!isValidSequence(delta_sequence, buf.lastSequence)) return state; // stale
+
+      // I: Enforce per-response buffer cap
+      const combined = buf.accumulatedText + text;
+      const truncated = combined.length > MAX_STREAM_BUFFER_CHARS;
+      const accumulatedText = truncated ? combined.slice(0, MAX_STREAM_BUFFER_CHARS) : combined;
+
+      if (truncated && !buf.truncated) {
+        console.warn(
+          `[streamingReducer] Buffer ${response_id} exceeded ${MAX_STREAM_BUFFER_CHARS} chars — truncating preview.`,
+        );
+      }
+
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
       next.set(response_id, {
         ...buf,
-        accumulatedText: buf.accumulatedText + text,
+        accumulatedText,
         lastSequence: delta_sequence,
         state: "streaming",
+        truncated: true,
       });
       return { ...state, buffers: next };
     }

@@ -5,7 +5,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 
-from auth import CSRF_COOKIE_NAME, ENABLE_CSRF, get_current_admin, get_optional_user
+from auth import get_csrf_cookie_name, get_current_admin, get_optional_user
 from billing.routes import billing_router
 from config import settings
 from correlation import CorrelationContext, set_correlation_context
@@ -127,7 +127,7 @@ async def csrf_protect(request: Request) -> None:
     - Route is marked CSRF-exempt via route metadata
     - Request uses Bearer token auth (Authorization header)
     """
-    if request.method in SAFE_METHODS or not ENABLE_CSRF:
+    if request.method in SAFE_METHODS or not settings.ENABLE_CSRF:
         return
     # FH125 C-3: Check route-level CSRF-exempt marker instead of path strings
     route = request.scope.get("route")
@@ -138,7 +138,7 @@ async def csrf_protect(request: Request) -> None:
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return
-    csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+    csrf_cookie = request.cookies.get(get_csrf_cookie_name())
     csrf_header = request.headers.get("x-csrf-token") or request.headers.get("X-CSRF-Token")
     if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
         raise HTTPException(

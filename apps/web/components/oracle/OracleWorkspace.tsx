@@ -7,6 +7,7 @@ import {
   Lightbulb, ShieldAlert, Sparkles, BookOpen, AlertCircle
 } from "lucide-react";
 import { apiRequest } from "@/lib/apiClient";
+import { normalizeError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 type ReasoningNode = {
@@ -132,7 +133,8 @@ export default function OracleWorkspace() {
       });
       setActiveBranchId(null);
     } catch (err: any) {
-      setError(err.message || "Failed to start reasoning session.");
+      const normalized = normalizeError(err);
+      setError(normalized.message || "Failed to start reasoning session.");
     } finally {
       setLoading(false);
     }
@@ -162,7 +164,8 @@ export default function OracleWorkspace() {
       setForkNodeId(null);
       setForkAssumption("");
     } catch (err: any) {
-      setError(err.message || "Failed to submit fork counter-assumption.");
+      const normalized = normalizeError(err);
+      setError(normalized.message || "Failed to submit fork counter-assumption.");
     } finally {
       setForking(false);
     }
