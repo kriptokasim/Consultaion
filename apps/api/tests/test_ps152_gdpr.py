@@ -231,3 +231,83 @@ class TestRuntimeConfigHelpers:
         with patch.object(settings, "WEB_APP_ORIGIN", None):
             with pytest.raises(Exception):
                 get_web_app_origin()
+
+
+# ── Audit follow-up: transaction and complete erasure ───────────────
+
+
+class TestScheduledDeletionTransactions:
+    def test_processing_commits_outer_transaction(self):
+        from gdpr.service import process_scheduled_deletions
+
+        db = MagicMock()
+        user = _make_user(deletion_requested_at=utcnow() - timedelta(days=31))
+        pending = MagicMock()
+        pending.all.return_value = [user]
+        db.exec.return_value = pending
+        savepoint = MagicMock()
+        db.begin_nested.return_value = savepoint
+
+        with patch("services.account_erasure.erase_user_account") as erase:
+            result = process_scheduled_deletions(db)
+
+        assert result == {"processed_count": 1, "failed_count": 0}
+        erase.assert_called_once_with(db, user, reason="gdpr_scheduled")
+        savepoint.commit.assert_called_once()
+        db.commit.assert_called_once()
+
+    def test_outer_commit_failure_rolls_back(self):
+        from gdpr.service import process_scheduled_deletions
+
+        db = MagicMock()
+        pending = MagicMock()
+        pending.all.return_value = []
+        db.exec.return_value = pending
+        db.commit.side_effect = RuntimeError("commit failed")
+
+        with pytest.raises(RuntimeError, match="commit failed"):
+            process_scheduled_deletions(db)
+
+        db.rollback.assert_called_once()
+
+
+class TestCompleteAccountErasure:
+    def test_recursive_pii_scrubber_handles_dicts_and_lists(self):
+        from services.account_erasure import _scrub_pii
+
+        value = {
+            "context": {
+                "items": [
+                    {"email": "person@example.com"},
+                    {"nested": {"ip_address": "203.0.113.8"}},
+                ]
+            },
+            "safe": "keep",
+        }
+
+        assert _scrub_pii(value) == {
+            "context": {
+                "items": [
+                    {"email": "[REDACTED]"},
+                    {"nested": {"ip_address": "[REDACTED]"}},
+                ]
+            },
+            "safe": "keep",
+        }
+
+    def test_coding_agent_records_are_in_erasure_plan(self):
+        from services.account_erasure import erase_user_account
+
+        db = MagicMock()
+        user = _make_user()
+        empty_result = MagicMock()
+        empty_result.all.return_value = []
+        db.exec.return_value = empty_result
+
+        erase_user_account(db, user, reason="test")
+
+        statements = "\n".join(str(call.args[0]) for call in db.execute.call_args_list)
+        assert "coding_patch_artifact" in statements
+        assert "coding_lane_result" in statements
+        assert "coding_turn" in statements
+        assert "DELETE FROM coding_run" in statements
