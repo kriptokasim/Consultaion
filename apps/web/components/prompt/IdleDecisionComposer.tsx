@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { usePromptHistory } from '@/hooks/usePromptHistory'
 
-export type RunPhase = 'idle' | 'creating' | 'active' | 'synthesizing' | 'completed' | 'failed'
+export type RunPhase = 'idle' | 'creating' | 'active' | 'synthesizing' | 'completed' | 'failed' | 'cancelled'
 
 interface IdleDecisionComposerProps {
   value: string

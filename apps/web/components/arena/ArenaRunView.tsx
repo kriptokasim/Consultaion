@@ -158,28 +158,16 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             fallbackModelIds: debate?.final_meta?.models?.map((m: any) => typeof m === "string" ? m : m.model_id),
         });
 
-        const mapped: Array<{
-            type: "persisted" | "stream" | "skeleton";
-            resp?: any;
-            streamBuf?: any;
-            key: string;
-        }> = arenaSlots.filter(slot => slot.type !== "placeholder").map(slot => ({
-            type: slot.type === "persisted" ? "persisted" : "stream",
+        // Track D: Render all slots in canonical order, preserving placeholders
+        return arenaSlots.map(slot => ({
+            type: slot.type === "persisted" ? "persisted" as const :
+                   slot.type === "streaming" ? "stream" as const :
+                   "skeleton" as const,
             resp: slot.persisted,
             streamBuf: slot.streaming,
             key: slot.key,
         }));
-
-        // Fill remaining with skeletons to reach expectedModels
-        const currentLen = mapped.length;
-        if (currentLen < expectedModels) {
-            for (let i = currentLen; i < expectedModels; i++) {
-                mapped.push({ type: "skeleton", key: `skeleton-${i}` });
-            }
-        }
-
-        return mapped;
-    }, [debate, persistedResponses, streamingBuffers, expectedModels]);
+    }, [debate, persistedResponses, streamingBuffers]);
 
     return (
         <div className="flex flex-col gap-6 pb-8">

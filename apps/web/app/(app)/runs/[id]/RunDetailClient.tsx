@@ -23,6 +23,8 @@ import type { WorkspaceModelSlot } from "@/lib/workspace/types";
 import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
 import { ArenaRunContent } from "@/components/arena/ArenaRunContent";
 import type { DebateSummary } from "@/lib/api/types";
+import { isTerminalRunStatus, isSuccessfulRunStatus, deriveRunPhase, type RunPhase } from "@/lib/runs/status";
+import type { RunPhase as RunPhaseType } from "@/lib/runs/status";
 
 const DebateArena = dynamic(() => import("@/components/debate/DebateArena"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const ParliamentRunView = dynamic(() => import("@/components/parliament/ParliamentRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
@@ -31,10 +33,20 @@ const ConversationRunView = dynamic(() => import("@/components/conversation/Conv
 const ArenaRunView = dynamic(() => import("@/components/arena/ArenaRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const VotingRunView = dynamic(() => import("@/components/voting/VotingRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 
-const COMPLETED_STATUSES = new Set(["completed", "success", "completed_budget"]);
-const TERMINAL_STATUSES = new Set(["completed", "success", "completed_budget", "failed"]);
 const POLL_INTERVAL_MS = 4000;
 const HARD_LOADING_CEILING_MS = 15000;
+
+export interface RunSnapshot {
+  id: string;
+  prompt: string;
+  mode: string;
+  status: string;
+  workspaceStage: string;
+  runPhase: RunPhase;
+  sseStatus: string;
+  isPollingFallback: boolean;
+  isTerminal: boolean;
+}
 
 type CompletedRunLoadState =
   | "loading_core"
@@ -66,10 +78,10 @@ interface RunDetailClientProps {
   recentRuns?: DebateSummary[];
   recentRunsLoading?: boolean;
   onNewRun?: () => void;
-  onTerminal?: (terminalStatus: "completed" | "failed") => void;
+  onRunSnapshot?: (snapshot: RunSnapshot) => void;
 }
 
-export default function RunDetailClient({ runId, surface = "standalone", recentRuns, recentRunsLoading, onNewRun, onTerminal }: RunDetailClientProps = {}) {
+export default function RunDetailClient({ runId, surface = "standalone", recentRuns, recentRunsLoading, onNewRun, onRunSnapshot }: RunDetailClientProps = {}) {
   const params = useParams();
   const router = useRouter();
   const id = runId || (params?.id as string);
@@ -107,29 +119,13 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   const [resultsFetched, setResultsFetched] = useState(false);
   const [completedLoadState, setCompletedLoadState] = useState<CompletedRunLoadState>("loading_core");
 
-  const isCompleted = !!debate && COMPLETED_STATUSES.has(debate.status);
+  const isCompleted = !!debate && isSuccessfulRunStatus(debate.status);
+  const isTerminal = !!debate && isTerminalRunStatus(debate.status);
   const isFailed = debate?.status === "failed";
+  const isCancelled = debate?.status === "cancelled";
   const isDebateLoaded = !!debate;
   const isLoading = workspaceStatus === "loading" || (!debate && workspaceStatus !== "failed" && workspaceStatus !== "error");
   const debateError = workspaceError ? new Error(workspaceError) : null;
-
-  // Notify parent when run reaches terminal state
-  const terminalNotifiedRef = useRef(false);
-  useEffect(() => {
-    if (!onTerminal || !isDebateLoaded) return;
-    if (isCompleted && !terminalNotifiedRef.current) {
-      terminalNotifiedRef.current = true;
-      onTerminal("completed");
-    } else if (isFailed && !terminalNotifiedRef.current) {
-      terminalNotifiedRef.current = true;
-      onTerminal("failed");
-    }
-  }, [isCompleted, isFailed, isDebateLoaded, onTerminal]);
-
-  // Reset terminal notification when run changes
-  useEffect(() => {
-    terminalNotifiedRef.current = false;
-  }, [id]);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number | null>(null);
@@ -361,6 +357,27 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
     return deriveWorkspaceStage(debate, eventTypes, liveResponseCount);
   }, [debate, eventTypes, liveResponseCount]);
 
+  const runPhase = useMemo(() => {
+    return deriveRunPhase(debate?.status, currentWorkspaceStage);
+  }, [debate?.status, currentWorkspaceStage]);
+
+  // Emit RunSnapshot whenever relevant values change
+  useEffect(() => {
+    if (!onRunSnapshot || !id) return;
+    const snapshot: RunSnapshot = {
+      id,
+      prompt: debate?.prompt || "",
+      mode: debate?.mode || "arena",
+      status: debate?.status || "",
+      workspaceStage: currentWorkspaceStage,
+      runPhase,
+      sseStatus: typeof sseStatus === "string" ? sseStatus : "idle",
+      isPollingFallback,
+      isTerminal,
+    };
+    onRunSnapshot(snapshot);
+  }, [id, debate?.prompt, debate?.mode, debate?.status, currentWorkspaceStage, runPhase, sseStatus, isPollingFallback, isTerminal, onRunSnapshot]);
+
   const modelSlots = useMemo<WorkspaceModelSlot[]>(() => {
     const modelsList = debate?.final_meta?.models || (debate?.config as any)?.models || [];
     return modelsList.map((model: any) => {
@@ -555,7 +572,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
 
           {/* Render the ArenaRunView with persisted responses */}
           {debate?.mode === "arena" ? (
-            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={TERMINAL_STATUSES.has(debate.status)} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
+            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isTerminal} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
           ) : (
             <ParliamentRunView
               id={id}

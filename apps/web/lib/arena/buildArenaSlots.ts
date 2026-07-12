@@ -14,12 +14,10 @@ export interface ArenaSlot {
 
 function getSeatModelId(seat: unknown): string {
   const s = seat as Record<string, unknown>;
-  return (
-    (s.model_id as string) ??
-    (s.model as string) ??
-    (s.seat_id as string) ??
-    ""
-  );
+  const candidates = [s.model_id, s.model, s.seat_id];
+  return (candidates.find(
+    value => typeof value === "string" && value.trim().length > 0
+  ) as string | undefined)?.trim() ?? "";
 }
 
 function getSeatDisplayName(seat: unknown): string {

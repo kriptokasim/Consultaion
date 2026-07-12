@@ -31,6 +31,7 @@ import { ConnectionIndicator, type ConnectionStatus } from "@/components/connect
 import { FirstRunGuide } from "@/components/onboarding/FirstRunGuide";
 
 import RunDetailClient from "../runs/[id]/RunDetailClient";
+import type { RunSnapshot } from "../runs/[id]/RunDetailClient";
 
 const seatsToMembers = (seats: PanelSeatConfig[]): Member[] =>
   seats.map((seat) => ({
@@ -445,28 +446,30 @@ function ArenaPageContent() {
   }
 
   const queryRunId = searchParams?.get('run')
-  const activeRunId = currentDebateId || queryRunId || null
+  // Track C: URL is authoritative after creation/navigation
+  const activeRunId = queryRunId || currentDebateId || null
 
-  type ArenaPagePhase = 'idle' | 'creating' | 'active' | 'terminal'
+  type ArenaPagePhase = 'idle' | 'creating' | 'active' | 'synthesizing' | 'completed' | 'failed' | 'cancelled'
 
-  // Track terminal status from RunDetailClient
-  const [runTerminalStatus, setRunTerminalStatus] = useState<'completed' | 'failed' | null>(null)
+  // Track B: RunSnapshot from RunDetailClient
+  const [runSnapshot, setRunSnapshot] = useState<RunSnapshot | null>(null)
 
   const arenaPagePhase: ArenaPagePhase = (() => {
     if (sessionStatus === 'creating' || sessionStatus === 'redirecting') return 'creating'
-    if (runTerminalStatus) return 'terminal'
+    if (runSnapshot?.runPhase === 'completed') return 'completed'
+    if (runSnapshot?.runPhase === 'failed') return 'failed'
+    if (runSnapshot?.runPhase === 'cancelled') return 'cancelled'
+    if (runSnapshot?.runPhase === 'synthesizing') return 'synthesizing'
+    if (activeRunId && runSnapshot?.runPhase === 'active') return 'active'
     if (activeRunId) return 'active'
     return 'idle'
   })()
 
-  const handleRunTerminal = useCallback((terminalStatus: 'completed' | 'failed') => {
-    setRunTerminalStatus(terminalStatus)
-    setRunning(false)
-    runningRef.current = false
-    if (terminalStatus === 'completed') {
-      setSessionStatus('complete')
-    } else {
-      setSessionStatus('terminal_error')
+  const handleRunSnapshot = useCallback((snapshot: RunSnapshot) => {
+    setRunSnapshot(snapshot)
+    if (snapshot.isTerminal) {
+      setRunning(false)
+      runningRef.current = false
     }
   }, [])
 
@@ -475,7 +478,7 @@ function ArenaPageContent() {
     setCurrentDebateId(null)
     currentDebateIdRef.current = null
     setSessionStatus('idle')
-    setRunTerminalStatus(null)
+    setRunSnapshot(null)
     setErrorState(null)
     router.replace('/live', { scroll: false })
   }, [router, reset])
@@ -538,7 +541,9 @@ function ArenaPageContent() {
         )}
         {sessionStatus !== 'idle' && (
           <ConnectionIndicator
-            status={running && activeRunId ? 'reconnecting' :
+            status={runSnapshot?.sseStatus === 'connected' ? 'connected' :
+                   runSnapshot?.sseStatus === 'reconnecting' ? 'reconnecting' :
+                   running && activeRunId ? 'reconnecting' :
                    running ? 'degraded' : 'idle'}
             className="ml-2"
           />
@@ -581,7 +586,7 @@ function ArenaPageContent() {
           isLoading={running}
           disabled={running}
           onConfigureModels={() => setModelPanelOpen(true)}
-          runPhase={arenaPagePhase === 'idle' ? 'idle' : arenaPagePhase === 'creating' ? 'creating' : arenaPagePhase === 'terminal' ? (runTerminalStatus === 'failed' ? 'failed' : 'completed') : 'active'}
+          runPhase={arenaPagePhase === 'idle' ? 'idle' : arenaPagePhase === 'creating' ? 'creating' : arenaPagePhase === 'completed' ? 'completed' : arenaPagePhase === 'failed' ? 'failed' : arenaPagePhase === 'cancelled' ? 'cancelled' : arenaPagePhase === 'synthesizing' ? 'synthesizing' : 'active'}
           onNewRun={resetToNewRun}
         />
 
@@ -589,12 +594,13 @@ function ArenaPageContent() {
         {activeRunId && (
           <div className="mt-8">
             <RunDetailClient
+              key={activeRunId}
               runId={activeRunId}
               surface="live"
               recentRuns={recentRuns}
               recentRunsLoading={debatesLoading}
               onNewRun={resetToNewRun}
-              onTerminal={handleRunTerminal}
+              onRunSnapshot={handleRunSnapshot}
             />
           </div>
         )}
