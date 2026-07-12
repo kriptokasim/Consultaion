@@ -49,6 +49,10 @@ vi.mock("@/components/arena/ArenaRunView", () => ({
   default: () => <div data-testid="arena-run-view" />,
 }));
 
+vi.mock("@/components/arena/ArenaRunContent", () => ({
+  ArenaRunContent: () => <div data-testid="arena-run-content" />,
+}));
+
 vi.mock("@/components/workspace", () => ({
   WorkspaceHeader: () => <div data-testid="workspace-header" />,
   DesktopStageRail: () => <div data-testid="desktop-stage-rail" />,
@@ -162,8 +166,7 @@ describe("RunDetailClient Hydration", () => {
     });
 
     render(<RunDetailClient />);
-    expect(screen.getByTestId("workspace-header")).toBeInTheDocument();
-    expect(screen.getByTestId("desktop-stage-rail")).toBeInTheDocument();
+    expect(screen.getByTestId("arena-run-content")).toBeInTheDocument();
   });
 });
 

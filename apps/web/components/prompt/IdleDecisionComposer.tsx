@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { usePromptHistory } from '@/hooks/usePromptHistory'
 
+export type RunPhase = 'idle' | 'creating' | 'active' | 'synthesizing' | 'completed' | 'failed'
+
 interface IdleDecisionComposerProps {
   value: string
   onChange: (val: string) => void
@@ -17,6 +19,8 @@ interface IdleDecisionComposerProps {
   isLoading?: boolean
   disabled?: boolean
   onConfigureModels?: () => void
+  runPhase?: RunPhase
+  onNewRun?: () => void
 }
 
 export function IdleDecisionComposer({
@@ -29,6 +33,8 @@ export function IdleDecisionComposer({
   isLoading = false,
   disabled = false,
   onConfigureModels,
+  runPhase = 'idle',
+  onNewRun,
 }: IdleDecisionComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { history, addToHistory } = usePromptHistory()
@@ -67,7 +73,8 @@ export function IdleDecisionComposer({
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 py-8 space-y-6 pb-48 sm:pb-8">
-      {/* 1. Mode Cards (Arena & Debate only) */}
+      {/* 1. Mode Cards (Arena & Debate only) — hidden when not idle */}
+      {runPhase === 'idle' && (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Arena Card */}
         <Card
@@ -134,6 +141,7 @@ export function IdleDecisionComposer({
           )}
         </Card>
       </div>
+      )}
 
       {/* 2. Main Input Box */}
       <div className={cn(
@@ -182,7 +190,17 @@ export function IdleDecisionComposer({
             Press <kbd className="px-1.5 py-0.5 border rounded bg-muted font-sans text-[10px]">⌘/Ctrl + Enter</kbd> to run
           </span>
           <div className="flex items-center gap-2 ml-auto">
-            {onConfigureModels && (
+            {onNewRun && (runPhase === 'completed' || runPhase === 'failed') && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onNewRun}
+                className="rounded-xl px-4 font-semibold text-sm border-border hover:bg-muted/40"
+              >
+                New Run
+              </Button>
+            )}
+            {onConfigureModels && runPhase === 'idle' && (
               <Button
                 type="button"
                 variant="outline"
@@ -194,8 +212,8 @@ export function IdleDecisionComposer({
               </Button>
             )}
             <Button
-              onClick={handleSubmit}
-              disabled={disabled || isLoading || !value.trim()}
+              onClick={runPhase === 'failed' ? onNewRun ?? handleSubmit : handleSubmit}
+              disabled={runPhase === 'creating' || runPhase === 'active' || runPhase === 'synthesizing' || runPhase === 'completed' || (!value.trim() && runPhase === 'idle')}
               className={cn(
                 'rounded-xl px-5 font-semibold text-sm shadow-sm transition-all',
                 mode === 'arena'
@@ -203,7 +221,12 @@ export function IdleDecisionComposer({
                   : 'bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600'
               )}
             >
-              {isLoading ? 'Launching...' : mode === 'arena' ? 'Launch Arena' : 'Start Debate'}
+              {runPhase === 'creating' && 'Starting\u2026'}
+              {runPhase === 'active' && 'Models responding\u2026'}
+              {runPhase === 'synthesizing' && 'Synthesizing\u2026'}
+              {runPhase === 'completed' && 'Completed'}
+              {runPhase === 'failed' && 'Retry'}
+              {runPhase === 'idle' && (isLoading ? 'Launching\u2026' : mode === 'arena' ? 'Launch Arena' : 'Start Debate')}
             </Button>
           </div>
         </div>

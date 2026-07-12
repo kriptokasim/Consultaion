@@ -21,6 +21,8 @@ import { FeatureGate, useFeatureFlag } from "@/components/FeatureGate";
 import { deriveWorkspaceStage } from "@/lib/workspace/deriveWorkspaceStage";
 import type { WorkspaceModelSlot } from "@/lib/workspace/types";
 import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
+import { ArenaRunContent } from "@/components/arena/ArenaRunContent";
+import type { DebateSummary } from "@/lib/api/types";
 
 const DebateArena = dynamic(() => import("@/components/debate/DebateArena"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const ParliamentRunView = dynamic(() => import("@/components/parliament/ParliamentRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
@@ -58,7 +60,15 @@ export function resolveRunViewKind(mode: string | undefined | null): "arena" | "
   }
 }
 
-export default function RunDetailClient({ runId }: { runId?: string } = {}) {
+interface RunDetailClientProps {
+  runId?: string;
+  surface?: "standalone" | "live";
+  recentRuns?: DebateSummary[];
+  recentRunsLoading?: boolean;
+  onNewRun?: () => void;
+}
+
+export default function RunDetailClient({ runId, surface = "standalone", recentRuns, recentRunsLoading, onNewRun }: RunDetailClientProps = {}) {
   const params = useParams();
   const router = useRouter();
   const id = runId || (params?.id as string);
@@ -149,6 +159,20 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
       });
     }
   }, [id, isContinuing, continueRun, pushToast]);
+
+  const handleRetry = useCallback(async () => {
+    if (!id) return;
+    try {
+      await retryRun();
+    } catch (err) {
+      console.error("Failed to retry:", err);
+      pushToast({
+        title: "Retry Error",
+        description: "Error retrying the run. Please try again.",
+        variant: "error",
+      });
+    }
+  }, [id, retryRun, pushToast]);
 
   useEffect(() => {
     if (!isCompleted || !id || resultsFetched) return;
@@ -598,7 +622,26 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
               <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
             </div>
           )}
-          <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isCompleted} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
+          <ArenaRunContent
+            debate={debate}
+            events={normalizedResultsEvents}
+            responses={responses}
+            streamingBuffers={streamingState.buffers}
+            isTerminal={isCompleted}
+            responsesState={responsesState}
+            responsesError={responsesError}
+            timelineState={timelineState}
+            workspaceStage={currentWorkspaceStage}
+            elapsedSeconds={elapsedSeconds}
+            sseStatus={sseStatus}
+            isPollingFallback={isPollingFallback}
+            surface={surface}
+            profile={profile}
+            onRefetch={refetch}
+            recentRuns={recentRuns}
+            recentRunsLoading={recentRunsLoading}
+            onNewRun={onNewRun}
+          />
         </div>
       );
     }
@@ -694,80 +737,29 @@ export default function RunDetailClient({ runId }: { runId?: string } = {}) {
 
   if (viewKind === "arena" && !isCompleted) {
     return (
-      <FeatureGate flag="unifiedWorkspace" fallback={
-        <div className="flex flex-col h-[calc(100vh-4rem)]">
-          {isPollingFallback && (
-            <div className="flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              <span>Connection interrupted — using polling fallback</span>
-            </div>
-          )}
-          <DebateArena debate={debate} events={events} connectionStatus={sseStatus} />
-        </div>
-      }>
-        <div className="container max-w-[1400px] py-6 space-y-6">
-          <WorkspaceHeader
-            stage={currentWorkspaceStage}
-            prompt={debate?.prompt}
-            mode="arena"
-            modelCount={modelsExpected}
-            onBack={() => router.push("/live")}
-          />
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="hidden lg:block lg:col-span-1">
-              <DesktopStageRail
-                currentStage={currentWorkspaceStage}
-                elapsedSeconds={elapsedSeconds}
-              />
-            </div>
-
-            <div className="col-span-1 lg:col-span-3 space-y-6">
-              <div className="block lg:hidden">
-                <FeatureGate flag="mobileWorkspaceV2" fallback={
-                  <div className="text-xs text-muted-foreground px-2 py-1 text-center border-b">
-                    Running...
-                  </div>
-                }>
-                  <MobileStageBar
-                    currentStage={currentWorkspaceStage}
-                    responsesReceived={responsesReceived}
-                    modelsExpected={modelsExpected}
-                    elapsedSeconds={elapsedSeconds}
-                    showDetails={showMobileDetails}
-                    onToggleDetails={() => setShowMobileDetails(!showMobileDetails)}
-                  />
-                </FeatureGate>
-              </div>
-
-              <FeatureGate flag="stagedDecisionPipelinePublic">
-                {currentWorkspaceStage === "perspectives_ready" && (
-                  <PerspectivesReadyAction
-                    mode="arena"
-                    modelCount={modelsExpected}
-                    onContinue={handleContinue}
-                    isContinuing={isContinuing}
-                    outcomeUnknown={outcomeUnknown}
-                  />
-                )}
-              </FeatureGate>
-
-              {["contacting_models", "collecting_perspectives", "perspectives_ready"].includes(currentWorkspaceStage) ? (
-                <PerspectivesGrid modelSlots={modelSlots} />
-              ) : (
-                <ArenaRunView debate={debate as any} events={liveEvents as any} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isCompleted} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} onRefetch={refetch} />
-              )}
-
-              {isPollingFallback && (
-                <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  <span>Connection interrupted — using polling fallback</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </FeatureGate>
+      <div className="container max-w-[1400px] py-6 space-y-6">
+        <ArenaRunContent
+          debate={debate}
+          events={liveEvents as any}
+          responses={responses}
+          streamingBuffers={streamingState.buffers}
+          isTerminal={isCompleted}
+          responsesState={responsesState}
+          responsesError={responsesError}
+          timelineState={timelineState}
+          workspaceStage={currentWorkspaceStage}
+          elapsedSeconds={elapsedSeconds}
+          sseStatus={sseStatus}
+          isPollingFallback={isPollingFallback}
+          surface={surface}
+          onRetry={handleRetry}
+          onContinue={handleContinue}
+          onRefetch={refetch}
+          recentRuns={recentRuns}
+          recentRunsLoading={recentRunsLoading}
+          onNewRun={onNewRun}
+        />
+      </div>
     );
   }
 

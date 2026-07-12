@@ -13,6 +13,7 @@ import { SynthesisCard, SynthesisLoading } from "./SynthesisCard";
 import { PublicRunCTATop, PublicRunCTAFooter } from "./CTABanner";
 import { DivergenceMeter } from "./DivergenceMeter";
 import { SynthesisReveal } from "./SynthesisReveal";
+import { DecisionReportView } from "@/components/report/DecisionReportView";
 import { fetchWithAuth } from "@/lib/auth";
 import { useCardKeyboardNav } from "@/hooks/useCardKeyboardNav";
 
@@ -26,11 +27,12 @@ interface ArenaRunViewProps {
     responsesState?: ResponsesState;
     responsesError?: string | null;
     timelineState?: TimelineState;
+    presentation?: "historical" | "live";
     profile?: any;
     onRefetch?: () => Promise<any> | void;
 }
 
-export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, isTerminal, responsesState, responsesError, timelineState, profile, onRefetch }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, isTerminal, responsesState, responsesError, timelineState, presentation = "historical", profile, onRefetch }: ArenaRunViewProps) {
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
         const eventResponses: Array<ModelResponse> = [];
@@ -431,31 +433,109 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 synthesisStatus={artifacts.synthesisStatus || debate.synthesis_status || debate.final_meta?.synthesis_status}
             />
 
-            {/* Synthesis / Final Verdict — P143: uses canonical normalizer */}
-            {artifacts.hasSynthesisOutput && (() => {
-                const isSynthesisFailed = artifacts.synthesisStatus === "failed" || 
-                                         (debate.synthesis_success === false || debate.final_meta?.synthesis_success === false) || 
-                                         (artifacts.synthesisStatus === undefined && artifacts.synthesisText.startsWith("⚠️ Synthesis unavailable"));
-                return (
-                    <SynthesisReveal 
-                        synthesis={artifacts.synthesisText} 
-                        modelResponses={modelResponses} 
-                        isSynthesisFailed={isSynthesisFailed} 
-                        debateId={debate.id}
-                        synthesisReport={artifacts.synthesisReport}
-                        synthesisStatus={artifacts.synthesisStatus}
-                        synthesisError={artifacts.synthesisError}
-                        fallbackModel={artifacts.fallbackModel}
-                        fallbackReason={artifacts.fallbackReason}
-                        fallbackResponse={artifacts.fallbackResponse}
-                        divergenceBreakdown={artifacts.divergenceBreakdown}
-                    />
-                );
-            })()}
+            {/* Decision Report Section — live vs historical */}
+            {presentation === "live" ? (
+                (() => {
+                    const hasReport = artifacts.hasStructuredReport && artifacts.synthesisReport;
+                    const isSynthesizing = modelResponses.length > 0 && !artifacts.hasSynthesisOutput && !artifacts.hasStructuredReport;
+                    const isSynthesisFailed = artifacts.synthesisStatus === "failed" ||
+                        (debate.synthesis_success === false || debate.final_meta?.synthesis_success === false) ||
+                        (artifacts.synthesisStatus === undefined && artifacts.synthesisText.startsWith("⚠️ Synthesis unavailable"));
 
-            {/* Loading synthesis indicator — P143: suppressed when structured report exists */}
-            {modelResponses.length > 0 && !artifacts.hasSynthesisOutput && !artifacts.hasStructuredReport && (
-                <SynthesisLoading successfulCount={modelResponses.filter(r => r.success).length} />
+                    return (
+                        <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-sm">
+                            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+                                Decision Report
+                            </h3>
+
+                            {hasReport ? (
+                                <DecisionReportView
+                                    report={artifacts.synthesisReport}
+                                    rawSynthesis={artifacts.synthesisText}
+                                    variant="arena"
+                                    synthesisStatus={artifacts.synthesisStatus || (isSynthesisFailed ? "failed" : "succeeded")}
+                                    synthesisError={artifacts.synthesisError}
+                                    fallbackModel={artifacts.fallbackModel}
+                                    fallbackReason={artifacts.fallbackReason}
+                                    fallbackResponse={artifacts.fallbackResponse}
+                                    divergenceBreakdown={artifacts.divergenceBreakdown}
+                                />
+                            ) : isSynthesizing ? (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                        Synthesizing the final decision report…
+                                    </div>
+                                    {/* Structured skeleton */}
+                                    <div className="space-y-3">
+                                        <div className="h-20 bg-muted/50 rounded-lg animate-pulse" />
+                                        <div className="h-8 w-24 bg-muted/50 rounded-lg animate-pulse" />
+                                        <div className="space-y-2">
+                                            <div className="h-4 bg-muted/50 rounded animate-pulse" />
+                                            <div className="h-4 w-3/4 bg-muted/50 rounded animate-pulse" />
+                                            <div className="h-4 w-1/2 bg-muted/50 rounded animate-pulse" />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="h-24 bg-muted/50 rounded-lg animate-pulse" />
+                                            <div className="h-24 bg-muted/50 rounded-lg animate-pulse" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="h-4 bg-muted/50 rounded animate-pulse" />
+                                            <div className="h-4 w-2/3 bg-muted/50 rounded animate-pulse" />
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : artifacts.hasSynthesisOutput ? (
+                                // Unstructured synthesis fallback — render directly without reveal
+                                <SynthesisReveal
+                                    synthesis={artifacts.synthesisText}
+                                    modelResponses={modelResponses}
+                                    isSynthesisFailed={isSynthesisFailed}
+                                    debateId={debate.id}
+                                    synthesisReport={artifacts.synthesisReport}
+                                    synthesisStatus={artifacts.synthesisStatus}
+                                    synthesisError={artifacts.synthesisError}
+                                    fallbackModel={artifacts.fallbackModel}
+                                    fallbackReason={artifacts.fallbackReason}
+                                    fallbackResponse={artifacts.fallbackResponse}
+                                    divergenceBreakdown={artifacts.divergenceBreakdown}
+                                />
+                            ) : (
+                                // Waiting for responses — empty report placeholder
+                                <div className="h-32 bg-muted/20 rounded-lg border border-dashed border-border flex items-center justify-center text-xs text-muted-foreground">
+                                    Report will appear after model responses are collected
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()
+            ) : (
+                /* Historical: existing SynthesisReveal interaction */
+                <>
+                    {artifacts.hasSynthesisOutput && (() => {
+                        const isSynthesisFailed = artifacts.synthesisStatus === "failed" ||
+                            (debate.synthesis_success === false || debate.final_meta?.synthesis_success === false) ||
+                            (artifacts.synthesisStatus === undefined && artifacts.synthesisText.startsWith("⚠️ Synthesis unavailable"));
+                        return (
+                            <SynthesisReveal
+                                synthesis={artifacts.synthesisText}
+                                modelResponses={modelResponses}
+                                isSynthesisFailed={isSynthesisFailed}
+                                debateId={debate.id}
+                                synthesisReport={artifacts.synthesisReport}
+                                synthesisStatus={artifacts.synthesisStatus}
+                                synthesisError={artifacts.synthesisError}
+                                fallbackModel={artifacts.fallbackModel}
+                                fallbackReason={artifacts.fallbackReason}
+                                fallbackResponse={artifacts.fallbackResponse}
+                                divergenceBreakdown={artifacts.divergenceBreakdown}
+                            />
+                        );
+                    })()}
+                    {modelResponses.length > 0 && !artifacts.hasSynthesisOutput && !artifacts.hasStructuredReport && (
+                        <SynthesisLoading successfulCount={modelResponses.filter(r => r.success).length} />
+                    )}
+                </>
             )}
 
             {!profile && debate.status === "completed" && (

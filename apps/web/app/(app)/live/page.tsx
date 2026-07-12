@@ -10,8 +10,7 @@ import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import type { Member, ScoreItem } from "@/components/parliament/types";
 import type { ArenaRunUiState } from "@/components/parliament/StatusPill";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { ApiError, getRateLimitInfo, startDebate, startDebateRun, getDebate } from "@/lib/api";
-import { useEventSource } from "@/lib/sse";
+import { ApiError, getRateLimitInfo, startDebate, getDebate } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { defaultPanelConfig, type PanelSeatConfig } from "@/lib/panels";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,7 @@ import { track } from "@/lib/analytics";
 import { OnboardingHint } from "@/components/ui/onboarding-hint";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
-import { normalizeSSEEnvelope, type DomainEvent, isErrorEvent, isTerminalEvent } from "@/lib/api/eventContract";
+import { type DomainEvent } from "@/lib/api/eventContract";
 import { normalizeApiError, type ClientError, shouldRedirectToLogin, getCorrelationId } from "@/lib/api/errorContract";
 import { ConnectionIndicator, type ConnectionStatus } from "@/components/connection/ConnectionIndicator";
 import { FirstRunGuide } from "@/components/onboarding/FirstRunGuide";
@@ -168,126 +167,9 @@ function ArenaPageContent() {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const elapsedTimerRef = useRef<NodeJS.Timeout | null>(null)
   const stopStreamRef = useRef<((status?: ArenaRunUiState) => void) | null>(null)
-  const lastEventTimestampRef = useRef<number>(Date.now())
-  const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const SSE_SILENCE_TIMEOUT_MS = typeof window !== "undefined"
-    ? parseInt(process.env.NEXT_PUBLIC_SSE_SILENCE_TIMEOUT_MS || "10000", 10)
-    : 10000
-
-  const manualStartMode = !ENABLE_CONVERSATION_MODE
-  const shouldStream = running && !!currentDebateId
-  const streamUrl = currentDebateId ? `${API_ORIGIN}/debates/${currentDebateId}/stream` : null
-
-  const handleStreamEvent = useCallback(
-    (msg: unknown) => {
-      lastEventTimestampRef.current = Date.now()
-
-      const payload = (msg as Record<string, unknown>).payload || msg
-      const event = normalizeSSEEnvelope(payload)
-
-      if (!event) return
-
-      if (isErrorEvent(event)) {
-        console.error('Stream error:', event)
-        stopStreamRef.current?.('terminal_error')
-        return
-      }
-
-      setEvents((prev) => [...prev, event])
-
-      if (event.type === 'seat_message' || event.type === 'message') {
-        if ('agent_name' in event) setActivePersona((event as any).agent_name)
-        setSpeakerTime(0)
-      } else if (event.type === 'stage_start') {
-        setActivePersona(undefined)
-        setSpeakerTime(0)
-      } else if (event.type === 'score') {
-        if ('agent_name' in event && 'value' in event && typeof (event as any).value === 'number') {
-          setLatestScores((prev) => {
-            const persona = (event as any).agent_name;
-            const score = (event as any).value;
-            const newScores = [...prev, { persona: persona, score: score }]
-            return newScores.slice(-5)
-          })
-        }
-      }
-
-      if (isTerminalEvent(event)) {
-        if (event.meta?.ranking) {
-          setVote({
-            method: event.meta?.vote?.method ?? 'borda',
-            ranking: event.meta.ranking,
-          })
-        }
-        if (event.meta?.truncated) {
-          setTruncated(true)
-          setTruncateReason(event.meta.truncate_reason ?? null)
-        }
-        track('debate_completed', {
-          debate_id: currentDebateIdRef.current,
-          duration_ms: elapsedSecondsRef.current * 1000,
-        })
-        stopStreamRef.current?.('complete')
-      }
-    },
-    [setEvents, setActivePersona, setVote, setLatestScores],
-  )
-
-  const handleStreamError = useCallback(() => {
-    if (!runningRef.current || !currentDebateIdRef.current) {
-      return
-    }
-    if (manualStartMode && !manualStartAttemptedRef.current) {
-      manualStartAttemptedRef.current = true
-      startDebateRun(currentDebateIdRef.current)
-        .then(() => {
-          setSessionStatus('running')
-        })
-        .catch((error) => {
-          console.error('Manual start failed', error)
-          setSessionStatus('terminal_error')
-        })
-      return
-    }
-    setSessionStatus('recoverable_error')
-  }, [manualStartMode])
-
-  const { status: streamStatus, close: closeStream } = useEventSource<DomainEvent>(shouldStream ? streamUrl : null, {
-    enabled: shouldStream,
-    withCredentials: true,
-    onEvent: handleStreamEvent,
-    onError: handleStreamError,
-  })
-
-  // FH125: Elapsed-time watchdog — detect silence and trigger recovery
-  useEffect(() => {
-    if (!shouldStream) {
-      if (watchdogTimerRef.current) {
-        clearInterval(watchdogTimerRef.current)
-        watchdogTimerRef.current = null
-      }
-      return
-    }
-
-    lastEventTimestampRef.current = Date.now()
-    const watchdogTickMs = Math.min(SSE_SILENCE_TIMEOUT_MS / 2, 2000)
-    watchdogTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - lastEventTimestampRef.current
-      if (elapsed >= SSE_SILENCE_TIMEOUT_MS) {
-        console.warn('[Arena] Stream silence detected, attempting recovery')
-        // Reconnect by closing and reopening
-        closeStream()
-      }
-    }, watchdogTickMs) as unknown as NodeJS.Timeout
-
-    return () => {
-      if (watchdogTimerRef.current) {
-        clearInterval(watchdogTimerRef.current)
-        watchdogTimerRef.current = null
-      }
-    }
-  }, [shouldStream, SSE_SILENCE_TIMEOUT_MS, closeStream])
+  // Track F: SSE is owned exclusively by RunDetailClient/useRunWorkspace.
+  // No local EventSource is created here.
 
   const reset = () => {
     setEvents([])
@@ -308,14 +190,9 @@ function ArenaPageContent() {
       clearInterval(elapsedTimerRef.current)
       elapsedTimerRef.current = null
     }
-    if (watchdogTimerRef.current) {
-      clearInterval(watchdogTimerRef.current)
-      watchdogTimerRef.current = null
-    }
   }, [])
 
   const stopStream = useCallback((nextStatus: ArenaRunUiState = 'idle') => {
-    closeStream()
     clearTimers()
     setRunning(false)
     runningRef.current = false
@@ -326,7 +203,7 @@ function ArenaPageContent() {
       setCurrentDebateId(null)
     }
     manualStartAttemptedRef.current = false
-  }, [clearTimers, closeStream])
+  }, [clearTimers])
 
   useEffect(() => {
     stopStreamRef.current = stopStream
@@ -466,13 +343,8 @@ function ArenaPageContent() {
     [],
   )
 
-  useEffect(() => {
-    if (streamStatus === 'connecting' || streamStatus === 'reconnecting') {
-      setEventsLoading(true)
-    } else if (streamStatus === 'connected') {
-      setEventsLoading(false)
-    }
-  }, [streamStatus])
+  // Track F: Connection status is now derived from RunDetailClient/useRunWorkspace.
+  // No local streamStatus tracking needed.
 
   const startElapsed = () => {
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current)
@@ -516,9 +388,7 @@ function ArenaPageContent() {
         seat_count: panelConfig.seats.length,
         mode,
       })
-      // Redirect to run detail page
-      setSessionStatus('redirecting')
-      router.replace(`/live?run=${id}`)
+      router.replace(`/live?run=${encodeURIComponent(id)}`, { scroll: false })
     } catch (error) {
       if (error instanceof ApiError) {
         const clientError = normalizeApiError(error, error.status)
@@ -574,71 +444,25 @@ function ArenaPageContent() {
     }
   }
 
-  const runId = searchParams?.get('run')
+  const queryRunId = searchParams?.get('run')
+  const activeRunId = currentDebateId || queryRunId || null
 
-  if (runId) {
-    return (
-      <main id="main" className="p-4 lg:p-6 pb-[calc(100px+env(safe-area-inset-bottom))]">
-        <RunDetailClient runId={runId} />
-        <ActiveWorkspaceComposer
-          value={activePrompt}
-          onChange={setActivePrompt}
-          onSubmit={async () => {
-            if (!activePrompt.trim()) return
-            if (authStatus === 'guest') {
-              setContinueRunSheetOpen(true)
-              return
-            }
-            const newPrompt = activePrompt
-            setActivePrompt('')
-            setPrompt(newPrompt)
-            reset()
-            setRateLimitNotice(null)
-            setErrorState(null)
-            setSessionStatus('creating')
-            setRunning(true)
-            runningRef.current = true
-            manualStartAttemptedRef.current = false
-            try {
-              const { id } = await startDebate({
-                prompt: newPrompt,
-                panel_config: panelConfig,
-                mode,
-                gateway_policy: gatewayPolicy,
-              })
-              currentDebateIdRef.current = id
-              setCurrentDebateId(id)
-              setSessionStatus('created')
-              track('debate_started', {
-                prompt_length: newPrompt.length,
-                seat_count: panelConfig.seats.length,
-                mode,
-              })
-              setSessionStatus('redirecting')
-              router.replace(`/live?run=${id}`)
-            } catch (error) {
-              console.error(error)
-              stopStream('terminal_error')
-            }
-          }}
-          isLoading={running}
-        />
-        <ContinueRunSheet
-          open={continueRunSheetOpen}
-          onOpenChange={setContinueRunSheetOpen}
-          promptText={activePrompt || prompt}
-          selectedModels={selectedModelIds}
-          mode={mode === 'debate' ? 'debate' : 'arena'}
-        />
-        <ModelPanelSheet
-          open={modelPanelOpen}
-          onOpenChange={setModelPanelOpen}
-          selectedModelIds={selectedModelIds}
-          onSave={handleModelSelectionSave}
-        />
-      </main>
-    )
-  }
+  type ArenaPagePhase = 'idle' | 'creating' | 'active' | 'terminal'
+
+  const arenaPagePhase: ArenaPagePhase = (() => {
+    if (sessionStatus === 'creating' || sessionStatus === 'redirecting') return 'creating'
+    if (activeRunId) return 'active'
+    return 'idle'
+  })()
+
+  const resetToNewRun = useCallback(() => {
+    reset()
+    setCurrentDebateId(null)
+    currentDebateIdRef.current = null
+    setSessionStatus('idle')
+    setErrorState(null)
+    router.replace('/live', { scroll: false })
+  }, [router, reset])
 
   return (
     <main id="main" className="relative min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center space-y-6 p-4 lg:p-6">
@@ -671,8 +495,8 @@ function ArenaPageContent() {
         </div>
       ) : null}
       <div className={`w-full max-w-[1800px] mx-auto flex flex-col ${sessionStatus === 'idle' ? 'xl:flex-row' : ''} gap-8 xl:gap-12 2xl:gap-24 items-start justify-center transition-all duration-500`}>
-        {/* Background / Info Banner on the left when idle */}
-        <div className={sessionStatus === 'idle' ? "hidden xl:block xl:flex-[1.3] xl:max-w-[950px] transition-all duration-1000 origin-left opacity-100" : "hidden"}>
+        {/* Background / Info Banner on the left — only when idle and no active run */}
+        <div className={sessionStatus === 'idle' && !activeRunId ? "hidden xl:block xl:flex-[1.3] xl:max-w-[950px] transition-all duration-1000 origin-left opacity-100" : "hidden"}>
           <ParliamentHome
             members={members}
             activeMemberId={members.find((member) => member.name === activePersona)?.id}
@@ -698,8 +522,7 @@ function ArenaPageContent() {
         )}
         {sessionStatus !== 'idle' && (
           <ConnectionIndicator
-            status={streamStatus === 'connected' ? 'connected' :
-                   streamStatus === 'connecting' || streamStatus === 'reconnecting' ? 'reconnecting' :
+            status={running && activeRunId ? 'reconnecting' :
                    running ? 'degraded' : 'idle'}
             className="ml-2"
           />
@@ -719,6 +542,13 @@ function ArenaPageContent() {
           />
         )}
 
+        {/* Inline retry after creation failure — preserve prompt */}
+        {arenaPagePhase === 'idle' && errorState?.retryable && prompt.trim() && (
+          <div className="text-xs text-muted-foreground text-center">
+            You can edit your prompt and try again
+          </div>
+        )}
+
         {!running && sessionStatus === 'idle' && (
           <FirstRunGuide onPrefill={(text) => { setPrompt(text); setAutoFocus(true); focusPromptPanel(); }} />
         )}
@@ -730,17 +560,27 @@ function ArenaPageContent() {
           mode={mode === 'debate' ? 'debate' : 'arena'}
           onModeChange={(newMode) => {
             setMode(newMode)
-            setSessionStatus('idle')
-            setErrorState(null)
-            setEvents([])
-            setCurrentDebateId(null)
-            currentDebateIdRef.current = null
             track('mode_selected', { mode: newMode })
           }}
           isLoading={running}
           disabled={running}
           onConfigureModels={() => setModelPanelOpen(true)}
+          runPhase={arenaPagePhase === 'idle' ? 'idle' : arenaPagePhase === 'creating' ? 'creating' : activeRunId ? 'active' : 'idle'}
+          onNewRun={resetToNewRun}
         />
+
+        {/* Arena Run Content — rendered below the centered composer when a run is active */}
+        {activeRunId && (
+          <div className="mt-8">
+            <RunDetailClient
+              runId={activeRunId}
+              surface="live"
+              recentRuns={recentRuns}
+              recentRunsLoading={debatesLoading}
+              onNewRun={resetToNewRun}
+            />
+          </div>
+        )}
 
         <PromptPresets onPresetSelected={handlePresetSelected} />
 
