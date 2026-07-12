@@ -66,9 +66,10 @@ interface RunDetailClientProps {
   recentRuns?: DebateSummary[];
   recentRunsLoading?: boolean;
   onNewRun?: () => void;
+  onTerminal?: (terminalStatus: "completed" | "failed") => void;
 }
 
-export default function RunDetailClient({ runId, surface = "standalone", recentRuns, recentRunsLoading, onNewRun }: RunDetailClientProps = {}) {
+export default function RunDetailClient({ runId, surface = "standalone", recentRuns, recentRunsLoading, onNewRun, onTerminal }: RunDetailClientProps = {}) {
   const params = useParams();
   const router = useRouter();
   const id = runId || (params?.id as string);
@@ -107,9 +108,28 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   const [completedLoadState, setCompletedLoadState] = useState<CompletedRunLoadState>("loading_core");
 
   const isCompleted = !!debate && COMPLETED_STATUSES.has(debate.status);
+  const isFailed = debate?.status === "failed";
   const isDebateLoaded = !!debate;
   const isLoading = workspaceStatus === "loading" || (!debate && workspaceStatus !== "failed" && workspaceStatus !== "error");
   const debateError = workspaceError ? new Error(workspaceError) : null;
+
+  // Notify parent when run reaches terminal state
+  const terminalNotifiedRef = useRef(false);
+  useEffect(() => {
+    if (!onTerminal || !isDebateLoaded) return;
+    if (isCompleted && !terminalNotifiedRef.current) {
+      terminalNotifiedRef.current = true;
+      onTerminal("completed");
+    } else if (isFailed && !terminalNotifiedRef.current) {
+      terminalNotifiedRef.current = true;
+      onTerminal("failed");
+    }
+  }, [isCompleted, isFailed, isDebateLoaded, onTerminal]);
+
+  // Reset terminal notification when run changes
+  useEffect(() => {
+    terminalNotifiedRef.current = false;
+  }, [id]);
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number | null>(null);

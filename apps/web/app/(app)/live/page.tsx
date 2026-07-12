@@ -449,17 +449,33 @@ function ArenaPageContent() {
 
   type ArenaPagePhase = 'idle' | 'creating' | 'active' | 'terminal'
 
+  // Track terminal status from RunDetailClient
+  const [runTerminalStatus, setRunTerminalStatus] = useState<'completed' | 'failed' | null>(null)
+
   const arenaPagePhase: ArenaPagePhase = (() => {
     if (sessionStatus === 'creating' || sessionStatus === 'redirecting') return 'creating'
+    if (runTerminalStatus) return 'terminal'
     if (activeRunId) return 'active'
     return 'idle'
   })()
+
+  const handleRunTerminal = useCallback((terminalStatus: 'completed' | 'failed') => {
+    setRunTerminalStatus(terminalStatus)
+    setRunning(false)
+    runningRef.current = false
+    if (terminalStatus === 'completed') {
+      setSessionStatus('complete')
+    } else {
+      setSessionStatus('terminal_error')
+    }
+  }, [])
 
   const resetToNewRun = useCallback(() => {
     reset()
     setCurrentDebateId(null)
     currentDebateIdRef.current = null
     setSessionStatus('idle')
+    setRunTerminalStatus(null)
     setErrorState(null)
     router.replace('/live', { scroll: false })
   }, [router, reset])
@@ -565,7 +581,7 @@ function ArenaPageContent() {
           isLoading={running}
           disabled={running}
           onConfigureModels={() => setModelPanelOpen(true)}
-          runPhase={arenaPagePhase === 'idle' ? 'idle' : arenaPagePhase === 'creating' ? 'creating' : activeRunId ? 'active' : 'idle'}
+          runPhase={arenaPagePhase === 'idle' ? 'idle' : arenaPagePhase === 'creating' ? 'creating' : arenaPagePhase === 'terminal' ? (runTerminalStatus === 'failed' ? 'failed' : 'completed') : 'active'}
           onNewRun={resetToNewRun}
         />
 
@@ -578,6 +594,7 @@ function ArenaPageContent() {
               recentRuns={recentRuns}
               recentRunsLoading={debatesLoading}
               onNewRun={resetToNewRun}
+              onTerminal={handleRunTerminal}
             />
           </div>
         )}
