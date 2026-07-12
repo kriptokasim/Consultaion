@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import type { DebateDetail, PersistedModelResponse, DebateEvent } from "@/lib/api/types";
 import type { StreamingModelBuffer } from "@/lib/streaming/types";
@@ -27,11 +27,19 @@ export interface ArenaRunContentProps {
   surface: "standalone" | "live";
   onRetry?: () => void;
   onContinue?: () => void;
+  isContinuing?: boolean;
   onRefetch?: () => void;
   profile?: any;
   recentRuns?: DebateSummary[];
   recentRunsLoading?: boolean;
   onNewRun?: () => void;
+  failure?: {
+    title: string;
+    message: string;
+    code?: string;
+    correlationId?: string;
+    retryable: boolean;
+  };
 }
 
 export function ArenaRunContent({
@@ -50,12 +58,26 @@ export function ArenaRunContent({
   surface,
   onRetry,
   onContinue,
+  isContinuing,
   onRefetch,
   profile,
   recentRuns,
   recentRunsLoading,
   onNewRun,
+  failure,
 }: ArenaRunContentProps) {
+  // Track F: Auto-continue on perspectives_ready for live surface
+  const autoContinuedRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (surface !== "live") return;
+    if (isTerminal || isContinuing) return;
+    if (workspaceStage !== "perspectives_ready") return;
+    if (!onContinue) return;
+    if (autoContinuedRunRef.current === debate.id) return;
+    autoContinuedRunRef.current = debate.id;
+    onContinue();
+  }, [surface, isTerminal, isContinuing, workspaceStage, onContinue, debate.id]);
+
   return (
     <div className="flex flex-col gap-6 pb-8">
       {/* Polling fallback indicator */}
@@ -63,6 +85,35 @@ export function ArenaRunContent({
         <div className="flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 rounded-lg">
           <Loader2 className="h-3 w-3 animate-spin" />
           <span>Connection interrupted — using polling fallback</span>
+        </div>
+      )}
+
+      {/* Track H: Inline failure banner */}
+      {failure && (
+        <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 rounded-lg bg-red-100 dark:bg-red-800/50 p-2 text-red-600 dark:text-red-400">
+              <Loader2 className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">{failure.title}</h3>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">{failure.message}</p>
+              {failure.code && (
+                <p className="text-xs font-mono text-red-500 dark:text-red-300 mt-1">
+                  Failure: {failure.code}
+                  {failure.correlationId && <> · ID: {failure.correlationId}</>}
+                </p>
+              )}
+            </div>
+            {failure.retryable && onRetry && (
+              <button
+                onClick={onRetry}
+                className="shrink-0 px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-800/50 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors"
+              >
+                Retry Run
+              </button>
+            )}
+          </div>
         </div>
       )}
 

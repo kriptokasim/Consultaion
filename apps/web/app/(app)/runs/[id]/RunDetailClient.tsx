@@ -134,6 +134,22 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileState, setProfileState] = useState<"loading" | "loaded" | "unavailable">("loading");
 
+  // Track E: Reset all local state when run ID changes
+  useEffect(() => {
+    setResultsEvents([]);
+    setResultsMembers([]);
+    setResultsLoading(false);
+    setResultsFetched(false);
+    setCompletedLoadState("loading_core");
+    setElapsedSeconds(0);
+    startTimeRef.current = null;
+    setHardCeilingReached(false);
+    setShowMobileDetails(false);
+    setProfile(null);
+    setProfileLoaded(false);
+    setProfileState("loading");
+  }, [id]);
+
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
@@ -526,6 +542,41 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
     const failureCode = debate?.final_meta?.failure_code;
     const failureDetail = debate?.final_meta?.failure_detail_safe;
     const correlationId = debate?.final_meta?.correlation_id;
+
+    // Track H: Arena failures route through ArenaRunContent
+    if (debate?.mode === "arena") {
+      return (
+        <div className="container max-w-[1400px] py-6 space-y-4">
+          <ArenaRunContent
+            debate={debate}
+            events={normalizedResultsEvents}
+            responses={responses}
+            streamingBuffers={streamingState.buffers}
+            isTerminal={true}
+            responsesState={responsesState}
+            responsesError={responsesError}
+            timelineState={timelineState}
+            workspaceStage={currentWorkspaceStage}
+            elapsedSeconds={elapsedSeconds}
+            sseStatus={sseStatus}
+            isPollingFallback={isPollingFallback}
+            surface={surface}
+            profile={profile}
+            onRetry={handleRetry}
+            onRefetch={refetch}
+            failure={{
+              title: responses.length === 0 ? "Run Failed" : "Run Completed with Errors",
+              message: responses.length === 0 ? errorReason : `${responses.filter(r => r.success).length} of ${responses.length} models responded successfully.`,
+              code: failureCode || undefined,
+              correlationId: correlationId || undefined,
+              retryable: true,
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Non-Arena failures retain specialized behavior
     const hasPersistedResponses = responsesState === "ready" && responses.length > 0;
     const responsesQueryFailed = responsesState === "failed";
     const noResponsesPersisted = responsesState === "empty" || (responsesState === "ready" && responses.length === 0);
@@ -564,7 +615,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
               {failureDetail && failureDetail !== errorReason && (
                 <p className="mt-1 text-xs text-muted-foreground">{failureDetail}</p>
               )}
-              <Button variant="outline" className="mt-3" onClick={() => window.location.reload()}>
+              <Button variant="outline" className="mt-3" onClick={() => refetch()}>
                 Retry Run
               </Button>
             </AlertDescription>
@@ -626,7 +677,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             {failureDetail && failureDetail !== errorReason && (
               <p className="mt-1 text-xs text-muted-foreground">{failureDetail}</p>
             )}
-            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+            <Button variant="outline" className="mt-4" onClick={() => refetch()}>
               Retry / Refresh
             </Button>
           </AlertDescription>
@@ -674,6 +725,9 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             isPollingFallback={isPollingFallback}
             surface={surface}
             profile={profile}
+            onRetry={handleRetry}
+            onContinue={handleContinue}
+            isContinuing={isContinuing}
             onRefetch={refetch}
             recentRuns={recentRuns}
             recentRunsLoading={recentRunsLoading}
@@ -791,6 +845,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
           surface={surface}
           onRetry={handleRetry}
           onContinue={handleContinue}
+          isContinuing={isContinuing}
           onRefetch={refetch}
           recentRuns={recentRuns}
           recentRunsLoading={recentRunsLoading}

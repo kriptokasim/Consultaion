@@ -513,9 +513,10 @@ function ArenaPageContent() {
           </div>
         </div>
       ) : null}
-      <div className={`w-full max-w-[1800px] mx-auto flex flex-col ${sessionStatus === 'idle' ? 'xl:flex-row' : ''} gap-8 xl:gap-12 2xl:gap-24 items-start justify-center transition-all duration-500`}>
-        {/* Background / Info Banner on the left — only when idle and no active run */}
-        <div className={sessionStatus === 'idle' && !activeRunId ? "hidden xl:block xl:flex-[1.3] xl:max-w-[950px] transition-all duration-1000 origin-left opacity-100" : "hidden"}>
+
+      {/* Idle-only ParliamentHome on wide displays */}
+      {sessionStatus === 'idle' && !activeRunId && (
+        <div className="hidden xl:block w-full max-w-[950px] mx-auto px-4 lg:px-6">
           <ParliamentHome
             members={members}
             activeMemberId={members.find((member) => member.name === activePersona)?.id}
@@ -526,33 +527,10 @@ function ArenaPageContent() {
             running={running}
           />
         </div>
+      )}
 
-        {/* Main composer and workspace (center-left) */}
-        <div className={`z-10 w-full mx-auto ${sessionStatus === 'idle' ? 'xl:flex-[1.1] max-w-4xl xl:max-w-[850px] xl:mx-0' : 'max-w-4xl'} flex flex-col space-y-6 transition-all duration-500`}>
-        {sessionStatus !== 'idle' && (
-          <SessionHUD
-            status={sessionStatus}
-            debateId={currentDebateId}
-            elapsedSeconds={elapsedSeconds}
-            activePersona={activePersona}
-            onCopy={handleCopyId}
-            runUrl={currentDebateId ? `/runs/${currentDebateId}` : null}
-          />
-        )}
-        {sessionStatus !== 'idle' && (
-          <ConnectionIndicator
-            status={runSnapshot?.sseStatus === 'connected' ? 'connected' :
-                   runSnapshot?.sseStatus === 'reconnecting' ? 'reconnecting' :
-                   running && activeRunId ? 'reconnecting' :
-                   running ? 'degraded' : 'idle'}
-            className="ml-2"
-          />
-        )}
-
-        {/* New centered prompt workspace */}
-        <div ref={promptSectionRef} className="space-y-4 scroll-mt-28 w-full mt-8 md:mt-16">
-          <DebateProgressBar active={running} />
-
+      {/* Composer shell — always max-w-4xl */}
+      <div className="w-full max-w-4xl mx-auto px-4 lg:px-6 space-y-6">
         {errorState && (
           <ErrorBanner
             title={errorState.title}
@@ -590,24 +568,9 @@ function ArenaPageContent() {
           onNewRun={resetToNewRun}
         />
 
-        {/* Arena Run Content — rendered below the centered composer when a run is active */}
-        {activeRunId && (
-          <div className="mt-8">
-            <RunDetailClient
-              key={activeRunId}
-              runId={activeRunId}
-              surface="live"
-              recentRuns={recentRuns}
-              recentRunsLoading={debatesLoading}
-              onNewRun={resetToNewRun}
-              onRunSnapshot={handleRunSnapshot}
-            />
-          </div>
-        )}
-
         <PromptPresets onPresetSelected={handlePresetSelected} />
 
-        {authStatus === 'authed' && (
+        {authStatus === 'authed' && !activeRunId && (
           <div className="mt-8 border-t border-slate-100 pt-8 dark:border-slate-800">
             <DashboardRunsHistory
               debates={recentRuns}
@@ -623,29 +586,23 @@ function ArenaPageContent() {
           </div>
         )}
       </div>
-      </div>
-      </div>
 
-      {/* Keep existing LivePanel for events display */}
-      {events.length > 0 && (
-        <div className="mt-6">
-          <LivePanel
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            onStart={onStart}
-            onStop={stopStream}
-            running={running}
-            events={events}
-            activePersona={activePersona}
-            speakerTime={speakerTime}
-            vote={vote}
-            loading={eventsLoading}
-            mode={mode}
-            truncated={truncated}
-            truncateReason={truncateReason}
+      {/* Active workspace — wider container */}
+      {activeRunId && (
+        <div className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto px-4 lg:px-6 mt-8">
+          <RunDetailClient
+            key={activeRunId}
+            runId={activeRunId}
+            surface="live"
+            recentRuns={recentRuns}
+            recentRunsLoading={debatesLoading}
+            onNewRun={resetToNewRun}
+            onRunSnapshot={handleRunSnapshot}
           />
         </div>
       )}
+
+      {/* Track L: LivePanel removed — events are handled by RunDetailClient */}
 
       {/* Advanced settings drawer */}
       <AdvancedSettingsDrawer
