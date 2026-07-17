@@ -475,7 +475,6 @@ __all__ = [
     "GatewayModelCallResult",
     "GatewayRequest",
     "is_provider_available",
-    "export_api_keys",
     "route_llm_call",
     "route_llm_stream",
 ]
