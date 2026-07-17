@@ -143,7 +143,8 @@ def test_create_debate_refunds_hourly_slot_after_panel_validation_failure(
     ):
         response = authenticated_client.post("/debates", json=payload)
 
-    assert response.status_code == 422
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "debate.invalid_panel_config"
     db_session.expire_all()
     counter = _get_or_reset_counter(db_session, user.id, "hour")
     assert counter.runs_used == 0
