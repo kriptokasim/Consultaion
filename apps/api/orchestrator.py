@@ -578,16 +578,38 @@ async def run_debate(
             logger.warning(f"Debate {debate_id} lease acquisition failed for {runner_id}. Already running?")
             return
 
-        # Start heartbeat
+        # Start heartbeat. Losing the fenced lease cancels the owning run.
+        owner_task = asyncio.current_task()
+
         async def _lease_heartbeat_loop():
             while not stop_heartbeat.is_set():
                 await asyncio.sleep(15)
                 if stop_heartbeat.is_set():
                     break
                 try:
-                    await _heartbeat(debate_id, runner_id, lease_epoch)
-                except Exception:
-                    pass
+                    still_owner = await _heartbeat(
+                        debate_id, runner_id, lease_epoch
+                    )
+                    if not still_owner:
+                        logger.error(
+                            "Debate %s lost execution lease at epoch %s; "
+                            "cancelling stale worker %s.",
+                            debate_id,
+                            lease_epoch,
+                            runner_id,
+                        )
+                        if owner_task and not owner_task.done():
+                            owner_task.cancel()
+                        return
+                except asyncio.CancelledError:
+                    raise
+                except Exception as heartbeat_exc:
+                    logger.warning(
+                        "Debate %s heartbeat failed: %s",
+                        debate_id,
+                        heartbeat_exc,
+                    )
+
         heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
 
         logger.info("Debate orchestration started (lease acquired)", extra=log_extra)
@@ -634,7 +656,13 @@ async def run_debate(
         if debate_mode == "arena":
             from arena.engine import run_arena
 
-            result = await run_arena(debate_id, model_id=model_id, continue_pipeline=is_resume)
+            result = await run_arena(
+                debate_id,
+                model_id=model_id,
+                continue_pipeline=is_resume,
+                execution_owner_id=runner_id,
+                lease_epoch=lease_epoch,
+            )
 
             if result.status == "perspectives_ready":
                 logger.info("Arena run %s paused at perspectives_ready stage", debate_id, extra=log_extra)
@@ -827,6 +855,8 @@ async def run_debate(
             usage_tracker=usage_tracker, # Pass the tracker we initialized
             is_resume=is_resume,
             continuation_id=continuation_id,
+            execution_owner_id=runner_id,
+            lease_epoch=lease_epoch,
         )
         
         pipeline = StandardDebatePipeline(state_manager)
@@ -845,6 +875,13 @@ async def run_debate(
         increment_metric("debate.completed")
         await _build_and_send_summary(debate_id, debate_user_id)
         await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
+
+    except asyncio.CancelledError:
+        logger.warning(
+            "Debate execution cancelled after lease ownership was lost",
+            extra=log_extra,
+        )
+        raise
 
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
         logger.warning(f"Debate encountered transient/provider error: {exc}", extra=log_extra)
