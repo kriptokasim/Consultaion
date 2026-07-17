@@ -188,7 +188,9 @@ class StandardDebatePipeline(DebatePipeline):
                     stage.name,
                     input_data,
                     run_fn,
-                    load_fn
+                    load_fn,
+                    owner_id=context.execution_owner_id,
+                    lease_epoch=context.lease_epoch,
                 )
                 stage_elapsed = time_module.monotonic() - stage_start
                 record_pipeline_stage_duration(stage.name, stage_mode, stage_elapsed)
