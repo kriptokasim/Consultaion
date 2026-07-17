@@ -206,6 +206,8 @@ class SynthesisStage(BaseStage):
                 debate_id=context.debate_id,
                 model_override=context.model_id,
                 usage=synthesis_usage,
+                execution_owner_id=context.execution_owner_id,
+                lease_epoch=context.lease_epoch,
             )
             final_answer = report.executive_summary or report.title
             state.final_meta["synthesis_report"] = report.model_dump()
