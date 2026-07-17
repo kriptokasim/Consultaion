@@ -1,7 +1,6 @@
 """PS155.1 — Execution Ownership and Checkpoint Fencing tests."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -144,49 +143,42 @@ async def test_heartbeat_with_stale_epoch_fails():
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_exponential_backoff():
-    """run_with_checkpoint should use exponential backoff when stage is running."""
-    from orchestration.checkpoints import run_with_checkpoint
+async def test_checkpoint_accepts_current_lease_owner():
+    """Checkpoint fencing accepts the current owner and epoch."""
+    from orchestration.checkpoints import _assert_lease_owner
 
-    call_count = 0
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = MagicMock()
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=result)
 
-    async def mock_session_scope():
-        """Simulate a running checkpoint that eventually completes."""
-        nonlocal call_count
-        mock_session = AsyncMock()
+    await _assert_lease_owner(session, "debate-1", "runner-1", 7)
 
-        class FakeCheckpoint:
-            status = "running" if call_count < 2 else "completed"
-            input_hash = "abc123"
-            owner_id = "owner-1"
-            attempt = 1
-            error_message = None
-            error_code = None
-            failed_at = None
-            started_at = datetime.now(timezone.utc)
-            completed_at = None
+    session.execute.assert_awaited_once()
 
-        class FakeResult:
-            def scalars(self):
-                return self
 
-            def first(self):
-                nonlocal call_count
-                call_count += 1
-                return FakeCheckpoint()
+@pytest.mark.asyncio
+async def test_checkpoint_rejects_stale_lease_epoch():
+    """Checkpoint fencing rejects a worker whose lease epoch was superseded."""
+    from orchestration.checkpoints import LeaseOwnershipLost, _assert_lease_owner
 
-        mock_session.execute = AsyncMock(return_value=FakeResult())
-        mock_session.commit = AsyncMock()
-        mock_session.add = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=result)
 
-        return mock_session
+    with pytest.raises(LeaseOwnershipLost):
+        await _assert_lease_owner(session, "debate-1", "runner-1", 6)
 
-    # Test that the backoff doesn't use fixed 1s intervals
-    # (just verifying the function signature accepts owner_id)
-    # The owner_id parameter should be accepted without error
-    assert run_with_checkpoint.__code__.co_varnames[:6] == (
-        "debate_id", "stage_key", "input_data", "run_fn", "load_fn", "owner_id"
-    )
+
+@pytest.mark.asyncio
+async def test_checkpoint_rejects_partial_fencing_identity():
+    """Owner and epoch must always be supplied together."""
+    from orchestration.checkpoints import _assert_lease_owner
+
+    session = AsyncMock()
+    with pytest.raises(ValueError):
+        await _assert_lease_owner(session, "debate-1", "runner-1", None)
 
 
 # ── Release with epoch guard ────────────────────────────────────────────
