@@ -9,7 +9,7 @@ import type { ResponsesState, TimelineState } from "@/hooks/useRunWorkspace";
 import type { WorkspaceStage } from "@/lib/workspace/types";
 import type { DebateSummary } from "@/lib/api/types";
 import ArenaRunView from "./ArenaRunView";
-import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
+import { RecentRunsRail } from "./RecentRunsRail";
 
 export interface ArenaRunContentProps {
   debate: DebateDetail;
@@ -147,17 +147,13 @@ export function ArenaRunContent({
           />
         </div>
 
-        {/* Latest Activity rail — 1/4 on wide displays, below on smaller */}
+        {/* Track J: Latest Activity rail — 1/4 on wide displays, below on smaller */}
         {surface === "live" && recentRuns && recentRuns.length > 0 && (
           <div className="col-span-1 xl:col-span-1">
             <div className="xl:sticky xl:top-24">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Latest Activity
-              </h3>
-              <DashboardRunsHistory
-                debates={recentRuns.slice(0, 5)}
-                debatesLoading={recentRunsLoading ?? false}
-                onNewRun={onNewRun ?? (() => {})}
+              <RecentRunsRail
+                runs={recentRuns}
+                currentRunId={debate.id}
               />
             </div>
           </div>

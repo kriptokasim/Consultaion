@@ -198,28 +198,60 @@ export function streamingReducer(
     case "RESPONSE_COMPLETED": {
       if (!isValidLifecyclePayload(action.payload)) return state;
       const { response_id } = action.payload;
+      const buf = state.buffers.get(response_id);
+      if (!buf) return state;
+      // Track G: Retain completed buffer with accumulated text until persistence arrives
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      next.delete(response_id);
+      next.set(response_id, { ...buf, state: "completed" });
       return { ...state, buffers: next };
     }
 
     case "RESPONSE_FAILED": {
       if (!isValidLifecyclePayload(action.payload)) return state;
-      const { response_id, error, error_code } = action.payload;
+      const { response_id, model_id, display_name, provider, error, error_code } = action.payload;
       const buf = state.buffers.get(response_id);
-      if (!buf) return state;
-      const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      next.set(response_id, {
-        ...buf,
+      if (buf) {
+        // Existing buffer — mark as failed
+        const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
+        next.set(response_id, {
+          ...buf,
+          state: "failed",
+          errorCode: error_code,
+          errorMessage: error,
+        });
+        return { ...state, buffers: next };
+      }
+      // Track G: Create a failed buffer even if queued/started events were missed
+      const fallbackBuf: StreamingModelBuffer = {
+        responseId: response_id,
+        modelId: model_id || "",
+        displayName: display_name || "",
+        provider,
         state: "failed",
+        accumulatedText: "",
+        lastSequence: 0,
         errorCode: error_code,
         errorMessage: error,
-      });
+      };
+      const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
+      next.set(response_id, fallbackBuf);
       return { ...state, buffers: next };
     }
 
     case "MERGE_PERSISTED": {
-      return { ...state, persisted: action.payloads };
+      // Track G: Remove buffers matching persisted response_id or model_id
+      const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
+      const persistedIds = new Set(action.payloads.map(p => p.id));
+      const persistedModelIds = new Set(action.payloads.map(p => p.model_id));
+      Array.from(next.entries()).forEach(([key, buf]) => {
+        if (persistedIds.has(buf.responseId) || persistedModelIds.has(buf.modelId)) {
+          // Only remove if completed or failed — keep active streaming buffers
+          if (buf.state === "completed" || buf.state === "failed") {
+            next.delete(key);
+          }
+        }
+      });
+      return { ...state, buffers: next, persisted: action.payloads };
     }
 
     case "CLEAR_BUFFER": {
