@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from sqlmodel import Session, select
 
@@ -14,11 +14,18 @@ def safe_query_extra_fields(
     debate_id: str,
     session: Session,
     capabilities: SchemaCapabilities,
+    *,
+    debate_status: Optional[str] = None,
+    debate_mode: Optional[str] = None,
 ) -> dict[str, Any]:
     """Query optional enrichment fields with capability gating and savepoint isolation.
 
     Each optional feature is queried inside a savepoint so that a missing
     table or column never aborts the outer transaction.
+
+    ``debate_status``/``debate_mode`` enable checkpoint-derived fields
+    (``current_stage``, ``perspectives_ready_at``); without them those
+    fields fall back to caller-provided defaults.
     """
     extra: dict[str, Any] = {
         "current_stage": None,
@@ -37,7 +44,10 @@ def safe_query_extra_fields(
     }
 
     if capabilities.has_stage_checkpoint_table:
-        ck_result = _safe_query_checkpoints(debate_id, session)
+        ck_result = _safe_query_checkpoints(
+            debate_id, session,
+            debate_status=debate_status, debate_mode=debate_mode,
+        )
         if not ck_result and capabilities.has_stage_checkpoint_table:
             pass  # Table exists but no rows — valid empty result
         extra.update(ck_result)
@@ -65,7 +75,13 @@ def safe_query_extra_fields(
     return extra
 
 
-def _safe_query_checkpoints(debate_id: str, session: Session) -> dict[str, Any]:
+def _safe_query_checkpoints(
+    debate_id: str,
+    session: Session,
+    *,
+    debate_status: Optional[str] = None,
+    debate_mode: Optional[str] = None,
+) -> dict[str, Any]:
     try:
         from models import DebateStageCheckpoint
 
@@ -73,11 +89,11 @@ def _safe_query_checkpoints(debate_id: str, session: Session) -> dict[str, Any]:
             stmt = (
                 select(DebateStageCheckpoint)
                 .where(DebateStageCheckpoint.debate_id == debate_id)
-                .order_by(DebateStageCheckpoint.created_at)
+                .order_by(DebateStageCheckpoint.started_at)
             )
             checkpoints = list(session.execute(stmt).scalars().all())
         if checkpoints:
-            return {
+            result: dict[str, Any] = {
                 "stage_checkpoints": [
                     {
                         "stage_key": cp.stage_key,
@@ -91,6 +107,26 @@ def _safe_query_checkpoints(debate_id: str, session: Session) -> dict[str, Any]:
                     for cp in checkpoints
                 ],
             }
+            # Derive the pipeline sub-stage from checkpoints (FH51-era behavior;
+            # restored after being dropped in the enrichment extraction).
+            if debate_status in ("running", "queued", "scheduled"):
+                active_cp = next((cp for cp in checkpoints if cp.status in ("running", "failed")), None)
+                if active_cp:
+                    result["current_stage"] = active_cp.stage_key
+                else:
+                    completed = [cp for cp in checkpoints if cp.status == "completed" and cp.completed_at]
+                    if completed:
+                        last_completed = max(completed, key=lambda cp: cp.completed_at)
+                        result["current_stage"] = last_completed.stage_key
+            mode = debate_mode or "arena"
+            target_key = "arena_perspectives" if mode == "arena" else "critique"
+            ready_cp = next(
+                (cp for cp in checkpoints if cp.stage_key == target_key and cp.status == "completed"),
+                None,
+            )
+            if ready_cp:
+                result["perspectives_ready_at"] = ready_cp.completed_at
+            return result
     except Exception as exc:
         logger.warning("checkpoint_query_failed debate_id=%s error=%s", debate_id, exc)
         return {"_checkpoint_query_failed": True}

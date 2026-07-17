@@ -198,7 +198,7 @@ def test_retry_api_downstream_clearing(authenticated_client, db_session):
     db_session.commit()
 
     # We retry the "judge" stage
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/api/v1/debates/{debate.id}/retry",
             json={"stage_key": "judge"}
@@ -208,23 +208,24 @@ def test_retry_api_downstream_clearing(authenticated_client, db_session):
         assert response.json()["retried_stage"] == "judge"
         mock_dispatch.assert_called_once()
 
-    # Verify that:
-    # 1. "judge", "synthesis_draft", "verification", and "synthesis" checkpoints are deleted
-    # 2. "draft" and "critique" checkpoints are preserved
-    # 3. Scores, votes, synthesizer messages are deleted, but candidate and revised messages are preserved.
+    # Verify (FH125 G-7 non-destructive retry):
+    # 1. "judge", "synthesis_draft", "verification", and "synthesis" checkpoints
+    #    are marked "invalidated" (retained as evidence)
+    # 2. "draft" and "critique" checkpoints stay "completed"
+    # 3. Scores, votes, and messages from the failed attempt are preserved.
     db_session.expire_all()
 
     # Check checkpoints
     res_ckpts = db_session.exec(
         select(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id == debate.id)
     ).all()
-    remaining_keys = {c.stage_key for c in res_ckpts}
-    assert "draft" in remaining_keys
-    assert "critique" in remaining_keys
-    assert "judge" not in remaining_keys
-    assert "synthesis_draft" not in remaining_keys
-    assert "verification" not in remaining_keys
-    assert "synthesis" not in remaining_keys
+    status_by_key = {c.stage_key: c.status for c in res_ckpts}
+    assert status_by_key["draft"] == "completed"
+    assert status_by_key["critique"] == "completed"
+    assert status_by_key["judge"] == "invalidated"
+    assert status_by_key["synthesis_draft"] == "invalidated"
+    assert status_by_key["verification"] == "invalidated"
+    assert status_by_key["synthesis"] == "invalidated"
 
     # Check entities
     candidates = db_session.exec(select(Message).where(Message.debate_id == debate.id).where(Message.role == "candidate")).all()
@@ -234,13 +235,13 @@ def test_retry_api_downstream_clearing(authenticated_client, db_session):
     assert len(revised) == 1
 
     scores = db_session.exec(select(Score).where(Score.debate_id == debate.id)).all()
-    assert len(scores) == 0
+    assert len(scores) == 1
 
     votes = db_session.exec(select(Vote).where(Vote.debate_id == debate.id)).all()
-    assert len(votes) == 0
+    assert len(votes) == 1
 
     synthesizers = db_session.exec(select(Message).where(Message.debate_id == debate.id).where(Message.role == "synthesizer")).all()
-    assert len(synthesizers) == 0
+    assert len(synthesizers) == 1
 
 
 @pytest.mark.anyio

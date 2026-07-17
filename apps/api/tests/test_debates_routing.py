@@ -13,17 +13,17 @@ os.environ["USE_MOCK"] = "1"
 
 @pytest.fixture
 def mock_choose_model():
-    with patch("routes.debates.choose_model") as mock:
+    with patch("routes.debates.crud.choose_model") as mock:
         yield mock
 
 @pytest.fixture(autouse=True)
 def mock_dispatch_debate_run():
-    with patch("routes.debates.dispatch_debate_run") as mock:
+    with patch("routes.debates.crud.dispatch_debate_run") as mock:
         yield mock
 
 @pytest.fixture(autouse=True)
 def mock_rate_limiter():
-    with patch("routes.debates.increment_ip_bucket", return_value=(True, 0)) as mock:
+    with patch("routes.debates.crud.increment_ip_bucket", return_value=(True, 0)) as mock:
         yield mock
 
 def test_create_debate_uses_routing(authenticated_client, db_session: Session, mock_choose_model):
@@ -48,7 +48,7 @@ def test_create_debate_uses_routing(authenticated_client, db_session: Session, m
     }
     
     # Patchset 49.2: Validation requires checking model tier, so we must mock enabled models
-    with patch("routes.debates.list_enabled_models") as mock_list:
+    with patch("routes.debates.crud.list_enabled_models_for_user") as mock_list:
         mock_model = MagicMock()
         mock_model.id = "routed-model-id"
         mock_model.tier = "standard"
@@ -98,7 +98,7 @@ def test_create_debate_explicit_model_routing(authenticated_client, db_session: 
     # So we might need to mock list_enabled_models too if gpt-4o is not in default registry
     # But gpt-4o is likely in default registry.
     
-    with patch("routes.debates.list_enabled_models") as mock_list:
+    with patch("routes.debates.crud.list_enabled_models_for_user") as mock_list:
         mock_model = MagicMock()
         mock_model.id = "gpt-4o"
         mock_model.tier = "standard"  # Patchset 49.2: Required for validation

@@ -159,6 +159,7 @@ async def create_debate(
         )
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
+    has_hosted_credits = False
     try:
         # Patchset 54.0: Check feature flag for conversation mode
         if body.mode == "conversation":
@@ -261,6 +262,11 @@ async def create_debate(
             if usage.debates_created > 0:
                 usage.debates_created -= 1
                 session.add(usage)
+            if has_hosted_credits:
+                # A hosted credit was reserved before the failure — return it
+                # so users are not charged for debates that were never created.
+                from billing.service import refund_hosted_credit
+                refund_hosted_credit(session, current_user.id)
             session.commit()
         except Exception as refund_err:
             logger.error(f"Failed to refund quotas during creation failure: {refund_err}")

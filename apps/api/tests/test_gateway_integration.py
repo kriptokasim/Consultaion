@@ -245,12 +245,13 @@ async def test_used_equals_limit_gateway_block(db_session: Session):
     db_session.commit()
     db_session.refresh(user)
     
-    # 2. Try to call a restricted Pro model (e.g., claude-3-5-sonnet) with this user ID
-    # Since has_credits is False, it should raise GatewayModelRestrictedError because the free user
-    # does not have active credits to bypass the plan restrictions.
+    # 2. Try to call a restricted Pro model (gpt4o-deep → openai_premium, premium_pool)
+    # with this user ID. Since has_credits is False, it should raise
+    # GatewayModelRestrictedError because the free user does not have active
+    # credits to bypass the plan restrictions.
     req = GatewayRequest(
         messages=[{"role": "user", "content": "hello"}],
-        model_id="claude-3-5-sonnet",
+        model_id="gpt4o-deep",
         role="tester",
         user_id=user.id,
         user_plan="free"

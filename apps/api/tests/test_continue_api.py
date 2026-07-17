@@ -19,7 +19,7 @@ def test_continue_conditional_transition(authenticated_client, db_session):
     db_session.add(debate_queued)
     db_session.commit()
 
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(f"/api/v1/debates/{debate_queued.id}/continue")
         assert response.status_code == 400
         mock_dispatch.assert_not_called()
@@ -34,7 +34,7 @@ def test_continue_conditional_transition(authenticated_client, db_session):
     db_session.add(debate_paused)
     db_session.commit()
 
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(f"/api/v1/debates/{debate_paused.id}/continue")
         assert response.status_code == 200
         assert response.json()["status"] == "scheduled"
@@ -54,7 +54,7 @@ def test_continue_conditional_transition(authenticated_client, db_session):
         assert debate_paused.status == "scheduled"
 
     # 3. Test sending again (now that it is "scheduled") -> should conflict
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(f"/api/v1/debates/{debate_paused.id}/continue")
         assert response.status_code == 400
         mock_dispatch.assert_not_called()
@@ -75,7 +75,7 @@ def test_continue_idempotency_key(authenticated_client, db_session):
     headers = {"X-Idempotency-Key": "test-idem-key-123"}
 
     # First call - should succeed and dispatch
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/api/v1/debates/{debate.id}/continue",
             headers=headers
@@ -94,7 +94,7 @@ def test_continue_idempotency_key(authenticated_client, db_session):
         assert continuation.status == "dispatched"
 
     # Second call (with same key) - should act as no-op and NOT dispatch again
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/api/v1/debates/{debate.id}/continue",
             headers=headers
@@ -115,7 +115,7 @@ def test_continue_idempotency_key(authenticated_client, db_session):
     db_session.add(debate)
     db_session.commit()
 
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/api/v1/debates/{debate.id}/continue",
             headers=headers
@@ -146,7 +146,7 @@ def test_continue_preflight_budget(authenticated_client, db_session):
     db_session.commit()
 
     # Case 1: Within budget -> should pass
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(f"/api/v1/debates/{debate.id}/continue")
         assert response.status_code == 200
         mock_dispatch.assert_called_once()
@@ -172,7 +172,7 @@ def test_continue_preflight_budget(authenticated_client, db_session):
     db_session.commit()
 
     # Case 2: Exceeded budget -> should fail with ValidationError
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(f"/api/v1/debates/{debate.id}/continue")
         assert response.status_code == 400
         assert "cost limit exceeded" in response.json()["error"]["message"]
@@ -193,7 +193,7 @@ def test_continue_preflight_circuit_breaker(authenticated_client, db_session):
 
     # Mock health state to indicate circuit breaker is open (unhealthy)
     with patch("parliament.provider_health.get_health_state") as mock_get_health, \
-         patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+         patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         
         mock_health = MagicMock()
         mock_health.is_open.return_value = True
@@ -237,7 +237,7 @@ def test_retry_debate_run(authenticated_client, db_session):
     db_session.commit()
 
     # Call /retry on "judge" stage
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/api/v1/debates/{debate.id}/retry",
             json={"stage_key": "judge"}
@@ -247,19 +247,26 @@ def test_retry_debate_run(authenticated_client, db_session):
         assert response.json()["retried_stage"] == "judge"
         mock_dispatch.assert_called_once()
 
-        # Check DB updates:
-        # Checkpoints for judge should be deleted
+        # Check DB updates (FH125 G-7 non-destructive retry):
+        # The retried stage's checkpoint is invalidated, not deleted — prior
+        # attempt evidence remains immutable and inspectable.
         cps = db_session.exec(select(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id == debate.id)).all()
-        cp_keys = [c.stage_key for c in cps]
-        assert "draft" in cp_keys
-        assert "critique" in cp_keys
-        assert "judge" not in cp_keys
+        cp_status = {c.stage_key: c.status for c in cps}
+        assert cp_status["draft"] == "completed"
+        assert cp_status["critique"] == "completed"
+        assert cp_status["judge"] == "invalidated"
 
-        # Scores and votes should be deleted
+        # Scores and votes from the failed attempt are retained as evidence
         scores = db_session.exec(select(Score).where(Score.debate_id == debate.id)).all()
-        assert len(scores) == 0
+        assert len(scores) == 1
         votes = db_session.exec(select(Vote).where(Vote.debate_id == debate.id)).all()
-        assert len(votes) == 0
+        assert len(votes) == 1
+
+        # A DebateAttempt record tracks the new run attempt
+        from models import DebateAttempt
+        attempts = db_session.exec(select(DebateAttempt).where(DebateAttempt.debate_id == debate.id)).all()
+        assert len(attempts) == 1
+        assert attempts[0].status == "queued"
 
         # Debate status updated to scheduled
         db_session.refresh(debate)
@@ -365,7 +372,7 @@ def test_continue_retry_of_continuation_id(authenticated_client, db_session):
     db_session.commit()
 
     # Verify we can pass retry_of_continuation_id with a DIFFERENT idempotency key
-    with patch("routes.debates.dispatch_debate_run") as mock_dispatch:
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/api/v1/debates/{debate.id}/continue",
             json={"retry_of_continuation_id": failed_cont.id},

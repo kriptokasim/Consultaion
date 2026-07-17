@@ -251,45 +251,76 @@ def reserve_hosted_credit(db: Session, user_id: UserID) -> None:
     Checks if a user is on the free plan, and if so, verifies and increments
     their hosted_credits_used counter.
     Raises ValidationError if they have exhausted their credits.
+
+    The increment is an atomic conditional UPDATE (``used < limit``) rather
+    than a read-check-write, so two concurrent requests cannot both pass the
+    credit check and double-spend the final free credit.
     """
     from exceptions import ValidationError
     from models import User
-    
+    from sqlalchemy import update
+
     uid = _normalize_user_id(user_id)
     user = db.get(User, uid)
     if not user:
         return
-        
+
     plan = get_active_plan(db, uid)
-    if plan.is_default_free:
-        limit = getattr(user, "hosted_credits_limit", 10)
+    if not plan.is_default_free:
+        return
+
+    limit = getattr(user, "hosted_credits_limit", 10)
+    stmt = (
+        update(User)
+        .where(User.id == uid)
+        .where(User.hosted_credits_used < User.hosted_credits_limit)
+        .values(hosted_credits_used=User.hosted_credits_used + 1)
+        .execution_options(synchronize_session=False)
+    )
+    result = db.exec(stmt)
+    if result.rowcount == 0:
+        # No row matched the credit guard — the user is exhausted. Refresh to
+        # report the true counter values in the error message.
+        db.refresh(user)
         used = getattr(user, "hosted_credits_used", 0)
-        if used >= limit:
-            raise ValidationError(
-                message=f"You have exhausted your free hosted runs ({used}/{limit}).",
-                code="hosted_credits.exhausted",
-                hint="Please upgrade to a Pro plan, add your own API key under Settings, or run a mock/demo run.",
-            )
-        user.hosted_credits_used = used + 1
-        db.add(user)
+        raise ValidationError(
+            message=f"You have exhausted your free hosted runs ({used}/{limit}).",
+            code="hosted_credits.exhausted",
+            hint="Please upgrade to a Pro plan, add your own API key under Settings, or run a mock/demo run.",
+        )
+    # Keep the ORM instance consistent for any later reads in this session.
+    db.expire(user, ["hosted_credits_used"])
 
 
 def refund_hosted_credit(db: Session, user_id: UserID) -> None:
     """
     Refunds a hosted credit for the user if they are on the free plan.
+
+    Atomic decrement floored at 0 (same semantics as the previous
+    ``max(0, used - 1)``), so concurrent refunds cannot lose updates or
+    drive the counter negative.
     """
     from models import User
-    
+    from sqlalchemy import update
+
     uid = _normalize_user_id(user_id)
     user = db.get(User, uid)
     if not user:
         return
-        
+
     plan = get_active_plan(db, uid)
-    if plan.is_default_free:
-        used = getattr(user, "hosted_credits_used", 0)
-        user.hosted_credits_used = max(0, used - 1)
-        db.add(user)
+    if not plan.is_default_free:
+        return
+
+    stmt = (
+        update(User)
+        .where(User.id == uid)
+        .where(User.hosted_credits_used > 0)
+        .values(hosted_credits_used=User.hosted_credits_used - 1)
+        .execution_options(synchronize_session=False)
+    )
+    db.exec(stmt)
+    db.expire(user, ["hosted_credits_used"])
 
 
 def consume_hosted_credit(db: Session, user_id: UserID) -> None:

@@ -103,13 +103,14 @@ class TestFH67EnrichmentSavepoints:
 class TestFH68SchemaCapabilities:
     """Schema capability detection correctness."""
 
-    def test_capabilities_default_all_true(self):
+    def test_capabilities_default_fail_closed(self):
+        """Defaults are intentionally fail-closed: unknown schema → no enrichment queries."""
         from services.schema_capabilities import SchemaCapabilities
 
         caps = SchemaCapabilities()
-        assert caps.has_stage_checkpoint_table is True
-        assert caps.has_continuation_table is True
-        assert caps.inspection_succeeded is True
+        assert caps.has_stage_checkpoint_table is False
+        assert caps.has_continuation_table is False
+        assert caps.inspection_succeeded is False
 
     def test_capabilities_inspection_failure(self):
         from services.schema_capabilities import SchemaCapabilities

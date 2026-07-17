@@ -294,7 +294,11 @@ def _get_debate_extra_fields(debate, session=None, continuation_status: Optional
 
         if caps:
             from services.debate_enrichment import safe_query_extra_fields
-            safe_extra = safe_query_extra_fields(debate.id, session, caps)
+            safe_extra = safe_query_extra_fields(
+                debate.id, session, caps,
+                debate_status=debate.status,
+                debate_mode=getattr(debate, "mode", None),
+            )
             res = merge_non_null(res, safe_extra)
 
             if caps.missing_capabilities:
