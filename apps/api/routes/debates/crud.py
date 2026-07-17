@@ -249,6 +249,103 @@ async def create_debate(
                 code="debate.model_tier_restricted",
                 hint="Please upgrade to Pro to use advanced models."
             )
+
+        panel_config = body.panel_config or default_panel_config()
+        try:
+            panel = PanelConfig.model_validate(panel_config)
+        except Exception as exc:  # pragma: no cover - validation
+            raise ValidationError(message="Invalid panel_config payload", code="debate.invalid_panel_config") from exc
+        for seat in panel.seats:
+            if seat.provider_key not in PROVIDERS:
+                raise ValidationError(message=f"Unknown provider_key '{seat.provider_key}'", code="debate.invalid_provider")
+            if seat.role_profile not in ROLE_PROFILES:
+                raise ValidationError(message=f"Unknown role_profile '{seat.role_profile}'", code="debate.invalid_role")
+
+        # Routing decision
+        route_ctx = RouteContext(
+            user_id=current_user.id,
+            requested_model=body.model_id,
+            routing_policy=body.routing_policy,
+            debate_type="standard",
+            priority="normal",
+        )
+        best_model_id, candidates = choose_model(route_ctx)
+        
+        # Structured logging for routing decisions
+        logger.info(
+            "Routing decision made",
+            extra={
+                "selected_model": best_model_id,
+                "routing_policy": body.routing_policy or "router-smart",
+                "explicit_override": body.model_id is not None,
+                "candidate_count": len(candidates),
+                "top_candidates": [
+                    {"model": c.model, "score": round(c.total_score, 3)}
+                    for c in candidates[:3]
+                ] if candidates else [],
+                "user_id": current_user.id,
+            },
+        )
+        
+        # Track routing metrics
+        from routes.common import track_metric
+        track_metric(f"routing.policy.{body.routing_policy or 'router-smart'}")
+        track_metric(f"routing.model.{best_model_id}")
+        if body.model_id:
+            track_metric("routing.explicit_override")
+        
+        debate_id = str(uuid.uuid4())
+
+        # Patchset 41.0: Start Langfuse trace
+        trace_id = start_debate_trace(
+            debate_id=debate_id,
+            user_id=str(current_user.id),
+            routed_model=best_model_id,
+            routing_policy=body.routing_policy,
+        )
+
+        config_payload = config.model_dump()
+        # Store locale in config so the engine can instruct LLMs to respond in user's language
+        if body.locale:
+            config_payload["locale"] = body.locale
+        if body.mode == "compare":
+            if not body.compare_models or len(body.compare_models) < 2:
+                raise ValidationError(message="Compare mode requires at least 2 models", code="debate.invalid_compare_models")
+            config_payload["compare_models"] = body.compare_models
+
+        debate = Debate(
+            id=debate_id,
+            prompt=body.prompt,
+            status="queued",
+            config=config_payload,
+            user_id=current_user.id,
+            model_id=best_model_id,
+            routed_model=best_model_id,
+            routing_policy=body.routing_policy,
+            gateway_policy=body.gateway_policy or "auto",
+            routing_meta={
+                "candidates": [c.model_dump() for c in candidates],
+                "requested_model": body.model_id,
+            },
+            panel_config=panel.model_dump(),
+            engine_version=panel.engine_version,
+            mode=body.mode or "arena",
+            run_attempt=1,
+        )
+        session.add(debate)
+
+        # FH125 G-7: Create initial DebateAttempt
+        from models import DebateAttempt
+        attempt = DebateAttempt(
+            debate_id=debate_id,
+            attempt_number=1,
+            status="queued",
+            model_id=best_model_id,
+            created_at=utcnow(),
+        )
+        session.add(attempt)
+        session.commit()
+
     except Exception as exc:
         # Refund run slot & debate usage
         try:
@@ -271,102 +368,6 @@ async def create_debate(
         except Exception as refund_err:
             logger.error(f"Failed to refund quotas during creation failure: {refund_err}")
         raise exc
-
-    panel_config = body.panel_config or default_panel_config()
-    try:
-        panel = PanelConfig.model_validate(panel_config)
-    except Exception as exc:  # pragma: no cover - validation
-        raise ValidationError(message="Invalid panel_config payload", code="debate.invalid_panel_config") from exc
-    for seat in panel.seats:
-        if seat.provider_key not in PROVIDERS:
-            raise ValidationError(message=f"Unknown provider_key '{seat.provider_key}'", code="debate.invalid_provider")
-        if seat.role_profile not in ROLE_PROFILES:
-            raise ValidationError(message=f"Unknown role_profile '{seat.role_profile}'", code="debate.invalid_role")
-
-    # Routing decision
-    route_ctx = RouteContext(
-        user_id=current_user.id,
-        requested_model=body.model_id,
-        routing_policy=body.routing_policy,
-        debate_type="standard",
-        priority="normal",
-    )
-    best_model_id, candidates = choose_model(route_ctx)
-    
-    # Structured logging for routing decisions
-    logger.info(
-        "Routing decision made",
-        extra={
-            "selected_model": best_model_id,
-            "routing_policy": body.routing_policy or "router-smart",
-            "explicit_override": body.model_id is not None,
-            "candidate_count": len(candidates),
-            "top_candidates": [
-                {"model": c.model, "score": round(c.total_score, 3)}
-                for c in candidates[:3]
-            ] if candidates else [],
-            "user_id": current_user.id,
-        },
-    )
-    
-    # Track routing metrics
-    from routes.common import track_metric
-    track_metric(f"routing.policy.{body.routing_policy or 'router-smart'}")
-    track_metric(f"routing.model.{best_model_id}")
-    if body.model_id:
-        track_metric("routing.explicit_override")
-    
-    debate_id = str(uuid.uuid4())
-
-    # Patchset 41.0: Start Langfuse trace
-    trace_id = start_debate_trace(
-        debate_id=debate_id,
-        user_id=str(current_user.id),
-        routed_model=best_model_id,
-        routing_policy=body.routing_policy,
-    )
-
-    config_payload = config.model_dump()
-    # Store locale in config so the engine can instruct LLMs to respond in user's language
-    if body.locale:
-        config_payload["locale"] = body.locale
-    if body.mode == "compare":
-        if not body.compare_models or len(body.compare_models) < 2:
-            raise ValidationError(message="Compare mode requires at least 2 models", code="debate.invalid_compare_models")
-        config_payload["compare_models"] = body.compare_models
-
-    debate = Debate(
-        id=debate_id,
-        prompt=body.prompt,
-        status="queued",
-        config=config_payload,
-        user_id=current_user.id,
-        model_id=best_model_id,
-        routed_model=best_model_id,
-        routing_policy=body.routing_policy,
-        gateway_policy=body.gateway_policy or "auto",
-        routing_meta={
-            "candidates": [c.model_dump() for c in candidates],
-            "requested_model": body.model_id,
-        },
-        panel_config=panel.model_dump(),
-        engine_version=panel.engine_version,
-        mode=body.mode or "arena",
-        run_attempt=1,
-    )
-    session.add(debate)
-
-    # FH125 G-7: Create initial DebateAttempt
-    from models import DebateAttempt
-    attempt = DebateAttempt(
-        debate_id=debate_id,
-        attempt_number=1,
-        status="queued",
-        model_id=best_model_id,
-        created_at=utcnow(),
-    )
-    session.add(attempt)
-    session.commit()
 
     channel_id = debate_channel_id(debate_id)
     await sse_backend.create_channel(channel_id)
