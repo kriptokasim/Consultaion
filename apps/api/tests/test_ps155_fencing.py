@@ -208,3 +208,60 @@ async def test_release_lease_with_epoch():
     # Verify execute was called (the SQL contains epoch guard)
     mock_session.execute.assert_called_once()
     mock_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_nested_synthesis_checkpoints_receive_fencing_identity():
+    """Both internal synthesis checkpoints must be fenced to the active lease."""
+    from reporting.synthesizer import generate_decision_report
+
+    draft_report = MagicMock()
+    draft_report.model_dump.return_value = {}
+    final_report = MagicMock()
+    checkpoint = AsyncMock(
+        side_effect=[
+            ("raw", draft_report, [], {}, False),
+            final_report,
+        ]
+    )
+
+    with patch("orchestration.checkpoints.run_with_checkpoint", checkpoint):
+        result = await generate_decision_report(
+            prompt="prompt",
+            responses=[],
+            debate_id="debate-1",
+            execution_owner_id="runner-1",
+            lease_epoch=7,
+        )
+
+    assert result is final_report
+    assert checkpoint.await_count == 2
+    for call in checkpoint.await_args_list:
+        assert call.kwargs["owner_id"] == "runner-1"
+        assert call.kwargs["lease_epoch"] == 7
+
+
+@pytest.mark.asyncio
+async def test_ops_smoke_test_resolves_and_passes_provider_key():
+    """The ops smoke test must use the isolated key resolver, not removed exports."""
+    from routes.ops import llm_smoke_test
+
+    request = MagicMock()
+    request.json = AsyncMock(return_value={"provider": "openai"})
+    result = MagicMock(
+        success=True,
+        provider="openai",
+        model_used="openai/gpt-4o-mini",
+        content="OK",
+    )
+
+    with (
+        patch("agents.resolve_api_key", return_value="secret-key") as resolve_key,
+        patch("model_gateway.route_llm_call", AsyncMock(return_value=result)) as route_call,
+    ):
+        response = await llm_smoke_test(request, MagicMock())
+
+    assert response["success"] is True
+    resolve_key.assert_called_once_with("openai")
+    gateway_request = route_call.await_args.args[0]
+    assert gateway_request.api_key == "secret-key"
