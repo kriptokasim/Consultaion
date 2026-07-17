@@ -694,9 +694,10 @@ async def llm_smoke_test(
         "mistral": "MISTRAL_API_KEY",
     }
     key_name = key_name_map.get(target_provider)
-    has_key = bool(getattr(settings, key_name, None)) if key_name else False
+    from agents import resolve_api_key
+    api_key = resolve_api_key(target_provider)
 
-    if not has_key:
+    if not api_key:
         return {
             "success": False,
             "provider": target_provider,
@@ -711,9 +712,8 @@ async def llm_smoke_test(
     start_ts = _time.monotonic()
 
     try:
-        from model_gateway import export_api_keys, route_llm_call
+        from model_gateway import route_llm_call
         from model_gateway.types import GatewayRequest
-        export_api_keys()
 
         gateway_request = GatewayRequest(
             messages=[{"role": "user", "content": "Reply with exactly: OK"}],
@@ -724,6 +724,7 @@ async def llm_smoke_test(
             gateway_policy="auto",
             user_id=None,
             user_plan="free",
+            api_key=api_key,
         )
         result = await route_llm_call(gateway_request, db_session=None)
         latency_ms = (_time.monotonic() - start_ts) * 1000
