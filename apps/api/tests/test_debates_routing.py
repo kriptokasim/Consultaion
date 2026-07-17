@@ -3,9 +3,9 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from models import Debate
+from models import Debate, User
 from parliament.router_v2 import CandidateDecision
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 os.environ["RL_MAX_CALLS"] = "1000"
 os.environ["AUTH_RL_MAX_CALLS"] = "1000"
@@ -116,3 +116,34 @@ def test_create_debate_explicit_model_routing(authenticated_client, db_session: 
     debate = db_session.get(Debate, debate_id)
     assert debate.model_id == "gpt-4o"
     assert debate.routed_model == "gpt-4o"
+
+
+def test_create_debate_refunds_hourly_slot_after_panel_validation_failure(
+    authenticated_client,
+    db_session: Session,
+):
+    """A failure after quota reservation must not consume the hourly run slot."""
+    from usage_limits import _get_or_reset_counter
+
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).one()
+    payload = {
+        "prompt": "Invalid panel should be refunded",
+        "mode": "debate",
+    }
+
+    with (
+        patch(
+            "routes.debates.crud.list_enabled_models_for_user",
+            return_value=[MagicMock(id="standard-model", tier="standard")],
+        ),
+        patch(
+            "routes.debates.crud.PanelConfig.model_validate",
+            side_effect=ValueError("invalid panel"),
+        ),
+    ):
+        response = authenticated_client.post("/debates", json=payload)
+
+    assert response.status_code == 422
+    db_session.expire_all()
+    counter = _get_or_reset_counter(db_session, user.id, "hour")
+    assert counter.runs_used == 0
