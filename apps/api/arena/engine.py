@@ -116,6 +116,8 @@ async def run_arena(
     *,
     model_id: str | None = None,
     continue_pipeline: bool = False,
+    execution_owner_id: str | None = None,
+    lease_epoch: int | None = None,
 ) -> ArenaResult:
     """
     Orchestrate an Arena mode run:
@@ -512,13 +514,22 @@ async def run_arena(
             return response, call_usage
 
         # Fan-out: call all models, collect as each completes
-        tasks = [_call_and_persist(m) for m in arena_models]
+        tasks = [
+            asyncio.create_task(_call_and_persist(model))
+            for model in arena_models
+        ]
         responses = []
-        for coro in asyncio.as_completed(tasks):
-            response, call_usage = await coro
-            responses.append(response)
-            if call_usage:
-                usage.add_call(call_usage)
+        try:
+            for task in asyncio.as_completed(tasks):
+                response, call_usage = await task
+                responses.append(response)
+                if call_usage:
+                    usage.add_call(call_usage)
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         # Sort responses back to original arena_models order
         order_map = {m.id: i for i, m in enumerate(arena_models)}
@@ -535,7 +546,9 @@ async def run_arena(
         "arena_perspectives",
         perspectives_input,
         run_perspectives_fn,
-        load_perspectives_fn
+        load_perspectives_fn,
+        owner_id=execution_owner_id,
+        lease_epoch=lease_epoch,
     )
 
     # Check if we have enough successful responses for synthesis
@@ -663,7 +676,9 @@ async def run_arena(
         "arena_synthesis",
         synthesis_input,
         run_synthesis_fn,
-        load_synthesis_fn
+        load_synthesis_fn,
+        owner_id=execution_owner_id,
+        lease_epoch=lease_epoch,
     )
     synthesis_success = meta_updates.get("synthesis_status") == "succeeded"
 
