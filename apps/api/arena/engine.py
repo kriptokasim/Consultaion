@@ -647,6 +647,8 @@ async def run_arena(
             usage=usage,
             model_id=model_id,
             locale=locale,
+            execution_owner_id=execution_owner_id,
+            lease_epoch=lease_epoch,
         )
         ssuccess = meta.get("synthesis_status") == "succeeded"
 
@@ -764,6 +766,8 @@ async def _synthesize_verdict(
     usage: UsageAccumulator,
     model_id: str | None = None,
     locale: str | None = None,
+    execution_owner_id: str | None = None,
+    lease_epoch: int | None = None,
 ) -> tuple[str, dict | None, dict]:
     """Produce the final synthesized verdict and structured decision report from all model responses."""
     from reporting.synthesizer import StructuredSynthesisError, generate_decision_report
@@ -784,6 +788,8 @@ async def _synthesize_verdict(
             locale=locale,
             model_override=model_id,
             usage=usage,
+            execution_owner_id=execution_owner_id,
+            lease_epoch=lease_epoch,
         )
         meta_updates = {
             "synthesis_status": "succeeded",
