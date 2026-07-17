@@ -224,6 +224,8 @@ async def generate_decision_report(
     locale: Optional[str] = None,
     model_override: Optional[str] = None,
     usage: Any | None = None,
+    execution_owner_id: str | None = None,
+    lease_epoch: int | None = None,
 ) -> DecisionReport:
     """Generate a structured, verified decision report by aggregating candidate model responses."""
     from orchestration.checkpoints import run_with_checkpoint
@@ -488,7 +490,9 @@ async def generate_decision_report(
         stage_key="synthesis_draft",
         input_data=synthesis_input,
         run_fn=run_synthesis_fn,
-        load_fn=load_synthesis_fn
+        load_fn=load_synthesis_fn,
+        owner_id=execution_owner_id,
+        lease_epoch=lease_epoch,
     )
 
     # Stage 2: Verification Checkpoint
@@ -650,7 +654,9 @@ async def generate_decision_report(
             stage_key="verification",
             input_data=verification_input,
             run_fn=run_verification_fn,
-            load_fn=load_verification_fn
+            load_fn=load_verification_fn,
+            owner_id=execution_owner_id,
+            lease_epoch=lease_epoch,
         )
         return final_report
     except Exception as exc:
