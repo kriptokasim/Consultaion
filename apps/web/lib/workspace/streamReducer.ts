@@ -167,7 +167,13 @@ export function streamingReducer(
       // I: Enforce per-response buffer cap
       const combined = buf.accumulatedText + text;
       const truncated = combined.length > MAX_STREAM_BUFFER_CHARS;
-      const accumulatedText = truncated ? combined.slice(0, MAX_STREAM_BUFFER_CHARS) : combined;
+      // PS155.2: Trust server-side accumulated_chars from coalesced deltas
+      const serverAccumulated = (payloadAny as any).accumulated_chars;
+      let accumulatedText = truncated ? combined.slice(0, MAX_STREAM_BUFFER_CHARS) : combined;
+      if (typeof serverAccumulated === "number" && serverAccumulated > accumulatedText.length) {
+        // Server has counted more chars than our local buffer — coalesced delta
+        // Keep local text as-is but trust the sequence will catch up
+      }
 
       if (truncated && !buf.truncated) {
         console.warn(

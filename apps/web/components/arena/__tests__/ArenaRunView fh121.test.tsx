@@ -142,6 +142,7 @@ describe("ArenaRunView — FH121 regression tests", () => {
   it("test_non_terminal_loading_shows_skeletons", () => {
     const debate = makeDebate({
       status: "running",
+      models: [{ display_name: "Model A", model_id: "a" }, { display_name: "Model B", model_id: "b" }],
       final_meta: {},
     });
     render(

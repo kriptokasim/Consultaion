@@ -16,6 +16,7 @@ function delta(text: string, sequence: number) {
       provider: "test",
       text,
       delta_sequence: sequence,
+      accumulated_chars: text.length,
     },
   };
 }

@@ -463,7 +463,11 @@ async def run_arena(
             converted into ArenaModelResponse(success=False) and persisted.
             """
             try:
-                result = await _call_model(model_info)
+                from config import settings as _settings
+                total_timeout = getattr(_settings, "ARENA_MODEL_TOTAL_TIMEOUT_S", 60)
+                result = await asyncio.wait_for(
+                    _call_model(model_info), timeout=total_timeout
+                )
                 response, call_usage = result
             except Exception as exc:
                 logger.error(f"Arena model task exception for {model_info.id}: {exc}")

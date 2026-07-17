@@ -6,9 +6,7 @@ among semantically related claims (similarity between 0.60 and 0.78).
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import Any, Dict
 
 from agents import call_llm_for_role
@@ -83,19 +81,11 @@ async def classify_contradiction(
         if usage is not None and hasattr(usage, "add_call"):
             usage.add_call(call_usage)
 
-        # Parse JSON fragment from LLM output
-        match = re.search(r"\{.*\}", raw, flags=re.S)
-        if match:
-            data = json.loads(match.group(0))
-            is_contra = bool(data.get("is_contradictory", False))
-            explanation = str(data.get("explanation", "Parsed explanation"))
-            return {"is_contradictory": is_contra, "explanation": explanation}
-            
-        # Try raw fallback
-        data = json.loads(raw.strip())
+        from utils.json_utils import extract_and_parse_json
+        data = extract_and_parse_json(raw) or {}
         return {
             "is_contradictory": bool(data.get("is_contradictory", False)),
-            "explanation": str(data.get("explanation", "Parsed raw explanation")),
+            "explanation": str(data.get("explanation", "Parsed explanation")),
         }
     except Exception as exc:
         logger.warning(

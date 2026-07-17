@@ -21,6 +21,7 @@ async def call_model_via_gateway(
     response_format: Optional[Dict[str, Any]] = None,
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Optional[Dict[str, Any]] = None,
+    api_key: Optional[str] = None,
 ) -> Tuple[str, Any]:
     """
     Unified entry point from Agent execution paths to the central Model Gateway.
@@ -78,6 +79,7 @@ async def call_model_via_gateway(
         response_format=response_format,
         tools=tools,
         tool_choice=tool_choice,
+        api_key=api_key,
     )
 
     # 3. Route call through Gateway Orchestrator

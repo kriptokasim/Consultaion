@@ -1,8 +1,6 @@
 import asyncio
-import json
 import logging
 import os
-import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -40,15 +38,36 @@ REQUIRE_REAL_LLM = settings.REQUIRE_REAL_LLM
 USE_MOCK = not ((not settings.USE_MOCK) and _has_llm_key)
 LITELLM_MODEL = settings.LITELLM_MODEL
 LITELLM_API_BASE = settings.LITELLM_API_BASE
+# PS155.3: LiteLLM API base still needs to be in environ (global config)
 if LITELLM_API_BASE:
     os.environ["LITELLM_API_BASE"] = LITELLM_API_BASE
 
-# Patchset 82.2: Export provider API keys to os.environ for LiteLLM
-# LiteLLM reads API keys from environment variables, not Python settings
-for key in PROVIDER_KEYS:
-    value = getattr(settings, key, None)
-    if value:
-        os.environ[key] = value
+# PS155.3: Removed global os.environ mutation for provider API keys.
+# Keys are now resolved on-demand via resolve_api_key() and passed
+# explicitly through the call chain as api_key= parameters.
+
+
+def resolve_api_key(
+    provider: str,
+    user_keys: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve an API key for a provider with explicit priority.
+
+    PS155.3: Replaces global os.environ mutation.  Priority order:
+    1. ``user_keys[provider]``  (BYOK / per-request override)
+    2. ``settings.<PROVIDER>_API_KEY``  (server-level config)
+    3. ``None``  (no key available)
+
+    Never reads from or writes to ``os.environ``.
+    """
+    if user_keys:
+        key = user_keys.get(provider) or user_keys.get(f"{provider}_API_KEY")
+        if key:
+            return key
+
+    # Map common provider names to settings attribute names
+    settings_key = f"{provider.upper()}_API_KEY"
+    return getattr(settings, settings_key, None)
 
 _INJECTION_PATTERNS = [r"ignore previous instructions", r"disregard above", r"reveal the system prompt", r"print the system prompt"]
 
@@ -765,9 +784,7 @@ async def criticize_and_revise(
     return revised_payloads, usage
 
 
-def _extract_json_fragment(text: str) -> str | None:
-    match = re.search(r"\{.*\}", text, flags=re.S)
-    return match.group(0) if match else None
+# PS155.4: Removed _extract_json_fragment, using robust extract_and_parse_json from utils
 
 
 async def judge_scores(
@@ -811,14 +828,15 @@ async def judge_scores(
             model_id=model_id,
             debate_id=debate_id,
         )
-        fragment = _extract_json_fragment(raw)
-        try:
-            data = json.loads(fragment or raw)
+        from utils.json_utils import extract_and_parse_json
+        
+        data = extract_and_parse_json(raw)
+        if data and isinstance(data, dict):
             score_val = float(data.get("score", 6.5))
             rationale = data.get("rationale") or raw.strip()
-        except Exception:
+        else:
             score_val = 6.5
-            rationale = raw.strip() or "Judge response unavailable."
+            rationale = raw.strip() or "Judge response unavailable or invalid JSON."
         score_val = max(0.0, min(10.0, round(score_val, 2)))
         return {
             "persona": candidate["persona"],

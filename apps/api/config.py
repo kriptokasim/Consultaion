@@ -176,6 +176,8 @@ class AppSettings(BaseSettings):
     SYNTHESIS_MAX_TOKENS: int = Field(2000, ge=100, description="Max tokens for synthesis step")
     STREAMING_RESPONSES_ENABLED: bool = Field(True, description="Enable streaming deltas via SSE")
     ARENA_MODEL_TIMEOUT_SECONDS: int = Field(45, ge=5, le=300, description="Per-model timeout for Arena perspective calls")
+    ARENA_MODEL_TOTAL_TIMEOUT_S: int = Field(60, ge=10, le=600, description="PS155.3: Total max execution time for an Arena model streaming run")
+    ARENA_DELTA_FLUSH_MS: int = Field(150, ge=0, le=1000, description="PS155.2: SSE server-side delta coalescing flush interval in milliseconds")
 
     RESPONSES_CONTRACT_VERSION: int = 1
 

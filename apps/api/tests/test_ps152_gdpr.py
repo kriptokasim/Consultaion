@@ -1,9 +1,7 @@
 """Tests for PS152: GDPR deletion, account erasure, credit guard, and auth helpers."""
 
 import secrets
-import threading
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -211,25 +209,25 @@ class TestRuntimeConfigHelpers:
     """F1: WEB_APP_ORIGIN is accessed at runtime, not snapshot."""
 
     def test_get_web_app_origin_reads_settings(self):
-        from routes.auth import get_web_app_origin
         from config import settings
+        from routes.auth import get_web_app_origin
 
         with patch.object(settings, "WEB_APP_ORIGIN", "https://example.com"):
             assert get_web_app_origin() == "https://example.com"
 
     def test_get_web_app_origin_strips_trailing_slash(self):
-        from routes.auth import get_web_app_origin
         from config import settings
+        from routes.auth import get_web_app_origin
 
         with patch.object(settings, "WEB_APP_ORIGIN", "https://example.com/"):
             assert get_web_app_origin() == "https://example.com"
 
     def test_get_web_app_origin_raises_on_missing(self):
-        from routes.auth import get_web_app_origin
         from config import settings
+        from routes.auth import get_web_app_origin
 
         with patch.object(settings, "WEB_APP_ORIGIN", None):
-            with pytest.raises(Exception):
+            with pytest.raises(ValueError):
                 get_web_app_origin()
 
 

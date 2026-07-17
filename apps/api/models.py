@@ -200,6 +200,11 @@ class Debate(SQLModel, table=True):
     last_heartbeat_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     run_attempt: int = Field(default=0, nullable=False)
 
+    # PS155.1: Monotonic lease epoch — incremented atomically on every lease acquisition
+    lease_epoch: int = Field(default=0, nullable=False)
+    # PS155.1: Globally unique execution owner (hostname-pid-uuid4)
+    execution_owner_id: Optional[str] = Field(default=None, nullable=True)
+
 
 
     user: Optional[User] = Relationship(
@@ -646,6 +651,8 @@ class DebateStageCheckpoint(SQLModel, table=True):
     output_reference: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     failed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     error_code: Optional[str] = Field(default=None, nullable=True)
+    # PS155.1: Owner who created/runs this checkpoint stage
+    owner_id: Optional[str] = Field(default=None, nullable=True)
 
 
 class DebateAttempt(SQLModel, table=True):

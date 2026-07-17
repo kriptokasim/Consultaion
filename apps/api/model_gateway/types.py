@@ -19,6 +19,7 @@ class GatewayRequest(BaseModel):
     response_format: Optional[Dict[str, Any]] = None
     tools: Optional[List[Dict[str, Any]]] = None
     tool_choice: Optional[Dict[str, Any]] = None
+    api_key: Optional[str] = None
 
 class GatewayDecision(BaseModel):
     model_config = ConfigDict(protected_namespaces=())

@@ -7,13 +7,12 @@ and flag if a revision loop is needed.
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import Any, Dict, List
 
 from agents import call_llm_for_role
 from config import settings
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +102,7 @@ async def verify_synthesis_report(
         if usage is not None and hasattr(usage, "add_call"):
             usage.add_call(call_usage)
 
-        match = re.search(r"\{.*\}", raw, flags=re.S)
-        raw_json = match.group(0) if match else raw
-        
-        data = json.loads(raw_json)
+        data = extract_and_parse_json(raw) or {}
         
         completeness = float(data.get("completeness_score", 0.9))
         faithfulness = float(data.get("faithfulness_score", 0.9))

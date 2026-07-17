@@ -97,9 +97,8 @@ describe("Arena Experience Enhancements", () => {
           path: "/arena/test-debate/user-vote",
           method: "POST",
           body: {
+            claim_id: expect.any(String),
             claim_text: "Consensus Point A",
-            model_name: "GPT-4o",
-            is_consensus: true,
           },
         });
       });
@@ -135,7 +134,7 @@ describe("Arena Experience Enhancements", () => {
       );
 
       expect(screen.getByText("Final Verdict Synthesized")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Reveal Final Verdict/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /View Verdict & Report/i })).toBeInTheDocument();
       expect(screen.queryByText("Final synthesized verdict.")).not.toBeInTheDocument();
     });
 
@@ -149,7 +148,7 @@ describe("Arena Experience Enhancements", () => {
         />
       );
 
-      const revealButton = screen.getByRole("button", { name: /Reveal Final Verdict/i });
+      const revealButton = screen.getByRole("button", { name: /View Verdict & Report/i });
       fireEvent.click(revealButton);
 
       expect(screen.getAllByText("Final synthesized verdict.").length).toBeGreaterThanOrEqual(1);
@@ -190,7 +189,7 @@ describe("Arena Experience Enhancements", () => {
       );
 
       // Reveal synthesis
-      const revealButton = screen.getByRole("button", { name: /Reveal Final Verdict/i });
+      const revealButton = screen.getByRole("button", { name: /View Verdict & Report/i });
       fireEvent.click(revealButton);
 
       // Verify that Decision Report Title or export button are NOT rendered (Guardrail 6)

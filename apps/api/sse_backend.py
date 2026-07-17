@@ -67,6 +67,85 @@ def _delta_key(event: dict) -> str | None:
     return payload.get("response_id") or event.get("response_id")
 
 
+class DeltaCoalescer:
+    """PS155.2: Server-side delta coalescing buffer.
+
+    Accumulates rapid-fire ``model_response_delta`` events per ``response_id``
+    and flushes them at a configurable interval (default 150 ms).  On flush,
+    consecutive text fragments are concatenated into a single event with
+    updated ``accumulated_chars`` and ``delta_sequence`` values.
+
+    Non-delta events trigger an immediate flush of all pending deltas so that
+    event ordering remains correct.
+    """
+
+    def __init__(self, flush_interval_ms: int | None = None) -> None:
+        from config import settings
+        self._flush_ms = flush_interval_ms if flush_interval_ms is not None else getattr(settings, "ARENA_DELTA_FLUSH_MS", 150)
+        self._flush_seconds = self._flush_ms / 1000.0
+        # {response_id: [delta_event, ...]}
+        self._pending: dict[str, list[dict]] = {}
+        self._last_flush: float = time.monotonic()
+
+    def _merge_deltas(self, deltas: list[dict]) -> dict:
+        """Merge a list of delta events for the same response_id into one."""
+        if len(deltas) == 1:
+            return deltas[0]
+
+        merged = dict(deltas[-1])  # use the latest event as the base
+        merged_payload = dict(merged.get("payload", {}))
+
+        combined_text = ""
+        for d in deltas:
+            p = d.get("payload", {})
+            combined_text += p.get("text", "") or ""
+
+        merged_payload["text"] = combined_text
+        # accumulated_chars from the last delta is already the correct total
+        merged["payload"] = merged_payload
+        return merged
+
+    def ingest(self, event: dict) -> list[dict]:
+        """Accept an event and return a list of events to publish now.
+
+        Returns an empty list if the event was buffered, or a list of
+        coalesced events (possibly including the current one) if a flush
+        was triggered.
+        """
+        now = time.monotonic()
+
+        if not _is_delta(event):
+            # Non-delta → flush all pending deltas first, then emit this event
+            flushed = self.flush_all()
+            flushed.append(event)
+            return flushed
+
+        key = _delta_key(event) or "__default__"
+        if key not in self._pending:
+            self._pending[key] = []
+        self._pending[key].append(event)
+
+        # Check if flush interval has elapsed
+        elapsed = now - self._last_flush
+        if elapsed >= self._flush_seconds:
+            return self.flush_all()
+
+        return []  # buffered
+
+    def flush_all(self) -> list[dict]:
+        """Flush all pending deltas, returning merged events."""
+        self._last_flush = time.monotonic()
+        if not self._pending:
+            return []
+
+        result = []
+        for _key, deltas in self._pending.items():
+            if deltas:
+                result.append(self._merge_deltas(deltas))
+        self._pending.clear()
+        return result
+
+
 class StreamLeaseResult(Enum):
     ACQUIRED = "acquired"
     DENIED = "denied"
@@ -138,6 +217,8 @@ class MemoryChannelBackend:
         self._lock = asyncio.Lock()
         self._running = False
         self._cleanup_task: Optional[asyncio.Task] = None
+        # PS155.2: Per-channel delta coalescers
+        self._coalescers: dict[str, DeltaCoalescer] = {}
 
     async def start(self) -> None:
         self._running = True
@@ -169,6 +250,21 @@ class MemoryChannelBackend:
             self._last_seen[channel_id] = time.time()
 
     async def publish(self, channel_id: str, event: dict) -> None:
+        # PS155.2: Route through delta coalescer
+        if channel_id not in self._coalescers:
+            self._coalescers[channel_id] = DeltaCoalescer()
+
+        coalescer = self._coalescers[channel_id]
+        events_to_publish = coalescer.ingest(event)
+
+        if not events_to_publish:
+            return  # buffered, nothing to emit yet
+
+        for evt in events_to_publish:
+            await self._publish_single(channel_id, evt)
+
+    async def _publish_single(self, channel_id: str, event: dict) -> None:
+        """Publish a single event (after coalescing) to all subscribers."""
         async with self._lock:
             # Generate monotonic sequence number
             seq = self._sequences.get(channel_id, 0) + 1

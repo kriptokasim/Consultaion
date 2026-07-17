@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import socket
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -42,8 +43,12 @@ class SeatExecutionError(DebateEngineError):
 
 
 def _get_runner_id() -> str:
-    """Generate a unique ID for this worker process."""
-    return f"{socket.gethostname()}-{os.getpid()}"
+    """Generate a unique ID for this worker process.
+
+    PS155.1: Include a uuid4 fragment so that two processes on the same
+    host with recycled PIDs never collide.
+    """
+    return f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
 
 
 async def _update_continuation_status(
@@ -69,11 +74,21 @@ async def _update_continuation_status(
         logger.warning(f"Failed to update continuation status for {continuation_id} to {status}: {e}")
 
 
-async def _try_acquire_lease(debate_id: str, runner_id: str, lease_seconds: int = 60) -> bool:
-    """Attempt to acquire a lock on the debate execution."""
+async def _try_acquire_lease(
+    debate_id: str, runner_id: str, lease_seconds: int = 60
+) -> tuple[bool, int]:
+    """Attempt to acquire execution ownership of a debate.
+
+    PS155.1: Atomically increments ``lease_epoch`` on every acquisition so
+    that stale workers holding a previous epoch value are fenced out of
+    subsequent heartbeat and checkpoint operations.
+
+    Returns:
+        (acquired, epoch) — *epoch* is the new monotonic value after the
+        UPDATE succeeds, or 0 if the lease was not acquired.
+    """
     async with async_session_scope() as session:
         now = datetime.now(timezone.utc)
-        # Update if unowned OR lease expired OR owned by self
         stmt = (
             update(Debate)
             .where(Debate.id == debate_id)
@@ -81,17 +96,46 @@ async def _try_acquire_lease(debate_id: str, runner_id: str, lease_seconds: int 
                 or_(
                     Debate.runner_id.is_(None),
                     Debate.lease_expires_at < now,
-                    Debate.runner_id == runner_id
+                    Debate.runner_id == runner_id,
                 )
             )
             .values(
                 runner_id=runner_id,
+                execution_owner_id=runner_id,
                 lease_expires_at=now + timedelta(seconds=lease_seconds),
                 last_heartbeat_at=now,
                 status="running",
-                # Increment run_attempt only if we are taking over (not just refreshing own)
-                # But simple Increment is safer for tracking restarts
-                run_attempt=Debate.run_attempt + 1
+                lease_epoch=Debate.lease_epoch + 1,
+                run_attempt=Debate.run_attempt + 1,
+            )
+            .returning(Debate.lease_epoch)
+        )
+        result = await session.execute(stmt)
+        row = result.first()
+        await session.commit()
+        if row is None:
+            return False, 0
+        return True, row[0]
+
+
+async def _heartbeat(
+    debate_id: str, runner_id: str, expected_epoch: int, lease_seconds: int = 60
+) -> bool:
+    """Refresh the lease only if we still own the expected epoch.
+
+    PS155.1: Epoch-guarded heartbeat — a zombie worker whose epoch has
+    been superseded will silently fail to extend the lease.
+    """
+    async with async_session_scope() as session:
+        now = datetime.now(timezone.utc)
+        stmt = (
+            update(Debate)
+            .where(Debate.id == debate_id)
+            .where(Debate.runner_id == runner_id)
+            .where(Debate.lease_epoch == expected_epoch)
+            .values(
+                lease_expires_at=now + timedelta(seconds=lease_seconds),
+                last_heartbeat_at=now,
             )
         )
         result = await session.execute(stmt)
@@ -99,31 +143,19 @@ async def _try_acquire_lease(debate_id: str, runner_id: str, lease_seconds: int 
         return result.rowcount > 0
 
 
-async def _heartbeat(debate_id: str, runner_id: str, lease_seconds: int = 60) -> None:
-    """Refresh the lease."""
-    async with async_session_scope() as session:
-        now = datetime.now(timezone.utc)
-        stmt = (
-            update(Debate)
-            .where(Debate.id == debate_id)
-            .where(Debate.runner_id == runner_id)
-            .values(
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                last_heartbeat_at=now
-            )
-        )
-        await session.execute(stmt)
-        await session.commit()
+async def _release_lease(debate_id: str, runner_id: str, expected_epoch: int) -> None:
+    """Release execution ownership, guarded by epoch.
 
-
-async def _release_lease(debate_id: str, runner_id: str) -> None:
-    """Release the lease (cleanup)."""
+    PS155.1: Only clears lease fields if our epoch still matches,
+    preventing a late release from clobbering a new owner.
+    """
     async with async_session_scope() as session:
         stmt = (
             update(Debate)
             .where(Debate.id == debate_id)
             .where(Debate.runner_id == runner_id)
-            .values(runner_id=None, lease_expires_at=None)
+            .where(Debate.lease_epoch == expected_epoch)
+            .values(runner_id=None, lease_expires_at=None, execution_owner_id=None)
         )
         await session.execute(stmt)
         await session.commit()
@@ -541,7 +573,8 @@ async def run_debate(
 
     try:
         # Attempt to acquire lease immediately
-        if not await _try_acquire_lease(debate_id, runner_id):
+        acquired, lease_epoch = await _try_acquire_lease(debate_id, runner_id)
+        if not acquired:
             logger.warning(f"Debate {debate_id} lease acquisition failed for {runner_id}. Already running?")
             return
 
@@ -552,7 +585,7 @@ async def run_debate(
                 if stop_heartbeat.is_set():
                     break
                 try:
-                    await _heartbeat(debate_id, runner_id)
+                    await _heartbeat(debate_id, runner_id, lease_epoch)
                 except Exception:
                     pass
         heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
@@ -959,4 +992,4 @@ async def run_debate(
                 await heartbeat_task
             except Exception:
                 pass
-            await _release_lease(debate_id, runner_id)
+            await _release_lease(debate_id, runner_id, lease_epoch)

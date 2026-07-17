@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 import sqlalchemy as sa
 from auth import hash_password
@@ -38,13 +38,13 @@ from models import (
     Score,
     SupportNote,
     TeamMember,
+    UsageCounter,
+    UsageLedgerEntry,
+    UsageQuota,
     User,
     UserInteraction,
     UserPrediction,
     UserProviderKey,
-    UsageCounter,
-    UsageLedgerEntry,
-    UsageQuota,
     Vote,
     VoteRecord,
     utcnow,

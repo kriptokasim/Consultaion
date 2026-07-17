@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, List, Optional
@@ -190,11 +189,11 @@ async def _judge_performance(
         
         # Parse JSON
         try:
-            # Try to find JSON block
-            match = re.search(r"\{.*\}", text, flags=re.S)
-            json_str = match.group(0) if match else text
-            data = json.loads(json_str)
-            return data.get("scores", [])
+            from utils.json_utils import extract_and_parse_json
+            data = extract_and_parse_json(text)
+            if data and isinstance(data, dict):
+                return data.get("scores", [])
+            return []
         except Exception as exc:
             logger.warning("Failed to parse judge output: %s", exc)
             return []

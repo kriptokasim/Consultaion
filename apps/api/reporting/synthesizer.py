@@ -12,18 +12,18 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any, Dict, List, Optional
 
 from agents import call_llm_for_role
 from config import settings
+from utils.json_utils import extract_and_parse_json
 from worker.arena_tasks import _extract_claims_from_response
 
 from reporting.claim_contradiction import classify_contradiction
 from reporting.claim_quality import filter_claims
 from reporting.claim_similarity import compute_semantic_similarity, get_claim_embeddings
 from reporting.model_evaluator import evaluate_models_blind
-from reporting.report_integrity import looks_like_incomplete_json, validate_report_integrity
+from reporting.report_integrity import validate_report_integrity
 from reporting.synthesis_schema import DecisionReport, QualityMeta
 
 logger = logging.getLogger(__name__)
@@ -409,10 +409,9 @@ async def generate_decision_report(
             if usage is not None and hasattr(usage, "add_call"):
                 usage.add_call(call_usage)
             
-            match = re.search(r"\{.*\}", raw_content, flags=re.S)
-            json_str = match.group(0) if match else raw_content
+            data = extract_and_parse_json(raw_content) or {}
             
-            draft_report = DecisionReport.model_validate_json(json_str)
+            draft_report = DecisionReport.model_validate(data)
             # Check initial report integrity
             ok, problems = validate_report_integrity(draft_report)
             if not ok:
@@ -424,7 +423,7 @@ async def generate_decision_report(
             # Self-healing repair loop step 1: Repair Prompt
             repair_messages = [
                 {"role": "system", "content": "You are a JSON repair tool. Correct the provided text to output strictly valid JSON matching the schema of a Decision Report. Do not include markdown fences or explanation."},
-                {"role": "user", "content": f"Schema: {DecisionReport.model_json_schema()}\n\nError: {exc}\n\nInvalid Content:\n{raw_content or (json_str if 'json_str' in locals() else '')}\n\nReturn repaired JSON:"}
+                {"role": "user", "content": f"Schema: {DecisionReport.model_json_schema()}\n\nError: {exc}\n\nInvalid Content:\n{raw_content}\n\nReturn repaired JSON:"}
             ]
             try:
                 repaired_raw, call_usage = await call_llm_for_role(
@@ -436,9 +435,9 @@ async def generate_decision_report(
                 )
                 if usage is not None and hasattr(usage, "add_call"):
                     usage.add_call(call_usage)
-                match = re.search(r"\{.*\}", repaired_raw, flags=re.S)
-                repaired_json = match.group(0) if match else repaired_raw
-                draft_report = DecisionReport.model_validate_json(repaired_json)
+                data = extract_and_parse_json(repaired_raw) or {}
+                repaired_json = json.dumps(data)
+                draft_report = DecisionReport.model_validate(data)
                 # Check repaired report integrity
                 ok, problems = validate_report_integrity(draft_report)
                 if not ok:
@@ -447,8 +446,7 @@ async def generate_decision_report(
             except Exception as repair_exc:
                 logger.error("JSON repair failed: %s.", repair_exc)
                 # If repair fails and raw content looks like incomplete JSON, raise error to fail-closed
-                raw_to_check = raw_content or (repaired_json if "repaired_json" in locals() else "") or (json_str if "json_str" in locals() else "")
-                if looks_like_incomplete_json(raw_to_check):
+                if not repaired_json or repaired_json == "{}":
                     raise ValueError("Structured report generation failed; refusing unsafe raw JSON fallback.") from repair_exc
                 
                 logger.info("Falling back to heuristic parsing.")
@@ -551,9 +549,9 @@ async def generate_decision_report(
                 )
                 if usage is not None and hasattr(usage, "add_call"):
                     usage.add_call(call_usage)
-                match = re.search(r"\{.*\}", revised_raw, flags=re.S)
-                revised_json = match.group(0) if match else revised_raw
-                final_report = DecisionReport.model_validate_json(revised_json)
+                data = extract_and_parse_json(revised_raw) or {}
+                revised_json = json.dumps(data)
+                final_report = DecisionReport.model_validate(data)
                 # Check revised report integrity
                 ok, problems = validate_report_integrity(final_report)
                 if not ok:

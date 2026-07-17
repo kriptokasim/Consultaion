@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import difflib
-import json
 import logging
 import re
 from typing import List
@@ -12,6 +11,7 @@ from celery.utils.log import get_task_logger
 from database_async import async_session_scope
 from models import Debate, DivergenceReport, Message
 from sqlmodel import select
+from utils.json_utils import extract_and_parse_json
 
 from worker.celery_app import celery_app
 
@@ -53,12 +53,10 @@ async def _extract_claims_from_response(prompt: str, response_content: str, mode
         )
         
         # Try extracting JSON fragment
-        match = re.search(r"\{.*\}", raw, flags=re.S)
-        if match:
-            data = json.loads(match.group(0))
-            claims = data.get("claims", [])
-            if isinstance(claims, list) and all(isinstance(c, str) for c in claims):
-                return [c.strip() for c in claims if c.strip()]
+        data = extract_and_parse_json(raw) or {}
+        claims = data.get("claims", [])
+        if isinstance(claims, list) and all(isinstance(c, str) for c in claims):
+            return [c.strip() for c in claims if c.strip()]
     except Exception as exc:
         module_logger.warning("Failed to parse LLM extracted claims for %s: %s", model_display_name, exc)
     

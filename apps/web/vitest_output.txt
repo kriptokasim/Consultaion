@@ -1,0 +1,1228 @@
+
+ RUN  v3.2.6 /home/durmusahm/Consultaion/apps/web
+
+ ❯ lib/api/errorContract.test.ts (17 tests | 4 failed) 17ms
+   ✓ normalizeApiError > normalizes 401 to unauthorized 1ms
+   ✓ normalizeApiError > normalizes 403 to forbidden 0ms
+   ✓ normalizeApiError > normalizes 404 to not_found 0ms
+   ✓ normalizeApiError > normalizes 429 to rate_limited with retryable 0ms
+   ✓ normalizeApiError > normalizes 500 to server error 0ms
+   × normalizeApiError > preserves code, hint, and retryable from backend 8ms
+     → expected undefined to be 'QUOTA_EXCEEDED' // Object.is equality
+   × normalizeApiError > preserves request_id and correlation_id 1ms
+     → expected undefined to be 'req-123' // Object.is equality
+   ✓ normalizeApiError > handles network error 0ms
+   ✓ normalizeApiError > handles AbortError as cancelled 1ms
+   ✓ normalizeApiError > returns existing ClientError unchanged 1ms
+   ✓ isRetryable > returns true for retryable errors 0ms
+   ✓ isRetryable > returns false for non-retryable errors 0ms
+   ✓ shouldRedirectToLogin > returns true for 401 0ms
+   ✓ shouldRedirectToLogin > returns false for 403 0ms
+   × getCorrelationId > prefers correlationId over requestId 1ms
+     → expected undefined to be 'corr-1' // Object.is equality
+   × getCorrelationId > falls back to requestId 0ms
+     → expected undefined to be 'req-1' // Object.is equality
+   ✓ getCorrelationId > returns undefined when neither present 0ms
+ ❯ components/content/SafeMarkdown.test.tsx (12 tests | 2 failed) 136ms
+   ✓ SafeMarkdown > renders basic markdown 59ms
+   ✓ SafeMarkdown > renders bold text 9ms
+   × SafeMarkdown > renders lists 12ms
+     → Unable to find an element with the text: item 1. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"prose prose-sm dark:prose-invert max-w-none "[39m
+    [36m>[39m
+      [36m<ul>[39m
+        [0m
+[0m
+        [36m<li>[39m
+          [0mitem 1\n- item 2[0m
+        [36m</li>[39m
+        [0m
+[0m
+      [36m</ul>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   ✓ SafeMarkdown > renders code blocks 8ms
+   ✓ SafeMarkdown > sanitizes script tags 8ms
+   ✓ SafeMarkdown > sanitizes event handlers 8ms
+   ✓ SafeMarkdown > applies custom className 5ms
+   ✓ SafeMarkdown > handles empty content 2ms
+   ✓ SafeMarkdown > handles null/undefined gracefully 3ms
+   ✓ SafeMarkdown > renders blockquotes 4ms
+   × SafeMarkdown > renders tables 5ms
+     → Unable to find an element with the text: A. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"prose prose-sm dark:prose-invert max-w-none "[39m
+    [36m>[39m
+      [36m<p>[39m
+        [0m| A | B |\n|---|---|\n| 1 | 2 |[0m
+      [36m</p>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   ✓ SafeMarkdown > preserves link targets safely 4ms
+ ❯ components/arena/__tests__/ArenaRunView fh121.test.tsx (7 tests | 1 failed) 246ms
+   ✓ ArenaRunView — FH121 regression tests > test_terminal_empty_shows_explicit_message 62ms
+   ✓ ArenaRunView — FH121 regression tests > test_terminal_failed_shows_error_state 85ms
+   × ArenaRunView — FH121 regression tests > test_non_terminal_loading_shows_skeletons 19ms
+     → Unable to find an element by: [data-testid="/^skeleton-card-/"]
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"flex flex-col gap-6 pb-8"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"rounded-2xl border border-border bg-gradient-to-br from-card via-card to-primary/5 p-6 shadow-sm"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex items-start justify-between gap-4"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex items-start gap-3 min-w-0"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"shrink-0 rounded-xl bg-primary/10 p-2.5 text-primary"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33mclass[39m=[32m"lucide lucide-sparkles h-5 w-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M20 3v4"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M22 5h-4"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M4 17v2"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M5 18H3"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"min-w-0"[39m
+            [36m>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1"[39m
+              [36m>[39m
+                [0mYour Question[0m
+              [36m</p>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-lg font-medium text-foreground leading-relaxed whitespace-pre-wrap"[39m
+              [36m>[39m
+                [0mWhat is the meaning of life?[0m
+              [36m</p>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33maria-label[39m=[32m"Run sections"[39m
+        [33mclass[39m=[32m"flex sm:hidden items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border"[39m
+        [33mrole[39m=[32m"tablist"[39m
+      [36m>[39m
+        [36m<button[39m
+          [33maria-selected[39m=[32m"true"[39m
+          [33mclass[39m=[32m"flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all bg-card text-foreground shadow-sm"[39m
+          [33mrole[39m=[32m"tab"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33mclass[39m=[32m"lucide lucide-eye h-3.5 w-3.5"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"[39m
+            [36m/>[39m
+            [36m<circle[39m
+              [33mcx[39m=[32m"12"[39m
+              [33mcy[39m=[32m"12"[39m
+              [33mr[39m=[32m"3"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [0mPerspectives[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33maria-selected[39m=[32m"false"[39m
+          [33mclass[39m=[32m"flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-foreground"[39m
+          [33mrole[39m=[32m"tab"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33mclass[39m=[32m"lucide lucide-message-square h-3.5 w-3.5"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [0mDecision[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33maria-selected[39m=[32m"false"[39m
+          [33mclass[39m=[32m"flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-foreground"[39m
+          [33mrole[39m=[32m"tab"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33mclass[39m=[32m"lucide lucide-shield h-3.5 w-3.5"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [0mVerification[0m
+        [36m</button>[39m
+      [36m</div>[39m
+      [36m<div>[39m
+        [36m<h2[39m
+          [33mclass[39m=[32m"text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2"[39m
+        [36m>[39m
+          [36m<svg[39m
+            [33mclass[39m=[32m"lucide lucide-bot h-4 w-4"[39m
+            [33mfill[39m=[32m"none"[39m
+            [33mheight[39m=[32m"24"[39m
+            [33mstroke[39m=[32m"currentColor"[39m
+            [33mstroke-linecap[39m=[32m"round"[39m
+            [33mstroke-linejoin[39m=[32m"round"[39m
+            [33mstroke-width[39m=[32m"2"[39m
+            [33mviewBox[39m=[32m"0 0 24 24"[39m
+            [33mwidth[39m=[32m"24"[39m
+            [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+          [36m>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M12 8V4H8"[39m
+            [36m/>[39m
+            [36m<rect[39m
+              [33mheight[39m=[32m"12"[39m
+              [33mrx[39m=[32m"2"[39m
+              [33mwidth[39m=[32m"16"[39m
+              [33mx[39m=[32m"4"[39m
+              [33my[39m=[32m"8"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M2 14h2"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M20 14h2"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M15 13v2"[39m
+            [36m/>[39m
+            [36m<path[39m
+              [33md[39m=[32m"M9 13v2"[39m
+            [36m/>[39m
+          [36m</svg>[39m
+          [0mModel Responses[0m
+        [36m</h2>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex sm:hidden flex-col gap-3"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex overflow-x-auto snap-x snap-mandatory gap-3 px-4 pb-2 -mx-4"[39m
+            [33mstyle[39m=[32m"scrollbar-width: none;"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33maria-hidden[39m=[32m"true"[39m
+              [33mclass[39m=[32m"shrink-0 w-8"[39m
+            [36m/>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex justify-center gap-1.5"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"h-1.5 rounded-full transition-all w-4 bg-primary"[39m
+            [36m/>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"h-1.5 rounded-full transition-all w-1.5 bg-muted-foreground/20"[39m
+            [36m/>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33maria-label[39m=[32m"Model responses (use arrow keys to navigate)"[39m
+          [33mclass[39m=[32m"hidden sm:grid grid-cols-1 md:grid-cols-2 gap-6"[39m
+          [33mrole[39m=[32m"group"[39m
+        [36m/>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   ✓ ArenaRunView — FH121 regression tests > test_completed_with_responses_shows_cards 30ms
+   ✓ ArenaRunView — FH121 regression tests > renders SynthesisReveal when debate.synthesis_report exists but events and final_content are empty 23ms
+   ✓ ArenaRunView — FH121 regression tests > does not show SynthesisLoading when structured report exists 11ms
+   ✓ ArenaRunView — FH121 regression tests > renders correctly for private final_meta.synthesis_report 12ms
+ ✓ components/landing/HomeContent.test.tsx (5 tests) 414ms
+ ✓ components/landing/HowItWorks.test.tsx (11 tests) 626ms
+ ✓ components/report/DecisionReportView.test.tsx (40 tests) 773ms
+ ✓ hooks/useRunWorkspace.test.ts (13 tests) 306ms
+ ✓ components/parliament/RoundGrid.test.tsx (4 tests) 272ms
+ ❯ components/arena/DivergenceMeter.test.tsx (6 tests | 4 failed) 1530ms
+   ✓ Arena Experience Enhancements > DivergenceMeter Component > does not render divergence meter if debate is not completed 64ms
+   ✓ Arena Experience Enhancements > DivergenceMeter Component > fetches and renders divergence report if debate is completed 67ms
+   × Arena Experience Enhancements > DivergenceMeter Component > allows user to cast a vote on consensus claim 1141ms
+     → expected "spy" to be called with arguments: [ { …(3) } ]
+
+Received: 
+
+  1st spy call:
+
+  [
+    {
+-     "body": {
+-       "claim_text": "Consensus Point A",
+-       "is_consensus": true,
+-       "model_name": "GPT-4o",
+-     },
+-     "method": "POST",
+-     "path": "/arena/test-debate/user-vote",
++     "method": "GET",
++     "path": "/arena/test-debate/divergence",
+    },
+  ]
+
+  2nd spy call:
+
+  [
+    {
+      "body": {
++       "claim_id": "804d3d090d2860563cd6e36426f430a3d543a25ce5e6c7c53efcfa9ab1b59689",
+        "claim_text": "Consensus Point A",
+-       "is_consensus": true,
+-       "model_name": "GPT-4o",
+      },
+      "method": "POST",
+      "path": "/arena/test-debate/user-vote",
+    },
+  ]
+
+
+Number of calls: 2
+
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"rounded-2xl border border-border bg-gradient-to-b from-card via-card to-primary/5 p-6 shadow-md"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"[39m
+        [36m>[39m
+          [36m<div>[39m
+            [36m<h2[39m
+              [33mclass[39m=[32m"text-xl font-bold text-foreground flex items-center gap-2"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33mclass[39m=[32m"lucide lucide-sparkles h-5 w-5 text-primary"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M20 3v4"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M22 5h-4"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M4 17v2"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M5 18H3"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [0mClaims Divergence Meter[0m
+            [36m</h2>[39m
+            [36m<p[39m
+              [33mclass[39m=[32m"text-xs text-muted-foreground mt-1"[39m
+            [36m>[39m
+              [0mAnalyzing consensus and divergence of key claims across all candidate responses.[0m
+            [36m</p>[39m
+          [36m</div>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border bg-amber-500/10 text-amber-500 border-amber-500/20"[39m
+          [36m>[39m
+            [0mBalanced Deliberation[0m
+          [36m</span>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"space-y-3 mb-8"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"flex justify-between text-xs font-semibold text-muted-foreground px-1"[39m
+          [36m>[39m
+            [36m<span>[39m
+              [0m0% CONSENSUS[0m
+            [36m</span>[39m
+            [36m<span[39m
+              [33mclass[39m=[32m"text-foreground text-sm font-bold"[39m
+            [36m>[39m
+              [0m40[0m
+              [0m% DIVIDED[0m
+            [36m</span>[39m
+            [36m<span>[39m
+              [0m100% CONTESTED[0m
+            [36m</span>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"relative h-4 w-full rounded-full bg-muted overflow-hidden border border-border shadow-inner"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"absolute inset-0 bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 opacity-80"[39m
+            [36m/>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"absolute top-0 bottom-0 w-2.5 bg-foreground border border-background shadow-lg"[39m
+              [33mstyle[39m=[32m"left: calc(40% - 5px); transition: left 1s cubic-bezier(0.33, 1, 0.68, 1);"[39m
+            [36m/>[39m
+          [36m</div>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-xs text-muted-foreground text-center italic mt-1.5"[39m
+          [36m>[39m
+            [0mModerate level of unique claims and shared consensus points.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-border/60"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-4"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex items-center gap-2 text-emerald-500"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33mclass[39m=[32m"lucide lucide-circle-check h-5 w-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<circle[39m
+                  [33mcx[39m=[32m"12"[39m
+                  [33mcy[39m=[32m"12"[39m
+                  [33mr[39m=[32m"10"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m9 12 2 2 4-4"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<h3[39m
+                [33mclass[39m=[32m"text-sm font-bold uppercase tracking-wider"[39m
+              [36m>[39m
+                [0mConsensus Claims[0m
+              [36m</h3>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"space-y-3"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"group relative flex flex-col justify-between gap-3 p-4 rounded-xl border transition-all border-emerald-500 bg-emerald-500/5 shadow-emerald-500/10 shadow-sm"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"text-sm text-foreground/90 leading-relaxed font-medium"[39m
+                  [36m>[39m
+                    [0mConsensus Point A[0m
+                  [36m</p>[39m
+                  [36m<button[39m
+                    [33mclass[39m=[32m"shrink-0 flex items-center justify-center h-8 px-3 rounded-lg text-xs font-semibold border transition-all bg-emerald-500 text-white border-emerald-500"[39m
+                    [33mdisabled[39m=[32m""[39m
+                    [33mtitle[39m=[32m"You voted for this claim"[39m
+                  [36m>[39m
+                    [36m<svg[39m
+                      [33mclass[39m=[32m"lucide lucide-check h-3.5 w-3.5"[39m
+                      [33mfill[39m=[32m"none"[39m
+                      [33mheight[39m=[32m"24"[39m
+                      [33mstroke[39m=[32m"currentColor"[39m
+                      [33mstroke-linecap[39m=[32m"round"[39m
+                      [33mstroke-linejoin[39m=[32m"round"[39m
+                      [33mstroke-width[39m=[32m"2"[39m
+                      [33mviewBox[39m=[32m"0 0 24 24"[39m
+                      [33mwidth[39m=[32m"24"[39m
+                      [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                    [36m>[39m
+                      [36m<path[39m
+                        [33md[39m=[32m"M20 6 9 17l-5-5"[39m
+                      [36m/>[39m
+                    [36m</svg>[39m
+                  [36m</button>[39m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40"[39m
+                [36m>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"text-[10px] text-muted-foreground uppercase font-bold tracking-wide mr-1"[39m
+                  [36m>[39m
+                    [0mSupported by:[0m
+                  [36m</span>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 text-slate-700 dark:text-slate-300"[39m
+                  [36m>[39m
+                    [36m<span[39m
+                      [33mclass[39m=[32m"w-1.5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800"[39m
+                    [36m/>[39m
+                    [0mGPT-4o[0m
+                  [36m</span>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 text-slate-700 dark:text-slate-300"[39m
+                  [36m>[39m
+                    [36m<span[39m
+                      [33mclass[39m=[32m"w-1.5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800"[39m
+                    [36m/>[39m
+                    [0mClaude[0m
+                  [36m</span>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"space-y-4"[39m
+          [36m>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"flex items-center gap-2 text-rose-500"[39m
+            [36m>[39m
+              [36m<svg[39m
+                [33mclass[39m=[32m"lucide lucide-triangle-alert h-5 w-5"[39m
+                [33mfill[39m=[32m"none"[39m
+                [33mheight[39m=[32m"24"[39m
+                [33mstroke[39m=[32m"currentColor"[39m
+                [33mstroke-linecap[39m=[32m"round"[39m
+                [33mstroke-linejoin[39m=[32m"round"[39m
+                [33mstroke-width[39m=[32m"2"[39m
+                [33mviewBox[39m=[32m"0 0 24 24"[39m
+                [33mwidth[39m=[32m"24"[39m
+                [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+              [36m>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M12 9v4"[39m
+                [36m/>[39m
+                [36m<path[39m
+                  [33md[39m=[32m"M12 17h.01"[39m
+                [36m/>[39m
+              [36m</svg>[39m
+              [36m<h3[39m
+                [33mclass[39m=[32m"text-sm font-bold uppercase tracking-wider"[39m
+              [36m>[39m
+                [0mContested Claims[0m
+              [36m</h3>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"space-y-3"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"group relative flex flex-col justify-between gap-3 p-4 rounded-xl border transition-all border-border bg-card/50 hover:bg-card hover:shadow-sm"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex items-start justify-between gap-3"[39m
+                [36m>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"text-sm text-foreground/90 leading-relaxed font-medium"[39m
+                  [36m>[39m
+                    [0mContested Point B[0m
+                  [36m</p>[39m
+                  [36m<button[39m
+                    [33mclass[39m=[32m"shrink-0 flex items-center justify-center h-8 px-3 rounded-lg text-xs font-semibold border transition-all opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border"[39m
+                    [33mdisabled[39m=[32m""[39m
+                    [33mtitle[39m=[32m"Upvote this unique claim"[39m
+                  [36m>[39m
+                    [36m<span[39m
+                      [33mclass[39m=[32m"flex items-center gap-1"[39m
+                    [36m>[39m
+                      [36m<svg[39m
+                        [33mclass[39m=[32m"lucide lucide-thumbs-up h-3 w-3"[39m
+                        [33mfill[39m=[32m"none"[39m
+                        [33mheight[39m=[32m"24"[39m
+                        [33mstroke[39m=[32m"currentColor"[39m
+                        [33mstroke-linecap[39m=[32m"round"[39m
+                        [33mstroke-linejoin[39m=[32m"round"[39m
+                        [33mstroke-width[39m=[32m"2"[39m
+                        [33mviewBox[39m=[32m"0 0 24 24"[39m
+                        [33mwidth[39m=[32m"24"[39m
+                        [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                      [36m>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M7 10v12"[39m
+                        [36m/>[39m
+                        [36m<path[39m
+                          [33md[39m=[32m"M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"[39m
+                        [36m/>[39m
+                      [36m</svg>[39m
+                      [0m Agree[0m
+                    [36m</span>[39m
+                  [36m</button>[39m
+                [36m</div>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40"[39m
+                [36m>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"text-[10px] text-muted-foreground uppercase font-bold tracking-wide mr-1"[39m
+                  [36m>[39m
+                    [0mProposed by:[0m
+                  [36m</span>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m"inline-flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 text-slate-700 dark:text-slate-300"[39m
+                  [36m>[39m
+                    [36m<span[39m
+                      [33mclass[39m=[32m"w-1.5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800"[39m
+                    [36m/>[39m
+                    [0mGemini[0m
+                  [36m</span>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-3 px-4"[39m
+      [36m/>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+   × Arena Experience Enhancements > SynthesisReveal Component > renders cover card before synthesis is revealed 90ms
+     → Unable to find an accessible element with the role "button" and name `/Reveal Final Verdict/i`
+
+Here are the accessible roles:
+
+  heading:
+
+  Name "Final Verdict Synthesized":
+  [36m<h2[39m
+    [33mclass[39m=[32m"text-xl font-bold text-foreground"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs text-muted-foreground leading-relaxed"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs font-semibold text-foreground"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "GPT-4o":
+  [36m<button[39m
+    [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+  [36m/>[39m
+
+  Name "Gemini Pro":
+  [36m<button[39m
+    [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+  [36m/>[39m
+
+  Name "View Verdict & Report":
+  [36m<button[39m
+    [33mclass[39m=[32m"w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/95 shadow-md shadow-primary/20 hover:shadow-lg transition-all text-sm"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"rounded-2xl border-2 border-dashed border-primary/35 bg-gradient-to-br from-primary/5 via-card to-primary/5 p-8 text-center shadow-lg relative overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-10 pointer-events-none"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"max-w-md mx-auto space-y-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex justify-center"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"rounded-2xl bg-primary/15 p-4 text-primary animate-bounce"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-trophy h-8 w-8"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M6 9H4.5a2.5 2.5 0 0 1 0-5H6"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M18 9h1.5a2.5 2.5 0 0 0 0-5H18"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M4 22h16"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M18 2H6v7a6 6 0 0 0 12 0V2Z"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"space-y-2"[39m
+        [36m>[39m
+          [36m<h2[39m
+            [33mclass[39m=[32m"text-xl font-bold text-foreground"[39m
+          [36m>[39m
+            [0mFinal Verdict Synthesized[0m
+          [36m</h2>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-xs text-muted-foreground leading-relaxed"[39m
+          [36m>[39m
+            [0mThe independent evaluator has analyzed all candidate responses, weighed consensus points against contested issues, and compiled a single final verdict.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"bg-card/80 border border-border/80 rounded-xl p-4 space-y-3"[39m
+        [36m>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-xs font-semibold text-foreground"[39m
+          [36m>[39m
+            [0mWho do you think made the most compelling case?[0m
+          [36m</p>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid grid-cols-2 gap-2"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+            [36m>[39m
+              [0mGPT-4o[0m
+            [36m</button>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+            [36m>[39m
+              [0mGemini Pro[0m
+            [36m</button>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col sm:flex-row items-center justify-center gap-3 pt-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/95 shadow-md shadow-primary/20 hover:shadow-lg transition-all text-sm"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-eye h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"[39m
+              [36m/>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"3"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [0mView Verdict & Report[0m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-right h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m9 18 6-6-6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-3 px-4"[39m
+    [36m/>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × Arena Experience Enhancements > SynthesisReveal Component > reveals final verdict and displays feedback buttons upon reveal 81ms
+     → Unable to find an accessible element with the role "button" and name `/Reveal Final Verdict/i`
+
+Here are the accessible roles:
+
+  heading:
+
+  Name "Final Verdict Synthesized":
+  [36m<h2[39m
+    [33mclass[39m=[32m"text-xl font-bold text-foreground"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs text-muted-foreground leading-relaxed"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs font-semibold text-foreground"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "GPT-4o":
+  [36m<button[39m
+    [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+  [36m/>[39m
+
+  Name "Gemini Pro":
+  [36m<button[39m
+    [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+  [36m/>[39m
+
+  Name "View Verdict & Report":
+  [36m<button[39m
+    [33mclass[39m=[32m"w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/95 shadow-md shadow-primary/20 hover:shadow-lg transition-all text-sm"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"rounded-2xl border-2 border-dashed border-primary/35 bg-gradient-to-br from-primary/5 via-card to-primary/5 p-8 text-center shadow-lg relative overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-10 pointer-events-none"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"max-w-md mx-auto space-y-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex justify-center"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"rounded-2xl bg-primary/15 p-4 text-primary animate-bounce"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-trophy h-8 w-8"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M6 9H4.5a2.5 2.5 0 0 1 0-5H6"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M18 9h1.5a2.5 2.5 0 0 0 0-5H18"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M4 22h16"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M18 2H6v7a6 6 0 0 0 12 0V2Z"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"space-y-2"[39m
+        [36m>[39m
+          [36m<h2[39m
+            [33mclass[39m=[32m"text-xl font-bold text-foreground"[39m
+          [36m>[39m
+            [0mFinal Verdict Synthesized[0m
+          [36m</h2>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-xs text-muted-foreground leading-relaxed"[39m
+          [36m>[39m
+            [0mThe independent evaluator has analyzed all candidate responses, weighed consensus points against contested issues, and compiled a single final verdict.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"bg-card/80 border border-border/80 rounded-xl p-4 space-y-3"[39m
+        [36m>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-xs font-semibold text-foreground"[39m
+          [36m>[39m
+            [0mWho do you think made the most compelling case?[0m
+          [36m</p>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid grid-cols-2 gap-2"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+            [36m>[39m
+              [0mGPT-4o[0m
+            [36m</button>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+            [36m>[39m
+              [0mGemini Pro[0m
+            [36m</button>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col sm:flex-row items-center justify-center gap-3 pt-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/95 shadow-md shadow-primary/20 hover:shadow-lg transition-all text-sm"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-eye h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"[39m
+              [36m/>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"3"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [0mView Verdict & Report[0m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-right h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m9 18 6-6-6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-3 px-4"[39m
+    [36m/>[39m
+  [36m</div>[39m
+[36m</body>[39m
+   × Arena Experience Enhancements > SynthesisReveal Component > renders fallback response panel and failure card when synthesisStatus is failed or fallback 84ms
+     → Unable to find an accessible element with the role "button" and name `/Reveal Final Verdict/i`
+
+Here are the accessible roles:
+
+  heading:
+
+  Name "Final Verdict Synthesized":
+  [36m<h2[39m
+    [33mclass[39m=[32m"text-xl font-bold text-foreground"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs text-muted-foreground leading-relaxed"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs font-semibold text-foreground"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "GPT-4o":
+  [36m<button[39m
+    [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+  [36m/>[39m
+
+  Name "Gemini Pro":
+  [36m<button[39m
+    [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+  [36m/>[39m
+
+  Name "View Verdict & Report":
+  [36m<button[39m
+    [33mclass[39m=[32m"w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/95 shadow-md shadow-primary/20 hover:shadow-lg transition-all text-sm"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"rounded-2xl border-2 border-dashed border-primary/35 bg-gradient-to-br from-primary/5 via-card to-primary/5 p-8 text-center shadow-lg relative overflow-hidden"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-primary/10 rounded-full blur-3xl -z-10 pointer-events-none"[39m
+      [36m/>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"max-w-md mx-auto space-y-6"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex justify-center"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"rounded-2xl bg-primary/15 p-4 text-primary animate-bounce"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-trophy h-8 w-8"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M6 9H4.5a2.5 2.5 0 0 1 0-5H6"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M18 9h1.5a2.5 2.5 0 0 0 0-5H18"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M4 22h16"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"[39m
+              [36m/>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M18 2H6v7a6 6 0 0 0 12 0V2Z"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"space-y-2"[39m
+        [36m>[39m
+          [36m<h2[39m
+            [33mclass[39m=[32m"text-xl font-bold text-foreground"[39m
+          [36m>[39m
+            [0mFinal Verdict Synthesized[0m
+          [36m</h2>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-xs text-muted-foreground leading-relaxed"[39m
+          [36m>[39m
+            [0mThe independent evaluator has analyzed all candidate responses, weighed consensus points against contested issues, and compiled a single final verdict.[0m
+          [36m</p>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"bg-card/80 border border-border/80 rounded-xl p-4 space-y-3"[39m
+        [36m>[39m
+          [36m<p[39m
+            [33mclass[39m=[32m"text-xs font-semibold text-foreground"[39m
+          [36m>[39m
+            [0mWho do you think made the most compelling case?[0m
+          [36m</p>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid grid-cols-2 gap-2"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+            [36m>[39m
+              [0mGPT-4o[0m
+            [36m</button>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"flex items-center justify-center gap-1.5 p-2 rounded-lg border border-border text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground text-center"[39m
+            [36m>[39m
+              [0mGemini Pro[0m
+            [36m</button>[39m
+          [36m</div>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mclass[39m=[32m"flex flex-col sm:flex-row items-center justify-center gap-3 pt-2"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mclass[39m=[32m"w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/95 shadow-md shadow-primary/20 hover:shadow-lg transition-all text-sm"[39m
+          [36m>[39m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-eye h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"[39m
+              [36m/>[39m
+              [36m<circle[39m
+                [33mcx[39m=[32m"12"[39m
+                [33mcy[39m=[32m"12"[39m
+                [33mr[39m=[32m"3"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+            [0mView Verdict & Report[0m
+            [36m<svg[39m
+              [33mclass[39m=[32m"lucide lucide-chevron-right h-4 w-4"[39m
+              [33mfill[39m=[32m"none"[39m
+              [33mheight[39m=[32m"24"[39m
+              [33mstroke[39m=[32m"currentColor"[39m
+              [33mstroke-linecap[39m=[32m"round"[39m
+              [33mstroke-linejoin[39m=[32m"round"[39m
+              [33mstroke-width[39m=[32m"2"[39m
+              [33mviewBox[39m=[32m"0 0 24 24"[39m
+              [33mwidth[39m=[32m"24"[39m
+              [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+            [36m>[39m
+              [36m<path[39m
+                [33md[39m=[32m"m9 18 6-6-6-6"[39m
+              [36m/>[39m
+            [36m</svg>[39m
+          [36m</button>[39m
+        [36m</div>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-3 px-4"[39m
+    [36m/>[39m
+  [36m</div>[39m
+[36m</body>[39m
+ ✓ components/shared/ModeSelector.test.tsx (5 tests) 172ms
+ ✓ components/consultaion/consultaion/runs-table.test.tsx (4 tests) 225ms
+ ✓ components/debate/ShareRunButton.test.tsx (3 tests) 331ms
+ ✓ components/arena/CTABanner.test.tsx (4 tests) 212ms
+ ✓ components/landing/SocialProof.test.tsx (4 tests) 155ms
+ ✓ components/prompt/PromptPanel.test.tsx (5 tests) 184ms
+ ✓ hooks/hydration-generation.test.ts (3 tests) 237ms
+ ✓ components/navigation/BackButton.test.tsx (4 tests) 166ms
+ ✓ components/arena/__tests__/ArenaRunView.integration.test.tsx (1 test) 159ms
+ ✓ components/landing/ArenaAtAGlance.test.tsx (3 tests) 122ms
+ ✓ lib/sanitize.test.ts (16 tests) 69ms
+ ✓ components/arena/PipelineProgress.test.tsx (12 tests) 115ms
+ ✓ components/landing/DifferentiationSection.test.tsx (3 tests) 133ms
+ ✓ components/landing/ExampleReportPreview.test.tsx (5 tests) 133ms
+ ✓ hooks/sse-silence-watchdog.test.ts (3 tests) 91ms
+ ✓ components/connection/ConnectionIndicator.test.tsx (7 tests) 148ms
+ ✓ components/report/FallbackResponseCard.test.tsx (4 tests) 77ms
+ ✓ lib/__tests__/feature-flags.test.tsx (2 tests) 33ms
+ ✓ app/(app)/runs/[id]/RunDetailClient.test.tsx (12 tests) 82ms
+ ✓ app/(app)/runs/RunsPageClient.test.tsx (1 test) 25ms
+ ✓ components/parliament/ParliamentReportSection.test.tsx (5 tests) 94ms
+ ✓ lib/arena/synthesisArtifacts.test.ts (12 tests) 10ms

@@ -10,13 +10,13 @@ To reduce evaluation bias, model names and providers are redacted before scoring
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any, Dict, List
 
 from agents import call_llm_for_role
 from config import settings
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -146,11 +146,8 @@ async def evaluate_models_blind(
         if usage is not None and hasattr(usage, "add_call"):
             usage.add_call(call_usage)
 
-        # Extract JSON
-        match = re.search(r"\{.*\}", raw, flags=re.S)
-        raw_json = match.group(0) if match else raw
-        
-        data = json.loads(raw_json)
+        # Extract JSON using robust parser
+        data = extract_and_parse_json(raw) or {}
         evals = data.get("evaluations", [])
         
         results = []

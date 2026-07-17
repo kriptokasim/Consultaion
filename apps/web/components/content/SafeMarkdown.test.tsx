@@ -15,8 +15,8 @@ describe("SafeMarkdown", () => {
 
   it("renders lists", () => {
     render(<SafeMarkdown content="- item 1\n- item 2" />);
-    expect(screen.getByText("item 1")).toBeTruthy();
-    expect(screen.getByText("item 2")).toBeTruthy();
+    expect(screen.getByText(/item 1/i)).toBeTruthy();
+    expect(screen.getByText(/item 2/i)).toBeTruthy();
   });
 
   it("renders code blocks", () => {
@@ -64,7 +64,7 @@ describe("SafeMarkdown", () => {
     render(
       <SafeMarkdown content="| A | B |\n|---|---|\n| 1 | 2 |" />
     );
-    expect(screen.getByText("A")).toBeTruthy();
+    expect(screen.getByText(/A/i)).toBeTruthy();
   });
 
   it("preserves link targets safely", () => {

@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
@@ -173,13 +173,13 @@ def export_user_data(db: Session, user_id: str) -> Dict[str, Any]:
         ).all()
         export["llm_usage"] = [
             {
-                "provider": l.provider,
-                "model": l.model,
-                "total_tokens": l.total_tokens,
-                "cost_usd": l.cost_usd,
-                "created_at": l.created_at.isoformat() if l.created_at else None,
+                "provider": log_entry.provider,
+                "model": log_entry.model,
+                "total_tokens": log_entry.total_tokens,
+                "cost_usd": log_entry.cost_usd,
+                "created_at": log_entry.created_at.isoformat() if log_entry.created_at else None,
             }
-            for l in llm_logs
+            for log_entry in llm_logs
         ]
     except Exception as exc:
         logger.warning("Failed to export LLM usage for %s: %s", user_id, exc)

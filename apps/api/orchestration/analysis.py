@@ -1,12 +1,11 @@
-import json
 import logging
-import re
 from typing import Any, Dict, List
 
 from agents import call_llm_for_role
 from database_async import async_session_scope
 from models import Debate, DebateTurn
 from sqlmodel import select
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +101,8 @@ async def extract_debate_turn_analysis(debate_id: str, round_index: int, message
                     max_tokens=400,
                     debate_id=debate_id
                 )
-                match = re.search(r"\{.*\}", raw, flags=re.S)
-                if match:
-                    data = json.loads(match.group(0))
+                data = extract_and_parse_json(raw)
+                if data and isinstance(data, dict):
                     claims_nodes = data.get("claims_nodes", [])
                     position_drift = data.get("position_drift", position_drift)
             except Exception as e:

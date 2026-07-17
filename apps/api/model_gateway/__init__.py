@@ -1,5 +1,4 @@
 import logging
-import os
 
 from model_gateway.adapters import DirectProviderAdapter, MockAdapter, OpenRouterAdapter
 from model_gateway.agent_bridge import call_model_via_gateway
@@ -25,26 +24,7 @@ def is_provider_available(provider: str) -> bool:
         return bool(getattr(settings, "GEMINI_API_KEY", None) or getattr(settings, "GOOGLE_API_KEY", None))
     return bool(getattr(settings, key_name, None))
 
-def export_api_keys():
-    from config import settings
-    mappings = {
-        "OPENAI_API_KEY": settings.OPENAI_API_KEY,
-        "ANTHROPIC_API_KEY": settings.ANTHROPIC_API_KEY,
-        "GEMINI_API_KEY": settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY,
-        "GOOGLE_API_KEY": settings.GOOGLE_API_KEY or settings.GEMINI_API_KEY,
-        "GROQ_API_KEY": settings.GROQ_API_KEY,
-        "DEEPINFRA_API_KEY": settings.DEEPINFRA_API_KEY,
-        "TOGETHER_API_KEY": settings.TOGETHER_API_KEY,
-        "TOGETHERAI_API_KEY": settings.TOGETHER_API_KEY,
-        "FIREWORKS_API_KEY": settings.FIREWORKS_API_KEY,
-        "MISTRAL_API_KEY": settings.MISTRAL_API_KEY,
-        "XAI_API_KEY": settings.XAI_API_KEY,
-        "PERPLEXITY_API_KEY": settings.PERPLEXITY_API_KEY,
-        "OPENROUTER_API_KEY": settings.OPENROUTER_API_KEY,
-    }
-    for k, v in mappings.items():
-        if v:
-            os.environ[k] = v
+# Removed export_api_keys in PS155.3 in favor of explicit api_key passing
 
 async def route_llm_call(
     request: GatewayRequest,
@@ -130,11 +110,6 @@ async def route_llm_call(
     # Assume 1000 input, 1000 output tokens for credit check
     estimated_cost_usd = 0.00003 * (len(str(request.messages)) // 4)
     await check_credit_and_cost_safety(request.user_id, request.user_plan, estimated_cost_usd, db_session)
-    
-    # Export keys to environment for LiteLLM
-    export_api_keys()
-    
-
     
     # 3. Determine routing strategy
     adapter_cls, routing_policy = determine_routing_strategy(request)
@@ -281,9 +256,8 @@ async def route_llm_call(
             except Exception as e:
                 logger.warning(f"Failed to lookup BYOK key for provider {provider}: {e}")
 
-        if provider == "openrouter" and not current_api_key:
-            from config import settings as _settings
-            current_api_key = _settings.OPENROUTER_API_KEY or None
+        if not current_api_key and request.api_key:
+            current_api_key = request.api_key
 
         try:
             # Use the correct adapter for the resolved provider
@@ -419,6 +393,7 @@ async def route_llm_stream(
     on_delta=None,
     debate_id: str | None = None,
     user_id: str | None = None,
+    api_key: str | None = None,
 ) -> GatewayModelCallResult:
     """Stream LLM tokens via the gateway, calling on_delta for each chunk.
 
@@ -426,8 +401,6 @@ async def route_llm_stream(
     Used by the arena streaming path (FH101/FH102).
     """
     from model_gateway.provider_health import is_circuit_open, record_failure, record_success
-
-    export_api_keys()
 
     adapter_cls: type = DirectProviderAdapter
     provider = "direct"
@@ -455,8 +428,7 @@ async def route_llm_stream(
             routing_policy="stream",
         )
 
-    api_key = None
-    if user_id:
+    if user_id and not api_key:
         try:
             from database_async import async_session_scope
             from services.provider_credentials import get_model_api_key_async
@@ -466,12 +438,6 @@ async def route_llm_stream(
                     api_key = resolved.key
         except Exception as e:
             logger.warning(f"Failed to resolve api key in stream: {e}")
-
-    # Server-key fallback: if no BYOK key resolved and provider is OpenRouter,
-    # use the server's OpenRouter API key
-    if provider == "openrouter" and not api_key:
-        from config import settings as _settings
-        api_key = _settings.OPENROUTER_API_KEY or None
 
     adapter = adapter_cls()
     result = await adapter.stream_llm(

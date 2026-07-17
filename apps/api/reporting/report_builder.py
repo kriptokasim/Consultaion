@@ -9,7 +9,6 @@ Handles:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any, Optional
@@ -50,31 +49,13 @@ def build_report_from_synthesis(
 
 def _try_parse_json_report(text: str) -> Optional[DecisionReport]:
     """Attempt to parse a DecisionReport from JSON in the text."""
-    # Look for JSON block in markdown code fence
-    json_match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
-    if json_match:
+    from utils.json_utils import extract_and_parse_json
+    data = extract_and_parse_json(text)
+    if data and isinstance(data, dict):
         try:
-            data = json.loads(json_match.group(1))
             return DecisionReport(**data)
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.debug("JSON fence parse failed: %s", exc)
-
-    # Try parsing the entire text as JSON
-    try:
-        data = json.loads(text)
-        return DecisionReport(**data)
-    except (json.JSONDecodeError, Exception):
-        pass
-
-    # Look for { ... } block
-    brace_match = re.search(r"\{.*\}", text, re.DOTALL)
-    if brace_match:
-        try:
-            data = json.loads(brace_match.group(0))
-            return DecisionReport(**data)
-        except (json.JSONDecodeError, Exception):
-            pass
-
+        except Exception as exc:
+            logger.debug("DecisionReport validation failed: %s", exc)
     return None
 
 

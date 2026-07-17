@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import re
 
 from agents import call_llm_for_role
 from celery.utils.log import get_task_logger
-from database import session_scope
+from database_async import async_session_scope
 from models import Debate, Score
 from sqlmodel import select
+from utils.json_utils import extract_and_parse_json
 
 from worker.celery_app import celery_app
 
@@ -19,15 +18,16 @@ module_logger = logging.getLogger(__name__)
 
 async def _execute_vote_reasons_extraction(debate_id: str) -> None:
     """Read judge scores/rationales, call LLM to synthesize winner vs dissenter reasons, update final_meta."""
-    with session_scope() as session:
-        debate = session.get(Debate, debate_id)
+    async with async_session_scope() as session:
+        debate = await session.get(Debate, debate_id)
         if not debate:
             module_logger.warning("Debate %s not found for vote reasons extraction", debate_id)
             return
 
         # Fetch all scores for this debate
         stmt = select(Score).where(Score.debate_id == debate_id)
-        scores = session.exec(stmt).all()
+        res = await session.execute(stmt)
+        scores = res.scalars().all()
         
         if not scores:
             module_logger.warning("No scores found for debate %s to extract vote reasons", debate_id)
@@ -68,21 +68,29 @@ async def _execute_vote_reasons_extraction(debate_id: str) -> None:
             debate_id=debate_id
         )
 
-        match = re.search(r"\{.*\}", raw, flags=re.S)
-        if match:
-            data = json.loads(match.group(0))
+        # PS155.4: Robust JSON parsing and integrity validation
+        data = extract_and_parse_json(raw)
+        if data and isinstance(data, dict):
             w = data.get("winner_highlights", [])
             d = data.get("dissenter_highlights", [])
-            if isinstance(w, list) and all(isinstance(x, str) for x in w):
-                winner_hl = [x.strip() for x in w if x.strip()]
-            if isinstance(d, list) and all(isinstance(x, str) for x in d):
-                dissenter_hl = [x.strip() for x in d if x.strip()]
+            
+            # Validation: must be lists of non-empty strings
+            if isinstance(w, list):
+                valid_w = [str(x).strip() for x in w if str(x).strip()]
+                if valid_w:
+                    winner_hl = valid_w[:5]  # cap at 5
+            
+            if isinstance(d, list):
+                valid_d = [str(x).strip() for x in d if str(x).strip()]
+                if valid_d:
+                    dissenter_hl = valid_d[:5]  # cap at 5
     except Exception as exc:
         module_logger.warning("Failed to extract vote reasons via LLM for debate %s: %s", debate_id, exc)
 
     # Update debate.final_meta
-    with session_scope() as session:
-        debate = session.get(Debate, debate_id)
+    # Update debate.final_meta
+    async with async_session_scope() as session:
+        debate = await session.get(Debate, debate_id)
         if debate:
             meta = dict(debate.final_meta or {})
             meta["vote_reasons"] = {
@@ -91,7 +99,7 @@ async def _execute_vote_reasons_extraction(debate_id: str) -> None:
             }
             debate.final_meta = meta
             session.add(debate)
-            session.commit()
+            await session.commit()
             module_logger.info("Successfully saved vote reasons in final_meta for debate %s", debate_id)
 
 

@@ -99,8 +99,8 @@ export function normalizeApiError(
       body = obj.body as BackendErrorBody;
     } else if ("data" in obj && typeof obj.data === "object" && obj.data !== null) {
       body = obj.data as BackendErrorBody;
-    } else if ("detail" in obj) {
-      body = { detail: String(obj.detail) };
+    } else {
+      body = obj as BackendErrorBody;
     }
   }
 

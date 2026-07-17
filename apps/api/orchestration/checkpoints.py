@@ -2,8 +2,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import random
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from database_async import async_session_scope
 from models import DebateStageCheckpoint
@@ -18,6 +19,7 @@ async def run_with_checkpoint(
     input_data: Dict[str, Any],
     run_fn: Callable[[], Any],
     load_fn: Callable[[Any], Any],
+    owner_id: Optional[str] = None,
 ) -> Any:
     """
     Executes a pipeline stage wrapped in a database checkpoint transaction.
@@ -43,11 +45,13 @@ async def run_with_checkpoint(
                 logger.info("Debate %s: stage %s already completed with matching hash. Skipping.", debate_id, stage_key)
                 return await load_fn(session)
 
-            # If running, wait briefly and retry checking
+            # If running, wait with exponential backoff
             if checkpoint.status == "running":
                 logger.warning("Debate %s: stage %s is currently marked as running. Waiting...", debate_id, stage_key)
-                for _ in range(3):
-                    await asyncio.sleep(1.0)
+                # Exponential backoff: up to 5 attempts, base 1s, max 8s
+                for attempt in range(5):
+                    delay = min(8.0, (2 ** attempt) + random.uniform(0.1, 0.5))
+                    await asyncio.sleep(delay)
                     stmt_retry = (
                         select(DebateStageCheckpoint)
                         .where(DebateStageCheckpoint.debate_id == debate_id)
@@ -73,6 +77,7 @@ async def run_with_checkpoint(
             checkpoint.error_code = None
             checkpoint.failed_at = None
             checkpoint.attempt = (checkpoint.attempt or 0) + 1
+            checkpoint.owner_id = owner_id
             session.add(checkpoint)
             await session.commit()
         else:
@@ -84,6 +89,7 @@ async def run_with_checkpoint(
                 input_hash=input_hash,
                 started_at=datetime.now(timezone.utc),
                 attempt=1,
+                owner_id=owner_id,
             )
             session.add(checkpoint)
             await session.commit()
@@ -103,12 +109,15 @@ async def run_with_checkpoint(
             res = await session.execute(stmt)
             checkpoint = res.scalars().first()
             if checkpoint:
-                checkpoint.status = "completed"
-                checkpoint.completed_at = datetime.now(timezone.utc)
-                if output_ref:
-                    checkpoint.output_reference = output_ref
-                session.add(checkpoint)
-                await session.commit()
+                if owner_id and checkpoint.owner_id != owner_id:
+                    logger.warning("Debate %s stage %s: Owner ID mismatch on complete. Expected %s, got %s. Ignoring.", debate_id, stage_key, owner_id, checkpoint.owner_id)
+                else:
+                    checkpoint.status = "completed"
+                    checkpoint.completed_at = datetime.now(timezone.utc)
+                    if output_ref:
+                        checkpoint.output_reference = output_ref
+                    session.add(checkpoint)
+                    await session.commit()
 
         return actual_result
     except Exception as exc:
@@ -117,11 +126,14 @@ async def run_with_checkpoint(
             res = await session.execute(stmt)
             checkpoint = res.scalars().first()
             if checkpoint:
-                checkpoint.status = "failed"
-                checkpoint.error_message = str(exc)
-                checkpoint.failed_at = datetime.now(timezone.utc)
-                checkpoint.error_code = getattr(exc, "code", "EXECUTION_ERROR")
-                checkpoint.completed_at = datetime.now(timezone.utc)
-                session.add(checkpoint)
-                await session.commit()
+                if owner_id and checkpoint.owner_id != owner_id:
+                    logger.warning("Debate %s stage %s: Owner ID mismatch on fail. Expected %s, got %s. Ignoring.", debate_id, stage_key, owner_id, checkpoint.owner_id)
+                else:
+                    checkpoint.status = "failed"
+                    checkpoint.error_message = str(exc)
+                    checkpoint.failed_at = datetime.now(timezone.utc)
+                    checkpoint.error_code = getattr(exc, "code", "EXECUTION_ERROR")
+                    checkpoint.completed_at = datetime.now(timezone.utc)
+                    session.add(checkpoint)
+                    await session.commit()
         raise exc
