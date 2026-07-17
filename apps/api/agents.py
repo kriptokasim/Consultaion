@@ -60,14 +60,26 @@ def resolve_api_key(
 
     Never reads from or writes to ``os.environ``.
     """
+    provider = provider.lower()
     if user_keys:
-        key = user_keys.get(provider) or user_keys.get(f"{provider}_API_KEY")
+        key = (
+            user_keys.get(provider)
+            or user_keys.get(provider.upper())
+            or user_keys.get(f"{provider.upper()}_API_KEY")
+        )
         if key:
             return key
 
-    # Map common provider names to settings attribute names
-    settings_key = f"{provider.upper()}_API_KEY"
-    return getattr(settings, settings_key, None)
+    # Gemini deployments commonly use either setting name.
+    settings_keys = {
+        "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        "google": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    }.get(provider, (f"{provider.upper()}_API_KEY",))
+    for settings_key in settings_keys:
+        key = getattr(settings, settings_key, None)
+        if key:
+            return key
+    return None
 
 _INJECTION_PATTERNS = [r"ignore previous instructions", r"disregard above", r"reveal the system prompt", r"print the system prompt"]
 
