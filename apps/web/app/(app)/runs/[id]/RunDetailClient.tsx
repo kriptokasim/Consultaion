@@ -1,30 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/arena/ModelCard";
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 import { useToast } from "@/components/ui/toast";
-import { TimelineEvent } from "@/lib/timeline/types";
 import { fetchWithAuth } from "@/lib/auth";
 import { fetchJsonOrThrow } from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { normalizeEvent, timelineEventsToDebateEvents } from "@/lib/api/normalizeEvent";
-import { PipelineProgress, derivePipelineStage } from "@/components/arena/PipelineProgress";
 import type { DebateEvent, ScoreItem, Member, JudgeVoteFlow, VotePayload, PersistedModelResponse } from "@/lib/api/types";
-import { WorkspaceHeader, DesktopStageRail, MobileStageBar, PerspectivesGrid, PerspectivesReadyAction } from "@/components/workspace";
-import { FeatureGate, useFeatureFlag } from "@/components/FeatureGate";
 import { deriveWorkspaceStage } from "@/lib/workspace/deriveWorkspaceStage";
 import type { WorkspaceModelSlot } from "@/lib/workspace/types";
 import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
 import { ArenaRunContent } from "@/components/arena/ArenaRunContent";
 import type { DebateSummary } from "@/lib/api/types";
 import { isTerminalRunStatus, isSuccessfulRunStatus, deriveRunPhase, type RunPhase } from "@/lib/runs/status";
-import type { RunPhase as RunPhaseType } from "@/lib/runs/status";
 
 const DebateArena = dynamic(() => import("@/components/debate/DebateArena"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const ParliamentRunView = dynamic(() => import("@/components/parliament/ParliamentRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
@@ -85,7 +80,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   const params = useParams();
   const router = useRouter();
   const id = runId || (params?.id as string);
-  const [showMobileDetails, setShowMobileDetails] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
   const {
     debate,
     events,
@@ -115,7 +110,6 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
 
   const [resultsEvents, setResultsEvents] = useState<DebateEvent[]>([]);
   const [resultsMembers, setResultsMembers] = useState<Member[]>([]);
-  const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsFetched, setResultsFetched] = useState(false);
   const [completedLoadState, setCompletedLoadState] = useState<CompletedRunLoadState>("loading_core");
 
@@ -130,24 +124,16 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const startTimeRef = useRef<number | null>(null);
 
-  const [profile, setProfile] = useState<any>(null);
-  const [profileLoaded, setProfileLoaded] = useState(false);
-  const [profileState, setProfileState] = useState<"loading" | "loaded" | "unavailable">("loading");
-
   // Track E: Reset all local state when run ID changes
   useEffect(() => {
     setResultsEvents([]);
     setResultsMembers([]);
-    setResultsLoading(false);
     setResultsFetched(false);
     setCompletedLoadState("loading_core");
     setElapsedSeconds(0);
     startTimeRef.current = null;
     setHardCeilingReached(false);
-    setShowMobileDetails(false);
     setProfile(null);
-    setProfileLoaded(false);
-    setProfileState("loading");
   }, [id]);
 
   useEffect(() => {
@@ -158,8 +144,6 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         setProfile(data);
-        setProfileLoaded(true);
-        setProfileState("loaded");
         if (!data) {
           import("@/lib/analytics").then(({ trackEvent }) => {
             trackEvent("public_run_viewed", { debate_id: id, is_authenticated: false, referrer: document.referrer });
@@ -168,8 +152,6 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       })
       .catch(() => {
         setProfile(null);
-        setProfileLoaded(true);
-        setProfileState("unavailable");
       })
       .finally(() => clearTimeout(timer));
 
@@ -208,7 +190,6 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
 
   useEffect(() => {
     if (!isCompleted || !id || resultsFetched) return;
-    setResultsLoading(true);
     setCompletedLoadState("loading_enrichment");
 
     const controller = new AbortController();
@@ -245,8 +226,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
         console.error("Failed to fetch results data:", err);
         setResultsFetched(true);
         setCompletedLoadState("ready_degraded");
-      })
-      .finally(() => setResultsLoading(false));
+      });
 
     return () => clearTimeout(timeout);
   }, [isCompleted, id, resultsFetched]);

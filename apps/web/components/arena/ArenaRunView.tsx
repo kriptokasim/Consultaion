@@ -5,11 +5,11 @@ import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle,
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { getArenaSynthesisArtifacts } from "@/lib/arena/synthesisArtifacts";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
-import { ModelCard, StreamingModelCard, ModelLogo, SkeletonCard, getColors } from "./ModelCard";
+import { ModelCard, StreamingModelCard, SkeletonCard } from "./ModelCard";
 import type { ModelResponse } from "./ModelCard";
-import type { StreamingModelBuffer, ModelState } from "@/lib/streaming/types";
+import type { StreamingModelBuffer } from "@/lib/streaming/types";
 import type { ResponsesState, TimelineState } from "@/hooks/useRunWorkspace";
-import { SynthesisCard, SynthesisLoading } from "./SynthesisCard";
+import { SynthesisLoading } from "./SynthesisCard";
 import { PublicRunCTATop, PublicRunCTAFooter } from "./CTABanner";
 import { DivergenceMeter } from "./DivergenceMeter";
 import { SynthesisReveal } from "./SynthesisReveal";

@@ -3,31 +3,25 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import LivePanel from "@/components/consultaion/consultaion/live-panel";
 import ParliamentHome from "@/components/parliament/ParliamentHome";
-import SessionHUD from "@/components/parliament/SessionHUD";
 import RateLimitBanner from "@/components/parliament/RateLimitBanner";
 import type { Member, ScoreItem } from "@/components/parliament/types";
 import type { ArenaRunUiState } from "@/components/parliament/StatusPill";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ApiError, getRateLimitInfo, startDebate, getDebate } from "@/lib/api";
-import { API_ORIGIN } from "@/lib/config/runtime";
 import { defaultPanelConfig, type PanelSeatConfig } from "@/lib/panels";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { getMe } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n/client";
-import { DebateReplay } from "@/components/debate/DebateReplay";
-import { PromptPanel, PromptPresets, AdvancedSettingsDrawer, DebateProgressBar, IdleDecisionComposer, ActiveWorkspaceComposer } from "@/components/prompt";
+import { PromptPresets, AdvancedSettingsDrawer, IdleDecisionComposer } from "@/components/prompt";
 import { ModelPanelSheet, AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
 import { ContinueRunSheet } from "@/components/auth/ContinueRunSheet";
 import { track } from "@/lib/analytics";
-import { OnboardingHint } from "@/components/ui/onboarding-hint";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { DashboardRunsHistory } from "@/components/dashboard/DashboardRunsHistory";
+import { normalizeApiError, type ClientError, shouldRedirectToLogin } from "@/lib/api/errorContract";
 import { type DomainEvent } from "@/lib/api/eventContract";
-import { normalizeApiError, type ClientError, shouldRedirectToLogin, getCorrelationId } from "@/lib/api/errorContract";
-import { ConnectionIndicator, type ConnectionStatus } from "@/components/connection/ConnectionIndicator";
 import { FirstRunGuide } from "@/components/onboarding/FirstRunGuide";
 
 import RunDetailClient from "../runs/[id]/RunDetailClient";
@@ -43,11 +37,6 @@ const seatsToMembers = (seats: PanelSeatConfig[]): Member[] =>
 
 const FALLBACK_MEMBERS: Member[] = seatsToMembers(defaultPanelConfig().seats)
 
-type VoteMeta = {
-  method?: string
-  ranking?: string[]
-}
-
 const ENABLE_CONVERSATION_MODE = true
 
 function ArenaPageContent() {
@@ -57,7 +46,6 @@ function ArenaPageContent() {
   const [events, setEvents] = useState<DomainEvent[]>([])
   const [activePersona, setActivePersona] = useState<string | undefined>(undefined)
   const [speakerTime, setSpeakerTime] = useState<number>(0)
-  const [vote, setVote] = useState<VoteMeta | undefined>(undefined)
   const [members, setMembers] = useState<Member[]>(() => seatsToMembers(panelConfig.seats))
   const [eventsLoading, setEventsLoading] = useState(false)
   const [currentDebateId, setCurrentDebateId] = useState<string | null>(null)
@@ -74,9 +62,6 @@ function ArenaPageContent() {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [mode, setMode] = useState<'arena' | 'debate' | 'conversation'>('arena')
   const [gatewayPolicy, setGatewayPolicy] = useState<string>('auto')
-  const [autoFocus, setAutoFocus] = useState(false)
-  const [truncated, setTruncated] = useState(false)
-  const [truncateReason, setTruncateReason] = useState<string | null>(null)
   const [errorState, setErrorState] = useState<{ title?: string; message: string; hint?: string; retryable?: boolean } | null>(null)
   const [continueRunSheetOpen, setContinueRunSheetOpen] = useState(false)
   const [modelPanelOpen, setModelPanelOpen] = useState(false)
@@ -137,7 +122,6 @@ function ArenaPageContent() {
   useEffect(() => {
     if (prefillPromptText) {
       setPrompt(decodeURIComponent(prefillPromptText))
-      setAutoFocus(true)
       const url = new URL(window.location.href)
       url.searchParams.delete('prefill_prompt')
       window.history.replaceState({}, '', url.toString())
@@ -146,7 +130,6 @@ function ArenaPageContent() {
 
   useEffect(() => {
     if (focusParam === 'prompt') {
-      setAutoFocus(true)
       const url = new URL(window.location.href)
       url.searchParams.delete('focus')
       window.history.replaceState({}, '', url.toString())
@@ -176,7 +159,6 @@ function ArenaPageContent() {
     setEvents([])
     setActivePersona(undefined)
     setSpeakerTime(0)
-    setVote(undefined)
     setEventsLoading(false)
     setLatestScores([])
     manualStartAttemptedRef.current = false
@@ -484,7 +466,7 @@ function ArenaPageContent() {
   }, [router, reset])
 
   return (
-    <main id="main" className="relative min-h-[calc(100vh-8rem)] flex flex-col items-center justify-center space-y-6 p-4 lg:p-6">
+    <main id="main" className="relative min-h-[calc(100vh-8rem)] flex flex-col items-center space-y-6 p-4 lg:p-6">
       {rateLimitNotice ? (
         <RateLimitBanner
           detail={rateLimitNotice.detail}
@@ -549,7 +531,7 @@ function ArenaPageContent() {
         )}
 
         {!running && sessionStatus === 'idle' && (
-          <FirstRunGuide onPrefill={(text) => { setPrompt(text); setAutoFocus(true); focusPromptPanel(); }} />
+          <FirstRunGuide onPrefill={(text) => { setPrompt(text); focusPromptPanel(); }} />
         )}
 
         <IdleDecisionComposer
@@ -626,11 +608,6 @@ function ArenaPageContent() {
         selectedModelIds={selectedModelIds}
         onSave={handleModelSelectionSave}
       />
-      {currentDebateId && events.length > 0 && (
-        <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-6 shadow-[0_18px_40px_#70491c1f] dark:border-amber-900/50 dark:bg-stone-900/70">
-          <DebateReplay debateId={currentDebateId} />
-        </section>
-      )}
     </main>
   )
 }
