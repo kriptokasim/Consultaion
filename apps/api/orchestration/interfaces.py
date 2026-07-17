@@ -25,6 +25,10 @@ class DebateContext:
     is_resume: bool = False
     continuation_id: Optional[str] = None
 
+    # Execution fencing identity. Both values are set for orchestrated runs.
+    execution_owner_id: Optional[str] = None
+    lease_epoch: Optional[int] = None
+
 
 @dataclass
 class DebateState:
