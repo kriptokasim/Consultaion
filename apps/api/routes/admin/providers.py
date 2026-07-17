@@ -62,8 +62,8 @@ async def admin_test_provider(
     """
     Perform a low-latency diagnostic completion ping to verify the API key for a provider is valid.
     """
-    from config import settings
-    
+    from agents import resolve_api_key
+
     # 1. Resolve provider configuration
     provider = provider.lower()
     
@@ -87,23 +87,14 @@ async def admin_test_provider(
             detail=f"Unsupported provider or no diagnostic model defined for '{provider}'"
         )
         
-    # Check if key exists
-    if provider == "gemini":
-        has_key = bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)
-    else:
-        has_key = bool(getattr(settings, f"{provider.upper()}_API_KEY", None))
-        
-    if not has_key:
+    api_key = resolve_api_key(provider)
+    if not api_key:
         return {
             "success": False,
             "error": "API key is not configured in settings",
             "latency_ms": 0,
         }
         
-    # Ensure keys are exported to os.environ for LiteLLM
-    from model_gateway import export_api_keys
-    export_api_keys()
-    
     model_to_test = fast_models[provider]
     
     import time
@@ -117,6 +108,7 @@ async def admin_test_provider(
             model=model_to_test,
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=5,
+            api_key=api_key,
         )
         latency_ms = (time.monotonic() - start_ts) * 1000
         
