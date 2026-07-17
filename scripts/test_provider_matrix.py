@@ -10,9 +10,8 @@ api_path = Path(__file__).resolve().parent.parent / "apps" / "api"
 sys.path.insert(0, str(api_path))
 os.chdir(str(api_path))
 
-from config import settings
+from agents import resolve_api_key
 from litellm import acompletion
-from model_gateway import export_api_keys
 from parliament.model_registry import ALL_MODELS, list_enabled_models
 
 # Map of test model strings for providers
@@ -35,13 +34,8 @@ async def check_provider(provider: str) -> dict:
     if provider not in TEST_MODELS:
         return {"success": False, "error": f"No diagnostic model mapped for {provider}", "latency_ms": 0}
 
-    # Verify key exists
-    if provider == "gemini":
-        has_key = bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)
-    else:
-        has_key = bool(getattr(settings, f"{provider.upper()}_API_KEY", None))
-
-    if not has_key:
+    api_key = resolve_api_key(provider)
+    if not api_key:
         return {"success": False, "error": "API key is not configured in settings", "latency_ms": 0}
 
     model = TEST_MODELS[provider]
@@ -53,6 +47,7 @@ async def check_provider(provider: str) -> dict:
             messages=[{"role": "user", "content": "ping"}],
             max_tokens=5,
             timeout=10,
+            api_key=api_key,
         )
         latency_ms = (time.monotonic() - start_ts) * 1000
         content = response.choices[0].message["content"] if response.choices else ""
@@ -74,9 +69,6 @@ async def main():
     print("=" * 60)
     print(" Consultaion Direct Provider Matrix Diagnostic Tool")
     print("=" * 60)
-
-    # Ensure keys are exported to os.environ for LiteLLM
-    export_api_keys()
 
     enabled_models = list_enabled_models()
     enabled_providers = sorted(list({m.provider for m in enabled_models}))
