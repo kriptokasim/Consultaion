@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from routes.admin.alerts import admin_test_alert, router as alerts_router, update_ratings_endpoint
+from routes.admin.leases import admin_leases, router as leases_router
 from routes.admin.logs import admin_events, admin_logs, router as logs_router
 from routes.admin.metrics import admin_metrics, router as metrics_router
 from routes.admin.models import admin_models, router as models_router
@@ -38,6 +39,7 @@ router.include_router(usage_router)
 router.include_router(operations_router)
 router.include_router(models_router)
 router.include_router(promotions_router)
+router.include_router(leases_router)
 router.include_router(logs_router)
 router.include_router(providers_router)
 router.include_router(metrics_router)
@@ -51,6 +53,7 @@ __all__ = [
     "admin_test_alert",
     "update_ratings_endpoint",
     "admin_events",
+    "admin_leases",
     "admin_logs",
     "admin_metrics",
     "admin_models",

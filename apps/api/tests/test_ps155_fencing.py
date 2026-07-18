@@ -17,16 +17,17 @@ def test_runner_id_is_unique_across_invocations():
 
 
 def test_runner_id_format():
-    """Runner ID should follow hostname-pid-uuid4hex8 format."""
+    """Runner ID should follow PS156 hostname:pid:uuid4 format."""
+    import uuid as _uuid
+
     from orchestrator import _get_runner_id
 
     rid = _get_runner_id()
-    parts = rid.split("-")
-    # At minimum: hostname, pid, 8-char hex
+    parts = rid.split(":")
+    # hostname, pid, uuid4
     assert len(parts) >= 3
-    hex_part = parts[-1]
-    assert len(hex_part) == 8
-    int(hex_part, 16)  # should not raise
+    uuid_part = parts[-1]
+    _uuid.UUID(uuid_part)  # raises if not a valid UUID
 
 
 # ── Lease acquisition with epoch ─────────────────────────────────────────
@@ -55,7 +56,7 @@ async def test_lease_acquire_returns_tuple():
     async def fake_session():
         yield mock_session
 
-    with patch("orchestrator.async_session_scope", fake_session):
+    with patch("orchestration.execution_lease.async_session_scope", fake_session):
         acquired, epoch = await _try_acquire_lease("debate-1", "runner-1")
 
     assert acquired is True
@@ -81,7 +82,7 @@ async def test_lease_acquire_returns_false_when_locked():
     async def fake_session():
         yield mock_session
 
-    with patch("orchestrator.async_session_scope", fake_session):
+    with patch("orchestration.execution_lease.async_session_scope", fake_session):
         acquired, epoch = await _try_acquire_lease("debate-1", "runner-2")
 
     assert acquired is False
@@ -109,7 +110,7 @@ async def test_heartbeat_with_correct_epoch_succeeds():
     async def fake_session():
         yield mock_session
 
-    with patch("orchestrator.async_session_scope", fake_session):
+    with patch("orchestration.execution_lease.async_session_scope", fake_session):
         result = await _heartbeat("debate-1", "runner-1", expected_epoch=5)
 
     assert result is True
@@ -133,7 +134,7 @@ async def test_heartbeat_with_stale_epoch_fails():
     async def fake_session():
         yield mock_session
 
-    with patch("orchestrator.async_session_scope", fake_session):
+    with patch("orchestration.execution_lease.async_session_scope", fake_session):
         result = await _heartbeat("debate-1", "runner-1", expected_epoch=3)
 
     assert result is False
@@ -202,7 +203,7 @@ async def test_release_lease_with_epoch():
     async def fake_session():
         yield mock_session
 
-    with patch("orchestrator.async_session_scope", fake_session):
+    with patch("orchestration.execution_lease.async_session_scope", fake_session):
         await _release_lease("debate-1", "runner-1", expected_epoch=5)
 
     # Verify execute was called (the SQL contains epoch guard)

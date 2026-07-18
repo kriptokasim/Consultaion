@@ -165,6 +165,8 @@ class Debate(SQLModel, table=True):
         # Covers: WHERE user_id=? AND status=? ORDER BY created_at DESC
         Index("ix_debate_user_status_created", "user_id", "status", "created_at"),
         Index("ix_debate_status_lease", "status", "lease_expires_at"),
+        # PS156: fencing token lookup by owner
+        Index("ix_debate_runner_epoch", "runner_id", "lease_epoch"),
     )
     id: str = Field(primary_key=True)
     prompt: str = Field(sa_column=Column(Text, nullable=False))
@@ -204,6 +206,8 @@ class Debate(SQLModel, table=True):
     lease_epoch: int = Field(default=0, nullable=False)
     # PS155.1: Globally unique execution owner (hostname-pid-uuid4)
     execution_owner_id: Optional[str] = Field(default=None, nullable=True)
+    # PS156: when the current execution owner acquired the lease
+    execution_started_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
 
 
@@ -636,6 +640,8 @@ class DebateStageCheckpoint(SQLModel, table=True):
     __tablename__ = "debate_stage_checkpoint"
     __table_args__ = (
         UniqueConstraint("debate_id", "stage_key", name="uq_debate_stage_checkpoint_debate_id_stage_key"),
+        # PS156: stale-checkpoint scanning / takeover diagnostics
+        Index("ix_checkpoint_status_updated", "status", "updated_at"),
     )
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
@@ -653,6 +659,12 @@ class DebateStageCheckpoint(SQLModel, table=True):
     error_code: Optional[str] = Field(default=None, nullable=True)
     # PS155.1: Owner who created/runs this checkpoint stage
     owner_id: Optional[str] = Field(default=None, nullable=True)
+    # PS156: fencing token of the owning Debate lease at claim time
+    lease_epoch: Optional[int] = Field(default=None, nullable=True)
+    # PS156: last mutation timestamp (stale-takeover evaluation)
+    updated_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    # PS156: long-stage liveness signal, separate from Debate-level heartbeat
+    heartbeat_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
 
 class DebateAttempt(SQLModel, table=True):

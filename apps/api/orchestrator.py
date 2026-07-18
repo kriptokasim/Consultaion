@@ -1,9 +1,7 @@
 import asyncio
 import logging
-import os
-import socket
-import uuid
-from datetime import datetime, timedelta, timezone
+from contextlib import suppress
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from agents import (
@@ -21,9 +19,22 @@ from integrations.langfuse import current_trace_id
 from integrations.slack import send_slack_alert
 from llm_errors import TransientLLMError
 from models import Debate, DebateRound, Message, Score, User, Vote
+from orchestration.execution_context import (
+    ExecutionLease,
+    bind_execution_lease,
+    new_owner_id,
+    reset_execution_lease,
+)
+from orchestration.execution_lease import (
+    ExecutionSupersededError,
+    LeaseRenewResult,
+    acquire_execution_lease,
+    heartbeat_loop,
+    release_execution_lease,
+    renew_execution_lease,
+)
 from parliament.engine import run_parliament_debate
 from schemas import DebateConfig, DebateSummary, default_agents, default_judges
-from sqlalchemy import or_, update
 from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
@@ -43,12 +54,12 @@ class SeatExecutionError(DebateEngineError):
 
 
 def _get_runner_id() -> str:
-    """Generate a unique ID for this worker process.
+    """Generate a unique execution-owner ID for one invocation.
 
-    PS155.1: Include a uuid4 fragment so that two processes on the same
-    host with recycled PIDs never collide.
+    PS156: hostname:pid:uuid4 — the UUID4 fragment guarantees uniqueness even
+    for two invocations within the same worker process.
     """
-    return f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    return new_owner_id()
 
 
 async def _update_continuation_status(
@@ -79,43 +90,16 @@ async def _try_acquire_lease(
 ) -> tuple[bool, int]:
     """Attempt to acquire execution ownership of a debate.
 
-    PS155.1: Atomically increments ``lease_epoch`` on every acquisition so
-    that stale workers holding a previous epoch value are fenced out of
-    subsequent heartbeat and checkpoint operations.
-
-    Returns:
-        (acquired, epoch) — *epoch* is the new monotonic value after the
-        UPDATE succeeds, or 0 if the lease was not acquired.
+    PS156: delegates to the atomic execution-lease module (single
+    UPDATE ... RETURNING; no self-reacquire; terminal states excluded).
+    Returns (acquired, epoch).
     """
-    async with async_session_scope() as session:
-        now = datetime.now(timezone.utc)
-        stmt = (
-            update(Debate)
-            .where(Debate.id == debate_id)
-            .where(
-                or_(
-                    Debate.runner_id.is_(None),
-                    Debate.lease_expires_at < now,
-                    Debate.runner_id == runner_id,
-                )
-            )
-            .values(
-                runner_id=runner_id,
-                execution_owner_id=runner_id,
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                last_heartbeat_at=now,
-                status="running",
-                lease_epoch=Debate.lease_epoch + 1,
-                run_attempt=Debate.run_attempt + 1,
-            )
-            .returning(Debate.lease_epoch)
-        )
-        result = await session.execute(stmt)
-        row = result.first()
-        await session.commit()
-        if row is None:
-            return False, 0
-        return True, row[0]
+    result = await acquire_execution_lease(
+        debate_id, owner_id=runner_id, lease_seconds=lease_seconds
+    )
+    if not result.acquired:
+        return False, 0
+    return True, result.lease.lease_epoch
 
 
 async def _heartbeat(
@@ -123,42 +107,24 @@ async def _heartbeat(
 ) -> bool:
     """Refresh the lease only if we still own the expected epoch.
 
-    PS155.1: Epoch-guarded heartbeat — a zombie worker whose epoch has
-    been superseded will silently fail to extend the lease.
+    PS156: rowcount-verified renewal — False means ownership was lost.
     """
-    async with async_session_scope() as session:
-        now = datetime.now(timezone.utc)
-        stmt = (
-            update(Debate)
-            .where(Debate.id == debate_id)
-            .where(Debate.runner_id == runner_id)
-            .where(Debate.lease_epoch == expected_epoch)
-            .values(
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                last_heartbeat_at=now,
-            )
-        )
-        result = await session.execute(stmt)
-        await session.commit()
-        return result.rowcount > 0
+    lease = ExecutionLease.create(
+        debate_id, owner_id=runner_id, lease_epoch=expected_epoch, run_attempt=0
+    )
+    result = await renew_execution_lease(lease, lease_seconds=lease_seconds)
+    return result is LeaseRenewResult.RENEWED
 
 
 async def _release_lease(debate_id: str, runner_id: str, expected_epoch: int) -> None:
     """Release execution ownership, guarded by epoch.
 
-    PS155.1: Only clears lease fields if our epoch still matches,
-    preventing a late release from clobbering a new owner.
+    PS156: never clears a newer owner's lease (conditional release).
     """
-    async with async_session_scope() as session:
-        stmt = (
-            update(Debate)
-            .where(Debate.id == debate_id)
-            .where(Debate.runner_id == runner_id)
-            .where(Debate.lease_epoch == expected_epoch)
-            .values(runner_id=None, lease_expires_at=None, execution_owner_id=None)
-        )
-        await session.execute(stmt)
-        await session.commit()
+    lease = ExecutionLease.create(
+        debate_id, owner_id=runner_id, lease_epoch=expected_epoch, run_attempt=0
+    )
+    await release_execution_lease(lease)
 
 
 async def _build_and_send_summary(debate_id: str, user_id: str | None) -> None:
@@ -564,6 +530,9 @@ async def run_debate(
     runner_id = _get_runner_id()
     heartbeat_task = None
     stop_heartbeat = asyncio.Event()
+    lease: Optional[ExecutionLease] = None
+    token = None
+    lease_epoch = 0
 
     # Check if this is a resume execution before leasing
     async with async_session_scope() as session:
@@ -572,315 +541,327 @@ async def run_debate(
             is_resume = is_resume or (db_debate.status == "perspectives_ready")
 
     try:
-        # Attempt to acquire lease immediately
-        acquired, lease_epoch = await _try_acquire_lease(debate_id, runner_id)
-        if not acquired:
+        # PS156 Track C: atomic lease acquisition — unique owner per invocation.
+        acquire = await acquire_execution_lease(
+            debate_id, owner_id=runner_id, lease_seconds=settings.LEASE_SECONDS
+        )
+        if not acquire.acquired:
             logger.warning(f"Debate {debate_id} lease acquisition failed for {runner_id}. Already running?")
             return
+        lease = acquire.lease
+        lease_epoch = lease.lease_epoch
+        token = bind_execution_lease(lease)
 
-        # Start heartbeat. Losing the fenced lease cancels the owning run.
-        owner_task = asyncio.current_task()
-
-        async def _lease_heartbeat_loop():
-            while not stop_heartbeat.is_set():
-                await asyncio.sleep(15)
-                if stop_heartbeat.is_set():
-                    break
-                try:
-                    still_owner = await _heartbeat(
-                        debate_id, runner_id, lease_epoch
-                    )
-                    if not still_owner:
-                        logger.error(
-                            "Debate %s lost execution lease at epoch %s; "
-                            "cancelling stale worker %s.",
-                            debate_id,
-                            lease_epoch,
-                            runner_id,
-                        )
-                        if owner_task and not owner_task.done():
-                            owner_task.cancel()
-                        return
-                except asyncio.CancelledError:
-                    raise
-                except Exception as heartbeat_exc:
-                    logger.warning(
-                        "Debate %s heartbeat failed: %s",
-                        debate_id,
-                        heartbeat_exc,
-                    )
-
-        heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
+        # PS156 Track D: rowcount-verified heartbeat with failure threshold.
+        heartbeat_task = asyncio.create_task(
+            heartbeat_loop(
+                lease,
+                lease_seconds=settings.LEASE_SECONDS,
+                interval_seconds=settings.LEASE_HEARTBEAT_INTERVAL_SECONDS,
+                failure_threshold=settings.LEASE_HEARTBEAT_FAILURE_THRESHOLD,
+                stop_event=stop_heartbeat,
+            )
+        )
 
         logger.info("Debate orchestration started (lease acquired)", extra=log_extra)
 
-        if settings.FAST_DEBATE:
-            return await _run_mock_debate(debate_id, channel_id, agent_configs, usage_tracker)
+        async def _owned_body() -> None:
+            nonlocal debate_user_id
+            if settings.FAST_DEBATE:
+                return await _run_mock_debate(debate_id, channel_id, agent_configs, usage_tracker)
 
-        # 1. Initialize State Manager
-        from orchestration.state import DebateStateManager
+            # 1. Initialize State Manager
+            from orchestration.state import DebateStateManager
         
-        # Load debate to get user_id for token tracking and email summaries
-        async with async_session_scope() as session:
-            debate = await session.get(Debate, debate_id)
-            if not debate:
-                 logger.error(f"Debate {debate_id} not found during execution.")
-                 return # Or handle error appropriately
+            # Load debate to get user_id for token tracking and email summaries
+            async with async_session_scope() as session:
+                debate = await session.get(Debate, debate_id)
+                if not debate:
+                     logger.error(f"Debate {debate_id} not found during execution.")
+                     return # Or handle error appropriately
             
-            debate_user_id = debate.user_id
-            prompt = debate.prompt
-            config_data = debate.config
-            is_parliament = bool(debate.panel_config)
-            debate_mode = debate.mode or "debate"
+                debate_user_id = debate.user_id
+                prompt = debate.prompt
+                is_parliament = bool(debate.panel_config)
+                debate_mode = debate.mode or "debate"
 
-            # Resolve current attempt_id for attempt-scoped records
-            current_attempt_id: str | None = None
-            if debate.run_attempt:
-                from models import DebateAttempt
-                from sqlmodel import select as sel
-                result = await session.execute(
-                    sel(DebateAttempt).where(
-                        DebateAttempt.debate_id == debate_id,
-                        DebateAttempt.attempt_number == debate.run_attempt,
+                # Resolve current attempt_id for attempt-scoped records
+                current_attempt_id: str | None = None
+                if debate.run_attempt:
+                    from models import DebateAttempt
+                    from sqlmodel import select as sel
+                    result = await session.execute(
+                        sel(DebateAttempt).where(
+                            DebateAttempt.debate_id == debate_id,
+                            DebateAttempt.attempt_number == debate.run_attempt,
+                        )
                     )
+                    attempt = result.scalars().first()
+                    if attempt:
+                        current_attempt_id = attempt.id
+
+            state_manager = DebateStateManager(debate_id, debate_user_id, attempt_id=current_attempt_id, execution_lease=lease)
+            await state_manager.set_status("running")
+            if is_resume:
+                await _update_continuation_status(continuation_id, "running", ["dispatched", "requested", "preflight_passed"])
+
+            if debate_mode == "arena":
+                from arena.engine import run_arena
+
+                result = await run_arena(
+                    debate_id,
+                    model_id=model_id,
+                    continue_pipeline=is_resume,
+                    execution_owner_id=runner_id,
+                    lease_epoch=lease_epoch,
                 )
-                attempt = result.scalars().first()
-                if attempt:
-                    current_attempt_id = attempt.id
 
-        state_manager = DebateStateManager(debate_id, debate_user_id, attempt_id=current_attempt_id)
-        await state_manager.set_status("running")
-        if is_resume:
-            await _update_continuation_status(continuation_id, "running", ["dispatched", "requested", "preflight_passed"])
+                if result.status == "perspectives_ready":
+                    logger.info("Arena run %s paused at perspectives_ready stage", debate_id, extra=log_extra)
+                    if is_resume and continuation_id:
+                        await _update_continuation_status(continuation_id, "paused", ["running"])
+                    return
 
-        if debate_mode == "arena":
-            from arena.engine import run_arena
-
-            result = await run_arena(
-                debate_id,
-                model_id=model_id,
-                continue_pipeline=is_resume,
-                execution_owner_id=runner_id,
-                lease_epoch=lease_epoch,
-            )
-
-            if result.status == "perspectives_ready":
-                logger.info("Arena run %s paused at perspectives_ready stage", debate_id, extra=log_extra)
-                if is_resume and continuation_id:
-                    await _update_continuation_status(continuation_id, "paused", ["running"])
-                return
-
-            await state_manager.complete_debate(
-                final_content=result.final_answer,
-                final_meta=result.final_meta,
-                status=result.status,
-                tokens_total=float(result.usage_tracker.total_tokens),
-            )
-
-            await backend.publish(
-                channel_id,
-                {
-                    "type": "arena_synthesis",
-                    "debate_id": debate_id,
-                    "round": 0,
-                    "payload": {
-                        "content": result.final_answer,
-                        "meta": result.final_meta,
-                    },
-                },
-            )
-
-            if result.status == "completed":
-                await _build_and_send_summary(debate_id, debate_user_id)
-                try:
-                    if settings.DEBATE_DISPATCH_MODE == "celery":
-                        from worker.arena_tasks import compute_divergence_task
-                        compute_divergence_task.delay(debate_id)
-                    else:
-                        from worker.arena_tasks import _execute_divergence_computation
-                        await _execute_divergence_computation(debate_id)
-                except Exception as exc:
-                    logger.warning("Failed to trigger divergence computation for debate %s: %s", debate_id, exc)
-                await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
-            else:
-                await _update_continuation_status(
-                    continuation_id,
-                    "failed",
-                    ["running", "dispatched", "requested", "preflight_passed"],
-                    failure_code="arena_run_failed",
-                    failure_detail_safe="Arena run completed with non-success status"
+                await state_manager.complete_debate(
+                    final_content=result.final_answer,
+                    final_meta=result.final_meta,
+                    status=result.status,
+                    tokens_total=float(result.usage_tracker.total_tokens),
                 )
-            return
 
-        if debate_mode == "compare":
-            from compare.engine import run_compare_debate
-            
-            result = await run_compare_debate(debate_id)
-            
-            await state_manager.complete_debate(
-                final_content=result.final_answer,
-                final_meta=result.final_meta,
-                status=result.status,
-                tokens_total=float(result.usage_tracker.total_tokens)
-            )
-            
-            await backend.publish(
-                channel_id,
-                {
-                    "type": "final",
-                    "round": 0,
-                    "debate_id": debate_id,
-                    "payload": {
-                        "content": result.final_answer,
-                        "meta": result.final_meta,
-                    }
-                },
-            )
-            if result.status == "completed":
-                await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
-            else:
-                await _update_continuation_status(
-                    continuation_id,
-                    "failed",
-                    ["running", "dispatched", "requested", "preflight_passed"],
-                    failure_code="compare_run_failed",
-                    failure_detail_safe="Compare run completed with non-success status"
-                )
-            return
-
-        if debate_mode == "conversation":
-            if not settings.ENABLE_CONVERSATION_MODE:
-                raise ValueError("Conversation mode is disabled by configuration.")
-
-            result = await run_conversation_debate(debate_id, model_id=model_id)
-            
-            await state_manager.complete_debate(
-                final_content=result.final_answer,
-                final_meta=result.final_meta,
-                status=result.status,
-                tokens_total=float(result.usage_tracker.total_tokens)
-            )
-            
-            await backend.publish(
-                channel_id,
-                {
-                    "type": "final",
-                    "round": 0,
-                    "debate_id": debate_id,
-                    "payload": {
-                        "content": result.final_answer,
-                        "meta": result.final_meta,
-                    }
-                },
-            )
-            if result.status == "completed":
-                await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
-            else:
-                await _update_continuation_status(
-                    continuation_id,
-                    "failed",
-                    ["running", "dispatched", "requested", "preflight_passed"],
-                    failure_code="conversation_run_failed",
-                    failure_detail_safe="Conversation run completed with non-success status"
-                )
-            return
-
-        if is_parliament:
-             # Legacy Parliament Path (for now, or wrap in a pipeline later)
-            panel_result = await run_parliament_debate(debate_id, model_id=model_id)
-            final_meta = panel_result.final_meta
-            final_status = panel_result.status or "completed"
-            if panel_result.status != "completed" or panel_result.error_reason:
-                final_status = "failed"
-            final_content = (
-                panel_result.final_answer
-                if panel_result.final_answer
-                else "Debate aborted due to seat failures."
-            )
-            
-            await state_manager.complete_debate(
-                final_content=final_content,
-                final_meta=final_meta,
-                status=final_status,
-                tokens_total=float(panel_result.usage_tracker.total_tokens)
-            )
-
-            if final_status == "failed":
                 await backend.publish(
                     channel_id,
                     {
-                        "type": "error",
+                        "type": "arena_synthesis",
                         "debate_id": debate_id,
                         "round": 0,
                         "payload": {
-                            "reason": panel_result.error_reason or "seat_failure_threshold_exceeded",
+                            "content": result.final_answer,
+                            "meta": result.final_meta,
+                        },
+                    },
+                )
+
+                if result.status == "completed":
+                    await _build_and_send_summary(debate_id, debate_user_id)
+                    try:
+                        if settings.DEBATE_DISPATCH_MODE == "celery":
+                            from worker.arena_tasks import compute_divergence_task
+                            compute_divergence_task.delay(debate_id)
+                        else:
+                            from worker.arena_tasks import _execute_divergence_computation
+                            await _execute_divergence_computation(debate_id)
+                    except Exception as exc:
+                        logger.warning("Failed to trigger divergence computation for debate %s: %s", debate_id, exc)
+                    await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
+                else:
+                    await _update_continuation_status(
+                        continuation_id,
+                        "failed",
+                        ["running", "dispatched", "requested", "preflight_passed"],
+                        failure_code="arena_run_failed",
+                        failure_detail_safe="Arena run completed with non-success status"
+                    )
+                return
+
+            if debate_mode == "compare":
+                from compare.engine import run_compare_debate
+            
+                result = await run_compare_debate(debate_id)
+            
+                await state_manager.complete_debate(
+                    final_content=result.final_answer,
+                    final_meta=result.final_meta,
+                    status=result.status,
+                    tokens_total=float(result.usage_tracker.total_tokens)
+                )
+            
+                await backend.publish(
+                    channel_id,
+                    {
+                        "type": "final",
+                        "round": 0,
+                        "debate_id": debate_id,
+                        "payload": {
+                            "content": result.final_answer,
+                            "meta": result.final_meta,
+                        }
+                    },
+                )
+                if result.status == "completed":
+                    await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
+                else:
+                    await _update_continuation_status(
+                        continuation_id,
+                        "failed",
+                        ["running", "dispatched", "requested", "preflight_passed"],
+                        failure_code="compare_run_failed",
+                        failure_detail_safe="Compare run completed with non-success status"
+                    )
+                return
+
+            if debate_mode == "conversation":
+                if not settings.ENABLE_CONVERSATION_MODE:
+                    raise ValueError("Conversation mode is disabled by configuration.")
+
+                result = await run_conversation_debate(debate_id, model_id=model_id)
+            
+                await state_manager.complete_debate(
+                    final_content=result.final_answer,
+                    final_meta=result.final_meta,
+                    status=result.status,
+                    tokens_total=float(result.usage_tracker.total_tokens)
+                )
+            
+                await backend.publish(
+                    channel_id,
+                    {
+                        "type": "final",
+                        "round": 0,
+                        "debate_id": debate_id,
+                        "payload": {
+                            "content": result.final_answer,
+                            "meta": result.final_meta,
+                        }
+                    },
+                )
+                if result.status == "completed":
+                    await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
+                else:
+                    await _update_continuation_status(
+                        continuation_id,
+                        "failed",
+                        ["running", "dispatched", "requested", "preflight_passed"],
+                        failure_code="conversation_run_failed",
+                        failure_detail_safe="Conversation run completed with non-success status"
+                    )
+                return
+
+            if is_parliament:
+                 # Legacy Parliament Path (for now, or wrap in a pipeline later)
+                panel_result = await run_parliament_debate(debate_id, model_id=model_id)
+                final_meta = panel_result.final_meta
+                final_status = panel_result.status or "completed"
+                if panel_result.status != "completed" or panel_result.error_reason:
+                    final_status = "failed"
+                final_content = (
+                    panel_result.final_answer
+                    if panel_result.final_answer
+                    else "Debate aborted due to seat failures."
+                )
+            
+                await state_manager.complete_debate(
+                    final_content=final_content,
+                    final_meta=final_meta,
+                    status=final_status,
+                    tokens_total=float(panel_result.usage_tracker.total_tokens)
+                )
+
+                if final_status == "failed":
+                    await backend.publish(
+                        channel_id,
+                        {
+                            "type": "error",
+                            "debate_id": debate_id,
+                            "round": 0,
+                            "payload": {
+                                "reason": panel_result.error_reason or "seat_failure_threshold_exceeded",
+                                "meta": final_meta,
+                            }
+                        },
+                    )
+                    await _update_continuation_status(
+                        continuation_id,
+                        "failed",
+                        ["running", "dispatched", "requested", "preflight_passed"],
+                        failure_code="parliament_run_failed",
+                        failure_detail_safe=panel_result.error_reason or "seat_failure_threshold_exceeded"
+                    )
+                    return
+                await backend.publish(
+                    channel_id,
+                    {
+                        "type": "final",
+                        "debate_id": debate_id,
+                        "round": 0,
+                        "payload": {
+                            "content": panel_result.final_answer,
                             "meta": final_meta,
                         }
                     },
                 )
-                await _update_continuation_status(
-                    continuation_id,
-                    "failed",
-                    ["running", "dispatched", "requested", "preflight_passed"],
-                    failure_code="parliament_run_failed",
-                    failure_detail_safe=panel_result.error_reason or "seat_failure_threshold_exceeded"
-                )
+                await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
                 return
-            await backend.publish(
-                channel_id,
-                {
-                    "type": "final",
-                    "debate_id": debate_id,
-                    "round": 0,
-                    "payload": {
-                        "content": panel_result.final_answer,
-                        "meta": final_meta,
-                    }
-                },
+
+            # 3. Standard Pipeline Execution
+            from orchestration.engine import DebateRunner
+            from orchestration.interfaces import DebateContext
+            from orchestration.pipeline import StandardDebatePipeline
+
+            context = DebateContext(
+                debate_id=debate_id,
+                prompt=prompt,
+                config=config,
+                channel_id=channel_id,
+                model_id=model_id,
+                usage_tracker=usage_tracker, # Pass the tracker we initialized
+                is_resume=is_resume,
+                continuation_id=continuation_id,
+                execution_owner_id=runner_id,
+                lease_epoch=lease_epoch,
             )
+        
+            pipeline = StandardDebatePipeline(state_manager)
+            runner = DebateRunner(pipeline, state_manager)
+        
+            final_state = await runner.run(context)
+        
+            if final_state and final_state.status == "perspectives_ready":
+                logger.info("Debate %s paused at perspectives_ready stage", debate_id, extra=log_extra)
+                if is_resume and continuation_id:
+                    await _update_continuation_status(continuation_id, "paused", ["running"])
+                return
+        
+            # Success path for Standard Pipeline
+            logger.info("Debate completed successfully", extra=log_extra)
+            increment_metric("debate.completed")
+            await _build_and_send_summary(debate_id, debate_user_id)
             await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
-            return
 
-        # 3. Standard Pipeline Execution
-        from orchestration.engine import DebateRunner
-        from orchestration.interfaces import DebateContext
-        from orchestration.pipeline import StandardDebatePipeline
-
-        context = DebateContext(
-            debate_id=debate_id,
-            prompt=prompt,
-            config=config,
-            channel_id=channel_id,
-            model_id=model_id,
-            usage_tracker=usage_tracker, # Pass the tracker we initialized
-            is_resume=is_resume,
-            continuation_id=continuation_id,
-            execution_owner_id=runner_id,
-            lease_epoch=lease_epoch,
-        )
-        
-        pipeline = StandardDebatePipeline(state_manager)
-        runner = DebateRunner(pipeline, state_manager)
-        
-        final_state = await runner.run(context)
-        
-        if final_state and final_state.status == "perspectives_ready":
-            logger.info("Debate %s paused at perspectives_ready stage", debate_id, extra=log_extra)
-            if is_resume and continuation_id:
-                await _update_continuation_status(continuation_id, "paused", ["running"])
-            return
-        
-        # Success path for Standard Pipeline
-        logger.info("Debate completed successfully", extra=log_extra)
-        increment_metric("debate.completed")
-        await _build_and_send_summary(debate_id, debate_user_id)
-        await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
+        # PS156 Track E: race the owned body against lease loss.
+        body_task = asyncio.create_task(_owned_body())
+        lease_lost_task = asyncio.create_task(lease.lease_lost_event.wait())
+        try:
+            done, _pending = await asyncio.wait(
+                {body_task, lease_lost_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            lease_lost_task.cancel()
+        if lease_lost_task in done:
+            body_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await body_task
+            from metrics import increment_metric as _inc_metric
+            _inc_metric("debate.lease.execution_cancelled")
+            logger.warning(
+                "debate.execution_superseded debate_id=%s owner=%s epoch=%s",
+                debate_id, lease.owner_id, lease.lease_epoch,
+            )
+            raise ExecutionSupersededError(
+                f"Debate {debate_id} execution superseded — lease epoch "
+                f"{lease.lease_epoch} no longer owned by {lease.owner_id}."
+            )
+        await body_task  # propagate body exceptions into the handlers below
 
     except asyncio.CancelledError:
         logger.warning(
-            "Debate execution cancelled after lease ownership was lost",
-            extra=log_extra,
+            "debate.caller_cancelled debate_id=%s owner=%s",
+            debate_id, runner_id,
         )
+        raise
+
+    except ExecutionSupersededError:
+        # A newer owner took over; do not write terminal state (Track J).
         raise
 
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
@@ -903,6 +884,12 @@ async def run_debate(
         )
         try:
             async with async_session_scope() as session:
+                # PS156 Track F: fence terminal writes + billing on ownership.
+                # A superseded worker raises here, skipping both the status
+                # write and the hosted-credit refund.
+                if lease is not None:
+                    from orchestration.fencing import assert_execution_ownership
+                    await assert_execution_ownership(session, lease)
                 debate = await session.get(Debate, debate_id)
                 if debate and debate.status != "failed":
                     debate.status = "failed"
@@ -966,6 +953,12 @@ async def run_debate(
         # But we need to ensure DB status is updated if Runner failed completely
         try:
             async with async_session_scope() as session:
+                # PS156 Track F: fence terminal writes + billing on ownership.
+                # A superseded worker raises here, skipping both the status
+                # write and the hosted-credit refund.
+                if lease is not None:
+                    from orchestration.fencing import assert_execution_ownership
+                    await assert_execution_ownership(session, lease)
                 debate = await session.get(Debate, debate_id)
                 if debate and debate.status != "failed":
                     debate.status = "failed"
@@ -1022,11 +1015,13 @@ async def run_debate(
         )
 
     finally:
-        # Cleanup lease and heartbeat
+        # PS156 Track E: stop heartbeat, conditionally release only our own
+        # lease (never a newer owner's), and reset the execution context.
+        stop_heartbeat.set()
         if heartbeat_task:
-            stop_heartbeat.set()
-            try:
+            with suppress(Exception):
                 await heartbeat_task
-            except Exception:
-                pass
-            await _release_lease(debate_id, runner_id, lease_epoch)
+        if lease is not None:
+            await release_execution_lease(lease)
+        if token is not None:
+            reset_execution_lease(token)

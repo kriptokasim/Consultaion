@@ -39,10 +39,12 @@ async def test_lease_acquisition():
     with session_scope() as session:
         debate = create_test_debate(session, "test-acq")
         debate_id = debate.id
-        
+
     # Attempt 1: Success
-    assert await _try_acquire_lease(debate_id, TEST_RUNNER_A, lease_seconds=10) is True
-    
+    acquired, epoch = await _try_acquire_lease(debate_id, TEST_RUNNER_A, lease_seconds=10)
+    assert acquired is True
+    assert epoch >= 1
+
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
         assert debate.runner_id == TEST_RUNNER_A
@@ -51,10 +53,13 @@ async def test_lease_acquisition():
         assert expiry > datetime.now(timezone.utc)
 
     # Attempt 2: Failure (Locked by A)
-    assert await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10) is False
-    
-    # Attempt 3: Success (Re-acquire by A)
-    assert await _try_acquire_lease(debate_id, TEST_RUNNER_A, lease_seconds=10) is True
+    acquired_b, _ = await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10)
+    assert acquired_b is False
+
+    # Attempt 3: PS156 C1 — re-acquire of an unexpired lease is denied even
+    # for the same runner_id; every invocation is a distinct owner.
+    acquired_a2, _ = await _try_acquire_lease(debate_id, TEST_RUNNER_A, lease_seconds=10)
+    assert acquired_a2 is False
 
 @pytest.mark.anyio
 async def test_lease_expiration_takeover():
@@ -70,7 +75,8 @@ async def test_lease_expiration_takeover():
         session.commit()
         
     # Attempt 4: Success (Takeover by B because expired)
-    assert await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10) is True
+    acquired, _ = await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10)
+    assert acquired is True
     
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
@@ -81,7 +87,8 @@ async def test_heartbeat_updates():
     debate_id = "test-heartbeat"
     with session_scope() as session:
         create_test_debate(session, debate_id)
-        await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10)
+        acquired, epoch = await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10)
+        assert acquired is True
         debate = session.get(Debate, debate_id)
         old_expiry = ensure_aware(debate.lease_expires_at)
         
@@ -89,7 +96,8 @@ async def test_heartbeat_updates():
     await asyncio.sleep(0.1)
     
     # Heartbeat
-    await _heartbeat(debate_id, TEST_RUNNER_B, lease_seconds=20)
+    renewed = await _heartbeat(debate_id, TEST_RUNNER_B, epoch, lease_seconds=20)
+    assert renewed is True
     
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
@@ -102,9 +110,10 @@ async def test_release_lease():
     debate_id = "test-release"
     with session_scope() as session:
         create_test_debate(session, debate_id)
-        await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10)
-        
-    await _release_lease(debate_id, TEST_RUNNER_B)
+        acquired, epoch = await _try_acquire_lease(debate_id, TEST_RUNNER_B, lease_seconds=10)
+        assert acquired is True
+
+    await _release_lease(debate_id, TEST_RUNNER_B, epoch)
     
     with session_scope() as session:
         debate = session.get(Debate, debate_id)

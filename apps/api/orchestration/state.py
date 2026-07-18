@@ -18,14 +18,32 @@ class DebateStateManager:
     Patchset 72: Migrated to Async SQLAlchemy.
     Patchset 133: Added attempt_id for attempt-scoped records.
     """
-    def __init__(self, debate_id: str, user_id: Optional[str] = None, attempt_id: Optional[str] = None):
+    def __init__(self, debate_id: str, user_id: Optional[str] = None, attempt_id: Optional[str] = None, execution_lease=None):
         self.debate_id = debate_id
         self.user_id = user_id
         self.attempt_id = attempt_id
+        self.execution_lease = execution_lease
         self._resume_token: Optional[str] = None
 
     async def set_status(self, status: str, meta: Optional[Dict[str, Any]] = None) -> None:
-        """Update the debate status and metadata."""
+        """Update the debate status and metadata.
+
+        PS156 Track F: when an execution lease is bound, the write is fenced —
+        a stale worker gets ExecutionSupersededError instead of clobbering
+        the newer owner's state.
+        """
+        if self.execution_lease is not None:
+            from orchestration.fencing import fenced_debate_update
+
+            values: Dict[str, Any] = {"status": status, "updated_at": datetime.now(timezone.utc)}
+            if meta:
+                from json_contracts import safe_validate_final_meta
+                validated = safe_validate_final_meta(meta)
+                values["final_meta"] = validated.model_dump() if validated else meta
+            async with async_session_scope() as session:
+                await fenced_debate_update(session, self.execution_lease, values, what=f"status:{status}")
+                await session.commit()
+            return
         async with async_session_scope() as session:
             debate = await session.get(Debate, self.debate_id)
             if debate:
@@ -117,19 +135,43 @@ class DebateStateManager:
         status: str,
         tokens_total: float = 0.0
     ) -> None:
-        """Finalize the debate record and record usage."""
+        """Finalize the debate record and record usage.
+
+        PS156 Track F: when an execution lease is bound, final_content /
+        final_meta / status are written via a single owner-and-epoch
+        conditional UPDATE; a stale worker raises ExecutionSupersededError
+        before any related state (checkpoint, usage) is touched.
+        """
         async with async_session_scope() as session:
-            debate = await session.get(Debate, self.debate_id)
-            if not debate:
-                return
-            debate.final_content = final_content
             # Validate final_meta with JSON contract
             from json_contracts import safe_validate_final_meta
             validated = safe_validate_final_meta(final_meta)
-            debate.final_meta = validated.model_dump() if validated else final_meta
-            debate.status = status
-            debate.updated_at = datetime.now(timezone.utc)
-            session.add(debate)
+            meta_payload = validated.model_dump() if validated else final_meta
+
+            if self.execution_lease is not None:
+                from orchestration.fencing import fenced_debate_update
+
+                await fenced_debate_update(
+                    session,
+                    self.execution_lease,
+                    {
+                        "final_content": final_content,
+                        "final_meta": meta_payload,
+                        "status": status,
+                        "updated_at": datetime.now(timezone.utc),
+                    },
+                    what="complete_debate",
+                )
+                debate = await session.get(Debate, self.debate_id)
+            else:
+                debate = await session.get(Debate, self.debate_id)
+                if not debate:
+                    return
+                debate.final_content = final_content
+                debate.final_meta = meta_payload
+                debate.status = status
+                debate.updated_at = datetime.now(timezone.utc)
+                session.add(debate)
             
             # Also mark checkpoint as done
             await self._update_checkpoint_in_session(

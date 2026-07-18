@@ -96,6 +96,18 @@ class AppSettings(BaseSettings):
     USE_MOCK: bool = False
     REQUIRE_REAL_LLM: bool = False
     DISABLE_RATINGS: bool = False
+
+    # PS156: Execution lease fencing
+    LEASE_SECONDS: int = 60
+    LEASE_HEARTBEAT_INTERVAL_SECONDS: int = 15
+    LEASE_HEARTBEAT_FAILURE_THRESHOLD: int = 2
+
+    # PS156: Stage-checkpoint waiting / staleness
+    CHECKPOINT_WAIT_TIMEOUT_SECONDS: float = 30.0
+    CHECKPOINT_POLL_INITIAL_MS: int = 100
+    CHECKPOINT_POLL_MAX_MS: int = 1500
+    CHECKPOINT_STALE_SECONDS: float = 120.0
+
     # Patchset 135: Free-only enforcement — when True, the gateway rejects
     # any model whose cost_class is not explicitly "free".
     FREE_ONLY_MODE: bool = False
@@ -313,6 +325,15 @@ class AppSettings(BaseSettings):
         return v
 
     def model_post_init(self, __context):
+        # PS156: Lease heartbeat must fire well before the lease expires,
+        # otherwise ownership can never be renewed in time.
+        if self.LEASE_HEARTBEAT_INTERVAL_SECONDS >= self.LEASE_SECONDS:
+            raise ValueError(
+                "LEASE_HEARTBEAT_INTERVAL_SECONDS "
+                f"({self.LEASE_HEARTBEAT_INTERVAL_SECONDS}) must be less than "
+                f"LEASE_SECONDS ({self.LEASE_SECONDS})"
+            )
+
         # Patchset 29.0: Validate production secrets
         env_label = (self.ENV or "development").lower()
         local_envs = {"development", "dev", "local", "test"}
