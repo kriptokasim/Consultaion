@@ -128,8 +128,18 @@ def test_admin_payload_helpers_return_data():
 
     with Session(engine) as session:
         admin_db = session.get(User, admin_id)
-        payload = admin_users(q=None, plan_slug=None, limit=100, offset=0, session=session, _=admin_db)
+        payload = admin_users(
+            q=None,
+            email=None,
+            id=None,
+            plan_slug=None,
+            limit=100,
+            offset=0,
+            session=session,
+            _=admin_db,
+        )
     assert any(item["email"] == member_email for item in payload["items"])
+    assert any(item["email"] == member_email for item in payload["users"])
 
     with Session(engine) as session:
         admin_db = session.get(User, admin_id)
@@ -274,4 +284,3 @@ def test_admin_metrics():
     assert res["economics"]["cumulative_llm_cost"] >= 0.06
     assert res["economics"]["provider_cost_breakdown"]["openai"] >= 0.015
     assert res["economics"]["provider_cost_breakdown"]["anthropic"] >= 0.045
-

@@ -12,6 +12,7 @@ import { useRunWorkspace } from "./useRunWorkspace";
 
 const mockGetDebate = vi.fn();
 const mockGetDebateResponses = vi.fn();
+const sseHarness = vi.hoisted(() => ({ onEvent: null as null | ((event: unknown) => void) }));
 
 vi.mock("@/lib/api", () => ({
   getDebate: (...args: unknown[]) => mockGetDebate(...args),
@@ -34,7 +35,10 @@ vi.mock("@/lib/config/runtime", () => ({
 }));
 
 vi.mock("@/lib/sse", () => ({
-  useEventSource: vi.fn(() => ({ status: "idle" })),
+  useEventSource: vi.fn((_url: unknown, options: { onEvent?: (event: unknown) => void }) => {
+    sseHarness.onEvent = options.onEvent || null;
+    return { status: "idle" };
+  }),
 }));
 
 vi.mock("@/lib/api/normalizeEvent", () => ({
@@ -42,15 +46,10 @@ vi.mock("@/lib/api/normalizeEvent", () => ({
   normalizeTimelineItems: vi.fn((e: unknown) => e),
 }));
 
-vi.mock("@/lib/workspace/streamReducer", () => ({
-  streamingReducer: vi.fn((s: unknown) => s),
-  INITIAL_STREAMING_STATE: { buffers: new Map(), persisted: [] },
-  selectMergedResponses: vi.fn(() => []),
-}));
-
 describe("Hydration Generation Isolation (Track E)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sseHarness.onEvent = null;
   });
 
   it("stale fetch from debate A cannot update debate B", async () => {
@@ -139,5 +138,63 @@ describe("Hydration Generation Isolation (Track E)", () => {
 
     // State should not have transitioned to "ready" with stale data
     expect(result.current.coreState).not.toBe("ready");
+  });
+
+  it("late structural SSE refetch from A cannot overwrite B", async () => {
+    let resolveStructuralA: (value: unknown) => void;
+    const structuralA = new Promise((resolve) => {
+      resolveStructuralA = resolve;
+    });
+    mockGetDebate
+      .mockResolvedValueOnce({ id: "debate-A", status: "running" })
+      .mockImplementationOnce(() => structuralA)
+      .mockResolvedValueOnce({ id: "debate-B", status: "running" });
+    mockGetDebateResponses.mockResolvedValue({ items: [] });
+
+    const { result, rerender } = renderHook(
+      ({ id }) => useRunWorkspace(id),
+      { initialProps: { id: "debate-A" } },
+    );
+    await waitFor(() => expect(result.current.debate?.id).toBe("debate-A"));
+    const oldHandler = sseHarness.onEvent;
+    expect(oldHandler).toBeTypeOf("function");
+
+    act(() => {
+      oldHandler!({ type: "stage_checkpoint", debate_id: "debate-A", payload: {} });
+    });
+    rerender({ id: "debate-B" });
+    await waitFor(() => expect(result.current.debate?.id).toBe("debate-B"));
+
+    await act(async () => {
+      resolveStructuralA!({ id: "debate-A", status: "completed" });
+      await structuralA;
+    });
+    expect(result.current.debate?.id).toBe("debate-B");
+  });
+
+  it("clears active streaming buffers when the run changes", async () => {
+    mockGetDebate
+      .mockResolvedValueOnce({ id: "debate-A", status: "running" })
+      .mockResolvedValueOnce({ id: "debate-B", status: "running" });
+    mockGetDebateResponses.mockResolvedValue({ items: [] });
+
+    const { result, rerender } = renderHook(
+      ({ id }) => useRunWorkspace(id),
+      { initialProps: { id: "debate-A" } },
+    );
+    await waitFor(() => expect(result.current.debate?.id).toBe("debate-A"));
+
+    act(() => {
+      sseHarness.onEvent!({
+        type: "model_response_started",
+        debate_id: "debate-A",
+        payload: { response_id: "response-A", model_id: "model-A" },
+      });
+    });
+    await waitFor(() => expect(result.current.mergedStreamingResponses).toHaveLength(1));
+
+    rerender({ id: "debate-B" });
+    await waitFor(() => expect(result.current.mergedStreamingResponses).toHaveLength(0));
+    await waitFor(() => expect(result.current.debate?.id).toBe("debate-B"));
   });
 });

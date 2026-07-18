@@ -2,6 +2,7 @@ import logging
 import uuid
 from typing import Any, Optional
 
+import sqlalchemy as sa
 from config import settings
 from log_config import update_log_context
 from metrics import increment_metric
@@ -138,6 +139,27 @@ def user_team_ids(session: Session, user_id: str) -> list[str]:
             logger.warning("TeamMember table missing; running in single-user/no-team mode.")
             return []
         raise
+
+
+def debate_visibility_clause(session: Session, user: Optional[User]):
+    """Return the SQL predicate matching ``can_access_debate``.
+
+    Public aggregate endpoints must apply this predicate in the database so
+    private prompts and report excerpts never enter an anonymous result set.
+    """
+    if user and user.role == "admin":
+        return sa.true()
+
+    clauses = [
+        Debate.user_id.is_(None),
+        Debate.config["is_public"].as_boolean().is_(True),
+    ]
+    if user:
+        clauses.append(Debate.user_id == user.id)
+        team_ids = user_team_ids(session, user.id)
+        if team_ids:
+            clauses.append(Debate.team_id.in_(team_ids))
+    return sa.or_(*clauses)
 
 
 def can_access_debate(debate: Debate, user: Optional[User], session: Session) -> bool:

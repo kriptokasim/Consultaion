@@ -8,16 +8,19 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
-from auth import get_optional_user
+from auth import get_current_user, get_optional_user
 from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models import ConversationVote, User
+from models import ConversationVote, Debate, Message, User
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
-from sqlmodel import Session
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
+
+from routes.common import require_debate_access
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +53,7 @@ class VoteCreate(BaseModel):
     """Request to create or update a vote."""
     conversation_id: str = Field(..., description="Conversation/debate ID")
     message_id: str = Field(..., description="Message ID being voted on")
-    vote: int = Field(..., ge=-1, le=1, description="Vote value: -1 (down), 1 (up)")
+    vote: Literal[-1, 1] = Field(..., description="Vote value: -1 (down), 1 (up)")
     reason: Optional[str] = Field(None, max_length=50, description="Optional structured reason")
     confidence: Optional[int] = Field(None, ge=1, le=3, description="Confidence level 1-3")
 
@@ -75,11 +78,27 @@ class VoteSummary(BaseModel):
 # Endpoints
 # -----------------------------------------------------------------------------
 
+def _require_vote_target(
+    session: Session,
+    conversation_id: str,
+    message_id: str,
+    current_user: Optional[User],
+) -> tuple[Debate, Message]:
+    debate = require_debate_access(session.get(Debate, conversation_id), current_user, session)
+    try:
+        message_pk = int(message_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="message not found") from exc
+    message = session.get(Message, message_pk)
+    if not message or message.debate_id != debate.id:
+        raise HTTPException(status_code=404, detail="message not found")
+    return debate, message
+
 @router.post("", response_model=VoteResponse)
 def create_or_update_vote(
     payload: VoteCreate,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create or update a vote (upsert behavior).
@@ -88,7 +107,8 @@ def create_or_update_vote(
     """
     require_conversation_v2()
     
-    user_id = current_user.id if current_user else None
+    _require_vote_target(session, payload.conversation_id, payload.message_id, current_user)
+    user_id = current_user.id
     
     # Check for existing vote
     stmt = select(ConversationVote).where(
@@ -118,32 +138,47 @@ def create_or_update_vote(
         )
         
         return VoteResponse(vote_id=existing.id, action="updated")
-    else:
-        # Create new vote
-        vote = ConversationVote(
-            conversation_id=payload.conversation_id,
-            message_id=payload.message_id,
-            user_id=user_id,
-            vote=payload.vote,
-            reason=payload.reason,
-            confidence=payload.confidence,
-        )
+    # Create under a savepoint. If a concurrent request wins the unique-key
+    # race, update that row instead of returning a 500 or creating duplicates.
+    vote = ConversationVote(
+        conversation_id=payload.conversation_id,
+        message_id=payload.message_id,
+        user_id=user_id,
+        vote=payload.vote,
+        reason=payload.reason,
+        confidence=payload.confidence,
+    )
+    action = "created"
+    try:
+        with session.begin_nested():
+            session.add(vote)
+            session.flush()
+    except IntegrityError:
+        vote = session.exec(stmt).first()
+        if vote is None:
+            raise
+        vote.vote = payload.vote
+        vote.reason = payload.reason
+        vote.confidence = payload.confidence
+        vote.updated_at = datetime.now(timezone.utc)
         session.add(vote)
-        session.commit()
-        session.refresh(vote)
-        
-        # Log analytics events
-        _log_vote_event("vote_cast", vote)
-        if payload.reason:
-            _log_vote_event("vote_reason_saved", vote)
-        
-        return VoteResponse(vote_id=vote.id, action="created")
+        action = "updated"
+
+    session.commit()
+    session.refresh(vote)
+
+    _log_vote_event("vote_cast" if action == "created" else "vote_updated", vote)
+    if payload.reason:
+        _log_vote_event("vote_reason_saved", vote)
+
+    return VoteResponse(vote_id=vote.id, action=action)
 
 
 @router.get("/summary", response_model=VoteSummary)
 def get_vote_summary(
     conversation_id: str = Query(..., description="Conversation ID to summarize"),
     session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     """
     Get aggregated vote summary for a conversation.
@@ -151,6 +186,7 @@ def get_vote_summary(
     Returns total_up, total_down, and net_score.
     """
     require_conversation_v2()
+    require_debate_access(session.get(Debate, conversation_id), current_user, session)
     
     # Count up votes
     up_stmt = select(func.count()).where(

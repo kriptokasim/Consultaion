@@ -96,16 +96,23 @@ async def test_stream_events_uses_backend():
             session.commit()
 
         from fastapi import Request
+
         headers = [(b"authorization", f"Bearer {token}".encode())]
-        mock_request = Request(scope={"type": "http", "headers": headers, "state": {}})
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        mock_request = Request(
+            scope={"type": "http", "headers": headers, "state": {}},
+            receive=receive,
+        )
 
         response = await stream_events(
-            debate_id, 
+            debate_id,
             request=mock_request,
-            token=token,
             last_sequence=None,
-            session=session, 
-            sse_backend=backend
+            session=session,
+            sse_backend=backend,
         )
 
         async def publish_final():

@@ -11,7 +11,7 @@
           "debug"
         ],
         "summary": "Debug Auth",
-        "description": "Debug endpoint to inspect auth state from API perspective.\n\nOnly available when AUTH_DEBUG=True. Never exposes raw cookie values.\n\nReturns:\n    - user: Current authenticated user (if any)\n    - cookies_present: List of cookie names (values redacted)\n    - has_auth_cookie: Whether auth cookie is present\n    - cookie_name: Expected auth cookie name\n    - cookie_*: Cookie configuration values\n    - cors_origins: Configured CORS origins\n    - web_app_origin: Expected frontend origin\n    - enable_csrf: Whether CSRF is enabled",
+        "description": "Debug endpoint to inspect auth state from API perspective.\n\nOnly available when AUTH_DEBUG=True. Never exposes raw cookie values.\n\nIn production/staging (not local), only minimal info is returned and\na sanitized audit event is logged server-side.",
         "operationId": "debug_auth_debug_auth_get",
         "responses": {
           "200": {
@@ -165,6 +165,43 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Callback Post",
+        "operationId": "google_callback_post_auth_google_callback_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCallbackRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -349,7 +386,7 @@
           "auth"
         ],
         "summary": "Delete My Account",
-        "description": "Soft-delete user account and anonymize their data (FH125 H-1).\n\nClassification:\n- DELETE: api_keys, user_provider_keys, support_notes, user_interactions,\n  user_predictions, challenge_sessions, challenge_rounds, oracle_sessions,\n  oracle_branches, team_memberships, usage_counters, usage_quotas,\n  debate_attempts, vote_records, red_team_sessions, conversation_votes,\n  llm_usage_logs\n- ANONYMIZE: user (email\u2192deleted@invalid.local, name, avatar, bio, password),\n  debates (prompt\u2192[DELETED]), messages (content\u2192[DELETED])\n- RETAIN: audit_log (for compliance, PII removed)",
+        "description": "Soft-delete user account and anonymize their data (FH125 H-1).\n\nUses the shared AccountErasureService for consistent behavior\nwith scheduled GDPR deletion.",
         "operationId": "delete_my_account_me_delete_account_post",
         "responses": {
           "200": {
@@ -483,6 +520,43 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google Callback Post",
+        "operationId": "google_callback_post_api_v1_auth_google_callback_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCallbackRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -667,7 +741,7 @@
           "auth"
         ],
         "summary": "Delete My Account",
-        "description": "Soft-delete user account and anonymize their data (FH125 H-1).\n\nClassification:\n- DELETE: api_keys, user_provider_keys, support_notes, user_interactions,\n  user_predictions, challenge_sessions, challenge_rounds, oracle_sessions,\n  oracle_branches, team_memberships, usage_counters, usage_quotas,\n  debate_attempts, vote_records, red_team_sessions, conversation_votes,\n  llm_usage_logs\n- ANONYMIZE: user (email\u2192deleted@invalid.local, name, avatar, bio, password),\n  debates (prompt\u2192[DELETED]), messages (content\u2192[DELETED])\n- RETAIN: audit_log (for compliance, PII removed)",
+        "description": "Soft-delete user account and anonymize their data (FH125 H-1).\n\nUses the shared AccountErasureService for consistent behavior\nwith scheduled GDPR deletion.",
         "operationId": "delete_my_account_api_v1_me_delete_account_post",
         "responses": {
           "200": {
@@ -721,6 +795,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Readyz Readyz Get"
                 }
@@ -744,6 +819,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Provider Health Api Health Providers Get"
                 }
@@ -767,6 +843,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Api Status Api Status Get"
                 }
@@ -789,6 +866,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Contracts Meta Contracts Get"
                 }
@@ -812,6 +890,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Runtime Parity Ops Runtime Parity Get"
                 }
@@ -847,6 +926,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Debate Diagnostics Ops Debates  Debate Id  Diagnostics Get"
                 }
               }
@@ -879,8 +959,57 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Providers Readiness Ops Providers Readiness Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/run-pipeline-health": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Get Run Pipeline Health",
+        "description": "Admin-only endpoint that reports whether the current deployment can actually execute runs.\nPatchset 136: Run Pipeline Health Endpoint.",
+        "operationId": "get_run_pipeline_health_ops_run_pipeline_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Run Pipeline Health Ops Run Pipeline Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/llm-smoke-test": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Llm Smoke Test",
+        "description": "Admin-only smoke test that proves the deployment can reach a real LLM provider.\nPatchset 136: Provider Smoke Test Endpoint.",
+        "operationId": "llm_smoke_test_ops_llm_smoke_test_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Llm Smoke Test Ops Llm Smoke Test Post"
                 }
               }
             }
@@ -914,7 +1043,53 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Probe Provider Ops Providers  Provider  Probe Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ops/probe/{provider}": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Probe Provider User",
+        "description": "User-facing provider key probe. Tests the calling user's stored BYOK key\nfor the given provider. Does NOT use server-side keys.\nReturns {\"success\": bool, \"latency_ms\": float, \"error\": str|None}.",
+        "operationId": "probe_provider_user_ops_probe__provider__post",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Probe Provider User Ops Probe  Provider  Post"
                 }
               }
             }
@@ -972,6 +1147,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Readyz Api V1 Readyz Get"
                 }
@@ -995,6 +1171,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Provider Health Api V1 Api Health Providers Get"
                 }
@@ -1018,6 +1195,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Api Status Api V1 Api Status Get"
                 }
@@ -1040,6 +1218,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Contracts Api V1 Meta Contracts Get"
                 }
@@ -1063,6 +1242,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Runtime Parity Api V1 Ops Runtime Parity Get"
                 }
@@ -1098,6 +1278,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Debate Diagnostics Api V1 Ops Debates  Debate Id  Diagnostics Get"
                 }
               }
@@ -1130,8 +1311,57 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Providers Readiness Api V1 Ops Providers Readiness Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ops/run-pipeline-health": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Get Run Pipeline Health",
+        "description": "Admin-only endpoint that reports whether the current deployment can actually execute runs.\nPatchset 136: Run Pipeline Health Endpoint.",
+        "operationId": "get_run_pipeline_health_api_v1_ops_run_pipeline_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Run Pipeline Health Api V1 Ops Run Pipeline Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ops/llm-smoke-test": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Llm Smoke Test",
+        "description": "Admin-only smoke test that proves the deployment can reach a real LLM provider.\nPatchset 136: Provider Smoke Test Endpoint.",
+        "operationId": "llm_smoke_test_api_v1_ops_llm_smoke_test_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Llm Smoke Test Api V1 Ops Llm Smoke Test Post"
                 }
               }
             }
@@ -1165,7 +1395,53 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Probe Provider Api V1 Ops Providers  Provider  Probe Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ops/probe/{provider}": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Probe Provider User",
+        "description": "User-facing provider key probe. Tests the calling user's stored BYOK key\nfor the given provider. Does NOT use server-side keys.\nReturns {\"success\": bool, \"latency_ms\": float, \"error\": str|None}.",
+        "operationId": "probe_provider_user_api_v1_ops_probe__provider__post",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Probe Provider User Api V1 Ops Probe  Provider  Post"
                 }
               }
             }
@@ -2286,6 +2562,134 @@
         }
       }
     },
+    "/debates/{debate_id}": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Get Debate",
+        "operationId": "get_debate_debates__debate_id__get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Update Debate",
+        "operationId": "update_debate_debates__debate_id__patch",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debates/{debate_id}/report": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Get Debate Report",
+        "operationId": "get_debate_report_debates__debate_id__report_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/debates/{debate_id}/start": {
       "post": {
         "tags": [
@@ -2559,51 +2963,13 @@
         }
       }
     },
-    "/debates/{debate_id}": {
-      "get": {
+    "/debates/{debate_id}/retry-agent": {
+      "post": {
         "tags": [
           "debates"
         ],
-        "summary": "Get Debate",
-        "operationId": "get_debate_debates__debate_id__get",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Update Debate",
-        "operationId": "update_debate_debates__debate_id__patch",
+        "summary": "Retry Agent",
+        "operationId": "retry_agent_debates__debate_id__retry_agent_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -2620,91 +2986,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DebateUpdate"
+                "$ref": "#/components/schemas/RetryAgentRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/debates/{debate_id}/report": {
-      "get": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Get Debate Report",
-        "operationId": "get_debate_report_debates__debate_id__report_get",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/debates/{debate_id}/export": {
-      "post": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Export Debate Report",
-        "operationId": "export_debate_report_debates__debate_id__export_post",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2734,47 +3020,6 @@
         ],
         "summary": "Get Debate Events",
         "operationId": "get_debate_events_debates__debate_id__events_get",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/responses": {
-      "get": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Get Debate Responses",
-        "description": "Canonical persisted model responses (PR-FH89).\n\nIndependent of timeline / events / scores. Returns the persisted\nMessage rows for a debate normalized into a single DTO. A database\nfailure becomes a non-2xx response \u2014 never a successful empty list.",
-        "operationId": "get_debate_responses_api_v1_debates__debate_id__responses_get",
         "parameters": [
           {
             "name": "debate_id",
@@ -3046,6 +3291,46 @@
         }
       }
     },
+    "/debates/{debate_id}/export": {
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Export Debate Report",
+        "operationId": "export_debate_report_debates__debate_id__export_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/debates/{debate_id}/share": {
       "post": {
         "tags": [
@@ -3164,56 +3449,6 @@
             }
           }
         ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/debates/{debate_id}/retry-agent": {
-      "post": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Retry Agent",
-        "operationId": "retry_agent_debates__debate_id__retry_agent_post",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RetryAgentRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3595,6 +3830,134 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Get Debate",
+        "operationId": "get_debate_api_v1_debates__debate_id__get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Update Debate",
+        "operationId": "update_debate_api_v1_debates__debate_id__patch",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/report": {
+      "get": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Get Debate Report",
+        "operationId": "get_debate_report_api_v1_debates__debate_id__report_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/start": {
       "post": {
         "tags": [
@@ -3868,51 +4231,13 @@
         }
       }
     },
-    "/api/v1/debates/{debate_id}": {
-      "get": {
+    "/api/v1/debates/{debate_id}/retry-agent": {
+      "post": {
         "tags": [
           "debates"
         ],
-        "summary": "Get Debate",
-        "operationId": "get_debate_api_v1_debates__debate_id__get",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Update Debate",
-        "operationId": "update_debate_api_v1_debates__debate_id__patch",
+        "summary": "Retry Agent",
+        "operationId": "retry_agent_api_v1_debates__debate_id__retry_agent_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -3929,91 +4254,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DebateUpdate"
+                "$ref": "#/components/schemas/RetryAgentRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/report": {
-      "get": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Get Debate Report",
-        "operationId": "get_debate_report_api_v1_debates__debate_id__report_get",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/export": {
-      "post": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Export Debate Report",
-        "operationId": "export_debate_report_api_v1_debates__debate_id__export_post",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4076,14 +4321,14 @@
         }
       }
     },
-    "/api/v1/api/v1/debates/{debate_id}/responses": {
+    "/api/v1/debates/{debate_id}/responses": {
       "get": {
         "tags": [
           "debates"
         ],
         "summary": "Get Debate Responses",
         "description": "Canonical persisted model responses (PR-FH89).\n\nIndependent of timeline / events / scores. Returns the persisted\nMessage rows for a debate normalized into a single DTO. A database\nfailure becomes a non-2xx response \u2014 never a successful empty list.",
-        "operationId": "get_debate_responses_api_v1_api_v1_debates__debate_id__responses_get",
+        "operationId": "get_debate_responses_api_v1_debates__debate_id__responses_get",
         "parameters": [
           {
             "name": "debate_id",
@@ -4314,6 +4559,46 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}/export": {
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Export Debate Report",
+        "operationId": "export_debate_report_api_v1_debates__debate_id__export_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/share": {
       "post": {
         "tags": [
@@ -4432,56 +4717,6 @@
             }
           }
         ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/debates/{debate_id}/retry-agent": {
-      "post": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Retry Agent",
-        "operationId": "retry_agent_api_v1_debates__debate_id__retry_agent_post",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RetryAgentRequest"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -4797,10 +5032,27 @@
         "tags": [
           "admin"
         ],
-        "summary": "Admin Search Users",
-        "description": "Search for users by email or ID.\nReturns basic user info for admin listing.",
-        "operationId": "admin_search_users_admin_users_get",
+        "summary": "Admin Users",
+        "operationId": "admin_users_admin_users_get",
         "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search by email/display name.",
+              "title": "Q"
+            },
+            "description": "Search by email/display name."
+          },
           {
             "name": "email",
             "in": "query",
@@ -4814,10 +5066,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Search by email substring",
+              "description": "Compatibility alias for email search.",
               "title": "Email"
             },
-            "description": "Search by email substring"
+            "description": "Compatibility alias for email search."
           },
           {
             "name": "id",
@@ -4832,10 +5084,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Search by exact user ID",
+              "description": "Filter by exact user ID.",
               "title": "Id"
             },
-            "description": "Search by exact user ID"
+            "description": "Filter by exact user ID."
+          },
+          {
+            "name": "plan_slug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter users by active plan slug.",
+              "title": "Plan Slug"
+            },
+            "description": "Filter users by active plan slug."
           },
           {
             "name": "limit",
@@ -4843,10 +5113,21 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 200,
+              "maximum": 500,
               "minimum": 1,
-              "default": 50,
+              "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           }
         ],
@@ -4912,97 +5193,6 @@
         }
       }
     },
-    "/admin/usage": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Usage Overview",
-        "description": "Admin endpoint to view user usage statistics (tokens, exports, debates) with 7-day history.",
-        "operationId": "admin_usage_overview_admin_usage_get",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by specific user ID",
-              "title": "User Id"
-            },
-            "description": "Filter by specific user ID"
-          },
-          {
-            "name": "email",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Search by email",
-              "title": "Email"
-            },
-            "description": "Search by email"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 100,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/admin/users/{user_id}/billing": {
       "get": {
         "tags": [
@@ -5018,235 +5208,6 @@
             "schema": {
               "type": "string",
               "title": "User Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/ops/summary": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Ops Summary",
-        "operationId": "admin_ops_summary_admin_ops_summary_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/models": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Models",
-        "operationId": "admin_models_admin_models_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/promotions": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Promotions",
-        "operationId": "admin_promotions_admin_promotions_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/logs": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Logs",
-        "operationId": "admin_logs_admin_logs_get",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 100,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/events": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Events",
-        "operationId": "admin_events_admin_events_get",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 100,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          },
-          {
-            "name": "level",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Level"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/test-alert": {
-      "post": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Test Alert",
-        "operationId": "admin_test_alert_admin_test_alert_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/ratings/update/{debate_id}": {
-      "post": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Update Ratings Endpoint",
-        "operationId": "update_ratings_endpoint_admin_ratings_update__debate_id__post",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
             }
           }
         ],
@@ -5301,86 +5262,6 @@
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/usage/quota": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Quota Usage",
-        "description": "View user quota usage with plan limits.\n\nShows tokens and exports used today vs daily limits for each user.\nUseful for monitoring and troubleshooting quota issues.",
-        "operationId": "admin_quota_usage_admin_usage_quota_get",
-        "parameters": [
-          {
-            "name": "email",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by email",
-              "title": "Email"
-            },
-            "description": "Filter by email"
-          },
-          {
-            "name": "plan",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by plan (free/pro/internal)",
-              "title": "Plan"
-            },
-            "description": "Filter by plan (free/pro/internal)"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5597,6 +5478,196 @@
         }
       }
     },
+    "/admin/usage": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Usage Overview",
+        "description": "Admin endpoint to view user usage statistics (tokens, exports, debates) with 7-day history.",
+        "operationId": "admin_usage_overview_admin_usage_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by specific user ID",
+              "title": "User Id"
+            },
+            "description": "Filter by specific user ID"
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search by email",
+              "title": "Email"
+            },
+            "description": "Search by email"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/usage/quota": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Quota Usage",
+        "description": "View user quota usage with plan limits.\n\nShows tokens and exports used today vs daily limits for each user.\nUseful for monitoring and troubleshooting quota issues.",
+        "operationId": "admin_quota_usage_admin_usage_quota_get",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by email",
+              "title": "Email"
+            },
+            "description": "Filter by email"
+          },
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by plan (free/pro/internal)",
+              "title": "Plan"
+            },
+            "description": "Filter by plan (free/pro/internal)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/ops/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Ops Summary",
+        "operationId": "admin_ops_summary_admin_ops_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/maintenance/purge": {
       "post": {
         "tags": [
@@ -5611,6 +5682,157 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/models": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Models",
+        "operationId": "admin_models_admin_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/promotions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Promotions",
+        "operationId": "admin_promotions_admin_promotions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/logs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Logs",
+        "operationId": "admin_logs_admin_logs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Events",
+        "operationId": "admin_events_admin_events_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Level"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -5698,15 +5920,91 @@
         }
       }
     },
+    "/admin/test-alert": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Test Alert",
+        "operationId": "admin_test_alert_admin_test_alert_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/ratings/update/{debate_id}": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Ratings Endpoint",
+        "operationId": "update_ratings_endpoint_admin_ratings_update__debate_id__post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
           "admin"
         ],
-        "summary": "Admin Search Users",
-        "description": "Search for users by email or ID.\nReturns basic user info for admin listing.",
-        "operationId": "admin_search_users_api_v1_admin_users_get",
+        "summary": "Admin Users",
+        "operationId": "admin_users_api_v1_admin_users_get",
         "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search by email/display name.",
+              "title": "Q"
+            },
+            "description": "Search by email/display name."
+          },
           {
             "name": "email",
             "in": "query",
@@ -5720,10 +6018,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Search by email substring",
+              "description": "Compatibility alias for email search.",
               "title": "Email"
             },
-            "description": "Search by email substring"
+            "description": "Compatibility alias for email search."
           },
           {
             "name": "id",
@@ -5738,10 +6036,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Search by exact user ID",
+              "description": "Filter by exact user ID.",
               "title": "Id"
             },
-            "description": "Search by exact user ID"
+            "description": "Filter by exact user ID."
+          },
+          {
+            "name": "plan_slug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter users by active plan slug.",
+              "title": "Plan Slug"
+            },
+            "description": "Filter users by active plan slug."
           },
           {
             "name": "limit",
@@ -5749,10 +6065,21 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 200,
+              "maximum": 500,
               "minimum": 1,
-              "default": 50,
+              "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           }
         ],
@@ -5818,97 +6145,6 @@
         }
       }
     },
-    "/api/v1/admin/usage": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Usage Overview",
-        "description": "Admin endpoint to view user usage statistics (tokens, exports, debates) with 7-day history.",
-        "operationId": "admin_usage_overview_api_v1_admin_usage_get",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by specific user ID",
-              "title": "User Id"
-            },
-            "description": "Filter by specific user ID"
-          },
-          {
-            "name": "email",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Search by email",
-              "title": "Email"
-            },
-            "description": "Search by email"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 100,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/admin/users/{user_id}/billing": {
       "get": {
         "tags": [
@@ -5924,235 +6160,6 @@
             "schema": {
               "type": "string",
               "title": "User Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/ops/summary": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Ops Summary",
-        "operationId": "admin_ops_summary_api_v1_admin_ops_summary_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/models": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Models",
-        "operationId": "admin_models_api_v1_admin_models_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/promotions": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Promotions",
-        "operationId": "admin_promotions_api_v1_admin_promotions_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/logs": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Logs",
-        "operationId": "admin_logs_api_v1_admin_logs_get",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 100,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/events": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Events",
-        "operationId": "admin_events_api_v1_admin_events_get",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 100,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          },
-          {
-            "name": "level",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Level"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/test-alert": {
-      "post": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Test Alert",
-        "operationId": "admin_test_alert_api_v1_admin_test_alert_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/ratings/update/{debate_id}": {
-      "post": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Update Ratings Endpoint",
-        "operationId": "update_ratings_endpoint_api_v1_admin_ratings_update__debate_id__post",
-        "parameters": [
-          {
-            "name": "debate_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Debate Id"
             }
           }
         ],
@@ -6207,86 +6214,6 @@
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/usage/quota": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Admin Quota Usage",
-        "description": "View user quota usage with plan limits.\n\nShows tokens and exports used today vs daily limits for each user.\nUseful for monitoring and troubleshooting quota issues.",
-        "operationId": "admin_quota_usage_api_v1_admin_usage_quota_get",
-        "parameters": [
-          {
-            "name": "email",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by email",
-              "title": "Email"
-            },
-            "description": "Filter by email"
-          },
-          {
-            "name": "plan",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by plan (free/pro/internal)",
-              "title": "Plan"
-            },
-            "description": "Filter by plan (free/pro/internal)"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6503,6 +6430,196 @@
         }
       }
     },
+    "/api/v1/admin/usage": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Usage Overview",
+        "description": "Admin endpoint to view user usage statistics (tokens, exports, debates) with 7-day history.",
+        "operationId": "admin_usage_overview_api_v1_admin_usage_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by specific user ID",
+              "title": "User Id"
+            },
+            "description": "Filter by specific user ID"
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search by email",
+              "title": "Email"
+            },
+            "description": "Search by email"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/usage/quota": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Quota Usage",
+        "description": "View user quota usage with plan limits.\n\nShows tokens and exports used today vs daily limits for each user.\nUseful for monitoring and troubleshooting quota issues.",
+        "operationId": "admin_quota_usage_api_v1_admin_usage_quota_get",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by email",
+              "title": "Email"
+            },
+            "description": "Filter by email"
+          },
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by plan (free/pro/internal)",
+              "title": "Plan"
+            },
+            "description": "Filter by plan (free/pro/internal)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ops/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Ops Summary",
+        "operationId": "admin_ops_summary_api_v1_admin_ops_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/maintenance/purge": {
       "post": {
         "tags": [
@@ -6517,6 +6634,157 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/models": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Models",
+        "operationId": "admin_models_api_v1_admin_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/promotions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Promotions",
+        "operationId": "admin_promotions_api_v1_admin_promotions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logs": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Logs",
+        "operationId": "admin_logs_api_v1_admin_logs_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Events",
+        "operationId": "admin_events_api_v1_admin_events_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Level"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -6604,6 +6872,65 @@
         }
       }
     },
+    "/api/v1/admin/test-alert": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Test Alert",
+        "operationId": "admin_test_alert_api_v1_admin_test_alert_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ratings/update/{debate_id}": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Ratings Endpoint",
+        "operationId": "update_ratings_endpoint_api_v1_admin_ratings_update__debate_id__post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/users/me/participation": {
       "get": {
         "tags": [
@@ -6618,6 +6945,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get User Participation Users Me Participation Get"
                 }
@@ -6641,6 +6969,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get User Participation Api V1 Users Me Participation Get"
                 }
@@ -6676,6 +7005,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Divergence Report Arena  Debate Id  Divergence Get"
                 }
               }
@@ -6730,6 +7060,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Cast Arena Vote Arena  Debate Id  User Vote Post"
                 }
               }
@@ -6774,6 +7105,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Divergence Report Api V1 Arena  Debate Id  Divergence Get"
                 }
               }
@@ -6828,6 +7160,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Cast Arena Vote Api V1 Arena  Debate Id  User Vote Post"
                 }
               }
@@ -9966,7 +10299,7 @@
           "debug"
         ],
         "summary": "Debug Auth",
-        "description": "Debug endpoint to inspect auth state from API perspective.\n\nOnly available when AUTH_DEBUG=True. Never exposes raw cookie values.\n\nReturns:\n    - user: Current authenticated user (if any)\n    - cookies_present: List of cookie names (values redacted)\n    - has_auth_cookie: Whether auth cookie is present\n    - cookie_name: Expected auth cookie name\n    - cookie_*: Cookie configuration values\n    - cors_origins: Configured CORS origins\n    - web_app_origin: Expected frontend origin\n    - enable_csrf: Whether CSRF is enabled",
+        "description": "Debug endpoint to inspect auth state from API perspective.\n\nOnly available when AUTH_DEBUG=True. Never exposes raw cookie values.\n\nIn production/staging (not local), only minimal info is returned and\na sanitized audit event is logged server-side.",
         "operationId": "debug_auth_api_v1_debug_auth_get",
         "responses": {
           "200": {
@@ -10248,6 +10581,7 @@
           "details": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -10284,6 +10618,7 @@
             "title": "Password"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "email",
@@ -10484,216 +10819,6 @@
         ],
         "title": "CreateNoteRequest"
       },
-      "Debate": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "prompt": {
-            "type": "string",
-            "title": "Prompt"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status",
-            "default": "queued"
-          },
-          "config": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Config"
-          },
-          "panel_config": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Panel Config"
-          },
-          "engine_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Engine Version"
-          },
-          "model_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Id"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
-          },
-          "final_content": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Final Content"
-          },
-          "final_meta": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Final Meta"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          },
-          "team_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Team Id"
-          },
-          "routed_model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Routed Model"
-          },
-          "routing_policy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Routing Policy"
-          },
-          "gateway_policy": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gateway Policy"
-          },
-          "routing_meta": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Routing Meta"
-          },
-          "mode": {
-            "type": "string",
-            "title": "Mode",
-            "default": "conversation"
-          },
-          "runner_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Runner Id"
-          },
-          "lease_expires_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lease Expires At"
-          },
-          "last_heartbeat_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Heartbeat At"
-          },
-          "run_attempt": {
-            "type": "integer",
-            "title": "Run Attempt",
-            "default": 0
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "prompt"
-        ],
-        "title": "Debate"
-      },
       "DebateConfig": {
         "properties": {
           "agents": {
@@ -10725,6 +10850,7 @@
             ]
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "DebateConfig"
       },
@@ -10829,9 +10955,7 @@
       "DebateListResponse": {
         "properties": {
           "items": {
-            "items": {
-              "$ref": "#/components/schemas/Debate"
-            },
+            "items": {},
             "type": "array",
             "title": "Items"
           },
@@ -10945,6 +11069,7 @@
             "title": "Team Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "DebateUpdate"
       },
@@ -11027,6 +11152,24 @@
           "url"
         ],
         "title": "GifResponse"
+      },
+      "GoogleCallbackRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state"
+        ],
+        "title": "GoogleCallbackRequest"
       },
       "HTTPValidationError": {
         "properties": {
@@ -11359,6 +11502,7 @@
           },
           "recent_debates": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -11366,6 +11510,7 @@
           },
           "champion_samples": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -11756,6 +11901,7 @@
           },
           "recent_429s": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -11914,6 +12060,7 @@
             "description": "Seat ID or name if applicable."
           },
           "payload": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Payload",
             "description": "Event-specific data."
@@ -12134,6 +12281,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
@@ -12158,8 +12312,10 @@
           },
           "vote": {
             "type": "integer",
-            "maximum": 1.0,
-            "minimum": -1.0,
+            "enum": [
+              -1,
+              1
+            ],
             "title": "Vote",
             "description": "Vote value: -1 (down), 1 (up)"
           },

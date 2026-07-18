@@ -1,4 +1,5 @@
 """PS155.2 — Delta coalescing unit tests."""
+
 from __future__ import annotations
 
 from sse_backend import DeltaCoalescer, _delta_key, _is_delta
@@ -100,6 +101,24 @@ class TestDeltaCoalescer:
         assert payload["text"] == "abc"
         assert payload["accumulated_chars"] == 3
         assert payload["delta_sequence"] == 3
+
+    def test_unwrapped_deltas_preserve_all_text(self):
+        """The backend's public, unwrapped event shape must coalesce losslessly."""
+        coalescer = DeltaCoalescer(flush_interval_ms=5000)
+        for index in range(3):
+            coalescer.ingest(
+                {
+                    "type": "model_response_delta",
+                    "response_id": "r1",
+                    "text": f"chunk{index}",
+                    "delta_sequence": index + 1,
+                }
+            )
+
+        flushed = coalescer.flush_all()
+        assert len(flushed) == 1
+        assert flushed[0]["text"] == "chunk0chunk1chunk2"
+        assert flushed[0]["delta_sequence"] == 3
 
 
 class TestHelpers:

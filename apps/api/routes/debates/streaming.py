@@ -231,7 +231,6 @@ async def get_debate_events(
 
 
 @router.get("/debates/{debate_id}/responses")
-@router.get("/api/v1/debates/{debate_id}/responses")
 async def get_debate_responses(
     debate_id: str,
     session: Session = Depends(get_session),

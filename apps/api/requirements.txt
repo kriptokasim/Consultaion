@@ -8,7 +8,6 @@ litellm>=1.84.0
 sqlmodel==0.0.22
 psycopg[binary]==3.2.12
 alembic==1.13.2
-pytest>=9.0.3
 PyJWT>=2.13.0
 sentry-sdk[fastapi]==2.20.0
 redis==5.2.0

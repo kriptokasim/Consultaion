@@ -66,7 +66,7 @@ class StripeBillingProvider(BillingProvider):
         event_type = payload.get("type")
         logger.info("Received Stripe webhook event=%s", event_type)
         data = (payload.get("data") or {}).get("object") or {}
-        
+
         # Idempotency / Duplicate Check
         event_id = payload.get("id")
         if event_id and db_session:
@@ -75,11 +75,6 @@ class StripeBillingProvider(BillingProvider):
             if existing:
                 logger.info("Stripe webhook event=%s already processed, ignoring", event_id)
                 return
-            
-            # Record the event in session (will be committed with the transaction)
-            evt = BillingWebhookEvent(id=event_id, provider="stripe", event_type=event_type)
-            db_session.add(evt)
-
 
         if event_type == "checkout.session.completed" and db_session:
             metadata = data.get("metadata") or {}
@@ -88,44 +83,46 @@ class StripeBillingProvider(BillingProvider):
             subscription_id = data.get("subscription")
             customer_id = data.get("customer")
 
-            if user_id and plan_slug:
-                plan_ref = db_session.exec(select(BillingPlan).where(BillingPlan.slug == plan_slug)).first()
-                if not plan_ref:
-                    logger.error("Plan not found during webhook: slug=%s", plan_slug)
-                    return
+            if not user_id or not plan_slug or not subscription_id:
+                raise ValueError("checkout.session.completed is missing user_id, plan_slug, or subscription")
 
-                # Update user subscription plan
-                user = db_session.get(User, user_id)
-                if user:
-                    user.plan = plan_slug
-                    db_session.add(user)
+            plan_ref = db_session.exec(select(BillingPlan).where(BillingPlan.slug == plan_slug)).first()
+            if not plan_ref:
+                raise RuntimeError(f"Plan not found during webhook: slug={plan_slug}")
 
-                # Upsert BillingSubscription
-                sub = db_session.exec(
-                    select(BillingSubscription).where(
-                        BillingSubscription.provider_subscription_id == subscription_id
-                    )
-                ).first()
+            # Update user subscription plan
+            user = db_session.get(User, user_id)
+            if not user:
+                raise RuntimeError(f"User not found during webhook: user_id={user_id}")
+            user.plan = plan_slug
+            db_session.add(user)
 
-                now = datetime.now(timezone.utc)
-                if not sub:
-                    sub = BillingSubscription(
-                        user_id=user_id,
-                        plan_id=plan_ref.id,
-                        status="active",
-                        provider="stripe",
-                        provider_subscription_id=subscription_id,
-                        provider_customer_id=customer_id,
-                        current_period_start=now,
-                        current_period_end=now,  # will be updated by customer.subscription.updated
-                    )
-                else:
-                    sub.status = "active"
-                    sub.plan_id = plan_ref.id
+            # Upsert BillingSubscription
+            sub = db_session.exec(
+                select(BillingSubscription).where(
+                    BillingSubscription.provider_subscription_id == subscription_id
+                )
+            ).first()
 
-                db_session.add(sub)
-                # Don't commit here — let the webhook route transaction own the commit
-                # Side effects emitted after outer commit in webhook route
+            now = datetime.now(timezone.utc)
+            if not sub:
+                sub = BillingSubscription(
+                    user_id=user_id,
+                    plan_id=plan_ref.id,
+                    status="active",
+                    provider="stripe",
+                    provider_subscription_id=subscription_id,
+                    provider_customer_id=customer_id,
+                    current_period_start=now,
+                    current_period_end=now,  # will be updated by customer.subscription.updated
+                )
+            else:
+                sub.status = "active"
+                sub.plan_id = plan_ref.id
+
+            db_session.add(sub)
+            # Don't commit here — let the webhook route transaction own the commit
+            # Side effects emitted after outer commit in webhook route
 
         elif event_type in ("customer.subscription.created", "customer.subscription.updated") and db_session:
             subscription_id = data.get("id")
@@ -204,3 +201,16 @@ class StripeBillingProvider(BillingProvider):
 
                 # Don't commit here — let the webhook route transaction own the commit
                 # Side effects emitted after outer commit in webhook route
+
+        # Mark the event processed only after all domain handling above succeeds.
+        # The outer webhook transaction commits this marker atomically with the
+        # user/subscription updates; exceptions leave the event retryable.
+        if event_id and db_session:
+            from billing.models import BillingWebhookEvent
+            db_session.add(
+                BillingWebhookEvent(
+                    id=event_id,
+                    provider="stripe",
+                    event_type=event_type or "unknown",
+                )
+            )

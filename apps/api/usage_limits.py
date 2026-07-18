@@ -7,6 +7,7 @@ from typing import Optional, TypedDict
 from config import settings
 from database import session_scope
 from models import UsageCounter, UsageQuota, utcnow
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 
@@ -70,9 +71,21 @@ def _get_or_create_quota(session: Session, user_id: str, period: str) -> UsageQu
             max_tokens=_default_max_tokens_per_day(),
             reset_at=utcnow() + timedelta(seconds=_period_seconds(period)),
         )
-    session.add(quota)
-    session.flush()
-    return quota
+    try:
+        # The unique (user_id, period) index is the concurrency authority.
+        # A savepoint lets a losing first-request race recover without rolling
+        # back the caller's entire transaction.
+        with session.begin_nested():
+            session.add(quota)
+            session.flush()
+        return quota
+    except IntegrityError:
+        existing = session.exec(
+            select(UsageQuota).where(UsageQuota.user_id == user_id, UsageQuota.period == period)
+        ).first()
+        if existing is None:
+            raise
+        return existing
 
 
 def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit: bool = False, lock: bool = False) -> UsageCounter:
@@ -83,7 +96,16 @@ def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit
     now = utcnow()
     if not counter:
         counter = UsageCounter(user_id=user_id, period=period, window_start=now)
-        session.add(counter)
+        try:
+            with session.begin_nested():
+                session.add(counter)
+                session.flush()
+        except IntegrityError:
+            # Another request initialized the same period while we were
+            # selecting. Re-read its committed row and continue from there.
+            counter = session.exec(stmt).first()
+            if counter is None:
+                raise
         if commit:
             session.commit()
             session.refresh(counter)

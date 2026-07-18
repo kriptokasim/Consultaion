@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { useI18n } from "@/lib/i18n/client"
 import Link from "next/link"
+import { fetchWithAuth } from "@/lib/auth"
 
 interface UserSummary {
     user: {
@@ -84,7 +85,7 @@ export default function AdminUserDetailPage() {
 
         setSaving(true)
         try {
-            const res = await fetch(`/api/admin/users/${userId}/notes`, {
+            const res = await fetchWithAuth(`/admin/users/${userId}/notes`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ note: newNote }),
@@ -104,7 +105,7 @@ export default function AdminUserDetailPage() {
 
         const newStatus = !summary.user.is_active
         try {
-            await fetch(`/api/admin/users/${userId}/status`, {
+            await fetchWithAuth(`/admin/users/${userId}/status`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ is_active: newStatus }),
@@ -122,7 +123,7 @@ export default function AdminUserDetailPage() {
         if (!summary || newPlan === summary.user.plan) return
 
         try {
-            await fetch(`/api/admin/users/${userId}/plan`, {
+            await fetchWithAuth(`/admin/users/${userId}/plan`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ plan: newPlan }),

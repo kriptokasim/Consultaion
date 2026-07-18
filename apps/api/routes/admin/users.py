@@ -43,6 +43,8 @@ class UpdateUserStatusRequest(BaseModel):
 @router.get("/users")
 def admin_users(
     q: Optional[str] = Query(None, description="Search by email/display name."),
+    email: Optional[str] = Query(None, description="Compatibility alias for email search."),
+    id: Optional[str] = Query(None, description="Filter by exact user ID."),
     plan_slug: Optional[str] = Query(None, description="Filter users by active plan slug."),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -52,7 +54,9 @@ def admin_users(
     users = session.exec(select(User).order_by(User.created_at.desc())).all()
     activity = _activity_snapshot(session)
     filtered: List[Dict[str, Any]] = []
-    q_lower = q.lower() if q else None
+    basic_filtered: List[Dict[str, Any]] = []
+    search_text = q or email
+    q_lower = search_text.lower() if search_text else None
 
     # Prefetch plans, subscriptions, and usages
     from billing.models import BillingSubscription, BillingUsage
@@ -93,6 +97,8 @@ def admin_users(
                 user_usage_map[usage.user_id] = usage
 
     for user in users:
+        if id and user.id != id:
+            continue
         if q_lower:
             display = (user.display_name or "").lower()
             email_match = q_lower in user.email.lower()
@@ -130,9 +136,26 @@ def admin_users(
             }
         )
         filtered.append(row)
+        basic_filtered.append(
+            {
+                "id": user.id,
+                "email": user.email,
+                "display_name": user.display_name,
+                "plan": plan.slug if plan else user.plan,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "is_active": user.is_active,
+            }
+        )
     total = len(filtered)
     items = filtered[offset : offset + limit]
-    return {"items": items, "total": total, "limit": limit, "offset": offset}
+    basic_items = basic_filtered[offset : offset + limit]
+    return {
+        "items": items,
+        "users": basic_items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/users/{user_id}")
@@ -268,43 +291,6 @@ def change_user_plan(
         "email": user.email,
         "old_plan": old_plan,
         "new_plan": request.plan,
-    }
-
-
-@router.get("/users")
-def admin_search_users(
-    email: Optional[str] = Query(None, description="Search by email substring"),
-    id: Optional[str] = Query(None, description="Search by exact user ID"),
-    limit: int = Query(50, ge=1, le=200),
-    session: Session = Depends(get_session),
-    _: User = Depends(get_current_admin),
-):
-    """
-    Search for users by email or ID.
-    Returns basic user info for admin listing.
-    """
-    query = select(User)
-    
-    if id:
-        query = query.where(User.id == id)
-    elif email:
-        query = query.where(User.email.contains(email))
-    
-    users = session.exec(query.order_by(User.created_at.desc()).limit(limit)).all()
-    
-    return {
-        "users": [
-            {
-                "id": user.id,
-                "email": user.email,
-                "display_name": user.display_name,
-                "plan": user.plan,
-                "created_at": user.created_at.isoformat() if user.created_at else None,
-                "is_active": user.is_active,
-            }
-            for user in users
-        ],
-        "total": len(users),
     }
 
 

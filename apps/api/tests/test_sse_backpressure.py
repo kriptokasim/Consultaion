@@ -7,6 +7,7 @@ Proves that:
 4. Overflow metrics increment correctly
 5. Loss-tolerant events are dropped before important/critical events
 """
+
 import asyncio
 
 import pytest
@@ -149,22 +150,24 @@ async def test_delta_coalescing_preserves_order(backend):
 
     # Publish many deltas rapidly
     for i in range(20):
-        await large_backend.publish("bp:coalesce", {
-            "type": "model_response_delta",
-            "response_id": "resp:1",
-            "text": f"chunk{i}",
-        })
+        await large_backend.publish(
+            "bp:coalesce",
+            {
+                "type": "model_response_delta",
+                "response_id": "resp:1",
+                "text": f"chunk{i}",
+            },
+        )
 
     events = []
     async for env in large_backend.subscribe("bp:coalesce"):
         events.append(env)
 
     delta_events = [e for e in events if e.get("payload", {}).get("type") == "model_response_delta"]
-    # All deltas should arrive in a large queue
-    assert len(delta_events) == 20
-    # Order should be preserved
-    texts = [e.get("payload", {}).get("text") for e in delta_events]
-    assert texts == [f"chunk{i}" for i in range(20)]
+    # The flush timer must emit the buffered batch even if no later event
+    # arrives, while preserving fragment order in the coalesced payload.
+    assert len(delta_events) == 1
+    assert delta_events[0]["payload"]["text"] == "".join(f"chunk{i}" for i in range(20))
 
 
 @pytest.mark.asyncio
@@ -224,6 +227,7 @@ async def test_event_priority_classification():
 async def test_heartbeat_events_are_loss_tolerant(backend):
     """Heartbeat events should be classified as loss-tolerant (droppable)."""
     from sse_backend import _event_priority
+
     assert _event_priority({"type": "heartbeat"}) == 2
 
 
@@ -244,6 +248,7 @@ async def test_all_critical_queue_saturation(backend):
         await backend.publish(channel, {"type": "debate_completed", "id": i})
 
     from metrics import get_metrics_snapshot
+
     before_dropped = get_metrics_snapshot().get("sse.backpressure.dropped", 0)
     before_replaced = get_metrics_snapshot().get("sse.backpressure.critical_replaced", 0)
 
@@ -263,4 +268,3 @@ async def test_all_critical_queue_saturation(backend):
     ids = [e.get("payload", {}).get("id") for e in received]
     # The oldest event (id=0) should have been dropped, and id=999 should be present
     assert ids == [1, 2, 3, 4, 999]
-

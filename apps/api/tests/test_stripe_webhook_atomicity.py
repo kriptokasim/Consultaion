@@ -8,7 +8,8 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from billing.models import BillingPlan, BillingSubscription
+import pytest
+from billing.models import BillingPlan, BillingSubscription, BillingWebhookEvent
 from billing.providers.stripe_provider import StripeBillingProvider
 from models import User
 from sqlmodel import Session, select
@@ -179,4 +180,39 @@ def test_subscription_deleted_no_inner_commit(db_session):
     session.commit()
     session.refresh(sub)
     assert sub.status == "canceled"
+    assert user.plan == "free"
+
+
+def test_missing_plan_does_not_consume_checkout_event(db_session):
+    """A failed checkout remains retryable and cannot poison idempotency."""
+    provider = StripeBillingProvider()
+    user = User(
+        id=str(uuid.uuid4()),
+        email=f"missing-plan-{uuid.uuid4().hex[:8]}@example.com",
+        password_hash="hashed_pass",
+        plan="free",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    event_id = f"evt_missing_plan_{uuid.uuid4().hex}"
+    payload = {
+        "id": event_id,
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "subscription": f"sub_{uuid.uuid4().hex}",
+                "customer": f"cus_{uuid.uuid4().hex}",
+                "metadata": {"user_id": user.id, "plan_slug": "temporarily-missing"},
+            }
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="Plan not found"):
+        provider.handle_webhook(payload, {}, db_session=db_session)
+    db_session.rollback()
+
+    assert db_session.get(BillingWebhookEvent, event_id) is None
+    db_session.refresh(user)
     assert user.plan == "free"

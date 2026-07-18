@@ -18,6 +18,7 @@ from sqlmodel import Session, select
 from routes.common import (
     avg_scores_for_debate,
     champion_for_debate,
+    debate_visibility_clause,
     excerpt,
     members_from_config,
 )
@@ -128,8 +129,15 @@ def version():
 
 
 @router.get("/stats/models", response_model=list[ModelStatsSummary])
-async def get_model_leaderboard_stats(session: Session = Depends(get_session)):
-    rows = session.exec(select(Score.debate_id, Score.persona, Score.score)).all()
+async def get_model_leaderboard_stats(
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    rows = session.exec(
+        select(Score.debate_id, Score.persona, Score.score)
+        .join(Debate, Debate.id == Score.debate_id)
+        .where(debate_visibility_clause(session, current_user))
+    ).all()
     if not rows:
         return []
 
@@ -187,8 +195,14 @@ async def get_model_detail(
     model_id: str,
     limit: int = Query(50, ge=1, le=200),
     session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    rows = session.exec(select(Debate).order_by(Debate.created_at.desc()).limit(limit)).all()
+    rows = session.exec(
+        select(Debate)
+        .where(debate_visibility_clause(session, current_user))
+        .order_by(Debate.created_at.desc())
+        .limit(limit)
+    ).all()
     total_debates = 0
     wins = 0
     scores_sum = 0.0
@@ -261,9 +275,9 @@ async def get_hall_of_fame_stats(
     start_date: Optional[str] = Query(default=None),
     end_date: Optional[str] = Query(default=None),
     session: Session = Depends(get_session),
-    _: Optional[str] = Depends(get_optional_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    base_query = select(Debate)
+    base_query = select(Debate).where(debate_visibility_clause(session, current_user))
     if start_date:
         try:
             start_dt = datetime.fromisoformat(start_date)

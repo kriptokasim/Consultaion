@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useI18n } from "@/lib/i18n/client"
 import { useToast } from "@/components/ui/toast"
+import { fetchWithAuth } from "@/lib/auth"
 
 interface User {
     user_id: string
@@ -125,7 +126,7 @@ function UserRow({ user, onUpdate }: { user: User; onUpdate: () => void }) {
 
         setSaving(true)
         try {
-            const res = await fetch(`/api/admin/users/${user.user_id}/plan`, {
+            const res = await fetchWithAuth(`/admin/users/${user.user_id}/plan`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ plan: newPlan }),

@@ -41,7 +41,26 @@ def _make_request(headers=None, token=None):
     if token:
         raw_headers.append((b"authorization", f"Bearer {token}".encode()))
 
-    return Request(scope={"type": "http", "headers": raw_headers, "state": {}})
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    return Request(
+        scope={"type": "http", "headers": raw_headers, "state": {}},
+        receive=receive,
+    )
+
+
+def _capturing_subscribe(captured_last_seq):
+    """Return a finite subscriber that records the cursor under test."""
+    async def subscribe(channel_id, last_sequence=None):
+        captured_last_seq.append(last_sequence)
+        yield {
+            "type": "final",
+            "sequence": (last_sequence or 0) + 1,
+            "payload": {"type": "final"},
+        }
+
+    return subscribe
 
 
 def _ensure_fixtures(session):
@@ -94,7 +113,6 @@ async def test_fresh_connection_no_unbound_local_error():
         response = await stream_events(
             debate_id,
             request=req,
-            token=token,
             last_sequence=None,
             session=session,
             sse_backend=backend,
@@ -131,27 +149,17 @@ async def test_query_reconnect_passes_sequence():
         user, debate_id, token = _ensure_fixtures(session)
         req = _make_request(token=token)
 
-        original_subscribe = backend.subscribe
-
         captured_last_seq = []
-
-        async def spy_subscribe(channel_id, last_sequence=None):
-            captured_last_seq.append(last_sequence)
-            async for event in original_subscribe(channel_id, last_sequence=last_sequence):
-                yield event
+        spy_subscribe = _capturing_subscribe(captured_last_seq)
 
         with patch.object(backend, "subscribe", side_effect=spy_subscribe):
             response = await stream_events(
                 debate_id,
                 request=req,
-                token=token,
                 last_sequence=7,
                 session=session,
                 sse_backend=backend,
             )
-
-            channel_id = f"debate:{debate_id}"
-            await backend.publish(channel_id, {"type": "final"})
 
             async for chunk in response.body_iterator:
                 data = chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode()
@@ -176,26 +184,17 @@ async def test_header_reconnect_passes_sequence():
         user, debate_id, token = _ensure_fixtures(session)
         req = _make_request(headers={"last-event-id": "12"}, token=token)
 
-        original_subscribe = backend.subscribe
         captured_last_seq = []
-
-        async def spy_subscribe(channel_id, last_sequence=None):
-            captured_last_seq.append(last_sequence)
-            async for event in original_subscribe(channel_id, last_sequence=last_sequence):
-                yield event
+        spy_subscribe = _capturing_subscribe(captured_last_seq)
 
         with patch.object(backend, "subscribe", side_effect=spy_subscribe):
             response = await stream_events(
                 debate_id,
                 request=req,
-                token=token,
                 last_sequence=None,
                 session=session,
                 sse_backend=backend,
             )
-
-            channel_id = f"debate:{debate_id}"
-            await backend.publish(channel_id, {"type": "final"})
 
             async for chunk in response.body_iterator:
                 data = chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode()
@@ -220,26 +219,17 @@ async def test_query_wins_over_header():
         user, debate_id, token = _ensure_fixtures(session)
         req = _make_request(headers={"last-event-id": "10"}, token=token)
 
-        original_subscribe = backend.subscribe
         captured_last_seq = []
-
-        async def spy_subscribe(channel_id, last_sequence=None):
-            captured_last_seq.append(last_sequence)
-            async for event in original_subscribe(channel_id, last_sequence=last_sequence):
-                yield event
+        spy_subscribe = _capturing_subscribe(captured_last_seq)
 
         with patch.object(backend, "subscribe", side_effect=spy_subscribe):
             response = await stream_events(
                 debate_id,
                 request=req,
-                token=token,
                 last_sequence=20,  # query param wins
                 session=session,
                 sse_backend=backend,
             )
-
-            channel_id = f"debate:{debate_id}"
-            await backend.publish(channel_id, {"type": "final"})
 
             async for chunk in response.body_iterator:
                 data = chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode()
@@ -264,19 +254,13 @@ async def test_malformed_header_does_not_500():
         user, debate_id, token = _ensure_fixtures(session)
         req = _make_request(headers={"last-event-id": "abc"}, token=token)
 
-        original_subscribe = backend.subscribe
         captured_last_seq = []
-
-        async def spy_subscribe(channel_id, last_sequence=None):
-            captured_last_seq.append(last_sequence)
-            async for event in original_subscribe(channel_id, last_sequence=last_sequence):
-                yield event
+        spy_subscribe = _capturing_subscribe(captured_last_seq)
 
         with patch.object(backend, "subscribe", side_effect=spy_subscribe):
             response = await stream_events(
                 debate_id,
                 request=req,
-                token=token,
                 last_sequence=None,
                 session=session,
                 sse_backend=backend,
@@ -284,9 +268,6 @@ async def test_malformed_header_does_not_500():
 
             # No 500 — we got a valid response
             assert response.status_code == 200
-
-            channel_id = f"debate:{debate_id}"
-            await backend.publish(channel_id, {"type": "final"})
 
             async for chunk in response.body_iterator:
                 data = chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode()
@@ -311,26 +292,17 @@ async def test_negative_cursor_normalized_to_none():
         user, debate_id, token = _ensure_fixtures(session)
         req = _make_request(token=token)
 
-        original_subscribe = backend.subscribe
         captured_last_seq = []
-
-        async def spy_subscribe(channel_id, last_sequence=None):
-            captured_last_seq.append(last_sequence)
-            async for event in original_subscribe(channel_id, last_sequence=last_sequence):
-                yield event
+        spy_subscribe = _capturing_subscribe(captured_last_seq)
 
         with patch.object(backend, "subscribe", side_effect=spy_subscribe):
             response = await stream_events(
                 debate_id,
                 request=req,
-                token=token,
                 last_sequence=-5,
                 session=session,
                 sse_backend=backend,
             )
-
-            channel_id = f"debate:{debate_id}"
-            await backend.publish(channel_id, {"type": "final"})
 
             async for chunk in response.body_iterator:
                 data = chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode()
@@ -379,7 +351,6 @@ async def test_final_event_releases_lease():
         response = await stream_events(
             lease_debate_id,
             request=req,
-            token=token,
             last_sequence=None,
             session=session,
             sse_backend=backend,
@@ -444,7 +415,6 @@ async def test_client_cancellation_releases_lease():
         response = await stream_events(
             lease_debate_id,
             request=req,
-            token=token,
             last_sequence=None,
             session=session,
             sse_backend=backend,
@@ -510,7 +480,6 @@ async def test_backend_exception_releases_lease():
             response = await stream_events(
                 debate_id,
                 request=req,
-                token=token,
                 last_sequence=None,
                 session=session,
                 sse_backend=backend,
@@ -548,7 +517,6 @@ async def test_unauthorized_returns_401():
             await stream_events(
                 debate_id,
                 request=req,
-                token=None,
                 last_sequence=None,
                 session=session,
                 sse_backend=backend,
@@ -590,7 +558,6 @@ async def test_forbidden_debate_returns_error():
             await stream_events(
                 debate_id,
                 request=req,
-                token=other_token,
                 last_sequence=None,
                 session=session,
                 sse_backend=backend,

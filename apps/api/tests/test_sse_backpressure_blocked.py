@@ -102,13 +102,24 @@ class TestBackpressureBlockedSubscriber:
                     "response_id": "resp-1",
                     "text": f"chunk-{i}",
                 })
+            # A structural event forces the buffered deltas to flush first.
+            await backend.publish(channel, {
+                "type": "model_response_completed",
+                "response_id": "resp-1",
+            })
 
             events = []
             while not subscriber.empty():
                 events.append(subscriber.get_nowait())
 
-            # All deltas should be delivered (coalescing happens at consumer level)
-            assert len(events) == 5
+            deltas = [
+                event for event in events
+                if event.get("payload", {}).get("type") == "model_response_delta"
+            ]
+            assert len(deltas) == 1
+            assert deltas[0]["payload"]["text"] == "".join(
+                f"chunk-{index}" for index in range(5)
+            )
         finally:
             await backend.stop()
 

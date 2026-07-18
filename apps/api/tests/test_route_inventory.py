@@ -75,6 +75,19 @@ def test_all_routes_have_operation_ids():
     assert not missing, f"Routes without operation_id: {[r['path'] for r in missing]}"
 
 
+def test_operation_ids_are_unique_and_v1_is_not_double_prefixed():
+    """Router aliases must not re-declare the registry-managed v1 prefix."""
+    client = TestClient(app, raise_server_exceptions=False)
+    routes = _extract_routes(client)
+
+    operation_ids = [route["operation_id"] for route in routes]
+    duplicates = sorted({item for item in operation_ids if operation_ids.count(item) > 1})
+    double_prefixed = [route["path"] for route in routes if route["path"].startswith("/api/v1/api/v1/")]
+
+    assert not duplicates, f"Duplicate operation IDs found: {duplicates}"
+    assert not double_prefixed, f"Double-prefixed v1 routes found: {double_prefixed}"
+
+
 def test_api_v1_prefix_preserved():
     """Verify /api/v1 prefix routes exist."""
     client = TestClient(app, raise_server_exceptions=False)

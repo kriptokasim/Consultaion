@@ -19,30 +19,36 @@ logger = logging.getLogger(__name__)
 
 
 # Terminal events that immediately disconnect the subscriber
-TERMINAL_EVENT_TYPES = frozenset({
-    "final", "error", "run_completed"
-})
+TERMINAL_EVENT_TYPES = frozenset({"final", "error", "run_completed"})
 
 # Critical events that must be delivered but do not terminate the stream
-CRITICAL_NON_TERMINAL_EVENT_TYPES = frozenset({
-    "debate_completed", "debate_failed",
-})
+CRITICAL_NON_TERMINAL_EVENT_TYPES = frozenset(
+    {
+        "debate_completed",
+        "debate_failed",
+    }
+)
 
 # All critical events use priority 0 (preferentially retained)
 CRITICAL_EVENT_TYPES = TERMINAL_EVENT_TYPES | CRITICAL_NON_TERMINAL_EVENT_TYPES
 
 # Important state transitions should be preserved when possible
-IMPORTANT_EVENT_TYPES = frozenset({
-    "arena_response", "model_response_completed", "model_response_failed",
-    "perspectives_ready", "stage_checkpoint", "lane_assigned", "lane_convergence_checked"
-})
+IMPORTANT_EVENT_TYPES = frozenset(
+    {
+        "arena_response",
+        "model_response_completed",
+        "model_response_failed",
+        "perspectives_ready",
+        "stage_checkpoint",
+        "lane_assigned",
+        "lane_convergence_checked",
+    }
+)
 
 # Loss-tolerant events can be dropped or coalesced under pressure
 # (deltas, heartbeats, progress notices, repeated diagnostics)
 
-_DELTA_EVENT_TYPES = frozenset({
-    "model_response_delta", "agent_progress_delta"
-})
+_DELTA_EVENT_TYPES = frozenset({"model_response_delta", "agent_progress_delta"})
 
 
 def _event_priority(event: dict) -> int:
@@ -58,7 +64,9 @@ def _event_priority(event: dict) -> int:
 
 def _is_delta(event: dict) -> bool:
     payload = event.get("payload", {})
-    return payload.get("type", "") in _DELTA_EVENT_TYPES or event.get("type", "") in _DELTA_EVENT_TYPES
+    return (
+        payload.get("type", "") in _DELTA_EVENT_TYPES or event.get("type", "") in _DELTA_EVENT_TYPES
+    )
 
 
 def _delta_key(event: dict) -> str | None:
@@ -81,11 +89,20 @@ class DeltaCoalescer:
 
     def __init__(self, flush_interval_ms: int | None = None) -> None:
         from config import settings
-        self._flush_ms = flush_interval_ms if flush_interval_ms is not None else getattr(settings, "ARENA_DELTA_FLUSH_MS", 150)
+
+        self._flush_ms = (
+            flush_interval_ms
+            if flush_interval_ms is not None
+            else getattr(settings, "ARENA_DELTA_FLUSH_MS", 150)
+        )
         self._flush_seconds = self._flush_ms / 1000.0
         # {response_id: [delta_event, ...]}
         self._pending: dict[str, list[dict]] = {}
         self._last_flush: float = time.monotonic()
+
+    @property
+    def flush_interval_seconds(self) -> float:
+        return self._flush_seconds
 
     def _merge_deltas(self, deltas: list[dict]) -> dict:
         """Merge a list of delta events for the same response_id into one."""
@@ -93,16 +110,19 @@ class DeltaCoalescer:
             return deltas[0]
 
         merged = dict(deltas[-1])  # use the latest event as the base
-        merged_payload = dict(merged.get("payload", {}))
-
-        combined_text = ""
-        for d in deltas:
-            p = d.get("payload", {})
-            combined_text += p.get("text", "") or ""
-
-        merged_payload["text"] = combined_text
-        # accumulated_chars from the last delta is already the correct total
-        merged["payload"] = merged_payload
+        has_nested_payload = isinstance(merged.get("payload"), dict)
+        if has_nested_payload:
+            combined_text = "".join(
+                (delta.get("payload", {}).get("text", "") or "") for delta in deltas
+            )
+            merged_payload = dict(merged["payload"])
+            merged_payload["text"] = combined_text
+            # accumulated_chars from the last delta is already the correct total
+            merged["payload"] = merged_payload
+        else:
+            # MemoryChannelBackend also accepts the unwrapped event shape used
+            # by the rest of the SSE publishing API.
+            merged["text"] = "".join((delta.get("text", "") or "") for delta in deltas)
         return merged
 
     def ingest(self, event: dict) -> list[dict]:
@@ -154,53 +174,48 @@ class StreamLeaseResult(Enum):
 
 
 class BaseSSEBackend(Protocol):
-    async def start(self) -> None:
-        ...
+    async def start(self) -> None: ...
 
-    async def stop(self) -> None:
-        ...
+    async def stop(self) -> None: ...
 
-    async def create_channel(self, channel_id: str) -> None:
-        ...
+    async def create_channel(self, channel_id: str) -> None: ...
 
-    async def publish(self, channel_id: str, event: dict) -> None:
-        ...
+    async def publish(self, channel_id: str, event: dict) -> None: ...
 
-    async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
-        ...
+    async def subscribe(
+        self, channel_id: str, last_sequence: Optional[int] = None
+    ) -> AsyncIterator[dict]: ...
 
     async def replay(self, channel_id: str, after_sequence: Optional[int] = None) -> list[dict]:
         """Return cached events after the given sequence number."""
         ...
 
-    async def cleanup(self) -> None:
-        ...
+    async def cleanup(self) -> None: ...
 
-
-    async def ping(self) -> bool:
-        ...
+    async def ping(self) -> bool: ...
 
 
 class MemoryChannelBackend:
     """
     In-memory SSE backend for single-instance deployments.
-    
+
     Queue size is bounded (default 1000). When full, the queue enforces a priority-aware eviction policy:
     1. Loss-tolerant events are dropped first.
     2. Important events are dropped next.
     3. If full of critical events, the oldest critical event is replaced by the newest (latest critical wins).
-    
+
     Subscriptions will terminate on:
     - Receiving 'final' or 'error' event types
     - Idle timeout (no events received within timeout period)
     - External cancellation
-    
+
     Heartbeats are emitted every heartbeat_interval_seconds (default 5) to
     allow clients to detect connected-but-silent streams.
     """
+
     def __init__(
-        self, 
-        ttl_seconds: int = 900, 
+        self,
+        ttl_seconds: int = 900,
         max_queue_size: int = 1000,
         idle_timeout_seconds: int = 3600,
         heartbeat_interval_seconds: float = 5.0,
@@ -219,6 +234,7 @@ class MemoryChannelBackend:
         self._cleanup_task: Optional[asyncio.Task] = None
         # PS155.2: Per-channel delta coalescers
         self._coalescers: dict[str, DeltaCoalescer] = {}
+        self._coalescer_flush_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def start(self) -> None:
         self._running = True
@@ -227,6 +243,12 @@ class MemoryChannelBackend:
 
     async def stop(self) -> None:
         self._running = False
+        flush_tasks = list(self._coalescer_flush_tasks.values())
+        self._coalescer_flush_tasks.clear()
+        for task in flush_tasks:
+            task.cancel()
+        if flush_tasks:
+            await asyncio.gather(*flush_tasks, return_exceptions=True)
         if self._cleanup_task:
             self._cleanup_task.cancel()
             try:
@@ -258,10 +280,36 @@ class MemoryChannelBackend:
         events_to_publish = coalescer.ingest(event)
 
         if not events_to_publish:
+            self._schedule_coalescer_flush(channel_id, coalescer)
             return  # buffered, nothing to emit yet
+
+        pending_task = self._coalescer_flush_tasks.pop(channel_id, None)
+        if pending_task:
+            pending_task.cancel()
 
         for evt in events_to_publish:
             await self._publish_single(channel_id, evt)
+
+    def _schedule_coalescer_flush(self, channel_id: str, coalescer: DeltaCoalescer) -> None:
+        existing = self._coalescer_flush_tasks.get(channel_id)
+        if existing and not existing.done():
+            return
+
+        async def flush_after_interval() -> None:
+            try:
+                await asyncio.sleep(coalescer.flush_interval_seconds)
+                events = coalescer.flush_all()
+                current = asyncio.current_task()
+                if self._coalescer_flush_tasks.get(channel_id) is current:
+                    self._coalescer_flush_tasks.pop(channel_id, None)
+                for event in events:
+                    await self._publish_single(channel_id, event)
+            finally:
+                current = asyncio.current_task()
+                if self._coalescer_flush_tasks.get(channel_id) is current:
+                    self._coalescer_flush_tasks.pop(channel_id, None)
+
+        self._coalescer_flush_tasks[channel_id] = asyncio.create_task(flush_after_interval())
 
     async def _publish_single(self, channel_id: str, event: dict) -> None:
         """Publish a single event (after coalescing) to all subscribers."""
@@ -278,11 +326,12 @@ class MemoryChannelBackend:
                 "session_id": channel_id,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "sequence": seq,
-                "payload": event
+                "payload": event,
             }
 
             # Add correlation context if available
             from correlation import get_correlation_context
+
             ctx = get_correlation_context()
             if ctx:
                 envelope["correlation"] = ctx.to_sse_metadata()
@@ -320,6 +369,7 @@ class MemoryChannelBackend:
                             dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=0)
                             if dropped:
                                 from metrics import increment_metric
+
                                 increment_metric("sse.backpressure.critical_replaced")
                     elif new_priority == 1:
                         # Important event: only drop loss-tolerant
@@ -327,6 +377,7 @@ class MemoryChannelBackend:
 
                     if not dropped and sub_queue.full():
                         from metrics import increment_metric
+
                         increment_metric("sse.backpressure.overflow")
                         if new_priority == 0:
                             logger.error(
@@ -341,7 +392,7 @@ class MemoryChannelBackend:
 
     def _drop_from_queue(self, queue: asyncio.Queue[dict], min_priority_to_drop: int) -> bool:
         """Try to drop the oldest event with priority >= min_priority_to_drop from a queue.
-        
+
         Returns True if an event was dropped.
         """
         # asyncio.Queue doesn't support iteration, so we need to drain and re-enqueue
@@ -353,6 +404,7 @@ class MemoryChannelBackend:
                 if not dropped and _event_priority(item) >= min_priority_to_drop:
                     dropped = True
                     from metrics import increment_metric
+
                     increment_metric("sse.backpressure.dropped")
                     continue  # Drop this event
                 temp.append(item)
@@ -366,9 +418,11 @@ class MemoryChannelBackend:
                 break
         return dropped
 
-    async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
+    async def subscribe(
+        self, channel_id: str, last_sequence: Optional[int] = None
+    ) -> AsyncIterator[dict]:
         """Subscribe to a channel and yield events.
-        
+
         Terminates on:
         - 'final' or 'error' event types
         - idle_timeout_seconds without receiving any event
@@ -421,11 +475,11 @@ class MemoryChannelBackend:
             while True:
                 async with self._lock:
                     self._last_seen[channel_id] = time.time()
-                
+
                 if time.time() - idle_start > self._idle_timeout_seconds:
                     logger.info(f"SSE subscription idle timeout for {channel_id}")
                     break
-                
+
                 try:
                     envelope = await asyncio.wait_for(sub_queue.get(), timeout=poll_timeout)
                     idle_start = time.time()
@@ -479,8 +533,17 @@ class MemoryChannelBackend:
                 self._last_seen.pop(cid, None)
                 self._sequences.pop(cid, None)
                 self._history.pop(cid, None)
+        stale_flush_tasks = []
+        for cid in stale:
+            self._coalescers.pop(cid, None)
+            task = self._coalescer_flush_tasks.pop(cid, None)
+            if task:
+                task.cancel()
+                stale_flush_tasks.append(task)
+        if stale_flush_tasks:
+            await asyncio.gather(*stale_flush_tasks, return_exceptions=True)
         if stale:
-             logger.info(f"Cleaned up {len(stale)} stale SSE channels")
+            logger.info(f"Cleaned up {len(stale)} stale SSE channels")
 
     async def ping(self) -> bool:
         return True
@@ -494,7 +557,14 @@ class RedisChannelBackend:
     - Retry with exponential backoff for publish operations
     - Auto-reconnect for subscriptions on connection loss
     """
-    def __init__(self, url: str, ttl_seconds: int = 900, max_queue_size: int = 1000, heartbeat_interval_seconds: float = 5.0) -> None:
+
+    def __init__(
+        self,
+        url: str,
+        ttl_seconds: int = 900,
+        max_queue_size: int = 1000,
+        heartbeat_interval_seconds: float = 5.0,
+    ) -> None:
         if redis is None:
             raise RuntimeError("redis library is required for RedisChannelBackend")
         self._url = url
@@ -503,6 +573,7 @@ class RedisChannelBackend:
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         # Use shared async Redis connection pool
         from redis_pool import get_async_redis_client
+
         pooled_client = get_async_redis_client()
         if pooled_client is not None:
             self._redis = pooled_client
@@ -517,7 +588,7 @@ class RedisChannelBackend:
                 socket_timeout=10,
                 socket_keepalive=True,
                 health_check_interval=30,
-                retry_on_timeout=True
+                retry_on_timeout=True,
             )
 
     async def start(self) -> None:
@@ -560,7 +631,7 @@ class RedisChannelBackend:
             "session_id": channel_id,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "sequence": seq,
-            "payload": event
+            "payload": event,
         }
 
         payload_str = json.dumps(envelope)
@@ -580,18 +651,24 @@ class RedisChannelBackend:
                 return
             except (redis.ConnectionError, redis.TimeoutError) as e:
                 if attempt == 2:
-                    logger.error(f"Failed to publish to Redis SSE {channel_id} after 3 attempts: {e}")
+                    logger.error(
+                        f"Failed to publish to Redis SSE {channel_id} after 3 attempts: {e}"
+                    )
                     from metrics import increment_metric
+
                     increment_metric("sse.publish.degraded")
                 else:
                     await asyncio.sleep(0.1 * (2**attempt))
             except Exception as e:
                 logger.error(f"Failed to publish to Redis SSE {channel_id}: {e}")
                 from metrics import increment_metric
+
                 increment_metric("sse.publish.failed")
                 return
 
-    async def subscribe(self, channel_id: str, last_sequence: Optional[int] = None) -> AsyncIterator[dict]:
+    async def subscribe(
+        self, channel_id: str, last_sequence: Optional[int] = None
+    ) -> AsyncIterator[dict]:
         # Race-safe replay-to-live handoff for Redis
         # 1. Subscribe to Pub/Sub FIRST (before reading history)
         pubsub = self._redis.pubsub()
@@ -603,7 +680,9 @@ class RedisChannelBackend:
         try:
             events_str = await self._redis.lrange(history_key, 0, -1)
             history_events = [json.loads(evt_str) for evt_str in events_str]
-            replay_high_watermark = max((evt.get("sequence", 0) for evt in history_events), default=0)
+            replay_high_watermark = max(
+                (evt.get("sequence", 0) for evt in history_events), default=0
+            )
         except Exception as e:
             logger.error(f"Failed to fetch Redis SSE history: {e}")
             history_events = []
@@ -710,7 +789,9 @@ class RedisChannelBackend:
         except Exception:
             return False
 
+
 # ── Concurrent Stream Limiter (Lease-based) ────────────────────────────
+
 
 class StreamLeaseManager:
     """Lease-based concurrent stream limiter.
@@ -740,22 +821,30 @@ class StreamLeaseManager:
         """
         return f"{user_id}:{subscriber_id}"
 
-    async def try_acquire(self, debate_id: str, subscriber_id: str, user_id: str | None = None) -> StreamLeaseResult:
+    async def try_acquire(
+        self, debate_id: str, subscriber_id: str, user_id: str | None = None
+    ) -> StreamLeaseResult:
         """Try to acquire a streaming lease."""
         identity = self._subscriber_identity(debate_id, user_id or "anon", subscriber_id)
         try:
             from redis_pool import get_async_redis_client
+
             client = get_async_redis_client()
             if client is not None:
                 from services.lease import sse_acquire_lease_async
+
                 key = self._lease_key(debate_id)
-                result = await sse_acquire_lease_async(client, key, identity, self._max_streams, self._lease_ttl)
+                result = await sse_acquire_lease_async(
+                    client, key, identity, self._max_streams, self._lease_ttl
+                )
                 if result in (1, 2):
                     from metrics import increment_metric
+
                     increment_metric("sse.lease.acquired")
                     return StreamLeaseResult.ACQUIRED
                 if result == 0:
                     from metrics import increment_metric
+
                     increment_metric("sse.lease.denied")
                     return StreamLeaseResult.DENIED
                 # result == -1 (backend error) — fall through to memory
@@ -770,18 +859,21 @@ class StreamLeaseManager:
                 for k in expired:
                     del memory_set[k]
                     from metrics import increment_metric
+
                     increment_metric("sse.lease.expired")
                 if len(memory_set) >= self._max_streams:
                     from metrics import increment_metric
+
                     increment_metric("sse.lease.denied")
                     return StreamLeaseResult.DENIED
                 memory_set[identity] = now + self._lease_ttl
                 from metrics import increment_metric
+
                 increment_metric("sse.lease.acquired")
                 return StreamLeaseResult.ACQUIRED
         except Exception as exc:
             logger.error("Memory lease acquire failed: %s", exc)
-            
+
         fail_open = getattr(settings, "SSE_LEASE_FAIL_OPEN", False)
         if fail_open:
             return StreamLeaseResult.ERROR_FAIL_OPEN
@@ -797,9 +889,11 @@ class StreamLeaseManager:
         identity = self._subscriber_identity(debate_id, user_id or "anon", subscriber_id)
         try:
             from redis_pool import get_async_redis_client
+
             client = get_async_redis_client()
             if client is not None:
                 from services.lease import sse_release_lease_async
+
                 key = self._lease_key(debate_id)
                 await sse_release_lease_async(client, key, identity)
                 return
@@ -815,6 +909,7 @@ class StreamLeaseManager:
         """Return the number of active leases for a debate."""
         try:
             from redis_pool import get_async_redis_client
+
             client = get_async_redis_client()
             if client is not None:
                 key = self._lease_key(debate_id)
@@ -843,13 +938,12 @@ def get_stream_lease_manager() -> StreamLeaseManager:
     return _stream_lease_manager
 
 
-
 LEASE_RELEASE_TIMEOUT_SECONDS = 5.0
 
 
 class AcquiredStreamLease:
     """Async context manager that ensures a stream lease is released exactly once.
-    
+
     Handles:
     - Normal completion (final/error event)
     - Client disconnect
@@ -879,15 +973,15 @@ class AcquiredStreamLease:
         self._released = True
         try:
             await asyncio.wait_for(
-                asyncio.shield(
-                    self._lease_manager.release(self._debate_id, self._subscriber_id)
-                ),
+                asyncio.shield(self._lease_manager.release(self._debate_id, self._subscriber_id)),
                 timeout=LEASE_RELEASE_TIMEOUT_SECONDS,
             )
             from metrics import increment_metric
+
             increment_metric("sse.lease.released")
         except asyncio.TimeoutError:
             from metrics import increment_metric
+
             increment_metric("sse.lease.release_failed")
             logger.error(
                 "Lease release timed out: debate=%s subscriber=%s",
@@ -896,6 +990,7 @@ class AcquiredStreamLease:
             )
         except Exception as exc:
             from metrics import increment_metric
+
             increment_metric("sse.lease.release_failed")
             logger.error(
                 "Lease release failed: debate=%s subscriber=%s error=%s",
@@ -916,9 +1011,9 @@ def acquired_stream_lease(
 
 def _is_strict() -> bool:
     """Determine if SSE strict mode is enabled.
-    
+
     Strict mode causes startup to fail if Redis is configured but unusable.
-    
+
     - SSE_REDIS_STRICT=1 -> Always strict
     - SSE_REDIS_STRICT=0 -> Always lenient (fallback allowed)
     - SSE_REDIS_STRICT=None -> Auto: strict in production, lenient in local/dev
@@ -939,7 +1034,7 @@ def _validate_redis_url(url: str | None) -> bool:
 # Factory to create the backend instance
 def create_sse_backend() -> BaseSSEBackend:
     """Create the appropriate SSE backend based on configuration.
-    
+
     Patchset 75: Uses SSE_REDIS_STRICT for explicit strict mode control.
     """
     if settings.SSE_BACKEND.lower() == "redis":
@@ -951,14 +1046,14 @@ def create_sse_backend() -> BaseSSEBackend:
             if _is_strict():
                 raise RuntimeError(f"{msg} Set SSE_REDIS_STRICT=0 to allow fallback.")
             logger.warning(f"{msg} Falling back to memory.")
-    
+
     # Use configurable memory backend settings
     max_queue = getattr(settings, "SSE_MEMORY_MAX_QUEUE_SIZE", 1000)
     idle_timeout = getattr(settings, "SSE_MEMORY_IDLE_TIMEOUT_SECONDS", 3600)
     return MemoryChannelBackend(
         ttl_seconds=settings.SSE_CHANNEL_TTL_SECONDS,
         max_queue_size=max_queue,
-        idle_timeout_seconds=idle_timeout
+        idle_timeout_seconds=idle_timeout,
     )
 
 
@@ -969,33 +1064,34 @@ _sse_backend_lock = asyncio.Lock()
 class SSEBackendProvider:
     """
     Patchset 67.0: Thread-safe lazy SSE backend provider.
-    
+
     Replaces global mutable singleton pattern for better test isolation
     and multi-worker safety.
     """
+
     _instance: "SSEBackendProvider | None" = None
-    
+
     def __init__(self) -> None:
         self._backend: BaseSSEBackend | None = None
-    
+
     @classmethod
     def instance(cls) -> "SSEBackendProvider":
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-    
+
     def get(self) -> BaseSSEBackend:
         """Get or create the SSE backend instance."""
         if self._backend is None:
             self._backend = create_sse_backend()
             logger.info("SSE backend created: %s", type(self._backend).__name__)
         return self._backend
-    
+
     def reset_for_tests(self) -> None:
         """Reset backend for test isolation. Logs for debugging."""
         logger.debug("SSE backend reset for tests")
         self._backend = None
-    
+
     @classmethod
     def reset_instance_for_tests(cls) -> None:
         """Fully reset the provider instance (for complete test isolation)."""
@@ -1016,4 +1112,3 @@ def get_sse_backend() -> BaseSSEBackend:
 def reset_sse_backend_for_tests() -> None:
     """Reset SSE backend for test isolation."""
     SSEBackendProvider.reset_instance_for_tests()
-

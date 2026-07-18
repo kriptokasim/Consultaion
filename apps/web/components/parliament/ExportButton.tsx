@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
+import { fetchWithAuth } from "@/lib/auth";
 import { API_ORIGIN } from "@/lib/config/runtime";
 
 type ExportButtonProps = {
@@ -20,7 +21,7 @@ export default function ExportButton({ debateId, apiBase, onBillingLimit }: Expo
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`${base}/debates/${debateId}/export`, {
+      const response = await fetchWithAuth(`${base}/debates/${debateId}/export`, {
         method: "POST",
         credentials: "include",
       });

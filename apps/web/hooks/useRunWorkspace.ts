@@ -271,11 +271,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pollInFlightRef = useRef(false);
   const intentRef = useRef<PersistedContinuationIntent | null>(null);
+  const idempotencyKeyRef = useRef<string | null>(null);
   const debateSetOnceRef = useRef(false);
   const requestGenerationRef = useRef(0);
   const coreGenerationRef = useRef(0);
   const responsesGenerationRef = useRef(0);
   const timelineGenerationRef = useRef(0);
+  const activeDebateIdRef = useRef(debateId);
+  activeDebateIdRef.current = debateId;
 
   // Patchset 148 B1: O(1) event dedup via Set instead of O(n) .some()
   const seenEventIdsRef = useRef<Set<string>>(new Set());
@@ -455,30 +458,33 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   // ── Main effect: hydrate on debateId change ────────────────────────────
   useEffect(() => {
+    // A run is an isolation boundary. Clear visible and streaming state before
+    // hydrating the next ID so late work from the previous run cannot bleed in.
+    abortAll("debate_changed");
+    requestGenerationRef.current += 1;
+    coreGenerationRef.current += 1;
+    responsesGenerationRef.current += 1;
+    timelineGenerationRef.current += 1;
+    setDebate(null);
+    setEvents([]);
+    setResponses([]);
+    dispatchStreaming({ type: "RESET" });
+    dispatchConn({ type: "HYDRATION_START" });
+    setError(null);
+    setIsContinuing(false);
+    setOutcomeUnknown(false);
+    intentRef.current = null;
+    idempotencyKeyRef.current = null;
+    debateSetOnceRef.current = false;
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    pollInFlightRef.current = false;
+    dispatchConn({ type: "STOP_POLLING" });
+
     if (debateId) {
-      hydrate(debateId);
-    } else {
-      abortAll("cleared");
-      requestGenerationRef.current += 1;
-      coreGenerationRef.current += 1;
-      responsesGenerationRef.current += 1;
-      timelineGenerationRef.current += 1;
-      setDebate(null);
-      setEvents([]);
-      setResponses([]);
-      dispatchConn({ type: "HYDRATION_START" });
-      
-      
-      
-      setError(null);
-      
-      
-      dispatchConn({ type: "STOP_POLLING" });
-      setIsContinuing(false);
-      
-      
-      
-      debateSetOnceRef.current = false;
+      void hydrate(debateId);
     }
   }, [debateId, hydrate, abortAll]);
 
@@ -503,9 +509,17 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const streamUrl = debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
 
   const handleStreamEvent = useCallback((lastEvent: any) => {
-    if (!lastEvent || !debateId || isTerminalRef.current) return;
+    if (
+      !lastEvent
+      || !debateId
+      || activeDebateIdRef.current !== debateId
+      || isTerminalRef.current
+    ) return;
     try {
       const eventType = lastEvent.type;
+      const payloadDebateId = lastEvent.debate_id || lastEvent.payload?.debate_id;
+      if (payloadDebateId && payloadDebateId !== debateId) return;
+      const eventGeneration = requestGenerationRef.current;
 
       // Patchset 132 Track D: Update last event timestamp for silence detection
       lastEventTimestampRef.current = Date.now();
@@ -558,7 +572,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       // B3: Refetch debate only on low-frequency structural events (not deltas/streaming)
       if (["arena_synthesis", "debate_failed", "perspectives_ready", "debate_completed", "stage_checkpoint"].includes(eventType)) {
         getDebate(debateId)
-          .then((updated) => setDebate(updated))
+          .then((updated) => {
+            if (
+              activeDebateIdRef.current === debateId
+              && requestGenerationRef.current === eventGeneration
+            ) {
+              setDebate(updated);
+            }
+          })
           .catch(() => {});
       }
 
@@ -566,6 +587,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       if (["arena_synthesis", "debate_completed", "debate_failed", "arena_response"].includes(eventType)) {
         getDebateResponses(debateId)
           .then((data) => {
+            if (
+              activeDebateIdRef.current !== debateId
+              || requestGenerationRef.current !== eventGeneration
+            ) return;
             setResponses(data.items);
             dispatchConn({ type: "RESPONSES_LOADED", count: data.items.length });
             dispatchStreaming({ type: "MERGE_PERSISTED", payloads: data.items });
@@ -668,8 +693,6 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   }, []);
 
   // ── Continuation recovery ──────────────────────────────────────────────
-  const idempotencyKeyRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!debateId || typeof window === "undefined") return;
     const persisted = loadIntent(debateId);

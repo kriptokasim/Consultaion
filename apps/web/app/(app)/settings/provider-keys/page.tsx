@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { fetchWithAuth } from "@/lib/auth";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { ShieldCheck, Plus, Trash2, Key, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
 
@@ -35,7 +36,7 @@ export default function ProviderKeysPage() {
 
   const fetchKeys = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBase}/provider-keys`, { credentials: "include" });
+      const res = await fetchWithAuth(`${apiBase}/provider-keys`);
       if (res.ok) {
         const data = await res.json();
         setKeys(data);
@@ -60,7 +61,7 @@ export default function ProviderKeysPage() {
     trackEvent("byok_validation_started", { provider });
 
     try {
-      const res = await fetch(`${apiBase}/provider-keys`, {
+      const res = await fetchWithAuth(`${apiBase}/provider-keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider, key: newKey.trim() }),
@@ -96,7 +97,7 @@ export default function ProviderKeysPage() {
     }
 
     try {
-      const res = await fetch(`${apiBase}/provider-keys/${provider}`, {
+      const res = await fetchWithAuth(`${apiBase}/provider-keys/${provider}`, {
         method: "DELETE",
         credentials: "include"
       });
@@ -118,7 +119,7 @@ export default function ProviderKeysPage() {
     setSuccessMsg(null);
     
     try {
-      const res = await fetch(`${apiBase}/ops/probe/${provider}`, {
+      const res = await fetchWithAuth(`${apiBase}/ops/probe/${provider}`, {
         method: "POST",
         credentials: "include"
       });
