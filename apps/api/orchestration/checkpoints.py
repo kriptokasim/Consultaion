@@ -56,13 +56,42 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _active_debate_lease_exists(lease: ExecutionLease, *, now: Optional[datetime] = None):
+    """SQL predicate proving that *lease* is still live at statement time."""
+    checked_at = now or _now()
+    return sa.exists(
+        sa.select(Debate.id)
+        .where(Debate.id == lease.debate_id)
+        .where(Debate.runner_id == lease.owner_id)
+        .where(Debate.lease_epoch == lease.lease_epoch)
+        .where(Debate.status == "running")
+        .where(Debate.lease_expires_at.is_not(None))
+        .where(Debate.lease_expires_at > checked_at)
+    )
+
+
+def _checkpoint_is_stale(cp: DebateStageCheckpoint, *, now: datetime) -> bool:
+    """Return whether a running checkpoint has exceeded the stale window."""
+    activity_at = cp.heartbeat_at or cp.updated_at or cp.started_at
+    if activity_at is None:
+        return True
+    if activity_at.tzinfo is None:
+        activity_at = activity_at.replace(tzinfo=timezone.utc)
+    return activity_at < now - timedelta(seconds=settings.CHECKPOINT_STALE_SECONDS)
+
+
 async def _assert_debate_lease(session, lease: ExecutionLease) -> None:
     """Verify the Debate-level lease is still ours (fails closed)."""
+    now = _now()
     stmt = (
         sa.select(Debate.id)
         .where(Debate.id == lease.debate_id)
         .where(Debate.runner_id == lease.owner_id)
         .where(Debate.lease_epoch == lease.lease_epoch)
+        .where(Debate.status == "running")
+        .where(Debate.lease_expires_at.is_not(None))
+        .where(Debate.lease_expires_at > now)
+        .with_for_update()
     )
     result = await session.execute(stmt)
     if result.first() is None:
@@ -136,12 +165,22 @@ async def _cas_claim(session, lease: ExecutionLease, stage_key: str, input_hash:
     now = _now()
     stale_before = now - timedelta(seconds=settings.CHECKPOINT_STALE_SECONDS)
 
-    # Base claim: checkpoint is in a claimable (non-running) state.
+    # Base claim: checkpoint is in a claimable state, or completed output was
+    # produced for different input and must be recomputed.
     base = (
         sa.update(DebateStageCheckpoint)
         .where(DebateStageCheckpoint.debate_id == lease.debate_id)
         .where(DebateStageCheckpoint.stage_key == stage_key)
-        .where(DebateStageCheckpoint.status.in_(_CLAIMABLE_STATUSES))
+        .where(
+            sa.or_(
+                DebateStageCheckpoint.status.in_(_CLAIMABLE_STATUSES),
+                sa.and_(
+                    DebateStageCheckpoint.status == "completed",
+                    DebateStageCheckpoint.input_hash != input_hash,
+                ),
+            )
+        )
+        .where(_active_debate_lease_exists(lease, now=now))
     )
     values = dict(
         status="running",
@@ -171,6 +210,7 @@ async def _cas_claim(session, lease: ExecutionLease, stage_key: str, input_hash:
         .where(DebateStageCheckpoint.stage_key == stage_key)
         .where(DebateStageCheckpoint.status == "running")
         .where(DebateStageCheckpoint.owner_id != lease.owner_id)
+        .where(_active_debate_lease_exists(lease, now=now))
         .where(
             sa.or_(
                 DebateStageCheckpoint.heartbeat_at < stale_before,
@@ -227,9 +267,13 @@ async def _wait_for_checkpoint(session_factory, lease: ExecutionLease, stage_key
     Returns the terminal action to take: "load", "claim", or raises.
     Bounded exponential backoff with jitter (Track H).
     """
-    deadline = _now() + timedelta(seconds=settings.CHECKPOINT_WAIT_TIMEOUT_SECONDS)
     delay = settings.CHECKPOINT_POLL_INITIAL_MS / 1000.0
     max_delay = settings.CHECKPOINT_POLL_MAX_MS / 1000.0
+    effective_timeout = max(
+        float(settings.CHECKPOINT_WAIT_TIMEOUT_SECONDS),
+        float(settings.CHECKPOINT_STALE_SECONDS) + max_delay,
+    )
+    deadline = _now() + timedelta(seconds=effective_timeout)
 
     while True:
         async with session_factory() as session:
@@ -250,12 +294,15 @@ async def _wait_for_checkpoint(session_factory, lease: ExecutionLease, stage_key
                     f"Debate {lease.debate_id}: stage {stage_key} already "
                     f"running under this execution owner — refusing to run twice."
                 )
-            # running under another live owner — keep waiting.
+            if cp.status == "running" and _checkpoint_is_stale(cp, now=_now()):
+                return "claim"
+            # Running under another live owner — keep waiting until it
+            # completes or crosses the stale-takeover threshold.
 
         if _now() >= deadline:
             raise CheckpointIntegrityError(
                 f"Debate {lease.debate_id}: stage {stage_key} still locked "
-                f"after {settings.CHECKPOINT_WAIT_TIMEOUT_SECONDS}s."
+                f"after {effective_timeout}s."
             )
         await asyncio.sleep(delay + random.uniform(0, delay / 2))
         delay = min(max_delay, delay * 2)
@@ -267,6 +314,7 @@ async def checkpoint_heartbeat(lease: ExecutionLease, stage_key: str, attempt: i
     A zero-row update means ownership moved — abort by setting the lease-lost
     event; the completion CAS will fail closed as well.
     """
+    now = _now()
     stmt = (
         sa.update(DebateStageCheckpoint)
         .where(DebateStageCheckpoint.debate_id == lease.debate_id)
@@ -275,7 +323,8 @@ async def checkpoint_heartbeat(lease: ExecutionLease, stage_key: str, attempt: i
         .where(DebateStageCheckpoint.owner_id == lease.owner_id)
         .where(DebateStageCheckpoint.lease_epoch == lease.lease_epoch)
         .where(DebateStageCheckpoint.attempt == attempt)
-        .values(heartbeat_at=_now())
+        .where(_active_debate_lease_exists(lease, now=now))
+        .values(heartbeat_at=now, updated_at=now)
     )
     async with async_session_scope() as session:
         result = await session.execute(stmt)
@@ -322,6 +371,7 @@ async def _conditional_finish(
         .where(DebateStageCheckpoint.lease_epoch == lease.lease_epoch)
         .where(DebateStageCheckpoint.attempt == attempt)
         .where(DebateStageCheckpoint.input_hash == input_hash)
+        .where(_active_debate_lease_exists(lease, now=now))
         .values(**values)
     )
     async with async_session_scope() as session:

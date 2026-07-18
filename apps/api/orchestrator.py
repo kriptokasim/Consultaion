@@ -867,42 +867,39 @@ async def run_debate(
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
         logger.warning(f"Debate encountered transient/provider error: {exc}", extra=log_extra)
         increment_metric("debate.degraded")
-        await _update_continuation_status(
-            continuation_id,
-            "failed",
-            ["running", "dispatched", "requested", "preflight_passed"],
-            failure_code="transient_provider_error",
-            failure_detail_safe=str(exc)
-        )
-        await send_slack_alert(
-            message="[Consultaion] Debate transient/provider failure",
-            level="warning",
-            meta={
-                "debate_id": debate_id,
-                "error": str(exc)[:500],
-            },
-        )
         try:
             async with async_session_scope() as session:
-                # PS156 Track F: fence terminal writes + billing on ownership.
-                # A superseded worker raises here, skipping both the status
-                # write and the hosted-credit refund.
-                if lease is not None:
-                    from orchestration.fencing import assert_execution_ownership
-                    await assert_execution_ownership(session, lease)
                 debate = await session.get(Debate, debate_id)
                 if debate and debate.status != "failed":
-                    debate.status = "failed"
-                    debate.updated_at = datetime.now(timezone.utc)
                     from correlation import get_correlation_context
                     corr_ctx = get_correlation_context()
-                    debate.final_meta = {
+                    final_meta = {
                         "error": "Temporary AI provider issue. Please retry.",
                         "failure_code": "transient_provider_error",
                         "failure_detail_safe": str(exc)[:500],
                         "correlation_id": corr_ctx.request_id if corr_ctx else None,
                     }
-                    session.add(debate)
+                    updated_at = datetime.now(timezone.utc)
+                    if lease is not None:
+                        # One CAS covers ownership, epoch, live expiry, and the
+                        # terminal mutation. A stale worker cannot pass a
+                        # read-check and commit after a takeover.
+                        from orchestration.fencing import fenced_debate_update
+                        await fenced_debate_update(
+                            session,
+                            lease,
+                            {
+                                "status": "failed",
+                                "updated_at": updated_at,
+                                "final_meta": final_meta,
+                            },
+                            what="transient failure",
+                        )
+                    else:
+                        debate.status = "failed"
+                        debate.updated_at = updated_at
+                        debate.final_meta = final_meta
+                        session.add(debate)
                     await session.commit()
                     
                     # Refund free hosted credit
@@ -919,9 +916,26 @@ async def run_debate(
                             await asyncio.get_running_loop().run_in_executor(None, _run_refund)
                         except Exception as refund_err:
                             logger.warning(f"Failed to refund hosted credits: {refund_err}")
+        except ExecutionSupersededError:
+            raise
         except Exception as inner_exc:
             logger.error("Failed to update debate status after transient error: debate_id=%s error=%s", debate_id, inner_exc)
 
+        await _update_continuation_status(
+            continuation_id,
+            "failed",
+            ["running", "dispatched", "requested", "preflight_passed"],
+            failure_code="transient_provider_error",
+            failure_detail_safe=str(exc)
+        )
+        await send_slack_alert(
+            message="[Consultaion] Debate transient/provider failure",
+            level="warning",
+            meta={
+                "debate_id": debate_id,
+                "error": str(exc)[:500],
+            },
+        )
         await backend.publish(
             channel_id,
             {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Temporary AI provider issue. Please retry."}},
@@ -930,39 +944,12 @@ async def run_debate(
     except Exception as exc:
         logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
         increment_metric("debate.failed")
-        await _update_continuation_status(
-            continuation_id,
-            "failed",
-            ["running", "dispatched", "requested", "preflight_passed"],
-            failure_code="terminal_execution_error",
-            failure_detail_safe=str(exc)
-        )
-        
-        # Slack Alert
-        await send_slack_alert(
-            message="[Consultaion] Debate execution failed",
-            level="error",
-            meta={
-                "debate_id": debate_id,
-                "user_id": str(debate_user_id) if debate_user_id else "unknown",
-                "error": str(exc)[:500],
-            },
-        )
-
         # Fallback error handling if Runner didn't catch it (though it should)
         # But we need to ensure DB status is updated if Runner failed completely
         try:
             async with async_session_scope() as session:
-                # PS156 Track F: fence terminal writes + billing on ownership.
-                # A superseded worker raises here, skipping both the status
-                # write and the hosted-credit refund.
-                if lease is not None:
-                    from orchestration.fencing import assert_execution_ownership
-                    await assert_execution_ownership(session, lease)
                 debate = await session.get(Debate, debate_id)
                 if debate and debate.status != "failed":
-                    debate.status = "failed"
-                    debate.updated_at = datetime.now(timezone.utc)
                     from correlation import get_correlation_context
                     corr_ctx = get_correlation_context()
                     existing_meta = debate.final_meta or {}
@@ -981,14 +968,31 @@ async def run_debate(
                         error_msg = exc.safe_message
                         failure_code = getattr(exc, "failure_code", failure_code)
 
-                    debate.final_meta = {
+                    final_meta = {
                         **existing_meta,
                         "error": error_msg,
                         "failure_code": failure_code,
                         "failure_detail_safe": existing_meta.get("failure_detail_safe") or str(exc)[:500],
                         "correlation_id": existing_meta.get("correlation_id") or (corr_ctx.request_id if corr_ctx else None),
                     }
-                    session.add(debate)
+                    updated_at = datetime.now(timezone.utc)
+                    if lease is not None:
+                        from orchestration.fencing import fenced_debate_update
+                        await fenced_debate_update(
+                            session,
+                            lease,
+                            {
+                                "status": "failed",
+                                "updated_at": updated_at,
+                                "final_meta": final_meta,
+                            },
+                            what="terminal failure",
+                        )
+                    else:
+                        debate.status = "failed"
+                        debate.updated_at = updated_at
+                        debate.final_meta = final_meta
+                        session.add(debate)
                     await session.commit()
                     
                     # Refund free hosted credit
@@ -1005,10 +1009,29 @@ async def run_debate(
                             await asyncio.get_running_loop().run_in_executor(None, _run_refund)
                         except Exception as refund_err:
                             logger.warning(f"Failed to refund hosted credits: {refund_err}")
+        except ExecutionSupersededError:
+            raise
         except Exception as inner_exc:
             logger.error("Failed to update debate status after terminal error: debate_id=%s error=%s", debate_id, inner_exc)
 
+        await _update_continuation_status(
+            continuation_id,
+            "failed",
+            ["running", "dispatched", "requested", "preflight_passed"],
+            failure_code="terminal_execution_error",
+            failure_detail_safe=str(exc)
+        )
 
+        # Slack Alert
+        await send_slack_alert(
+            message="[Consultaion] Debate execution failed",
+            level="error",
+            meta={
+                "debate_id": debate_id,
+                "user_id": str(debate_user_id) if debate_user_id else "unknown",
+                "error": str(exc)[:500],
+            },
+        )
         await backend.publish(
             channel_id,
             {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Debate failed due to an internal error."}},

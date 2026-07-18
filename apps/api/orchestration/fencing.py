@@ -16,6 +16,7 @@ clobbering the newer owner's work.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import sqlalchemy as sa
@@ -28,12 +29,16 @@ logger = logging.getLogger(__name__)
 
 
 def fenced_debate_stmt(lease: ExecutionLease):
-    """Base UPDATE statement constrained to the lease's fencing identity."""
+    """Base UPDATE constrained to a live lease's fencing identity."""
+    now = datetime.now(timezone.utc)
     return (
         sa.update(Debate)
         .where(Debate.id == lease.debate_id)
         .where(Debate.runner_id == lease.owner_id)
         .where(Debate.lease_epoch == lease.lease_epoch)
+        .where(Debate.status == "running")
+        .where(Debate.lease_expires_at.is_not(None))
+        .where(Debate.lease_expires_at > now)
     )
 
 
@@ -68,11 +73,15 @@ async def fenced_debate_update(
 
 async def assert_execution_ownership(session, lease: ExecutionLease) -> None:
     """Read-side ownership check (SELECT) for flows about to write state."""
+    now = datetime.now(timezone.utc)
     stmt = (
         sa.select(Debate.id)
         .where(Debate.id == lease.debate_id)
         .where(Debate.runner_id == lease.owner_id)
         .where(Debate.lease_epoch == lease.lease_epoch)
+        .where(Debate.status == "running")
+        .where(Debate.lease_expires_at.is_not(None))
+        .where(Debate.lease_expires_at > now)
     )
     result = await session.execute(stmt)
     if result.first() is None:

@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from config import settings
 from database import session_scope
 from models import Debate, DebateStageCheckpoint, Message
 from orchestration.checkpoints import (
@@ -266,6 +267,30 @@ async def test_stale_owner_cannot_transition_status():
     assert _get_debate(debate_id).status == "running"
 
 
+@pytest.mark.anyio
+async def test_expired_owner_cannot_write_before_takeover():
+    from database_async import async_session_scope
+    from orchestration.execution_lease import ExecutionSupersededError
+
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    acquired = await acquire_execution_lease(debate_id, lease_seconds=30)
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        debate.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        session.add(debate)
+        session.commit()
+
+    async with async_session_scope() as session:
+        with pytest.raises(ExecutionSupersededError):
+            await fenced_debate_update(
+                session,
+                acquired.lease,
+                {"status": "failed"},
+                what="expired terminal write",
+            )
+    assert _get_debate(debate_id).status == "running"
+
+
 # ── Checkpoint helpers ───────────────────────────────────────────────────
 
 
@@ -345,7 +370,17 @@ async def test_completed_checkpoint_reuse_and_hash_change_reexecutes():
     assert len(runs) == 1
 
     # Different input hash must not return stale output — re-executes.
-    r3 = await run_with_checkpoint(debate_id, "stage-reuse", {"k": 2}, _run, _load, execution_lease=lease)
+    r3 = await asyncio.wait_for(
+        run_with_checkpoint(
+            debate_id,
+            "stage-reuse",
+            {"k": 2},
+            _run,
+            _load,
+            execution_lease=lease,
+        ),
+        timeout=1,
+    )
     assert r3 == "v1"
     assert len(runs) == 2
 
@@ -395,6 +430,59 @@ async def test_stale_worker_completion_rejected():
         cp = session.query(DebateStageCheckpoint).filter_by(debate_id=debate_id, stage_key="stage-stale").one()
         assert cp.status == "running"  # stale completion did not land
         assert cp.owner_id == "owner-b"
+
+
+@pytest.mark.anyio
+async def test_debate_takeover_alone_rejects_old_checkpoint_completion():
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    _owned_debate(debate_id, "owner-a")
+    lease_a = ExecutionLease.create(
+        debate_id, owner_id="owner-a", lease_epoch=1, run_attempt=1
+    )
+    gate = asyncio.Event()
+
+    async def _run():
+        await gate.wait()
+        return "stale-result"
+
+    async def _load(session):
+        return "loaded"
+
+    task = asyncio.create_task(
+        run_with_checkpoint(
+            debate_id,
+            "stage-debate-takeover",
+            {"k": 1},
+            _run,
+            _load,
+            execution_lease=lease_a,
+        )
+    )
+    await asyncio.sleep(0.05)
+
+    # Only the Debate lease moves. The checkpoint row still carries owner-a;
+    # completion must nevertheless fail because owner-a no longer owns the
+    # execution lease.
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        debate.runner_id = "owner-b"
+        debate.execution_owner_id = "owner-b"
+        debate.lease_epoch = 2
+        debate.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+        session.add(debate)
+        session.commit()
+
+    gate.set()
+    with pytest.raises(CheckpointOwnershipLostError):
+        await task
+
+    with session_scope() as session:
+        cp = session.query(DebateStageCheckpoint).filter_by(
+            debate_id=debate_id, stage_key="stage-debate-takeover"
+        ).one()
+        assert cp.status == "running"
+        assert cp.owner_id == "owner-a"
+        assert cp.lease_epoch == 1
 
 
 # ── 27. Deleted checkpoint → integrity error ─────────────────────────────
@@ -458,6 +546,69 @@ async def test_fresh_running_checkpoint_not_stolen():
     assert await task_a == "a-done"
 
 
+@pytest.mark.anyio
+async def test_waits_until_checkpoint_is_stale_then_takes_over(monkeypatch):
+    monkeypatch.setattr(settings, "CHECKPOINT_STALE_SECONDS", 0.05)
+    monkeypatch.setattr(settings, "CHECKPOINT_WAIT_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(settings, "CHECKPOINT_POLL_INITIAL_MS", 1)
+    monkeypatch.setattr(settings, "CHECKPOINT_POLL_MAX_MS", 5)
+
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    _owned_debate(debate_id, "owner-b", epoch=2)
+    now = datetime.now(timezone.utc)
+    with session_scope() as session:
+        session.add(
+            DebateStageCheckpoint(
+                debate_id=debate_id,
+                stage_key="stage-wait-takeover",
+                status="running",
+                input_hash="old-input",
+                owner_id="owner-a",
+                lease_epoch=1,
+                attempt=1,
+                started_at=now,
+                updated_at=now,
+                heartbeat_at=now,
+            )
+        )
+        session.commit()
+
+    lease_b = ExecutionLease.create(
+        debate_id, owner_id="owner-b", lease_epoch=2, run_attempt=2
+    )
+    runs = []
+
+    async def _run():
+        runs.append(1)
+        return "taken-over"
+
+    async def _load(session):
+        return "unexpected-load"
+
+    result = await asyncio.wait_for(
+        run_with_checkpoint(
+            debate_id,
+            "stage-wait-takeover",
+            {"k": "new"},
+            _run,
+            _load,
+            execution_lease=lease_b,
+        ),
+        timeout=1,
+    )
+    assert result == "taken-over"
+    assert runs == [1]
+
+    with session_scope() as session:
+        cp = session.query(DebateStageCheckpoint).filter_by(
+            debate_id=debate_id, stage_key="stage-wait-takeover"
+        ).one()
+        assert cp.status == "completed"
+        assert cp.owner_id == "owner-b"
+        assert cp.lease_epoch == 2
+        assert cp.attempt == 2
+
+
 # ── 20. Attempt-scoped message isolation ─────────────────────────────────
 
 
@@ -471,3 +622,42 @@ def test_prior_attempt_messages_isolated():
         by_attempt = {m.attempt_id: m.content for m in rows}
         assert by_attempt["attempt-1"] == "old"
         assert by_attempt["attempt-2"] == "new"
+
+
+def test_admin_leases_selects_latest_checkpoint_by_timestamp():
+    from routes.admin.leases import admin_leases
+
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    _owned_debate(debate_id, "owner-a")
+    now = datetime.now(timezone.utc)
+    with session_scope() as session:
+        session.add(
+            DebateStageCheckpoint(
+                id=f"zz-old-{uuid.uuid4()}",
+                debate_id=debate_id,
+                stage_key="older-stage",
+                status="completed",
+                input_hash="old",
+                started_at=now - timedelta(minutes=2),
+                updated_at=now - timedelta(minutes=1),
+            )
+        )
+        session.add(
+            DebateStageCheckpoint(
+                id=f"aa-new-{uuid.uuid4()}",
+                debate_id=debate_id,
+                stage_key="newer-stage",
+                status="running",
+                input_hash="new",
+                started_at=now,
+                updated_at=now,
+                heartbeat_at=now,
+                owner_id="owner-a",
+                lease_epoch=1,
+            )
+        )
+        session.commit()
+
+    payload = admin_leases(None)
+    item = next(row for row in payload["debates"] if row["debate_id"] == debate_id)
+    assert item["current_checkpoint"]["stage_key"] == "newer-stage"

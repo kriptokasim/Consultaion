@@ -57,7 +57,14 @@ def admin_leases(
             cp = session.exec(
                 select(DebateStageCheckpoint)
                 .where(DebateStageCheckpoint.debate_id == d.id)
-                .order_by(DebateStageCheckpoint.id.desc())
+                .order_by(
+                    func.coalesce(
+                        DebateStageCheckpoint.updated_at,
+                        DebateStageCheckpoint.heartbeat_at,
+                        DebateStageCheckpoint.completed_at,
+                        DebateStageCheckpoint.started_at,
+                    ).desc()
+                )
             ).first()
 
             lease_age_s = _seconds_since(d.execution_started_at)
