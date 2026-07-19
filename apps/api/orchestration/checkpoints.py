@@ -195,6 +195,7 @@ async def _cas_claim(session, lease: ExecutionLease, stage_key: str, input_hash:
         error_code=None,
         failed_at=None,
         completed_at=None,
+        output_reference=None,
     )
     result = await session.execute(base.values(**values))
     if result.rowcount == 1:

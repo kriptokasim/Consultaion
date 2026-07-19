@@ -6,9 +6,11 @@ database; there is no read-then-write anywhere in the lease lifecycle.
 - Acquisition requires the lease to be free (no runner, no expiry, or expired)
   and the Debate to be in a non-terminal status. Every acquisition increments
   ``lease_epoch`` (fencing token) and ``run_attempt`` exactly once.
-- Heartbeat renewal is conditional on (debate_id, owner_id, lease_epoch,
-  status='running') and never increments either counter. ``rowcount == 0``
-  means ownership was lost — it is never treated as success.
+- Heartbeat renewal is conditional on (debate_id, owner_id, lease_epoch) and
+  never increments either counter. Debate status may change before the owner
+  finishes publishing final events and other post-processing, so status is
+  deliberately not part of the ownership predicate. ``rowcount == 0`` means
+  ownership was lost — it is never treated as success.
 - Release is conditional on the same identity triple, so a stale worker can
   never clear a newer owner's lease.
 """
@@ -133,14 +135,20 @@ async def renew_execution_lease(
     *,
     lease_seconds: int,
 ) -> LeaseRenewResult:
-    """Conditionally extend the lease. Zero rows updated ⇒ ownership lost."""
+    """Conditionally extend the lease. Zero rows updated ⇒ ownership lost.
+
+    The fencing identity, rather than ``Debate.status``, defines ownership.
+    Finalization can set ``completed`` or ``perspectives_ready`` before the
+    owner finishes SSE publication and continuation bookkeeping; keeping the
+    lease alive across that transition prevents those tasks from being
+    cancelled as a false takeover.
+    """
     now = _now()
     stmt = (
         sa.update(Debate)
         .where(Debate.id == lease.debate_id)
         .where(Debate.runner_id == lease.owner_id)
         .where(Debate.lease_epoch == lease.lease_epoch)
-        .where(Debate.status == "running")
         .values(
             lease_expires_at=now + timedelta(seconds=lease_seconds),
             last_heartbeat_at=now,

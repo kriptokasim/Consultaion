@@ -133,6 +133,62 @@ async def test_heartbeat_renews_and_never_increments_counters():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "status",
+    ["perspectives_ready", "completed", "completed_with_warnings", "failed"],
+)
+async def test_heartbeat_renews_while_same_owner_finalizes(status):
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    result = await acquire_execution_lease(debate_id, lease_seconds=30)
+    lease = result.lease
+
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        debate.status = status
+        session.add(debate)
+        session.commit()
+
+    renewed = await renew_execution_lease(lease, lease_seconds=30)
+
+    assert renewed is LeaseRenewResult.RENEWED
+    assert not lease.lease_lost_event.is_set()
+
+
+@pytest.mark.anyio
+async def test_heartbeat_loop_does_not_signal_loss_after_status_transition(monkeypatch):
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    result = await acquire_execution_lease(debate_id, lease_seconds=30)
+    lease = result.lease
+
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        debate.status = "completed"
+        session.add(debate)
+        session.commit()
+
+    import orchestration.execution_lease as lease_mod
+
+    stop = asyncio.Event()
+    original = lease_mod.renew_execution_lease
+
+    async def _renew_once(*args, **kwargs):
+        renewed = await original(*args, **kwargs)
+        stop.set()
+        return renewed
+
+    monkeypatch.setattr(lease_mod, "renew_execution_lease", _renew_once)
+    await heartbeat_loop(
+        lease,
+        lease_seconds=30,
+        interval_seconds=0,
+        failure_threshold=2,
+        stop_event=stop,
+    )
+
+    assert not lease.lease_lost_event.is_set()
+
+
+@pytest.mark.anyio
 async def test_old_owner_heartbeat_lost_after_takeover():
     debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
     first = await acquire_execution_lease(debate_id, lease_seconds=0)
@@ -369,6 +425,15 @@ async def test_completed_checkpoint_reuse_and_hash_change_reexecutes():
     assert r2 == "from-store"
     assert len(runs) == 1
 
+    with session_scope() as session:
+        checkpoint = session.query(DebateStageCheckpoint).filter_by(
+            debate_id=debate_id,
+            stage_key="stage-reuse",
+        ).one()
+        checkpoint.output_reference = "stale-output-reference"
+        session.add(checkpoint)
+        session.commit()
+
     # Different input hash must not return stale output — re-executes.
     r3 = await asyncio.wait_for(
         run_with_checkpoint(
@@ -383,6 +448,12 @@ async def test_completed_checkpoint_reuse_and_hash_change_reexecutes():
     )
     assert r3 == "v1"
     assert len(runs) == 2
+    with session_scope() as session:
+        checkpoint = session.query(DebateStageCheckpoint).filter_by(
+            debate_id=debate_id,
+            stage_key="stage-reuse",
+        ).one()
+        assert checkpoint.output_reference is None
 
 
 # ── 25/26. Stale completion/failure rejection ────────────────────────────
