@@ -10,7 +10,6 @@ from agents import (
     judge_scores,
     produce_candidate,
 )
-from config import settings
 from conversation.engine import run_conversation_debate
 from database_async import async_session_scope
 from exceptions import ProviderCircuitOpenError
@@ -36,6 +35,8 @@ from orchestration.execution_lease import (
 from parliament.engine import run_parliament_debate
 from schemas import DebateConfig, DebateSummary, default_agents, default_judges
 from sse_backend import get_sse_backend
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -648,7 +649,10 @@ async def run_debate(
                 )
 
                 if result.status == "completed":
-                    from services.terminal_transition import TRANSITION_SUMMARY_EMAIL, claim_transition_async
+                    from services.terminal_transition import (
+                        TRANSITION_SUMMARY_EMAIL,
+                        claim_transition_async,
+                    )
                     if await claim_transition_async(debate_id, TRANSITION_SUMMARY_EMAIL):
                         await _build_and_send_summary(debate_id, debate_user_id)
                     try:
@@ -832,7 +836,10 @@ async def run_debate(
             # Success path for Standard Pipeline
             logger.info("Debate completed successfully", extra=log_extra)
             increment_metric("debate.completed")
-            from services.terminal_transition import TRANSITION_SUMMARY_EMAIL, claim_transition_async
+            from services.terminal_transition import (
+                TRANSITION_SUMMARY_EMAIL,
+                claim_transition_async,
+            )
             if await claim_transition_async(debate_id, TRANSITION_SUMMARY_EMAIL):
                 await _build_and_send_summary(debate_id, debate_user_id)
             await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])

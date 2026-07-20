@@ -13,13 +13,6 @@ from typing import List
 from agents import UsageAccumulator, call_llm_for_role
 from database_async import async_session_scope
 from models import Debate, Message
-from parliament.model_registry import get_arena_models
-from sse_backend import get_sse_backend
-
-from arena.prompts import (
-    get_compiled_model_prompt,
-)
-
 from observability.latency import (
     PROMETHEUS_AVAILABLE,
     record_connect_latency,
@@ -27,6 +20,12 @@ from observability.latency import (
     record_stream_dps,
     record_stream_duration,
     record_ttft,
+)
+from parliament.model_registry import get_arena_models
+from sse_backend import get_sse_backend
+
+from arena.prompts import (
+    get_compiled_model_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -202,8 +201,9 @@ async def run_arena(
     2. Stream each response as it arrives
     3. Synthesize a final verdict from all responses
     """
-    from config import settings
     from sqlmodel import select
+
+    from config import settings
 
     # Load debate data
     async with async_session_scope() as session:
@@ -579,7 +579,7 @@ async def run_arena(
             # Persist before the terminal lifecycle event. A completed event
             # therefore guarantees that the canonical response can be fetched.
             async with async_session_scope() as session:
-                persisted = await persist_and_publish_arena_response(
+                await persist_and_publish_arena_response(
                     session, backend, debate_id, response,
                     owner_id=execution_owner_id,
                     lease_epoch=lease_epoch,
