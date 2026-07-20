@@ -1,4 +1,5 @@
 import type { WorkspaceStage } from "./types";
+import { isSuccessfulRunStatus } from "@/lib/runStatus";
 
 export function deriveWorkspaceStage(
   debate: any,
@@ -7,7 +8,7 @@ export function deriveWorkspaceStage(
 ): WorkspaceStage {
   const status = debate?.status;
 
-  if (["completed", "success", "completed_budget"].includes(status)) return "complete";
+  if (isSuccessfulRunStatus(status)) return "complete";
   if (status === "failed") return "failed";
   if (status === "queued") return "idle";
   if (status === "scheduled") return "creating";

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from sse_backend import DeltaCoalescer, _delta_key, _is_delta
+import json
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from sse_backend import DeltaCoalescer, RedisChannelBackend, _delta_key, _is_delta
 
 
 def _make_delta(response_id: str, text: str, accumulated_chars: int = 0, seq: int = 1) -> dict:
@@ -133,3 +137,57 @@ class TestHelpers:
 
     def test_delta_key_returns_none_for_non_delta(self):
         assert _delta_key({"payload": {}}) is None
+
+
+@pytest.mark.asyncio
+async def test_redis_backend_coalesces_deltas_before_lifecycle_event():
+    """Production Redis transport must match memory coalescing semantics."""
+    backend = RedisChannelBackend.__new__(RedisChannelBackend)
+    backend._redis = AsyncMock()
+    backend._redis.incr.side_effect = [1, 2]
+    history_pipeline = MagicMock()
+    history_pipeline.rpush.return_value = history_pipeline
+    history_pipeline.expire.return_value = history_pipeline
+    history_pipeline.ltrim.return_value = history_pipeline
+    history_pipeline.execute = AsyncMock(return_value=[1, True, True])
+    backend._redis.pipeline = MagicMock(return_value=history_pipeline)
+    backend._ttl_seconds = 60
+    backend._max_queue_size = 100
+    backend._coalescers = {}
+    backend._coalescer_flush_tasks = {}
+
+    await backend.publish("debate:d1", _make_delta("r1", "hello", 5, 1))
+    await backend.publish("debate:d1", _make_delta("r1", " world", 11, 2))
+    await backend.publish("debate:d1", _make_non_delta())
+
+    published = [json.loads(call.args[1]) for call in backend._redis.publish.await_args_list]
+    assert len(published) == 2
+    assert published[0]["payload"]["payload"]["text"] == "hello world"
+    assert published[0]["payload"]["payload"]["delta_sequence"] == 2
+    assert published[1]["payload"]["type"] == "model_response_completed"
+
+
+@pytest.mark.asyncio
+async def test_redis_backend_pipelines_history_maintenance():
+    """History append, expiry, and trim should use one Redis round trip."""
+    backend = RedisChannelBackend.__new__(RedisChannelBackend)
+    backend._redis = AsyncMock()
+    backend._redis.incr.return_value = 1
+    history_pipeline = MagicMock()
+    history_pipeline.rpush.return_value = history_pipeline
+    history_pipeline.expire.return_value = history_pipeline
+    history_pipeline.ltrim.return_value = history_pipeline
+    history_pipeline.execute = AsyncMock(return_value=[1, True, True])
+    backend._redis.pipeline = MagicMock(return_value=history_pipeline)
+    backend._ttl_seconds = 60
+    backend._max_queue_size = 100
+    backend._coalescers = {}
+    backend._coalescer_flush_tasks = {}
+
+    await backend.publish("debate:d1", _make_non_delta("notice"))
+
+    backend._redis.pipeline.assert_called_once_with(transaction=False)
+    history_pipeline.rpush.assert_called_once()
+    history_pipeline.expire.assert_called_once_with("sse:history:debate:d1", 60)
+    history_pipeline.ltrim.assert_called_once_with("sse:history:debate:d1", -100, -1)
+    history_pipeline.execute.assert_awaited_once()

@@ -3,6 +3,7 @@
 import React from "react";
 import { Check, Loader2, Circle, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isSuccessfulRunStatus } from "@/lib/runStatus";
 
 export type PipelineStage =
   | "queued"
@@ -221,7 +222,7 @@ export function PipelineProgress({
 export function derivePipelineStage(debate: any, eventTypes: Set<string>, liveResponseCount?: number): PipelineStage {
   const status = debate?.status;
 
-  if (["completed", "success", "completed_budget"].includes(status)) return "complete";
+  if (isSuccessfulRunStatus(status)) return "complete";
   if (status === "failed") return "queued";
   if (status === "queued") return "queued";
   if (status === "perspectives_ready") return "perspectives_ready";

@@ -7,6 +7,7 @@ Verifies:
 4. Full structured decision report generation & repair loops
 """
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -152,6 +153,36 @@ async def test_run_semantic_claims_analysis():
         assert len(analysis["contested_claims"]) == 2
         # divergence score should reflect two contested claims with no consensus
         assert analysis["divergence_score"] > 0.0
+        assert mock_similarity.await_count == 1
+
+
+@pytest.mark.anyio
+async def test_synthesis_preanalysis_starts_scoring_and_semantics_together():
+    from reporting.synthesizer import _run_synthesis_preanalysis
+
+    scoring_started = asyncio.Event()
+    semantics_started = asyncio.Event()
+
+    async def scoring(*args, **kwargs):
+        scoring_started.set()
+        await asyncio.wait_for(semantics_started.wait(), timeout=0.1)
+        return [{"model": "M1"}]
+
+    async def semantics(*args, **kwargs):
+        semantics_started.set()
+        await asyncio.wait_for(scoring_started.wait(), timeout=0.1)
+        return {"consensus_claims": []}
+
+    with patch("reporting.synthesizer.evaluate_models_blind", side_effect=scoring), \
+         patch("reporting.synthesizer.run_semantic_claims_analysis", side_effect=semantics):
+        evaluations, analysis = await _run_synthesis_preanalysis(
+            "prompt",
+            [{"persona": "M1", "content": "answer"}],
+            "debate-1",
+        )
+
+    assert evaluations == [{"model": "M1"}]
+    assert analysis == {"consensus_claims": []}
 
 
 @pytest.mark.anyio
@@ -294,6 +325,7 @@ async def test_contradiction_pair_cap():
         # Verify it capped at 25 pairs
         assert analysis["contradiction_pairs_classified"] == 25
         assert analysis["contradictions_count"] == 25
+        assert mock_similarity.await_count == 45
 
 
 @pytest.mark.anyio

@@ -749,3 +749,30 @@ class CodingPatchArtifact(SQLModel, table=True):
     test_status: Optional[str] = Field(default=None)
     test_output: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True)))
+
+
+class TerminalTransition(SQLModel, table=True):
+    """PS157 Track M: Idempotent claim for terminal side effects.
+
+    Records which debate terminal transitions have been applied so that
+    worker crash-recovery does not duplicate summary emails, Slack alerts,
+    or billing increments.
+
+    A transition is claimed atomically via unique constraint on
+    (debate_id, transition_type). The first worker to insert wins;
+    subsequent attempts are silently skipped.
+
+    State machine: claimed -> completed | failed
+    """
+    __tablename__ = "terminal_transition"
+    __table_args__ = (
+        UniqueConstraint("debate_id", "transition_type", name="uq_terminal_transition_debate_type"),
+        Index("ix_terminal_transition_debate_id", "debate_id"),
+    )
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, nullable=False)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False)
+    transition_type: str = Field(nullable=False)
+    status: str = Field(default="claimed", nullable=False)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    completed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))

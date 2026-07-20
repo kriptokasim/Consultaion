@@ -1,28 +1,17 @@
 import type { WorkspaceStage } from "@/lib/workspace/types";
+import {
+  SUCCESSFUL_STATUSES,
+  TERMINAL_STATUSES,
+  isSuccessfulRunStatus,
+  isTerminalRunStatus,
+} from "@/lib/runStatus";
 
-export const SUCCESSFUL_RUN_STATUSES = new Set([
-  "completed",
-  "completed_with_warnings",
-  "completed_budget",
-  "success",
-]);
+// PS157 Track A: canonical status sets live in @/lib/runStatus.
+// These aliases preserve the existing public API of this module.
+export const SUCCESSFUL_RUN_STATUSES = SUCCESSFUL_STATUSES;
+export const TERMINAL_RUN_STATUSES = TERMINAL_STATUSES;
 
-export const TERMINAL_RUN_STATUSES = new Set([
-  "completed",
-  "completed_with_warnings",
-  "completed_budget",
-  "success",
-  "failed",
-  "cancelled",
-]);
-
-export function isSuccessfulRunStatus(status?: string | null): boolean {
-  return !!status && SUCCESSFUL_RUN_STATUSES.has(status);
-}
-
-export function isTerminalRunStatus(status?: string | null): boolean {
-  return !!status && TERMINAL_RUN_STATUSES.has(status);
-}
+export { isSuccessfulRunStatus, isTerminalRunStatus };
 
 export type RunPhase =
   | "idle"

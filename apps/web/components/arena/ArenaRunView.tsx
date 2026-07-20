@@ -17,6 +17,7 @@ import { DecisionReportView } from "@/components/report/DecisionReportView";
 import { fetchWithAuth } from "@/lib/auth";
 import { useCardKeyboardNav } from "@/hooks/useCardKeyboardNav";
 import { buildArenaSlots } from "@/lib/arena/buildArenaSlots";
+import { isSuccessfulRunStatus, isTerminalRunStatus } from "@/lib/runStatus";
 
 /* ─── Main component ─── */
 interface ArenaRunViewProps {
@@ -192,7 +193,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         </div>
                     </div>
                     {/* Share Button */}
-                    {(debate.status === "completed" || debate.status === "completed_budget") && profile && (!debate.user_id || profile.id === debate.user_id) ? (
+                    {isTerminalRunStatus(debate.status) && profile && (!debate.user_id || profile.id === debate.user_id) ? (
                         <div className="shrink-0">
                             <ShareRunButton 
                                 debateId={debate.id} 
@@ -420,7 +421,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             {/* Claims Divergence Analysis */}
             <DivergenceMeter 
                 debateId={debate.id} 
-                isCompleted={debate.status === "completed" || debate.status === "completed_budget"} 
+                isCompleted={isSuccessfulRunStatus(debate.status)} 
                 synthesisStatus={artifacts.synthesisStatus || debate.synthesis_status || debate.final_meta?.synthesis_status}
             />
 

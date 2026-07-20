@@ -10,6 +10,7 @@ Orchestrates:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -53,7 +54,6 @@ async def run_semantic_claims_analysis(
         name = resp.get("persona", resp.get("model", "Model"))
         claims_tasks.append(_extract_claims_from_response(prompt, content, name, debate_id))
     
-    import asyncio
     extracted_lists = await asyncio.gather(*claims_tasks)
     
     all_claims = []
@@ -84,6 +84,33 @@ async def run_semantic_claims_analysis(
     else:
         semantic_analysis_mode = "embedding"
 
+    # Compute each unordered claim pair once, then reuse the symmetric matrix
+    # for both consensus grouping and contradiction candidate selection.
+    similarity_matrix = [
+        [0.0 for _ in all_claims]
+        for _ in all_claims
+    ]
+    similarity_pairs = []
+    similarity_tasks = []
+    for i, item1 in enumerate(all_claims):
+        for j in range(i + 1, len(all_claims)):
+            item2 = all_claims[j]
+            embed1 = embeddings[i] if i < len(embeddings) else None
+            embed2 = embeddings[j] if j < len(embeddings) else None
+            similarity_pairs.append((i, j))
+            similarity_tasks.append(
+                compute_semantic_similarity(
+                    item1["claim"],
+                    item2["claim"],
+                    embed1,
+                    embed2,
+                )
+            )
+    similarity_values = await asyncio.gather(*similarity_tasks)
+    for (i, j), similarity in zip(similarity_pairs, similarity_values, strict=False):
+        similarity_matrix[i][j] = similarity
+        similarity_matrix[j][i] = similarity
+
     processed = set()
     consensus_list = []
     contested_list = []
@@ -95,17 +122,9 @@ async def run_semantic_claims_analysis(
         matching_indices = []
         matching_models = [item1["model"]]
         
-        embed1 = embeddings[i] if i < len(embeddings) else None
-        
         for j, item2 in enumerate(all_claims):
             if i != j and j not in processed:
-                embed2 = embeddings[j] if j < len(embeddings) else None
-                sim = await compute_semantic_similarity(
-                    item1["claim"],
-                    item2["claim"],
-                    embed1,
-                    embed2,
-                )
+                sim = similarity_matrix[i][j]
                 
                 if sim >= 0.78:  # same_claim threshold
                     matching_indices.append(j)
@@ -130,20 +149,13 @@ async def run_semantic_claims_analysis(
     # Collect contradiction candidate pairs (similarity in [0.60, 0.78))
     candidate_pairs = []
     for i, item1 in enumerate(all_claims):
-        embed1 = embeddings[i] if i < len(embeddings) else None
         for j, item2 in enumerate(all_claims):
             if i >= j:
                 continue
             if item1["model"] == item2["model"]:
                 # A model cannot contradict itself
                 continue
-            embed2 = embeddings[j] if j < len(embeddings) else None
-            sim = await compute_semantic_similarity(
-                item1["claim"],
-                item2["claim"],
-                embed1,
-                embed2,
-            )
+            sim = similarity_matrix[i][j]
             if 0.60 <= sim < 0.78:
                 candidate_pairs.append({
                     "similarity": sim,
@@ -217,6 +229,20 @@ class StructuredSynthesisError(Exception):
         self.original_exc = original_exc
 
 
+async def _run_synthesis_preanalysis(
+    prompt: str,
+    responses: List[Dict[str, Any]],
+    debate_id: str,
+    usage: Any | None = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Run independent scoring and semantic analysis concurrently."""
+    evaluations, semantic_analysis = await asyncio.gather(
+        evaluate_models_blind(prompt, responses, debate_id, usage),
+        run_semantic_claims_analysis(prompt, responses, debate_id, usage),
+    )
+    return evaluations, semantic_analysis
+
+
 async def generate_decision_report(
     prompt: str,
     responses: List[Dict[str, Any]],
@@ -240,13 +266,13 @@ async def generate_decision_report(
     }
 
     async def run_synthesis_fn():
-        # Step 1: Blind scoring
-        logger.info("Running blind scoring for debate %s", debate_id)
-        model_evals = await evaluate_models_blind(prompt, responses, debate_id, usage)
-        
-        # Step 2: Semantic claim analysis
-        logger.info("Running semantic claim analysis for debate %s", debate_id)
-        semantic_analysis = await run_semantic_claims_analysis(prompt, responses, debate_id, usage)
+        logger.info("Running parallel scoring and semantic analysis for debate %s", debate_id)
+        model_evals, semantic_analysis = await _run_synthesis_preanalysis(
+            prompt,
+            responses,
+            debate_id,
+            usage,
+        )
         
         # Format candidate answers block
         candidate_block = "\n\n---\n\n".join(
@@ -671,4 +697,3 @@ async def generate_decision_report(
             },
         )
         raise StructuredSynthesisError(str(exc), semantic_analysis=semantic_analysis if "semantic_analysis" in locals() else None, original_exc=exc) from exc
-

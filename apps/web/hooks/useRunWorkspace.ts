@@ -7,10 +7,12 @@ import { API_ORIGIN } from "@/lib/config/runtime";
 import { useEventSource, type SSEStatus } from "@/lib/sse";
 import { normalizeEvent, normalizeTimelineItems } from "@/lib/api/normalizeEvent";
 import type { TimelineEvent } from "@/lib/timeline/types";
-import type { PersistedModelResponse } from "@/lib/api/types";
+import type { PersistedModelResponse, DebateDetail } from "@/lib/api/types";
 import { streamingReducer, INITIAL_STREAMING_STATE, selectMergedResponses } from "@/lib/workspace/streamReducer";
 import type { StreamingState } from "@/lib/workspace/streamReducer";
 import { connectionReducer, INITIAL_CONNECTION_STATE } from "@/lib/workspace/connectionReducer";
+import { isTerminalRunStatus } from "@/lib/runStatus";
+import type { ModelResponseDeltaPayload } from "@/lib/streaming/types";
 
 // ── FH116: Core load failure taxonomy ────────────────────────────────────
 
@@ -75,6 +77,15 @@ const DEBATE_TIMEOUT_MS = 12000;
 const TIMELINE_TIMEOUT_MS = 6000;
 const EVENTS_TIMEOUT_MS = 8000;
 const RESPONSES_TIMEOUT_MS = 8000;
+const MODEL_RESPONSE_STREAM_EVENT_TYPES = new Set([
+  "model_response_queued",
+  "model_response_connecting",
+  "model_response_started",
+  "model_response_delta",
+  "model_response_persisting",
+  "model_response_completed",
+  "model_response_failed",
+]);
 
 function getStorageKey(debateId: string): string {
   return `${STORAGE_KEY_PREFIX}:${debateId}`;
@@ -116,11 +127,12 @@ function clearIntent(debateId: string): void {
 
 // ── FH116: Classify errors into CoreLoadFailure ──────────────────────────
 
-function classifyCoreError(err: any): { code: CoreLoadFailure; httpStatus: number | null } {
+function classifyCoreError(err: unknown): { code: CoreLoadFailure; httpStatus: number | null } {
   if (err instanceof TimeoutError) {
     return { code: "timeout", httpStatus: null };
   }
-  if (err?.name === "AbortError") {
+  const errorObj = err instanceof Error ? err : null;
+  if (errorObj?.name === "AbortError") {
     return { code: "cancelled", httpStatus: null };
   }
   if (err instanceof ApiError) {
@@ -134,7 +146,8 @@ function classifyCoreError(err: any): { code: CoreLoadFailure; httpStatus: numbe
         return { code: "network_error", httpStatus: status };
     }
   }
-  if (err?.message?.includes("Failed to fetch") || err?.message?.includes("NetworkError")) {
+  const fallbackMessage = err instanceof Error ? err.message : String(err);
+  if (fallbackMessage.includes("Failed to fetch") || fallbackMessage.includes("NetworkError")) {
     return { code: "network_error", httpStatus: null };
   }
   return { code: "network_error", httpStatus: null };
@@ -161,6 +174,13 @@ type TimelineHydrationResult = {
   eventsError: string | null;
 };
 
+type ResponseRefreshFlight = {
+  debateId: string;
+  generation: number;
+  queued: boolean;
+  promise: Promise<void>;
+};
+
 async function loadTimelineWithFallback(id: string, signal?: AbortSignal): Promise<TimelineHydrationResult> {
   let timelineEvents: unknown[] | null = null;
 
@@ -171,8 +191,8 @@ async function loadTimelineWithFallback(id: string, signal?: AbortSignal): Promi
       { signal }
     );
     timelineEvents = extractEventItems(data);
-  } catch (err: any) {
-    const msg = err?.message || "Timeline fetch failed";
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.warn("[useRunWorkspace] Timeline failed, falling back to /events:", msg);
 
     try {
@@ -189,8 +209,8 @@ async function loadTimelineWithFallback(id: string, signal?: AbortSignal): Promi
         timelineError: msg,
         eventsError: null,
       };
-    } catch (err2: any) {
-      const msg2 = err2?.message || "Events fetch failed";
+    } catch (err2: unknown) {
+      const msg2 = err2 instanceof Error ? err2.message : String(err2);
       console.warn("[useRunWorkspace] Both timeline and events failed:", msg2);
       return {
         events: [],
@@ -211,7 +231,7 @@ async function loadTimelineWithFallback(id: string, signal?: AbortSignal): Promi
 // ── Hook return type ─────────────────────────────────────────────────────
 
 export interface UseRunWorkspaceResult {
-  debate: any | null;
+  debate: DebateDetail | null;
   events: TimelineEvent[];
   responses: PersistedModelResponse[];
   coreState: CoreState;
@@ -241,7 +261,7 @@ export interface UseRunWorkspaceResult {
 // ── Main hook ────────────────────────────────────────────────────────────
 
 export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult {
-  const [debate, setDebate] = useState<any | null>(null);
+  const [debate, setDebate] = useState<DebateDetail | null>(null);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connState, dispatchConn] = useReducer(connectionReducer, INITIAL_CONNECTION_STATE);
@@ -256,6 +276,35 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     
   // FH104: Streaming reducer
   const [streamingState, dispatchStreaming] = useReducer(streamingReducer, INITIAL_STREAMING_STATE);
+  const pendingDeltasRef = useRef<ModelResponseDeltaPayload[]>([]);
+  const deltaFrameRef = useRef<number | null>(null);
+
+  const flushPendingDeltas = useCallback(() => {
+    if (deltaFrameRef.current !== null) {
+      cancelAnimationFrame(deltaFrameRef.current);
+      deltaFrameRef.current = null;
+    }
+    if (pendingDeltasRef.current.length === 0) return;
+
+    const payloads = pendingDeltasRef.current;
+    pendingDeltasRef.current = [];
+    dispatchStreaming({ type: "RESPONSE_DELTA_BATCH", payloads });
+  }, []);
+
+  const queueDelta = useCallback((payload: ModelResponseDeltaPayload) => {
+    pendingDeltasRef.current.push(payload);
+    if (deltaFrameRef.current === null) {
+      deltaFrameRef.current = requestAnimationFrame(flushPendingDeltas);
+    }
+  }, [flushPendingDeltas]);
+
+  const discardPendingDeltas = useCallback(() => {
+    if (deltaFrameRef.current !== null) {
+      cancelAnimationFrame(deltaFrameRef.current);
+      deltaFrameRef.current = null;
+    }
+    pendingDeltasRef.current = [];
+  }, []);
 
   const mergedStreamingResponses = useMemo(
     () => selectMergedResponses(streamingState),
@@ -277,11 +326,16 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const coreGenerationRef = useRef(0);
   const responsesGenerationRef = useRef(0);
   const timelineGenerationRef = useRef(0);
+  const responseRefreshFlightRef = useRef<ResponseRefreshFlight | null>(null);
   const activeDebateIdRef = useRef(debateId);
   activeDebateIdRef.current = debateId;
 
   // Patchset 148 B1: O(1) event dedup via Set instead of O(n) .some()
   const seenEventIdsRef = useRef<Set<string>>(new Set());
+
+  // Track W: performance mark guards
+  const firstDeltaMarkedRef = useRef(false);
+  const firstCompletedMarkedRef = useRef(false);
 
   // Patchset 132: Silence detection for connected-but-silent streams
   const lastEventTimestampRef = useRef<number>(Date.now());
@@ -296,9 +350,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     ? parseInt(process.env.NEXT_PUBLIC_SSE_FALLBACK_POLL_MS || "3000", 10)
     : 3000;
 
-  const isTerminal = debate
-    ? ["completed", "success", "completed_budget", "failed"].includes(debate.status)
-    : false;
+  const isTerminal = isTerminalRunStatus(debate?.status);
   const isPaused = debate?.status === "perspectives_ready";
 
   const isTerminalRef = useRef(isTerminal);
@@ -319,34 +371,34 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── FH116+FH117: Fetch core debate with timeout and error classification ──
   const fetchCoreDebate = useCallback(async (id: string, signal?: AbortSignal) => {
     const gen = coreGenerationRef.current;
+    // PS157 Track B: a resolution is stale if the run changed OR a newer
+    // request superseded this one. Check both at every completion point.
+    const isStale = () => gen !== coreGenerationRef.current || activeDebateIdRef.current !== id;
     dispatchConn({ type: "HYDRATION_START" });
-    
-    
 
     try {
       const debateData = await getDebate(id, { signal, timeoutMs: DEBATE_TIMEOUT_MS });
-      if (gen !== coreGenerationRef.current) return null;
+      if (isStale()) return null;
 
-      const isDebateTerminal = debateData
-        ? ["completed", "success", "completed_budget", "failed"].includes(debateData.status)
-        : false;
+      const isDebateTerminal = isTerminalRunStatus(debateData?.status);
 
       setDebate(debateData);
       debateSetOnceRef.current = true;
       setError(null);
       dispatchConn({ type: "CORE_LOADED", isTerminal: isDebateTerminal });
       return debateData;
-    } catch (err: any) {
-      if (gen !== coreGenerationRef.current) return null;
+    } catch (err: unknown) {
+      if (isStale()) return null;
 
-      // Don't show errors for intentional navigation aborts
-      if (err?.name === "AbortError" && coreAbortRef.current?.signal?.aborted) {
+      const errorObj = err instanceof Error ? err : null;
+      if (errorObj?.name === "AbortError" && coreAbortRef.current?.signal?.aborted) {
         dispatchConn({ type: "HYDRATION_START" });
         return null;
       }
 
       const { code, httpStatus } = classifyCoreError(err);
-      dispatchConn({ type: "CORE_FAILED", code, httpStatus, error: err?.message || "Core failed" });
+      const message = errorObj?.message || String(err);
+      dispatchConn({ type: "CORE_FAILED", code, httpStatus, error: message });
       /* replaced */
       setError(coreFailureMessage(code));
       // handled by CORE_FAILED
@@ -361,26 +413,27 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── FH117: Fetch responses independently ───────────────────────────────
   const fetchResponses = useCallback(async (id: string, signal?: AbortSignal) => {
     const gen = responsesGenerationRef.current;
+    const isStale = () => gen !== responsesGenerationRef.current || activeDebateIdRef.current !== id;
     dispatchConn({ type: "RESPONSES_LOADING" });
-    
 
     try {
       const responsesData = await getDebateResponses(id, { signal, timeoutMs: RESPONSES_TIMEOUT_MS });
-      if (gen !== responsesGenerationRef.current) return;
+      if (isStale()) return;
 
       setResponses(responsesData.items);
       dispatchConn({ type: "RESPONSES_LOADED", count: responsesData.items.length });
-      
-    } catch (err: any) {
-      if (gen !== responsesGenerationRef.current) return;
+
+    } catch (err: unknown) {
+      if (isStale()) return;
 
       // FH119: Distinguish 404 (deployment mismatch) from other failures
       if (err instanceof ApiError && err.status === 404) {
         dispatchConn({ type: "RESPONSES_FAILED", isMismatch: true, error: "Backend contract mismatch — /responses endpoint unavailable" });
         
       } else {
-        console.warn("[useRunWorkspace] /responses fetch failed:", err?.message);
-        dispatchConn({ type: "RESPONSES_FAILED", isMismatch: false, error: err?.message || "Failed to load persisted responses" });
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn("[useRunWorkspace] /responses fetch failed:", message);
+        dispatchConn({ type: "RESPONSES_FAILED", isMismatch: false, error: message });
         
       }
     }
@@ -389,19 +442,21 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── FH117: Fetch timeline independently ────────────────────────────────
   const fetchTimeline = useCallback(async (id: string, signal?: AbortSignal) => {
     const gen = timelineGenerationRef.current;
+    const isStale = () => gen !== timelineGenerationRef.current || activeDebateIdRef.current !== id;
     dispatchConn({ type: "TIMELINE_LOADING" });
 
     try {
       const result = await loadTimelineWithFallback(id, signal);
-      if (gen !== timelineGenerationRef.current) return;
+      if (isStale()) return;
 
       setEvents(result.events);
       dispatchConn({ type: "TIMELINE_LOADED", quality: result.quality, timelineError: result.timelineError, eventsError: result.eventsError });
-      
-      
-      
-    } catch (err: any) {
-      if (gen !== timelineGenerationRef.current) return;
+
+
+
+
+    } catch (err: unknown) {
+      if (isStale()) return;
       console.error("[useRunWorkspace] Timeline fetch error:", err);
       dispatchConn({ type: "TIMELINE_FAILED" });
     }
@@ -433,8 +488,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     coreAbortRef.current = new AbortController();
     const coreData = await fetchCoreDebate(id, coreAbortRef.current.signal);
 
-    // Patchset 132 Track E: Capture generation locally, check after each await
-    if (coreGen !== coreGenerationRef.current) return;
+    // Patchset 132 Track E + PS157 Track B: Capture generation locally, check
+    // both generation and active run after each await.
+    if (coreGen !== coreGenerationRef.current || activeDebateIdRef.current !== id) return;
     if (!coreData) return; // Failed or aborted
 
     // Step 2: Fire responses and timeline concurrently (don't await each other)
@@ -458,40 +514,51 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   // ── Main effect: hydrate on debateId change ────────────────────────────
   useEffect(() => {
-    // A run is an isolation boundary. Clear visible and streaming state before
-    // hydrating the next ID so late work from the previous run cannot bleed in.
+    // PS157 Track B: A run is an isolation boundary. Tear down ALL async and
+    // visible state from the previous run before hydrating the next one, so
+    // late work (fetches, SSE events, polls, timers) cannot bleed across.
     abortAll("debate_changed");
     requestGenerationRef.current += 1;
     coreGenerationRef.current += 1;
     responsesGenerationRef.current += 1;
     timelineGenerationRef.current += 1;
+    // Visible state
     setDebate(null);
     setEvents([]);
     setResponses([]);
+    discardPendingDeltas();
     dispatchStreaming({ type: "RESET" });
-    dispatchConn({ type: "HYDRATION_START" });
+    dispatchConn({ type: "RESET_FOR_NEW_RUN" });
     setError(null);
+    // Continuation intent (in-memory only; per-run localStorage intents are
+    // keyed by debateId and must survive navigation for recovery)
     setIsContinuing(false);
     setOutcomeUnknown(false);
     intentRef.current = null;
     idempotencyKeyRef.current = null;
     debateSetOnceRef.current = false;
+    // Event dedup registry (Patchset 148 B1) — cleared before hydrate so no
+    // event from the previous run can suppress or leak into the next one.
+    seenEventIdsRef.current.clear();
+    // Polling fallback
     if (pollTimerRef.current) {
       clearTimeout(pollTimerRef.current);
       pollTimerRef.current = null;
     }
     pollInFlightRef.current = false;
     dispatchConn({ type: "STOP_POLLING" });
+    // Silence watchdog (Patchset 132 Track D)
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current as unknown as number);
+      silenceTimerRef.current = null;
+    }
+    lastEventTimestampRef.current = Date.now();
+    setIsSilent(false);
 
     if (debateId) {
       void hydrate(debateId);
     }
-  }, [debateId, hydrate, abortAll]);
-
-  // Patchset 148 B1: Reset seen event IDs when debateId changes
-  useEffect(() => {
-    seenEventIdsRef.current.clear();
-  }, [debateId]);
+  }, [debateId, hydrate, abortAll, discardPendingDeltas]);
 
   // Patchset 148 B1: O(1) append helper
   const appendEventOnce = useCallback((event: TimelineEvent) => {
@@ -500,10 +567,60 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     setEvents((prev) => [...prev, event]);
   }, []);
 
+  const refreshPersistedResponses = useCallback((id: string, generation: number) => {
+    const current = responseRefreshFlightRef.current;
+    if (current && current.debateId === id && current.generation === generation) {
+      current.queued = true;
+      return current.promise;
+    }
+
+    const flight: ResponseRefreshFlight = {
+      debateId: id,
+      generation,
+      queued: false,
+      promise: Promise.resolve(),
+    };
+    flight.promise = (async () => {
+      try {
+        do {
+          flight.queued = false;
+          const data = await getDebateResponses(id);
+          if (
+            activeDebateIdRef.current !== id
+            || requestGenerationRef.current !== generation
+          ) return;
+
+          setResponses(data.items);
+          dispatchConn({ type: "RESPONSES_LOADED", count: data.items.length });
+          dispatchStreaming({ type: "MERGE_PERSISTED", payloads: data.items });
+        } while (flight.queued);
+      } catch (err: unknown) {
+        if (activeDebateIdRef.current === id) {
+          console.warn("[useRunWorkspace] Persisted response refresh failed:", err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (responseRefreshFlightRef.current === flight) {
+          responseRefreshFlightRef.current = null;
+        }
+      }
+    })();
+    responseRefreshFlightRef.current = flight;
+    return flight.promise;
+  }, []);
+
   // ── Cleanup on unmount ─────────────────────────────────────────────────
   useEffect(() => {
-    return () => { abortAll("unmount"); };
-  }, [abortAll]);
+    return () => {
+      // PS157 Track B: invalidate every in-flight generation so resolutions
+      // arriving after unmount take the stale path instead of setState.
+      requestGenerationRef.current += 1;
+      coreGenerationRef.current += 1;
+      responsesGenerationRef.current += 1;
+      timelineGenerationRef.current += 1;
+      discardPendingDeltas();
+      abortAll("unmount");
+    };
+  }, [abortAll, discardPendingDeltas]);
 
   // ── SSE stream ─────────────────────────────────────────────────────────
   const streamUrl = debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
@@ -533,30 +650,31 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       }
 
       // FH104: Dispatch streaming reducer actions
-      const STREAMING_EVENT_TYPES = new Set([
-        "model_response_queued", "model_response_connecting", "model_response_started",
-        "model_response_delta", "model_response_persisting", "model_response_completed",
-        "model_response_failed",
-      ]);
-
-      if (STREAMING_EVENT_TYPES.has(eventType)) {
+      if (MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType)) {
         const p = lastEvent.payload || lastEvent;
+        if (eventType === "model_response_delta") {
+          firstDeltaMarkedRef.current || (performance.mark?.("sse_first_delta"), firstDeltaMarkedRef.current = true);
+          queueDelta(p);
+          return;
+        }
+
+        // Preserve transport ordering when a lifecycle transition arrives in
+        // the same frame as its final content chunks.
+        flushPendingDeltas();
         switch (eventType) {
           case "model_response_queued": dispatchStreaming({ type: "RESPONSE_QUEUED", payload: p }); break;
           case "model_response_connecting": dispatchStreaming({ type: "RESPONSE_CONNECTING", payload: p }); break;
           case "model_response_started": dispatchStreaming({ type: "RESPONSE_STARTED", payload: p }); break;
-          case "model_response_delta": dispatchStreaming({ type: "RESPONSE_DELTA", payload: p }); break;
           case "model_response_persisting": dispatchStreaming({ type: "RESPONSE_PERSISTING", payload: p }); break;
-          case "model_response_completed": dispatchStreaming({ type: "RESPONSE_COMPLETED", payload: p }); break;
+          case "model_response_completed":
+            firstCompletedMarkedRef.current || (performance.mark?.("sse_first_completion"), firstCompletedMarkedRef.current = true);
+            dispatchStreaming({ type: "RESPONSE_COMPLETED", payload: p });
+            break;
           case "model_response_failed": dispatchStreaming({ type: "RESPONSE_FAILED", payload: p }); break;
         }
-        const newEvent: TimelineEvent = {
-          id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
-          debate_id: debateId, ts: lastEvent.ts || new Date().toISOString(),
-          type: eventType, round: lastEvent.round || 0, seat: lastEvent.seat,
-          payload: normalizeEvent(lastEvent) as unknown as Record<string, unknown>,
-        };
-        appendEventOnce(newEvent);
+        if (eventType === "model_response_completed" || eventType === "model_response_failed") {
+          void refreshPersistedResponses(debateId, eventGeneration);
+        }
         return;
       }
 
@@ -571,6 +689,9 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
       // B3: Refetch debate only on low-frequency structural events (not deltas/streaming)
       if (["arena_synthesis", "debate_failed", "perspectives_ready", "debate_completed", "stage_checkpoint"].includes(eventType)) {
+        if (eventType === "arena_synthesis") {
+          performance.mark?.("sse_report_visible");
+        }
         getDebate(debateId)
           .then((updated) => {
             if (
@@ -584,23 +705,18 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       }
 
       // Sync persisted responses on terminal events
-      if (["arena_synthesis", "debate_completed", "debate_failed", "arena_response"].includes(eventType)) {
-        getDebateResponses(debateId)
-          .then((data) => {
-            if (
-              activeDebateIdRef.current !== debateId
-              || requestGenerationRef.current !== eventGeneration
-            ) return;
-            setResponses(data.items);
-            dispatchConn({ type: "RESPONSES_LOADED", count: data.items.length });
-            dispatchStreaming({ type: "MERGE_PERSISTED", payloads: data.items });
-          })
-          .catch(() => {});
+      const isLegacyArenaResponse = eventType === "arena_response"
+        && !(lastEvent.payload || lastEvent).response_id;
+      if (
+        ["arena_synthesis", "debate_completed", "debate_failed"].includes(eventType)
+        || isLegacyArenaResponse
+      ) {
+        void refreshPersistedResponses(debateId, eventGeneration);
       }
     } catch (err) {
       console.error("[useRunWorkspace] Error processing stream event:", err);
     }
-  }, [debateId]);
+  }, [debateId, flushPendingDeltas, queueDelta, refreshPersistedResponses]);
 
   const { status: sseStatus } = useEventSource<any>(streamUrl, {
     enabled: !!debateId && !isTerminal,
@@ -614,6 +730,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     if (pollTimerRef.current) return;
     dispatchConn({ type: "START_POLLING" });
     const tick = async () => {
+      // PS157 Track B: never run or reschedule a poll for a stale run. The
+      // debate-change effect clears pollTimerRef, but a queued/in-flight tick
+      // can still fire afterwards — bail before touching shared state.
+      if (activeDebateIdRef.current !== id) return;
       if (pollInFlightRef.current) {
         pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
         return;
@@ -625,7 +745,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         console.error("[useRunWorkspace] Polling fetch error:", err);
       } finally {
         pollInFlightRef.current = false;
-        pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
+        // Only the run that started this poll may continue the loop; if the
+        // user switched runs, the new run owns pollTimerRef now.
+        if (activeDebateIdRef.current === id) {
+          pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
+        }
       }
     };
     pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
@@ -697,6 +821,11 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     if (!debateId || typeof window === "undefined") return;
     const persisted = loadIntent(debateId);
     if (persisted) {
+      // PS157 Track B: recovery is async — capture the generation so stale
+      // resolutions cannot mutate refs/state or hydrate a previous run.
+      const recoveryGeneration = requestGenerationRef.current;
+      const isStale = () =>
+        activeDebateIdRef.current !== debateId || requestGenerationRef.current !== recoveryGeneration;
       intentRef.current = persisted;
       idempotencyKeyRef.current = persisted.idempotencyKey;
       if (persisted.phase === "server_acknowledged" || persisted.phase === "tracking" || persisted.phase === "request_sent") {
@@ -710,11 +839,13 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
           let statusData = null;
           if (persisted.continuationId) {
             const res = await fetchWithAuth(`/debates/${debateId}/continuations/${persisted.continuationId}`);
+            if (isStale()) return;
             if (res.ok) statusData = await res.json();
           }
           if (!statusData && persisted.idempotencyKey) {
             try { statusData = await resolveContinuationByKey(debateId, persisted.idempotencyKey); } catch {}
           }
+          if (isStale()) return;
           if (statusData) {
             if (statusData.status === "failed" || statusData.status === "cancelled") {
               clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
@@ -750,6 +881,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   // ── Continue / Retry / Refetch ─────────────────────────────────────────
   const handleContinue = useCallback(async () => {
     if (!debateId) return;
+    // PS157 Track B: user may navigate away mid-flight — guard completions.
+    const continueGeneration = requestGenerationRef.current;
+    const isStale = () =>
+      activeDebateIdRef.current !== debateId || requestGenerationRef.current !== continueGeneration;
     try {
       setError(null); setIsContinuing(true); setOutcomeUnknown(false);
       if (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") {
@@ -764,14 +899,20 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       persistIntent(debateId, sentIntent); intentRef.current = sentIntent;
       const retryOfId = (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") ? debate.continuation_id : undefined;
       const response = await continueDebate(debateId, idempotencyKeyRef.current, retryOfId);
+      if (isStale()) return;
       const ackIntent = { ...sentIntent, phase: "server_acknowledged" as const, continuationId: response?.continuation_id, updatedAt: new Date().toISOString() };
       persistIntent(debateId, ackIntent); intentRef.current = ackIntent;
       await hydrate(debateId);
+      // hydrate() legitimately bumps the request generation — only the
+      // active-run check is meaningful past this point.
+      if (activeDebateIdRef.current !== debateId) return;
       const trackIntent = { ...ackIntent, phase: "tracking" as const, updatedAt: new Date().toISOString() };
       persistIntent(debateId, trackIntent); intentRef.current = trackIntent;
-    } catch (err: any) {
-      console.error("[useRunWorkspace] Continue failed:", err);
-      setError(err?.message || "Failed to continue debate");
+    } catch (err: unknown) {
+      if (activeDebateIdRef.current !== debateId) return;
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[useRunWorkspace] Continue failed:", message);
+      setError(message);
       setIsContinuing(false);
       if (intentRef.current?.phase === "request_sent") setOutcomeUnknown(true);
     }
@@ -779,13 +920,20 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   const handleRetry = useCallback(async (stageKey?: string) => {
     if (!debateId) return;
+    // PS157 Track B: user may navigate away mid-flight — guard completions.
+    const retryGeneration = requestGenerationRef.current;
+    const isStale = () =>
+      activeDebateIdRef.current !== debateId || requestGenerationRef.current !== retryGeneration;
     try {
       setError(null);
       await retryDebate(debateId, stageKey);
+      if (isStale()) return;
       await hydrate(debateId);
-    } catch (err: any) {
-      console.error("[useRunWorkspace] Retry failed:", err);
-      setError(err?.message || "Failed to retry stage");
+    } catch (err: unknown) {
+      if (activeDebateIdRef.current !== debateId) return;
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[useRunWorkspace] Retry failed:", message);
+      setError(message);
     }
   }, [debateId, hydrate]);
 

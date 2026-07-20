@@ -142,6 +142,7 @@ async def test_one_model_timeout_others_succeed():
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
         mock_settings.ARENA_MAX_TOKENS = 1200
         mock_settings.STAGED_DECISION_PIPELINE = False
         mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
@@ -196,6 +197,7 @@ async def test_gateway_failure_result_no_crash():
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
         mock_settings.ARENA_MAX_TOKENS = 1200
         mock_settings.STAGED_DECISION_PIPELINE = False
         mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
@@ -228,6 +230,7 @@ async def test_all_models_fail_graceful():
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
         mock_settings.ARENA_MAX_TOKENS = 1200
         mock_settings.STAGED_DECISION_PIPELINE = False
         mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
@@ -290,6 +293,7 @@ async def test_as_completed_immediate_publish():
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
         mock_settings.ARENA_MAX_TOKENS = 1200
         mock_settings.STAGED_DECISION_PIPELINE = False
         mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
@@ -336,6 +340,7 @@ async def test_final_meta_model_order():
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
         mock_settings.ARENA_MAX_TOKENS = 1200
         mock_settings.STAGED_DECISION_PIPELINE = False
         mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
@@ -346,6 +351,133 @@ async def test_final_meta_model_order():
         # Models in final_meta must follow arena_models order
         model_ids = [m["model_id"] for m in result.final_meta["models"]]
         assert model_ids == ["model-a", "model-b", "model-c"]
+
+
+@pytest.mark.anyio
+async def test_non_streaming_models_emit_symmetric_terminal_lifecycle():
+    """Every persisted response ends with exactly one completed/failed event."""
+    from arena.engine import run_arena
+
+    models = _ARENA_MODELS[:2]
+
+    async def mock_call_llm(*args, **kwargs):
+        if "Model B" in kwargs.get("role", ""):
+            raise RuntimeError("provider unavailable")
+        return "successful answer", _FakeUsage()
+
+    async def bypass_checkpoint(*args, **kwargs):
+        run_fn = args[3]
+        return await run_fn()
+
+    mock_backend = AsyncMock()
+    mock_report = MagicMock()
+    mock_report.executive_summary = "Verdict"
+    mock_report.title = "Report"
+    mock_report.divergence_breakdown = []
+    mock_report.model_dump.return_value = {}
+
+    with patch("arena.engine.get_arena_models", return_value=models), \
+         patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm), \
+         patch("arena.engine.get_sse_backend", return_value=mock_backend), \
+         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
+         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=bypass_checkpoint), \
+         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
+         patch("config.settings") as mock_settings:
+        mock_settings.FAST_DEBATE = False
+        mock_settings.STREAMING_RESPONSES_ENABLED = False
+        mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
+        mock_settings.ARENA_MAX_TOKENS = 1200
+        mock_settings.STAGED_DECISION_PIPELINE = False
+        mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
+
+        await run_arena("test-debate-lifecycle")
+
+    lifecycle = [
+        call.args[1]
+        for call in mock_backend.publish.await_args_list
+        if call.args[1].get("type", "").startswith("model_response_")
+    ]
+    by_model = {
+        model.id: [event for event in lifecycle if event.get("model_id") == model.id]
+        for model in models
+    }
+
+    assert [event["type"] for event in by_model["model-a"]] == [
+        "model_response_queued",
+        "model_response_connecting",
+        "model_response_started",
+        "model_response_persisting",
+        "model_response_completed",
+    ]
+    assert [event["type"] for event in by_model["model-b"]] == [
+        "model_response_queued",
+        "model_response_connecting",
+        "model_response_started",
+        "model_response_persisting",
+        "model_response_failed",
+    ]
+    for events in by_model.values():
+        assert len({event["response_id"] for event in events}) == 1
+        assert all(event["run_attempt"] == 2 for event in events)
+        assert all(event["retry_generation"] == 0 for event in events)
+
+
+@pytest.mark.anyio
+async def test_stream_fallback_uses_remaining_monotonic_deadline():
+    """A failed stream must not reset the model timeout for its fallback."""
+    from arena.engine import run_arena
+
+    real_wait_for = asyncio.wait_for
+    observed_timeouts = []
+
+    async def tracking_wait_for(awaitable, timeout):
+        observed_timeouts.append(timeout)
+        return await real_wait_for(awaitable, timeout=timeout)
+
+    async def failed_stream(*args, **kwargs):
+        await asyncio.sleep(0.04)
+        result = MagicMock()
+        result.success = False
+        result.error_message = "stream unavailable"
+        result.error_code = "api_error"
+        return result
+
+    async def fallback(*args, **kwargs):
+        return "fallback answer", _FakeUsage()
+
+    async def bypass_checkpoint(*args, **kwargs):
+        return await args[3]()
+
+    mock_report = MagicMock()
+    mock_report.executive_summary = "Verdict"
+    mock_report.title = "Report"
+    mock_report.divergence_breakdown = []
+    mock_report.model_dump.return_value = {}
+
+    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]), \
+         patch("arena.engine.call_llm_for_role", side_effect=fallback), \
+         patch("arena.engine.asyncio.wait_for", side_effect=tracking_wait_for), \
+         patch("model_gateway.route_llm_stream", side_effect=failed_stream), \
+         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
+         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
+         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=bypass_checkpoint), \
+         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
+         patch("config.settings") as mock_settings:
+        mock_settings.FAST_DEBATE = False
+        mock_settings.STREAMING_RESPONSES_ENABLED = True
+        mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 0.06
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 0.08
+        mock_settings.ARENA_MAX_TOKENS = 1200
+        mock_settings.STAGED_DECISION_PIPELINE = False
+        mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
+
+        result = await run_arena("test-debate-deadline")
+
+    assert result.status == "completed"
+    stream_timeout, fallback_timeout = observed_timeouts[-2:]
+    assert fallback_timeout < stream_timeout
+    assert fallback_timeout <= 0.05
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +504,7 @@ class _MockAsyncSession:
         obj.prompt = "test prompt"
         obj.config = {}
         obj.user_id = "test-user"
+        obj.run_attempt = 2
         return obj
 
 
@@ -384,6 +517,6 @@ class _mock_session_scope:
         pass
 
 
-async def _bypass_checkpoint(debate_id, stage_name, input_data, run_fn, load_fn):
+async def _bypass_checkpoint(debate_id, stage_name, input_data, run_fn, load_fn, **_kwargs):
     """Skip checkpoint logic — just call the run function directly."""
     return await run_fn()

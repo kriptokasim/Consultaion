@@ -140,6 +140,7 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
 
     item: Dict[str, Any] = {
         "id": msg.id,
+        "response_id": _getattr_safely(meta, "response_id") or msg.id,
         "debate_id": msg.debate_id,
         "response_type": response_type,
         "role": role,
@@ -158,6 +159,10 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
             "persona_type": _getattr_safely(meta, "persona_type"),
             "persona_tagline": _getattr_safely(meta, "persona_tagline"),
             "attempt_count": _extract_attempt_count(meta),
+            "run_attempt": int(_getattr_safely(meta, "run_attempt", default=1) or 1),
+            "retry_generation": int(
+                _getattr_safely(meta, "retry_generation", default=0) or 0
+            ),
         },
     }
 

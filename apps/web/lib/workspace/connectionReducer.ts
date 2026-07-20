@@ -37,6 +37,7 @@ export const INITIAL_CONNECTION_STATE: ConnectionState = {
 
 export type ConnectionAction =
   | { type: "HYDRATION_START" }
+  | { type: "RESET_FOR_NEW_RUN" }
   | { type: "CORE_LOADED"; isTerminal: boolean; outcome?: "completed" | "failed" }
   | { type: "CORE_FAILED"; code: CoreLoadFailure; httpStatus: number | null; error: string }
   | { type: "RESPONSES_LOADING" }
@@ -75,6 +76,17 @@ export function connectionReducer(state: ConnectionState, action: ConnectionActi
   switch (action.type) {
     case "HYDRATION_START":
       if (state.phase === "terminal") return state; // Ignore if terminal
+      nextState = {
+        ...INITIAL_CONNECTION_STATE,
+        phase: "hydrating",
+        coreState: "loading",
+      };
+      break;
+
+    case "RESET_FOR_NEW_RUN":
+      // PS157 Track B: A run is an isolation boundary. Unlike HYDRATION_START
+      // (which must not flicker a terminal run back to "loading" on same-run
+      // refetches), switching runs must always reset — even from "terminal".
       nextState = {
         ...INITIAL_CONNECTION_STATE,
         phase: "hydrating",

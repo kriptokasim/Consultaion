@@ -10,9 +10,13 @@ export function formatStatus(status?: string | null): string {
         queued: "Queued",
         scheduled: "Scheduled",
         running: "Running",
+        perspectives_ready: "Perspectives ready",
         completed: "Completed",
+        completed_with_warnings: "Completed with warnings",
         completed_budget: "Completed (budget)",
+        success: "Completed",
         failed: "Failed",
+        cancelled: "Cancelled",
         debate_failed: "Failed",
     };
     return map[status] ?? status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());

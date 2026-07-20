@@ -643,7 +643,9 @@ async def run_debate(
                 )
 
                 if result.status == "completed":
-                    await _build_and_send_summary(debate_id, debate_user_id)
+                    from services.terminal_transition import TRANSITION_SUMMARY_EMAIL, claim_transition_async
+                    if await claim_transition_async(debate_id, TRANSITION_SUMMARY_EMAIL):
+                        await _build_and_send_summary(debate_id, debate_user_id)
                     try:
                         if settings.DEBATE_DISPATCH_MODE == "celery":
                             from worker.arena_tasks import compute_divergence_task
@@ -825,7 +827,9 @@ async def run_debate(
             # Success path for Standard Pipeline
             logger.info("Debate completed successfully", extra=log_extra)
             increment_metric("debate.completed")
-            await _build_and_send_summary(debate_id, debate_user_id)
+            from services.terminal_transition import TRANSITION_SUMMARY_EMAIL, claim_transition_async
+            if await claim_transition_async(debate_id, TRANSITION_SUMMARY_EMAIL):
+                await _build_and_send_summary(debate_id, debate_user_id)
             await _update_continuation_status(continuation_id, "completed", ["running", "dispatched", "requested", "preflight_passed"])
 
         # PS156 Track E: race the owned body against lease loss.
@@ -867,6 +871,23 @@ async def run_debate(
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
         logger.warning(f"Debate encountered transient/provider error: {exc}", extra=log_extra)
         increment_metric("debate.degraded")
+        await _update_continuation_status(
+            continuation_id,
+            "failed",
+            ["running", "dispatched", "requested", "preflight_passed"],
+            failure_code="transient_provider_error",
+            failure_detail_safe=str(exc)
+        )
+        from services.terminal_transition import TRANSITION_SLACK_ALERT, claim_transition_async
+        if await claim_transition_async(debate_id, TRANSITION_SLACK_ALERT):
+            await send_slack_alert(
+            message="[Consultaion] Debate transient/provider failure",
+            level="warning",
+            meta={
+                "debate_id": debate_id,
+                "error": str(exc)[:500],
+            },
+        )
         try:
             async with async_session_scope() as session:
                 debate = await session.get(Debate, debate_id)
@@ -944,6 +965,27 @@ async def run_debate(
     except Exception as exc:
         logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
         increment_metric("debate.failed")
+        await _update_continuation_status(
+            continuation_id,
+            "failed",
+            ["running", "dispatched", "requested", "preflight_passed"],
+            failure_code="terminal_execution_error",
+            failure_detail_safe=str(exc)
+        )
+
+        # Slack Alert
+        from services.terminal_transition import TRANSITION_SLACK_ALERT, claim_transition_async
+        if await claim_transition_async(debate_id, TRANSITION_SLACK_ALERT):
+            await send_slack_alert(
+            message="[Consultaion] Debate execution failed",
+            level="error",
+            meta={
+                "debate_id": debate_id,
+                "user_id": str(debate_user_id) if debate_user_id else "unknown",
+                "error": str(exc)[:500],
+            },
+        )
+
         # Fallback error handling if Runner didn't catch it (though it should)
         # But we need to ensure DB status is updated if Runner failed completely
         try:

@@ -43,6 +43,24 @@ const STATUS_MAP: Record<
     className:
       "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
   },
+  completed_with_warnings: {
+    label: "Completed with warnings",
+    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+    className:
+      "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
+  },
+  success: {
+    label: "Completed",
+    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+    className:
+      "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
+  },
+  cancelled: {
+    label: "Cancelled",
+    icon: <XCircle className="h-3.5 w-3.5" />,
+    className:
+      "border-stone-200 bg-stone-50 text-stone-700 dark:border-border dark:bg-muted dark:text-muted-foreground",
+  },
   default: {
     label: "Unknown",
     icon: <AlertCircle className="h-3.5 w-3.5" />,

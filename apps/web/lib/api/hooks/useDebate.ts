@@ -2,8 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getDebate } from '@/lib/api';
 import { useRef } from 'react';
 import { ApiClientError } from '../../apiClient';
-
-const COMPLETED_STATUSES = new Set(["completed", "success", "completed_budget", "failed"]);
+import { isTerminalRunStatus } from '@/lib/runStatus';
 
 export function useDebate(id: string) {
     const provisioningStart = useRef<number | null>(null);
@@ -35,7 +34,7 @@ export function useDebate(id: string) {
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 2000),
         refetchInterval: (query) => {
             const status = query.state.data?.status;
-            if (!status || COMPLETED_STATUSES.has(status)) return false;
+            if (!status || isTerminalRunStatus(status)) return false;
             return 4000;
         },
         refetchIntervalInBackground: false,

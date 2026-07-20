@@ -375,6 +375,8 @@ async def stream_events(
 
     # Record metrics after cursor is resolved
     track_metric("sse_stream_open")
+    from observability.metrics import record_sse_stream_opened
+    record_sse_stream_opened()
     if last_seq_val is not None:
         from observability.metrics import record_sse_reconnect
         record_sse_reconnect()
@@ -401,6 +403,10 @@ async def stream_events(
         lease_mgr = get_stream_lease_manager()
 
         async with acquired_stream_lease(lease_mgr, debate_id, subscriber_id):
+            # Force headers through proxy/browser buffers before the first
+            # application event, which may not arrive for several seconds.
+            yield ": connected\n\n"
+
             # Periodically check if client disconnected to forcefully release lease
             async def check_disconnect(task: asyncio.Task):
                 while True:
@@ -412,23 +418,26 @@ async def stream_events(
             monitor_task = asyncio.create_task(check_disconnect(asyncio.current_task()))
             try:
                 async for event in sse_backend.subscribe(channel_id, last_sequence=last_seq_val):
-                    # Skip heartbeat events from being serialized to the client
-                    # Heartbeats are used internally for silence detection
                     evt_type = event.get("type")
                     payload = event.get("payload")
                     payload_type = payload.get("type") if isinstance(payload, dict) else None
-                    if evt_type == "heartbeat" or payload_type == "heartbeat":
+                    is_heartbeat = evt_type == "heartbeat" or payload_type == "heartbeat"
+                    if is_heartbeat:
                         increment_metric("sse.heartbeat.emitted")
-                        continue
 
                     seq = event.get("sequence")
-                    id_prefix = f"id: {seq}\n" if seq is not None else ""
+                    # Heartbeats are transport liveness signals, not replayable
+                    # events; never let their synthetic sequence=0 rewind the
+                    # browser's Last-Event-ID cursor.
+                    id_prefix = f"id: {seq}\n" if seq is not None and not is_heartbeat else ""
                     yield f"{id_prefix}data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
                     # Check either top-level or payload type
                     if evt_type == "final" or payload_type == "final":
                         break
             finally:
+                from observability.metrics import record_sse_stream_closed
+                record_sse_stream_closed()
                 # Cancel and await monitor task
                 monitor_task.cancel()
                 from contextlib import suppress

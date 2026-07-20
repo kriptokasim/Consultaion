@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import RunDetailClient from "./RunDetailClient";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { safeMetadataTitle, safeMetadataDescription, containsSensitivePattern } from "@/lib/textSafety";
+import { isSuccessfulRunStatus } from "@/lib/runStatus";
 
 export async function generateMetadata({ params }: RunDetailProps): Promise<Metadata> {
   const { id } = await params;
@@ -13,7 +14,7 @@ export async function generateMetadata({ params }: RunDetailProps): Promise<Meta
     if (res.ok) {
       const debate = await res.json();
       const isPublic = debate?.is_public === true || debate?.config?.is_public === true;
-      const isCompleted = debate?.status === "completed" || debate?.status === "completed_budget";
+      const isCompleted = isSuccessfulRunStatus(debate?.status);
       
       if (isPublic && isCompleted && debate.prompt) {
         const title = safeMetadataTitle(debate.prompt, true);

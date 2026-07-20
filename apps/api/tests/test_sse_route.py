@@ -139,6 +139,51 @@ async def test_fresh_connection_no_unbound_local_error():
 # ─── Test 2: Query reconnect ────────────────────────────────────────────────
 
 @pytest.mark.anyio
+async def test_stream_flushes_immediately_and_forwards_heartbeat_without_cursor():
+    """The client must receive an immediate chunk and transport heartbeats."""
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+
+    async def heartbeat_then_final(channel_id, last_sequence=None):
+        yield {
+            "id": "hb-test",
+            "type": "heartbeat",
+            "sequence": 0,
+            "payload": {"type": "heartbeat"},
+        }
+        yield {
+            "id": "sse-test-1",
+            "type": "final",
+            "sequence": 1,
+            "payload": {"type": "final"},
+        }
+
+    from sqlmodel import Session
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        req = _make_request(token=token)
+
+        with patch.object(backend, "subscribe", side_effect=heartbeat_then_final):
+            response = await stream_events(
+                debate_id,
+                request=req,
+                last_sequence=None,
+                session=session,
+                sse_backend=backend,
+            )
+
+            first = await response.body_iterator.__anext__()
+            heartbeat = await response.body_iterator.__anext__()
+
+            assert first == ": connected\n\n"
+            assert '"type": "heartbeat"' in heartbeat
+            assert not heartbeat.startswith("id:")
+
+            await response.body_iterator.aclose()
+
+    await backend.stop()
+
+@pytest.mark.anyio
 async def test_query_reconnect_passes_sequence():
     """?last_sequence=7 should pass 7 to backend.subscribe."""
     backend = MemoryChannelBackend(ttl_seconds=30)

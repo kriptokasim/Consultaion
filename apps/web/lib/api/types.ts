@@ -1,3 +1,5 @@
+import type { RunStatus } from "@/lib/runStatus";
+
 export interface RequestOptions {
     signal?: AbortSignal;
     timeoutMs?: number;
@@ -45,7 +47,7 @@ export interface StageCheckpointDTO {
 
 export interface ContinuationDTO {
     id: string;
-    status: "requested" | "preflight_passed" | "dispatched" | "running" | "completed" | "failed";
+    status: "requested" | "preflight_passed" | "dispatched" | "running" | "completed" | "failed" | "cancelled";
     requested_at?: string;
     preflight_passed_at?: string;
     dispatched_at?: string;
@@ -61,7 +63,7 @@ export interface ContinuationDTO {
 export interface DebateSummary {
     id: string;
     prompt: string;
-    status: 'queued' | 'scheduled' | 'running' | 'completed' | 'failed' | 'completed_budget' | 'perspectives_ready';
+    status: RunStatus;
     created_at: string;
     updated_at: string;
     user_id?: string;
@@ -443,10 +445,13 @@ export interface PersistedModelResponseMetadata {
   persona_type?: string | null;
   persona_tagline?: string | null;
   attempt_count?: number;
+  run_attempt?: number;
+  retry_generation?: number;
 }
 
 export interface PersistedModelResponse {
   id: string;
+  response_id?: string;
   debate_id: string;
   response_type: string;
   role: string;
