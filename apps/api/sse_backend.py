@@ -26,6 +26,8 @@ CRITICAL_NON_TERMINAL_EVENT_TYPES = frozenset(
     {
         "debate_completed",
         "debate_failed",
+        "model_response_completed",
+        "model_response_failed",
     }
 )
 
@@ -36,8 +38,6 @@ CRITICAL_EVENT_TYPES = TERMINAL_EVENT_TYPES | CRITICAL_NON_TERMINAL_EVENT_TYPES
 IMPORTANT_EVENT_TYPES = frozenset(
     {
         "arena_response",
-        "model_response_completed",
-        "model_response_failed",
         "perspectives_ready",
         "stage_checkpoint",
         "lane_assigned",
@@ -85,9 +85,20 @@ class DeltaCoalescer:
 
     Non-delta events trigger an immediate flush of all pending deltas so that
     event ordering remains correct.
+
+    Bounded memory: ``max_items`` caps per-key pending count and
+    ``max_chars`` caps total accumulated text.  When either bound is hit
+    the oldest pending deltas are evicted (loss-tolerant — only deltas
+    arrive here, so dropping intermediate tokens is safe).
     """
 
-    def __init__(self, flush_interval_ms: int | None = None) -> None:
+    def __init__(
+        self,
+        flush_interval_ms: int | None = None,
+        *,
+        max_items: int = 256,
+        max_chars: int = 64_000,
+    ) -> None:
         from config import settings
 
         self._flush_ms = (
@@ -96,6 +107,8 @@ class DeltaCoalescer:
             else getattr(settings, "ARENA_DELTA_FLUSH_MS", 150)
         )
         self._flush_seconds = self._flush_ms / 1000.0
+        self._max_items = max_items
+        self._max_chars = max_chars
         # {response_id: [delta_event, ...]}
         self._pending: dict[str, list[dict]] = {}
         self._last_flush: float = time.monotonic()
@@ -144,6 +157,16 @@ class DeltaCoalescer:
         if key not in self._pending:
             self._pending[key] = []
         self._pending[key].append(event)
+
+        # Enforce bounds: evict oldest deltas if over limits
+        pending = self._pending[key]
+        while len(pending) > self._max_items or (
+            pending and sum(len(d.get("text", "") or d.get("payload", {}).get("text", "")) for d in pending) > self._max_chars
+        ):
+            if pending:
+                pending.pop(0)
+            else:
+                break
 
         # Check if flush interval has elapsed
         elapsed = now - self._last_flush

@@ -422,6 +422,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
       setResponses(responsesData.items);
       dispatchConn({ type: "RESPONSES_LOADED", count: responsesData.items.length });
+      dispatchStreaming({ type: "MERGE_PERSISTED", payloads: responsesData.items });
 
     } catch (err: unknown) {
       if (isStale()) return;

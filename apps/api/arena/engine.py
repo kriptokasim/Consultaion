@@ -63,59 +63,97 @@ async def persist_and_publish_arena_response(
     backend,
     debate_id: str,
     response: ArenaModelResponse,
-) -> None:
-    """Persist the arena model response to the database with idempotency check, and stream it to SSE."""
-    from sqlmodel import select
-    # 1. Idempotency check: load existing messages for this debate and role 'arena_response'
-    stmt = select(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_response")
+    *,
+    owner_id: str | None = None,
+    lease_epoch: int | None = None,
+) -> bool:
+    """Persist the arena model response with PS156 fencing.
+
+    Returns True if the response was newly persisted (and SSE event was
+    published), False if a duplicate was detected (SSE already emitted or
+    skipped). Raises ExecutionSupersededError if the lease expired.
+    """
+    from orchestration.execution_context import get_current_execution_lease
+    from orchestration.execution_lease import ExecutionSupersededError
+    from sqlalchemy import text
+
+    # Resolve fencing parameters: explicit > context var
+    lease = get_current_execution_lease()
+    if owner_id is None and lease is not None:
+        owner_id = lease.owner_id
+    if lease_epoch is None and lease is not None:
+        lease_epoch = lease.lease_epoch
+
+    # --- Ownership gate (best-effort) ---
+    if owner_id and lease_epoch is not None:
+        ownership_row = await session.execute(
+            text(
+                "SELECT 1 FROM debate "
+                "WHERE id = :did AND runner_id = :owner "
+                "AND lease_epoch = :epoch AND status = 'running'"
+            ),
+            {"did": debate_id, "owner": owner_id, "epoch": lease_epoch},
+        )
+        if ownership_row.first() is None:
+            logger.warning(
+                "arena_response.fenced_rejected debate_id=%s owner=%s epoch=%s",
+                debate_id, owner_id, lease_epoch,
+            )
+            if lease:
+                lease.lease_lost_event.set()
+            raise ExecutionSupersededError(
+                f"Arena response persist rejected: {debate_id} no longer owned by "
+                f"{owner_id} at epoch {lease_epoch}"
+            )
+
+    # --- Idempotency: deduplicate by response_id only ---
+    from sqlmodel import select as sa_select
+    stmt = sa_select(Message).where(
+        Message.debate_id == debate_id,
+        Message.role == "arena_response",
+    )
     res = await session.execute(stmt)
     existing_messages = res.scalars().all()
-    
+
+    response_id = response.response_id
     already_exists = False
     for msg in existing_messages:
         meta = msg.meta if isinstance(msg.meta, dict) else {}
-        existing_attempt = int(meta.get("run_attempt", 1) or 1)
-        existing_generation = int(meta.get("retry_generation", 0) or 0)
-        same_response_id = bool(
-            response.response_id and meta.get("response_id") == response.response_id
-        )
-        same_attempt = (
-            meta.get("model_id") == response.model_id
-            and existing_attempt == response.run_attempt
-            and existing_generation == response.retry_generation
-        )
-        if same_response_id or same_attempt:
+        if response_id and meta.get("response_id") == response_id:
             already_exists = True
             break
-            
-    if not already_exists:
-        session.add(
-            Message(
-                debate_id=debate_id,
-                round_index=1,
-                role="arena_response",
-                persona=response.display_name,
-                content=response.content,
-                meta={
-                    "model_id": response.model_id,
-                    "display_name": response.display_name,
-                    "provider": response.provider,
-                    "mode": "arena",
-                    "response_id": response.response_id,
-                    "run_attempt": response.run_attempt,
-                    "retry_generation": response.retry_generation,
-                    "logo_url": response.logo_url,
-                    "persona_type": response.persona_type,
-                    "persona_tagline": response.persona_tagline,
-                    "success": response.success,
-                    "error": response.error or (None if response.success else "Model failed to respond"),
-                    "error_code": response.error_code,
-                },
-            )
+
+    if already_exists:
+        return False
+
+    # --- Persist ---
+    session.add(
+        Message(
+            debate_id=debate_id,
+            round_index=1,
+            role="arena_response",
+            persona=response.display_name,
+            content=response.content,
+            meta={
+                "model_id": response.model_id,
+                "display_name": response.display_name,
+                "provider": response.provider,
+                "mode": "arena",
+                "response_id": response.response_id,
+                "run_attempt": response.run_attempt,
+                "retry_generation": response.retry_generation,
+                "logo_url": response.logo_url,
+                "persona_type": response.persona_type,
+                "persona_tagline": response.persona_tagline,
+                "success": response.success,
+                "error": response.error or (None if response.success else "Model failed to respond"),
+                "error_code": response.error_code,
+            },
         )
-        await session.commit()
-    
-    # 2. Publish to SSE
+    )
+    await session.commit()
+
+    # --- Publish SSE only after confirmed persistence ---
     await backend.publish(
         f"debate:{debate_id}",
         {
@@ -136,6 +174,7 @@ async def persist_and_publish_arena_response(
             "retry_generation": response.retry_generation,
         },
     )
+    return True
 
 
 @dataclass
@@ -540,7 +579,11 @@ async def run_arena(
             # Persist before the terminal lifecycle event. A completed event
             # therefore guarantees that the canonical response can be fetched.
             async with async_session_scope() as session:
-                await persist_and_publish_arena_response(session, backend, debate_id, response)
+                persisted = await persist_and_publish_arena_response(
+                    session, backend, debate_id, response,
+                    owner_id=execution_owner_id,
+                    lease_epoch=lease_epoch,
+                )
 
             terminal_payload = {
                 "type": "model_response_completed" if response.success else "model_response_failed",
@@ -553,6 +596,9 @@ async def run_arena(
                         "error_code": response.error_code,
                     }
                 )
+            # Only emit terminal event if response was actually persisted (or already existed)
+            # to prevent frontend from seeing "completed" for a response that isn't in DB.
+            # persisted=False means duplicate already in DB — still safe to emit terminal.
             await backend.publish(f"debate:{debate_id}", terminal_payload)
 
             if PROMETHEUS_AVAILABLE and _timing.get("start_ts"):

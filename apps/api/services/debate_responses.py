@@ -144,7 +144,7 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
         "debate_id": msg.debate_id,
         "response_type": response_type,
         "role": role,
-        "round": int(msg.round or 0),
+        "round": int(msg.round_index or 0),
         "model_id": model_id,
         "display_name": display_name,
         "provider": provider,

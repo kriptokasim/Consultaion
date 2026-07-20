@@ -215,8 +215,8 @@ async def test_event_priority_classification():
     assert _event_priority({"type": "debate_completed"}) == 0
     assert _event_priority({"type": "debate_failed"}) == 0
     assert _event_priority({"type": "arena_response"}) == 1
-    assert _event_priority({"type": "model_response_completed"}) == 1
-    assert _event_priority({"type": "model_response_failed"}) == 1
+    assert _event_priority({"type": "model_response_completed"}) == 0  # critical — must not be dropped
+    assert _event_priority({"type": "model_response_failed"}) == 0  # critical — must not be dropped
     assert _event_priority({"type": "perspectives_ready"}) == 1
     assert _event_priority({"type": "model_response_delta"}) == 2
     assert _event_priority({"type": "heartbeat"}) == 2

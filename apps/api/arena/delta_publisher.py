@@ -47,7 +47,21 @@ class ArenaDeltaPublisher:
         self._flush_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
-        pass
+        """Start the background timer-based flush loop."""
+        if self._flush_task is not None:
+            return
+        self._flush_task = asyncio.create_task(self._timer_loop())
+
+    async def _timer_loop(self) -> None:
+        """Periodically flush pending deltas."""
+        interval = self._flush_interval_ms / 1000.0
+        try:
+            while not self._closed:
+                await asyncio.sleep(interval)
+                if self._pending and not self._closed:
+                    await self._flush()
+        except asyncio.CancelledError:
+            pass
 
     async def push(self, delta: ModelDelta) -> None:
         if self._closed:
@@ -71,6 +85,7 @@ class ArenaDeltaPublisher:
             await self._flush()
 
     async def close(self) -> None:
+        """Stop timer and flush remaining pending deltas."""
         self._closed = True
         if self._flush_task:
             self._flush_task.cancel()
@@ -79,6 +94,9 @@ class ArenaDeltaPublisher:
             except (asyncio.CancelledError, Exception):
                 pass
             self._flush_task = None
+        # Flush any remaining deltas
+        if self._pending:
+            await self._flush()
 
     async def fail(self, error: Optional[Exception] = None) -> None:
         await self.close()

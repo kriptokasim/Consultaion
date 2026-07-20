@@ -255,16 +255,14 @@ export function streamingReducer(
     }
 
     case "MERGE_PERSISTED": {
-      // Match current responses by their durable stream identity. The model ID
-      // fallback is only for historical rows that predate response_id; using it
-      // for new rows can delete a newer retry when stale persistence arrives.
+      // Match current responses by their durable stream identity (response_id).
+      // Legacy model_id fallback is intentionally removed — matching by model_id
+      // alone would incorrectly wipe out a newer retry's streaming buffer when
+      // stale persistence rows (pre-response_id) arrive.
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
       const persistedIds = new Set(action.payloads.map(p => p.response_id || p.id));
-      const legacyModelIds = new Set(
-        action.payloads.filter(p => !p.response_id).map(p => p.model_id),
-      );
       Array.from(next.entries()).forEach(([key, buf]) => {
-        if (persistedIds.has(buf.responseId) || legacyModelIds.has(buf.modelId)) {
+        if (persistedIds.has(buf.responseId)) {
           // Only remove if completed or failed — keep active streaming buffers
           if (buf.state === "completed" || buf.state === "failed") {
             next.delete(key);
