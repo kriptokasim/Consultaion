@@ -20,7 +20,7 @@ def upgrade() -> None:
     op.create_table(
         "terminal_transition",
         sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("debate_id", sa.String(), sa.ForeignKey("debate.id"), nullable=False, index=True),
+        sa.Column("debate_id", sa.String(), sa.ForeignKey("debate.id"), nullable=False),
         sa.Column("transition_type", sa.String(), nullable=False),
         sa.Column("status", sa.String(), nullable=False, server_default="claimed"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
