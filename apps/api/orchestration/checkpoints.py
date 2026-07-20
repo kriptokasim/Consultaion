@@ -32,6 +32,7 @@ from orchestration.execution_context import (
     get_current_execution_lease,
 )
 from orchestration.execution_lease import ExecutionSupersededError
+from orchestration.stage_graph import StageKey
 
 logger = logging.getLogger(__name__)
 
@@ -446,7 +447,7 @@ async def _run_unfenced(
             isinstance(result, tuple)
             and len(result) == 2
             and isinstance(result[1], str)
-            and stage_key in {"synthesis", "verification", "synthesis_draft"}
+            and stage_key in {StageKey.SYNTHESIS.value, StageKey.VERIFICATION.value, StageKey.SYNTHESIS_DRAFT.value}
         ):
             actual_result, output_ref = result
         else:
@@ -574,7 +575,7 @@ async def run_with_checkpoint(
             isinstance(result, tuple)
             and len(result) == 2
             and isinstance(result[1], str)
-            and stage_key in {"synthesis", "verification", "synthesis_draft"}
+            and stage_key in {StageKey.SYNTHESIS.value, StageKey.VERIFICATION.value, StageKey.SYNTHESIS_DRAFT.value}
         ):
             actual_result, output_ref = result
         else:

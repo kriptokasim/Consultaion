@@ -4,45 +4,61 @@ Centralized stage invalidation graph for debate retry logic.
 Each stage maps to the list of stages that must be invalidated when retrying from that stage.
 """
 
+from __future__ import annotations
+
+from enum import Enum
 from typing import Dict, List, Set
 
+
+class StageKey(str, Enum):
+    """Canonical stage keys for the debate pipeline checkpoint system.
+
+    Usage: StageKey.DRAFT == "draft" (StrEnum, comparable to strings).
+    """
+    DRAFT = "draft"
+    CRITIQUE = "critique"
+    JUDGE = "judge"
+    DIVERGENCE_ANALYSIS = "divergence_analysis"
+    SYNTHESIS = "synthesis"
+    SYNTHESIS_DRAFT = "synthesis_draft"
+    VERIFICATION = "verification"
+    ARENA_PERSPECTIVES = "arena_perspectives"
+    ARENA_SYNTHESIS = "arena_synthesis"
+
+
 # Known stage keys
-KNOWN_STAGES: Set[str] = {
-    "draft", "critique", "judge", "divergence_analysis",
-    "synthesis", "synthesis_draft", "verification",
-    "arena_perspectives", "arena_synthesis",
-}
+KNOWN_STAGES: Set[str] = {k.value for k in StageKey}
 
 # Stage aliases for backward compatibility
 STAGE_ALIASES: Dict[str, str] = {
-    "opening": "draft",
-    "argument": "critique",
-    "evaluation": "judge",
-    "analysis": "divergence_analysis",
-    "summary": "synthesis",
-    "final": "synthesis_draft",
-    "check": "verification",
-    "perspectives": "arena_perspectives",
-    "conclusion": "arena_synthesis",
+    "opening": StageKey.DRAFT,
+    "argument": StageKey.CRITIQUE,
+    "evaluation": StageKey.JUDGE,
+    "analysis": StageKey.DIVERGENCE_ANALYSIS,
+    "summary": StageKey.SYNTHESIS,
+    "final": StageKey.SYNTHESIS_DRAFT,
+    "check": StageKey.VERIFICATION,
+    "perspectives": StageKey.ARENA_PERSPECTIVES,
+    "conclusion": StageKey.ARENA_SYNTHESIS,
 }
 
 # Stage invalidation graph: stage_key → list of stages to invalidate on retry
 STAGE_INVALIDATION_GRAPH: Dict[str, List[str]] = {
-    "draft": ["draft", "critique", "judge", "synthesis", "synthesis_draft", "verification"],
-    "critique": ["critique", "judge", "synthesis", "synthesis_draft", "verification"],
-    "judge": ["judge", "synthesis", "synthesis_draft", "verification"],
-    "divergence_analysis": ["divergence_analysis", "synthesis", "synthesis_draft", "verification"],
-    "synthesis": ["synthesis", "synthesis_draft", "verification"],
-    "synthesis_draft": ["synthesis_draft", "verification", "synthesis", "arena_synthesis"],
-    "verification": ["verification", "synthesis", "arena_synthesis"],
-    "arena_perspectives": [
-        "arena_perspectives",
-        "arena_synthesis",
-        "divergence_analysis",
-        "synthesis_draft",
-        "verification",
+    StageKey.DRAFT: [StageKey.DRAFT, StageKey.CRITIQUE, StageKey.JUDGE, StageKey.SYNTHESIS, StageKey.SYNTHESIS_DRAFT, StageKey.VERIFICATION],
+    StageKey.CRITIQUE: [StageKey.CRITIQUE, StageKey.JUDGE, StageKey.SYNTHESIS, StageKey.SYNTHESIS_DRAFT, StageKey.VERIFICATION],
+    StageKey.JUDGE: [StageKey.JUDGE, StageKey.SYNTHESIS, StageKey.SYNTHESIS_DRAFT, StageKey.VERIFICATION],
+    StageKey.DIVERGENCE_ANALYSIS: [StageKey.DIVERGENCE_ANALYSIS, StageKey.SYNTHESIS, StageKey.SYNTHESIS_DRAFT, StageKey.VERIFICATION],
+    StageKey.SYNTHESIS: [StageKey.SYNTHESIS, StageKey.SYNTHESIS_DRAFT, StageKey.VERIFICATION],
+    StageKey.SYNTHESIS_DRAFT: [StageKey.SYNTHESIS_DRAFT, StageKey.VERIFICATION, StageKey.SYNTHESIS, StageKey.ARENA_SYNTHESIS],
+    StageKey.VERIFICATION: [StageKey.VERIFICATION, StageKey.SYNTHESIS, StageKey.ARENA_SYNTHESIS],
+    StageKey.ARENA_PERSPECTIVES: [
+        StageKey.ARENA_PERSPECTIVES,
+        StageKey.ARENA_SYNTHESIS,
+        StageKey.DIVERGENCE_ANALYSIS,
+        StageKey.SYNTHESIS_DRAFT,
+        StageKey.VERIFICATION,
     ],
-    "arena_synthesis": ["arena_synthesis", "synthesis_draft", "verification"],
+    StageKey.ARENA_SYNTHESIS: [StageKey.ARENA_SYNTHESIS, StageKey.SYNTHESIS_DRAFT, StageKey.VERIFICATION],
 }
 
 

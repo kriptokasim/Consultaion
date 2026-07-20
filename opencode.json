@@ -39,7 +39,7 @@
 
       "rm *": "deny",
       "sudo *": "deny",
-      "git push*": "deny",
+      "git push*": "ask",
       "git reset --hard*": "deny",
       "git clean*": "deny"
     },

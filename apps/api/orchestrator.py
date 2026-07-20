@@ -228,10 +228,15 @@ def _compute_rankings(scores: Sequence[Dict[str, Any]]):
 
     for i in range(n):
         for j in range(i + 1, n):
-            pass # Removed naive Condorcet implementation that duplicated Borda due to pre-sorting
+            a, a_score = sorted_scores[i]["persona"], sorted_scores[i]["score"]
+            b, b_score = sorted_scores[j]["persona"], sorted_scores[j]["score"]
+            if a_score > b_score:
+                condorcet[a] += 1.0
+            elif b_score > a_score:
+                condorcet[b] += 1.0
 
     combined = {
-        persona: borda[persona]
+        persona: (condorcet[persona], borda[persona])
         for persona in borda
     }
 
@@ -942,21 +947,6 @@ async def run_debate(
         except Exception as inner_exc:
             logger.error("Failed to update debate status after transient error: debate_id=%s error=%s", debate_id, inner_exc)
 
-        await _update_continuation_status(
-            continuation_id,
-            "failed",
-            ["running", "dispatched", "requested", "preflight_passed"],
-            failure_code="transient_provider_error",
-            failure_detail_safe=str(exc)
-        )
-        await send_slack_alert(
-            message="[Consultaion] Debate transient/provider failure",
-            level="warning",
-            meta={
-                "debate_id": debate_id,
-                "error": str(exc)[:500],
-            },
-        )
         await backend.publish(
             channel_id,
             {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Temporary AI provider issue. Please retry."}},
@@ -973,7 +963,7 @@ async def run_debate(
             failure_detail_safe=str(exc)
         )
 
-        # Slack Alert
+        # Slack Alert (idempotent — fires at most once per debate)
         from services.terminal_transition import TRANSITION_SLACK_ALERT, claim_transition_async
         if await claim_transition_async(debate_id, TRANSITION_SLACK_ALERT):
             await send_slack_alert(
@@ -1056,24 +1046,6 @@ async def run_debate(
         except Exception as inner_exc:
             logger.error("Failed to update debate status after terminal error: debate_id=%s error=%s", debate_id, inner_exc)
 
-        await _update_continuation_status(
-            continuation_id,
-            "failed",
-            ["running", "dispatched", "requested", "preflight_passed"],
-            failure_code="terminal_execution_error",
-            failure_detail_safe=str(exc)
-        )
-
-        # Slack Alert
-        await send_slack_alert(
-            message="[Consultaion] Debate execution failed",
-            level="error",
-            meta={
-                "debate_id": debate_id,
-                "user_id": str(debate_user_id) if debate_user_id else "unknown",
-                "error": str(exc)[:500],
-            },
-        )
         await backend.publish(
             channel_id,
             {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Debate failed due to an internal error."}},
