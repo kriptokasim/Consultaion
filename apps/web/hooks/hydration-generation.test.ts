@@ -12,7 +12,10 @@ import { useRunWorkspace } from "./useRunWorkspace";
 
 const mockGetDebate = vi.fn();
 const mockGetDebateResponses = vi.fn();
-const sseHarness = vi.hoisted(() => ({ onEvent: null as null | ((event: unknown) => void) }));
+const sseHarness = vi.hoisted(() => ({
+  onEvent: null as null | ((event: unknown) => void),
+  status: "idle" as "idle" | "connecting" | "connected" | "reconnecting" | "closed",
+}));
 
 vi.mock("@/lib/api", () => ({
   getDebate: (...args: unknown[]) => mockGetDebate(...args),
@@ -37,7 +40,7 @@ vi.mock("@/lib/config/runtime", () => ({
 vi.mock("@/lib/sse", () => ({
   useEventSource: vi.fn((_url: unknown, options: { onEvent?: (event: unknown) => void }) => {
     sseHarness.onEvent = options.onEvent || null;
-    return { status: "idle" };
+    return { status: sseHarness.status };
   }),
 }));
 
@@ -50,6 +53,7 @@ describe("Hydration Generation Isolation (Track E)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sseHarness.onEvent = null;
+    sseHarness.status = "idle";
   });
 
   it("stale fetch from debate A cannot update debate B", async () => {
@@ -196,5 +200,76 @@ describe("Hydration Generation Isolation (Track E)", () => {
     rerender({ id: "debate-B" });
     await waitFor(() => expect(result.current.mergedStreamingResponses).toHaveLength(0));
     await waitFor(() => expect(result.current.debate?.id).toBe("debate-B"));
+  });
+
+  it("PS157 B: stale fallback poll cannot hydrate or reschedule for the previous run", async () => {
+    vi.useFakeTimers();
+    try {
+      // SSE closed → polling fallback engages
+      sseHarness.status = "closed";
+
+      let resolveStuckA: (v: unknown) => void;
+      const stuckA = new Promise((resolve) => { resolveStuckA = resolve; });
+      mockGetDebate
+        .mockResolvedValue({ id: "debate-B", status: "running" }) // default after one-shots
+        .mockResolvedValueOnce({ id: "debate-A", status: "running" }) // initial hydrate(A)
+        .mockImplementationOnce(() => stuckA); // poll hydrate(A) — stays in-flight
+      mockGetDebateResponses.mockResolvedValue({ items: [] });
+
+      const { result, rerender } = renderHook(
+        ({ id }) => useRunWorkspace(id),
+        { initialProps: { id: "debate-A" } },
+      );
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.debate?.id).toBe("debate-A");
+
+      // Fire the first fallback poll → hydrate(A) starts and gets stuck in-flight
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(mockGetDebate.mock.calls.filter((c) => c[0] === "debate-A")).toHaveLength(2);
+
+      // Navigate to B while A's poll is still in-flight
+      rerender({ id: "debate-B" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(result.current.debate?.id).toBe("debate-B");
+
+      // Resolve A's stuck poll — it is stale and must not reschedule itself
+      await act(async () => {
+        resolveStuckA!({ id: "debate-A", status: "running" });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Advance well past several poll intervals: no further fetches for A,
+      // and B's state is never clobbered by the stale loop.
+      const aCallsBefore = mockGetDebate.mock.calls.filter((c) => c[0] === "debate-A").length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+      const aCallsAfter = mockGetDebate.mock.calls.filter((c) => c[0] === "debate-A").length;
+      expect(aCallsAfter).toBe(aCallsBefore);
+      expect(result.current.debate?.id).toBe("debate-B");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("PS157 B: navigating away from a terminal run resets connection state", async () => {
+    mockGetDebate
+      .mockResolvedValueOnce({ id: "debate-A", status: "completed" })
+      .mockResolvedValueOnce({ id: "debate-B", status: "running" });
+    mockGetDebateResponses.mockResolvedValue({ items: [] });
+
+    const { result, rerender } = renderHook(
+      ({ id }) => useRunWorkspace(id),
+      { initialProps: { id: "debate-A" } },
+    );
+    await waitFor(() => expect(result.current.debate?.id).toBe("debate-A"));
+    expect(result.current.status).toBe("completed");
+
+    rerender({ id: "debate-B" });
+
+    // The terminal state of A must not persist into B's hydration
+    expect(result.current.coreState).toBe("loading");
+    expect(result.current.status).toBe("loading");
+
+    await waitFor(() => expect(result.current.debate?.id).toBe("debate-B"));
+    expect(result.current.status).not.toBe("completed");
   });
 });

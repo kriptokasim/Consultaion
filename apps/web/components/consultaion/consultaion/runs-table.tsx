@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { ApiError, assignDebateTeam, TeamSummary, getDebates, normalizeRunStatus } from "@/lib/api"
+import { isTerminalRunStatus } from "@/lib/runStatus"
 import SearchFilter from "@/components/ui/search-filter"
 import EmptyState from "@/components/ui/empty-state"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -475,7 +476,7 @@ export default function RunsTable({ items, teams, profile, initialQuery = "", in
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    {(normalizeStatus(run.status) === "completed" || normalizeStatus(run.status) === "failed") ? (
+                    {isTerminalRunStatus(normalizeStatus(run.status)) ? (
                       <Link href={`/runs/${run.id}/replay`} className="text-xs font-semibold text-amber-700 underline-offset-4 hover:underline">
                         {t("dashboard.recentDebates.replay")}
                       </Link>

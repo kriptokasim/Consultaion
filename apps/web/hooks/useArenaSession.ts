@@ -6,13 +6,12 @@
  * and logic duplication in LiveArenaPage / ArenaRunView.
  */
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
+import { isTerminalRunStatus } from "@/lib/runStatus";
 
 export function useArenaSession(debateId: string) {
   const workspace = useRunWorkspace(debateId);
 
-  const isTerminal = workspace.debate?.status === "completed" || 
-                     workspace.debate?.status === "completed_budget" ||
-                     workspace.debate?.status === "failed";
+  const isTerminal = isTerminalRunStatus(workspace.debate?.status);
                      
   const hasSynthesis = workspace.debate?.synthesis_status === "succeeded" ||
                        workspace.debate?.synthesis_report != null ||

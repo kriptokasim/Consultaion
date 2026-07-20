@@ -28,7 +28,6 @@ export function useEventSource<T = unknown>(
     onError,
   } = options;
   const [status, setStatus] = useState<SSEStatus>(!url || !enabled ? "idle" : "connecting");
-  const [lastEvent, setLastEvent] = useState<T | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -102,20 +101,25 @@ export function useEventSource<T = unknown>(
           source.close();
           return;
         }
+        performance.mark?.("sse_open");
         attemptsRef.current = 0;
         setRetryCount(0);
         setStatus("connected");
         setLastError(null);
       };
 
+      let _firstEvent = true;
       source.onmessage = (event) => {
         if (cancelled) return;
+        if (_firstEvent) {
+          _firstEvent = false;
+          performance.mark?.("sse_first_event");
+        }
         try {
           if (event.lastEventId) {
             lastEventIdRef.current = event.lastEventId;
           }
           const payload = parseJson ? (JSON.parse(event.data) as T) : ((event.data as unknown) as T);
-          setLastEvent(payload);
           onEventRef.current?.(payload, event);
         } catch (error) {
           setLastError(error instanceof Error ? error.message : "Failed to parse event");
@@ -154,7 +158,6 @@ export function useEventSource<T = unknown>(
 
   return {
     status,
-    lastEvent,
     error: lastError,
     close,
     retryCount,
@@ -167,7 +170,7 @@ export type SessionStreamEvent = {
   event: string;
   session_id: string;
   timestamp: string;
-  payload: any;
+  payload: Record<string, unknown>;
 };
 
 export type UseSessionStreamOptions = {
@@ -270,14 +273,20 @@ export function useSessionStream(
           source.close();
           return;
         }
+        performance.mark?.("sse_open");
         attemptsRef.current = 0;
         setRetryCount(0);
         setStatus("connected");
         setLastError(null);
       };
 
+      let _sessionFirstEvent = true;
       source.onmessage = (event) => {
         if (cancelled) return;
+        if (_sessionFirstEvent) {
+          _sessionFirstEvent = false;
+          performance.mark?.("sse_first_event");
+        }
         try {
           const envelope = JSON.parse(event.data) as SessionStreamEvent;
           const seq = envelope.sequence;

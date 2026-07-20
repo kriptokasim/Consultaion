@@ -82,6 +82,8 @@ class ModelResponseDelta:
     text: str
     sequence: int
     accumulated_chars: int
+    run_attempt: int = 0
+    retry_generation: int = 0
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -90,6 +92,8 @@ class ModelResponseDelta:
             "text": self.text,
             "delta_sequence": self.sequence,
             "accumulated_chars": self.accumulated_chars,
+            "run_attempt": self.run_attempt,
+            "retry_generation": self.retry_generation,
         }
 
 

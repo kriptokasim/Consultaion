@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from litellm import acompletion
@@ -10,7 +11,8 @@ from model_gateway.types import GatewayModelCallResult, ModelDelta, OnDeltaCallb
 
 logger = logging.getLogger("model_gateway.adapters")
 
-class BaseAdapter:
+class BaseAdapter(ABC):
+    @abstractmethod
     async def stream_llm(
         self,
         messages: List[Dict[str, str]],
@@ -23,14 +25,9 @@ class BaseAdapter:
         on_delta: OnDeltaCallback,
         user_id: Optional[str] = None,
         api_key: Optional[str] = None,
-    ) -> GatewayModelCallResult:
-        """Stream tokens from the provider, calling on_delta for each chunk.
+    ) -> GatewayModelCallResult: ...
 
-        Falls back to non-streaming if the provider doesn't support streaming.
-        Returns the final GatewayModelCallResult with ttft_ms set.
-        """
-        raise NotImplementedError()
-
+    @abstractmethod
     async def call_llm(
         self,
         messages: List[Dict[str, str]],
@@ -45,8 +42,7 @@ class BaseAdapter:
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Dict[str, Any]] = None,
         api_key: Optional[str] = None,
-    ) -> GatewayModelCallResult:
-        raise NotImplementedError()
+    ) -> GatewayModelCallResult: ...
 
 class DirectProviderAdapter(BaseAdapter):
     async def stream_llm(
@@ -445,6 +441,37 @@ class OpenRouterAdapter(BaseAdapter):
         )
 
 class MockAdapter(BaseAdapter):
+    async def stream_llm(
+        self,
+        messages: List[Dict[str, str]],
+        model_id: str,
+        temperature: float,
+        max_tokens: int,
+        gateway_policy: str,
+        model_pool: str,
+        routing_policy: str,
+        on_delta: OnDeltaCallback,
+        user_id: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> GatewayModelCallResult:
+        await asyncio.sleep(0.05)
+        content = f"[Mock response from {model_id}] Received message count: {len(messages)}"
+        await on_delta(ModelDelta(text=content, sequence=0, accumulated_chars=len(content)))
+        return GatewayModelCallResult(
+            content=content,
+            model_used=model_id,
+            provider="mock",
+            prompt_tokens=100,
+            completion_tokens=50,
+            total_tokens=150,
+            cost_usd=0.0001,
+            estimated_cost_usd=0.0001,
+            latency_ms=50.0,
+            success=True,
+            model_pool=model_pool,
+            routing_policy=routing_policy,
+        )
+
     async def call_llm(
         self,
         messages: List[Dict[str, str]],

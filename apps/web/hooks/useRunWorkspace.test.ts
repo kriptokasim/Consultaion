@@ -1,11 +1,12 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { fetchWithAuth } from "@/lib/auth";
-import { requestWithTimeout, getDebate } from "@/lib/api";
+import { requestWithTimeout, getDebate, getDebateResponses } from "@/lib/api";
 import { useRunWorkspace } from "./useRunWorkspace";
 
 vi.mock("@/lib/api", () => ({
   getDebate: vi.fn().mockResolvedValue({ id: "mock", status: "perspectives_ready" }),
+  getDebateResponses: vi.fn().mockResolvedValue({ items: [] }),
   continueDebate: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
   retryDebate: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
   resolveContinuationByKey: vi.fn().mockResolvedValue({ continuation_id: "cont-1", status: "dispatched" }),
@@ -232,7 +233,57 @@ describe("useRunWorkspace -- timeline and fallback events", () => {
     expect(result.current.events.length).toBe(0);
     expect(result.current.timelineError).toBe("Timeline fetch failed");
     expect(result.current.eventsError).toBe("Events fetch failed");
-    expect(result.current.debate.id).toBe("mock"); // Debate data should still be there
+    expect(result.current.debate?.id).toBe("mock"); // Debate data should still be there
+  });
+});
+
+describe("useRunWorkspace -- persisted response refresh", () => {
+  it("serializes terminal-event refreshes and performs one trailing refresh", async () => {
+    let handleEvent: ((event: any) => void) | undefined;
+    (globalThis as any).__mockUseEventSourceCallback = (_url: unknown, options: any) => {
+      handleEvent = options?.onEvent;
+    };
+
+    const { result } = renderHook(() => useRunWorkspace("refresh-debate"));
+    await vi.waitFor(() => expect(result.current.coreState).toBe("ready"));
+    const baselineCalls = vi.mocked(getDebateResponses).mock.calls.length;
+
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    vi.mocked(getDebateResponses).mockImplementation(async () => {
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      await gate;
+      activeRequests -= 1;
+      return { items: [] } as any;
+    });
+
+    act(() => {
+      handleEvent?.({
+        type: "model_response_completed",
+        payload: { response_id: "response-1", model_id: "model-1" },
+      });
+      handleEvent?.({
+        type: "model_response_completed",
+        payload: { response_id: "response-2", model_id: "model-2" },
+      });
+    });
+
+    await vi.waitFor(() => expect(activeRequests).toBe(1));
+    expect(maxActiveRequests).toBe(1);
+
+    await act(async () => {
+      release?.();
+      await gate;
+    });
+    await vi.waitFor(() => {
+      expect(vi.mocked(getDebateResponses).mock.calls.length).toBe(baselineCalls + 2);
+    });
+    expect(maxActiveRequests).toBe(1);
+
+    delete (globalThis as any).__mockUseEventSourceCallback;
   });
 });
 
@@ -249,8 +300,63 @@ describe("useRunWorkspace -- SSE watchdog and terminal handling", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     delete (globalThis as any).__mockSseStatus;
     delete (globalThis as any).__mockUseEventSourceCallback;
+  });
+
+  it("keeps model response transport events out of the timeline and batches deltas per frame", () => {
+    let frameCallback: FrameRequestCallback | null = null;
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      frameCallback = callback;
+      return 1;
+    }));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn(() => {
+      frameCallback = null;
+    }));
+    const { result } = renderHook(() => useRunWorkspace("test-debate"));
+
+    act(() => {
+      mockHandleEvent({
+        id: "stream-queued-1",
+        type: "model_response_queued",
+        payload: {
+          response_id: "response-1",
+          model_id: "model-1",
+          display_name: "Model 1",
+        },
+      });
+      mockHandleEvent({
+        id: "stream-delta-1",
+        type: "model_response_delta",
+        payload: {
+          response_id: "response-1",
+          model_id: "model-1",
+          text: "Hello",
+          delta_sequence: 1,
+          accumulated_chars: 5,
+        },
+      });
+      mockHandleEvent({
+        id: "stream-delta-2",
+        type: "model_response_delta",
+        payload: {
+          response_id: "response-1",
+          model_id: "model-1",
+          text: " world",
+          delta_sequence: 2,
+          accumulated_chars: 11,
+        },
+      });
+    });
+
+    expect(result.current.events).toEqual([]);
+    expect(result.current.streamingState.buffers.get("response-1")?.accumulatedText).toBe("");
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+    act(() => frameCallback?.(16));
+
+    expect(result.current.streamingState.buffers.get("response-1")?.accumulatedText).toBe("Hello world");
   });
 
   it("connected-but-silent SSE starts polling", async () => {

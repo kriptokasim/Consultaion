@@ -22,6 +22,53 @@ function delta(text: string, sequence: number) {
 }
 
 describe("streamingReducer buffer bounds", () => {
+  test("does not remove a newer retry buffer when an older response persists", () => {
+    const queued = streamingReducer(INITIAL_STREAMING_STATE, {
+      type: "RESPONSE_QUEUED",
+      payload: { response_id: "response-new", model_id: "model-1" },
+    });
+    const completed = streamingReducer(queued, {
+      type: "RESPONSE_COMPLETED",
+      payload: { response_id: "response-new", model_id: "model-1" },
+    });
+    const merged = streamingReducer(completed, {
+      type: "MERGE_PERSISTED",
+      payloads: [{
+        id: "message-old",
+        response_id: "response-old",
+        debate_id: "d1",
+        response_type: "arena_response",
+        role: "arena_response",
+        round: 1,
+        model_id: "model-1",
+        display_name: "Model 1",
+        provider: "test",
+        content: "old",
+        success: true,
+        error_code: null,
+        error_message: null,
+        retryable: false,
+        created_at: null,
+        metadata: {},
+      }],
+    });
+
+    expect(merged.buffers.has("response-new")).toBe(true);
+  });
+
+  test("applies a delta batch in order and rejects stale sequences", () => {
+    const first = delta("hello", 1).payload;
+    const stale = delta(" ignored", 1).payload;
+    const second = delta(" world", 2).payload;
+    const state = streamingReducer(INITIAL_STREAMING_STATE, {
+      type: "RESPONSE_DELTA_BATCH",
+      payloads: [first, stale, second],
+    });
+
+    expect(state.buffers.get("response-1")?.accumulatedText).toBe("hello world");
+    expect(state.buffers.get("response-1")?.lastSequence).toBe(2);
+  });
+
   test("does not mark an in-bounds preview as truncated", () => {
     const state = streamingReducer(INITIAL_STREAMING_STATE, delta("hello", 1));
 

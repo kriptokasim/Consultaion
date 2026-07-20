@@ -51,6 +51,8 @@ export interface ModelResponseDeltaPayload {
   text: string;
   delta_sequence: number;
   accumulated_chars: number;
+  run_attempt?: number;
+  retry_generation?: number;
 }
 
 export interface ModelResponseLifecyclePayload {
@@ -60,6 +62,8 @@ export interface ModelResponseLifecyclePayload {
   provider?: string;
   error?: string;
   error_code?: string;
+  run_attempt?: number;
+  retry_generation?: number;
 }
 
 export interface PipelineStagePayload {

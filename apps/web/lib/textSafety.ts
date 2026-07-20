@@ -8,40 +8,47 @@
  * - Analytics event payloads (prevent prompt leakage)
  */
 
-// ---------------------------------------------------------------------------
-// Sensitive pattern detection
-// ---------------------------------------------------------------------------
+import {
+  createDetectionPatterns,
+  createRedactionPatterns,
+  type CompiledSafetyPattern,
+} from "./generatedPatterns";
 
-/** OpenAI, Anthropic, Google, Groq, xAI API key patterns */
-const API_KEY_PATTERNS = [
-  /sk-[a-zA-Z0-9]{20,}/g,
-  /sk-ant-[a-zA-Z0-9\-]{20,}/g,
-  /sk-proj-[a-zA-Z0-9\-]{20,}/g,
-  /AIza[a-zA-Z0-9\-_]{30,}/g,
-  /gsk_[a-zA-Z0-9]{20,}/g,
-  /xai-[a-zA-Z0-9]{20,}/g,
-];
 
-/** JWT-like tokens (three dot-separated base64 segments) */
-const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
+function isLuhnValid(candidate: string): boolean {
+  const digits = candidate.replace(/[ -]/g, "");
+  if (!/^\d{13,19}$/.test(digits)) return false;
 
-/** Bearer tokens in text */
-const BEARER_PATTERN = /Bearer\s+[A-Za-z0-9\-._~+/]+/gi;
+  let checksum = 0;
+  const parity = digits.length % 2;
+  for (let index = 0; index < digits.length; index += 1) {
+    let value = Number(digits[index]);
+    if (index % 2 === parity) {
+      value *= 2;
+      if (value > 9) value -= 9;
+    }
+    checksum += value;
+  }
+  return checksum % 10 === 0;
+}
 
-/** Credit card-like numbers (13-19 digits) */
-const CREDIT_CARD_PATTERN = /\b(?:\d{4}[-\s]?){3,4}\d{1,4}\b/g;
 
-/** Explicit secret assignments (PASSWORD=..., API_KEY=..., etc.) */
-const SECRET_ASSIGNMENT = /(?:PASSWORD|SECRET|API_KEY|APIKEY|ACCESS_TOKEN|AUTH_TOKEN|PRIVATE_KEY|SECRET_KEY|ENCRYPTION_KEY)\s*[=:]\s*\S+/gi;
+function isValidMatch(pattern: CompiledSafetyPattern["pattern"], value: string): boolean {
+  return pattern.validator !== "luhn" || isLuhnValid(value);
+}
 
-/** URLs with token/key query params */
-const URL_WITH_TOKEN = /https?:\/\/[^\s]+[?&](?:token|key|secret|api_key|access_token|auth)=[^\s&]+/gi;
 
-/** Email addresses */
-const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi;
-
-/** Phone numbers (US + international) */
-const PHONE_PATTERN = /(\+\d{1,3}[-.\s]?)?(\(\d{3}\)|\d{3})[-.\s]?\d{3}[-.\s]?\d{4}/g;
+function hasValidMatch({ pattern, regex }: CompiledSafetyPattern, text: string): boolean {
+  let remaining = text;
+  let match = regex.exec(remaining);
+  while (match) {
+    if (isValidMatch(pattern, match[0])) return true;
+    const consumed = match.index + Math.max(match[0].length, 1);
+    remaining = remaining.slice(consumed);
+    match = regex.exec(remaining);
+  }
+  return false;
+}
 
 
 /**
@@ -52,34 +59,29 @@ const PHONE_PATTERN = /(\+\d{1,3}[-.\s]?)?(\(\d{3}\)|\d{3})[-.\s]?\d{3}[-.\s]?\d
  */
 export function containsSensitivePattern(text: string): boolean {
   if (!text) return false;
+  return createDetectionPatterns().some((pattern) => hasValidMatch(pattern, text));
+}
 
-  for (const pattern of API_KEY_PATTERNS) {
-    pattern.lastIndex = 0;
-    if (pattern.test(text)) return true;
+
+export function detectSensitiveCategories(text: string): string[] {
+  if (!text) return [];
+  const categories = new Set<string>();
+  for (const compiled of createDetectionPatterns()) {
+    if (hasValidMatch(compiled, text)) categories.add(compiled.pattern.category);
   }
+  return Array.from(categories).sort();
+}
 
-  JWT_PATTERN.lastIndex = 0;
-  if (JWT_PATTERN.test(text)) return true;
 
-  BEARER_PATTERN.lastIndex = 0;
-  if (BEARER_PATTERN.test(text)) return true;
-
-  SECRET_ASSIGNMENT.lastIndex = 0;
-  if (SECRET_ASSIGNMENT.test(text)) return true;
-
-  URL_WITH_TOKEN.lastIndex = 0;
-  if (URL_WITH_TOKEN.test(text)) return true;
-
-  EMAIL_PATTERN.lastIndex = 0;
-  if (EMAIL_PATTERN.test(text)) return true;
-
-  PHONE_PATTERN.lastIndex = 0;
-  if (PHONE_PATTERN.test(text)) return true;
-
-  CREDIT_CARD_PATTERN.lastIndex = 0;
-  if (CREDIT_CARD_PATTERN.test(text)) return true;
-
-  return false;
+export function sanitizePublicText(text: string): string {
+  let result = text;
+  for (const { pattern, regex } of createRedactionPatterns()) {
+    result = result.replace(
+      regex,
+      (match) => isValidMatch(pattern, match) ? pattern.replacement : match,
+    );
+  }
+  return result;
 }
 
 

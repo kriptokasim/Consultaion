@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyStateModern } from "@/components/ui/empty-state-modern";
 import type { DebateSummary } from "@/app/(app)/dashboard/types";
 import { useI18n } from "@/lib/i18n/client";
+import { isTerminalRunStatus } from "@/lib/runStatus";
 
 type DashboardRunsHistoryProps = {
   debates: DebateSummary[];
@@ -67,7 +68,7 @@ export function DashboardRunsHistory({ debates, debatesLoading, onNewRun }: Dash
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-smooth">
           <div className="divide-y divide-border">
             {debates.map((debate) => {
-              const replayAvailable = (debate.status || "").toLowerCase() === "completed" || (debate.status || "").toLowerCase() === "failed";
+              const replayAvailable = isTerminalRunStatus((debate.status || "").toLowerCase());
               return (
                 <div
                   key={debate.id}

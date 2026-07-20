@@ -48,6 +48,7 @@ export type StreamingAction =
   | { type: "RESPONSE_CONNECTING"; payload: ModelResponseLifecyclePayload }
   | { type: "RESPONSE_STARTED"; payload: ModelResponseLifecyclePayload }
   | { type: "RESPONSE_DELTA"; payload: ModelResponseDeltaPayload }
+  | { type: "RESPONSE_DELTA_BATCH"; payloads: ModelResponseDeltaPayload[] }
   | { type: "RESPONSE_PERSISTING"; payload: { response_id: string } }
   | { type: "RESPONSE_COMPLETED"; payload: ModelResponseLifecyclePayload }
   | { type: "RESPONSE_FAILED"; payload: ModelResponseLifecyclePayload & { error?: string; error_code?: string } }
@@ -76,6 +77,56 @@ export function isValidDeltaPayload(payload: any): payload is ModelResponseDelta
   if (typeof payload.text !== "string") return false;
   if (typeof payload.delta_sequence !== "number") return false;
   return true;
+}
+
+function applyDeltaPayloads(
+  state: StreamingState,
+  payloads: ModelResponseDeltaPayload[],
+): StreamingState {
+  let nextBuffers: Map<string, StreamingModelBuffer> | null = null;
+
+  for (const payload of payloads) {
+    if (!isValidDeltaPayload(payload)) {
+      console.warn("[streamingReducer] Invalid RESPONSE_DELTA payload", payload);
+      continue;
+    }
+
+    const buffers = nextBuffers ?? state.buffers;
+    const { response_id, text, delta_sequence } = payload;
+    const buf = buffers.get(response_id) ?? {
+      responseId: response_id,
+      modelId: payload.model_id || "",
+      displayName: (payload as ModelResponseDeltaPayload & { display_name?: string }).display_name || "",
+      provider: (payload as ModelResponseDeltaPayload & { provider?: string }).provider || "",
+      state: "streaming" as const,
+      accumulatedText: "",
+      lastSequence: 0,
+    };
+    if (!isValidSequence(delta_sequence, buf.lastSequence)) continue;
+
+    const combined = buf.accumulatedText + text;
+    const truncated = combined.length > MAX_STREAM_BUFFER_CHARS;
+    const accumulatedText = truncated
+      ? combined.slice(0, MAX_STREAM_BUFFER_CHARS)
+      : combined;
+
+    if (truncated && !buf.truncated) {
+      console.warn(
+        `[streamingReducer] Buffer ${response_id} exceeded ${MAX_STREAM_BUFFER_CHARS} chars — truncating preview.`,
+      );
+    }
+
+    if (!nextBuffers) nextBuffers = new Map(state.buffers);
+    nextBuffers.set(response_id, {
+      ...buf,
+      accumulatedText,
+      lastSequence: delta_sequence,
+      state: "streaming",
+      truncated: Boolean(buf.truncated || truncated),
+    });
+  }
+
+  return nextBuffers ? { ...state, buffers: nextBuffers } : state;
 }
 
 export function streamingReducer(
@@ -144,52 +195,11 @@ export function streamingReducer(
     }
 
     case "RESPONSE_DELTA": {
-      if (!isValidDeltaPayload(action.payload)) {
-        console.warn("[streamingReducer] Invalid RESPONSE_DELTA payload", action.payload);
-        return state;
-      }
-      const payloadAny = action.payload as any;
-      const { response_id, text, delta_sequence } = action.payload;
-      let buf = state.buffers.get(response_id);
-      if (!buf) {
-        buf = {
-          responseId: response_id,
-          modelId: payloadAny.model_id || "",
-          displayName: payloadAny.display_name || "",
-          provider: payloadAny.provider || "",
-          state: "streaming",
-          accumulatedText: "",
-          lastSequence: 0,
-        };
-      }
-      if (!isValidSequence(delta_sequence, buf.lastSequence)) return state; // stale
+      return applyDeltaPayloads(state, [action.payload]);
+    }
 
-      // I: Enforce per-response buffer cap
-      const combined = buf.accumulatedText + text;
-      const truncated = combined.length > MAX_STREAM_BUFFER_CHARS;
-      // PS155.2: Trust server-side accumulated_chars from coalesced deltas
-      const serverAccumulated = (payloadAny as any).accumulated_chars;
-      let accumulatedText = truncated ? combined.slice(0, MAX_STREAM_BUFFER_CHARS) : combined;
-      if (typeof serverAccumulated === "number" && serverAccumulated > accumulatedText.length) {
-        // Server has counted more chars than our local buffer — coalesced delta
-        // Keep local text as-is but trust the sequence will catch up
-      }
-
-      if (truncated && !buf.truncated) {
-        console.warn(
-          `[streamingReducer] Buffer ${response_id} exceeded ${MAX_STREAM_BUFFER_CHARS} chars — truncating preview.`,
-        );
-      }
-
-      const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      next.set(response_id, {
-        ...buf,
-        accumulatedText,
-        lastSequence: delta_sequence,
-        state: "streaming",
-        truncated: Boolean(buf.truncated || truncated),
-      });
-      return { ...state, buffers: next };
+    case "RESPONSE_DELTA_BATCH": {
+      return applyDeltaPayloads(state, action.payloads);
     }
 
     case "RESPONSE_PERSISTING": {
@@ -245,12 +255,16 @@ export function streamingReducer(
     }
 
     case "MERGE_PERSISTED": {
-      // Track G: Remove buffers matching persisted response_id or model_id
+      // Match current responses by their durable stream identity. The model ID
+      // fallback is only for historical rows that predate response_id; using it
+      // for new rows can delete a newer retry when stale persistence arrives.
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      const persistedIds = new Set(action.payloads.map(p => p.id));
-      const persistedModelIds = new Set(action.payloads.map(p => p.model_id));
+      const persistedIds = new Set(action.payloads.map(p => p.response_id || p.id));
+      const legacyModelIds = new Set(
+        action.payloads.filter(p => !p.response_id).map(p => p.model_id),
+      );
       Array.from(next.entries()).forEach(([key, buf]) => {
-        if (persistedIds.has(buf.responseId) || persistedModelIds.has(buf.modelId)) {
+        if (persistedIds.has(buf.responseId) || legacyModelIds.has(buf.modelId)) {
           // Only remove if completed or failed — keep active streaming buffers
           if (buf.state === "completed" || buf.state === "failed") {
             next.delete(key);
@@ -311,10 +325,11 @@ export function selectMergedResponses(state: StreamingState): Array<{
 
   // Persisted responses (skip if buffer still active)
   for (const p of state.persisted) {
-    if (!seen.has(p.id)) {
-      seen.add(p.id);
+    const responseId = p.response_id || p.id;
+    if (!seen.has(responseId)) {
+      seen.add(responseId);
       result.push({
-        responseId: p.id,
+        responseId,
         modelId: p.model_id,
         displayName: p.display_name,
         provider: p.provider,

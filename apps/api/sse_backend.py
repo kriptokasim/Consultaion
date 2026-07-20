@@ -329,6 +329,9 @@ class MemoryChannelBackend:
                 "payload": event,
             }
 
+            from observability.metrics import record_sse_message
+            record_sse_message()
+
             # Add correlation context if available
             from correlation import get_correlation_context
 
@@ -590,6 +593,8 @@ class RedisChannelBackend:
                 health_check_interval=30,
                 retry_on_timeout=True,
             )
+        self._coalescers: dict[str, DeltaCoalescer] = {}
+        self._coalescer_flush_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def start(self) -> None:
         # Verify connection
@@ -600,6 +605,12 @@ class RedisChannelBackend:
             # We don't raise here to allow app startup, but subsequent calls will fail/retry
 
     async def stop(self) -> None:
+        flush_tasks = list(getattr(self, "_coalescer_flush_tasks", {}).values())
+        self._coalescer_flush_tasks = {}
+        for task in flush_tasks:
+            task.cancel()
+        if flush_tasks:
+            await asyncio.gather(*flush_tasks, return_exceptions=True)
         # Don't close pooled Redis clients — only close standalone connections
         if self._redis and not getattr(self._redis, "_from_pool", False):
             await self._redis.aclose()
@@ -609,6 +620,51 @@ class RedisChannelBackend:
         await self._redis.set(key, "1", ex=self._ttl_seconds)
 
     async def publish(self, channel_id: str, event: dict) -> None:
+        # Keep production Redis behavior aligned with the memory backend: token
+        # fragments are coalesced per response and flushed before lifecycle
+        # events so transport ordering remains intact.
+        if not hasattr(self, "_coalescers"):
+            self._coalescers = {}
+        if not hasattr(self, "_coalescer_flush_tasks"):
+            self._coalescer_flush_tasks = {}
+        if channel_id not in self._coalescers:
+            self._coalescers[channel_id] = DeltaCoalescer()
+
+        coalescer = self._coalescers[channel_id]
+        events_to_publish = coalescer.ingest(event)
+        if not events_to_publish:
+            self._schedule_coalescer_flush(channel_id, coalescer)
+            return
+
+        pending_task = self._coalescer_flush_tasks.pop(channel_id, None)
+        if pending_task:
+            pending_task.cancel()
+
+        for pending_event in events_to_publish:
+            await self._publish_single(channel_id, pending_event)
+
+    def _schedule_coalescer_flush(self, channel_id: str, coalescer: DeltaCoalescer) -> None:
+        existing = self._coalescer_flush_tasks.get(channel_id)
+        if existing and not existing.done():
+            return
+
+        async def flush_after_interval() -> None:
+            try:
+                await asyncio.sleep(coalescer.flush_interval_seconds)
+                events = coalescer.flush_all()
+                current = asyncio.current_task()
+                if self._coalescer_flush_tasks.get(channel_id) is current:
+                    self._coalescer_flush_tasks.pop(channel_id, None)
+                for pending_event in events:
+                    await self._publish_single(channel_id, pending_event)
+            finally:
+                current = asyncio.current_task()
+                if self._coalescer_flush_tasks.get(channel_id) is current:
+                    self._coalescer_flush_tasks.pop(channel_id, None)
+
+        self._coalescer_flush_tasks[channel_id] = asyncio.create_task(flush_after_interval())
+
+    async def _publish_single(self, channel_id: str, event: dict) -> None:
         # Generate monotonic sequence number atomically in Redis
         seq_key = f"sse:seq:{channel_id}"
         try:
@@ -634,14 +690,19 @@ class RedisChannelBackend:
             "payload": event,
         }
 
+        from observability.metrics import record_sse_message
+        record_sse_message()
+
         payload_str = json.dumps(envelope)
 
         # Cache in Redis list history
         history_key = f"sse:history:{channel_id}"
         try:
-            await self._redis.rpush(history_key, payload_str)
-            await self._redis.expire(history_key, self._ttl_seconds)
-            await self._redis.ltrim(history_key, -self._max_queue_size, -1)
+            pipeline = self._redis.pipeline(transaction=False)
+            pipeline.rpush(history_key, payload_str)
+            pipeline.expire(history_key, self._ttl_seconds)
+            pipeline.ltrim(history_key, -self._max_queue_size, -1)
+            await pipeline.execute()
         except Exception as e:
             logger.error(f"Failed to save Redis SSE history: {e}")
 

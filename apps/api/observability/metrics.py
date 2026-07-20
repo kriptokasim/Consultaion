@@ -175,6 +175,89 @@ try:
         registry=REGISTRY,
     )
 
+    # ── PS157 Arena Milestone Latency (Section 28) ─────────────────────────
+    ARENA_QUEUE_WAIT_MS = Histogram(
+        "consultaion_arena_queue_wait_ms",
+        "Time from debate commit to worker start",
+        ["mode"],
+        buckets=(50, 100, 200, 500, 1000, 2000, 5000),
+        registry=REGISTRY,
+    )
+    ARENA_START_DELAY_MS = Histogram(
+        "consultaion_arena_start_delay_ms",
+        "Time from worker start to arena fan-out",
+        ["mode"],
+        buckets=(10, 25, 50, 100, 250, 500, 1000),
+        registry=REGISTRY,
+    )
+    ARENA_PROVIDER_TTFT_MS = Histogram(
+        "consultaion_arena_provider_ttft_ms",
+        "Time from provider call to first token",
+        ["provider", "model_family"],
+        buckets=(100, 250, 500, 1000, 2500, 5000, 10000),
+        registry=REGISTRY,
+    )
+    ARENA_FIRST_DELTA_PUBLISH_MS = Histogram(
+        "consultaion_arena_first_delta_publish_ms",
+        "Time from first token to first backend delta publish",
+        ["provider"],
+        buckets=(1, 5, 10, 25, 50, 100, 250),
+        registry=REGISTRY,
+    )
+    ARENA_MODEL_TOTAL_MS = Histogram(
+        "consultaion_arena_model_total_ms",
+        "Total time for a single model call from start to completion/failure",
+        ["provider", "model_family", "success"],
+        buckets=(500, 1000, 2500, 5000, 10000, 20000, 40000, 60000),
+        registry=REGISTRY,
+    )
+    ARENA_FIRST_MODEL_COMPLETE_MS = Histogram(
+        "consultaion_arena_first_model_complete_ms",
+        "Time until the first model completes",
+        ["mode"],
+        buckets=(500, 1000, 2500, 5000, 10000, 20000, 40000),
+        registry=REGISTRY,
+    )
+    ARENA_ALL_MODELS_COMPLETE_MS = Histogram(
+        "consultaion_arena_all_models_complete_ms",
+        "Time until all models complete",
+        ["mode", "model_count"],
+        buckets=(1000, 2500, 5000, 10000, 20000, 40000, 60000),
+        registry=REGISTRY,
+    )
+    ARENA_RESPONSE_PERSIST_MS = Histogram(
+        "consultaion_arena_response_persist_ms",
+        "Time to persist a single model response",
+        ["provider"],
+        buckets=(5, 10, 25, 50, 100, 250, 500),
+        registry=REGISTRY,
+    )
+    ARENA_SYNTHESIS_ANALYSIS_MS = Histogram(
+        "consultaion_arena_synthesis_analysis_ms",
+        "Time for synthesis analysis (evaluation + semantic)",
+        buckets=(100, 250, 500, 1000, 2500, 5000, 10000),
+        registry=REGISTRY,
+    )
+    ARENA_SYNTHESIS_DRAFT_MS = Histogram(
+        "consultaion_arena_synthesis_draft_ms",
+        "Time to draft the synthesis report",
+        buckets=(100, 250, 500, 1000, 2500, 5000, 10000),
+        registry=REGISTRY,
+    )
+    ARENA_SYNTHESIS_VERIFICATION_MS = Histogram(
+        "consultaion_arena_synthesis_verification_ms",
+        "Time to verify the synthesis report",
+        buckets=(50, 100, 250, 500, 1000, 2500, 5000),
+        registry=REGISTRY,
+    )
+    ARENA_TOTAL_MS = Histogram(
+        "consultaion_arena_total_ms",
+        "End-to-end arena run duration",
+        ["mode"],
+        buckets=(1000, 2500, 5000, 10000, 20000, 40000, 60000, 120000),
+        registry=REGISTRY,
+    )
+
     # ── Reconciliation Metrics ────────────────────────────────────────────
     RECONCILIATION_RUNS_TOTAL = Counter(
         "consultaion_reconciliation_runs_total",
@@ -314,6 +397,24 @@ def record_sse_reconnect() -> None:
     SSE_RECONNECTS_TOTAL.inc()
 
 
+def record_sse_stream_opened() -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    SSE_STREAMS_ACTIVE.inc()
+
+
+def record_sse_stream_closed() -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    SSE_STREAMS_ACTIVE.dec()
+
+
+def record_sse_message(channel_type: str = "event") -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    SSE_MESSAGES_TOTAL.labels(channel_type=channel_type).inc()
+
+
 def record_reconciliation_run(run_type: str, status: str, duration: float) -> None:
     if not PROMETHEUS_AVAILABLE:
         return
@@ -334,3 +435,77 @@ def record_reconciliation_discrepancy(severity: str, disc_type: str) -> None:
     if not PROMETHEUS_AVAILABLE:
         return
     RECONCILIATION_DISCREPANCIES_TOTAL.labels(severity=severity, type=disc_type).inc()
+
+
+def record_arena_queue_wait(mode: str, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_QUEUE_WAIT_MS.labels(mode=mode).observe(ms)
+
+
+def record_arena_start_delay(mode: str, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_START_DELAY_MS.labels(mode=mode).observe(ms)
+
+
+def record_arena_provider_ttft(provider: str, model_family: str, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_PROVIDER_TTFT_MS.labels(provider=provider, model_family=model_family).observe(ms)
+
+
+def record_arena_first_delta_publish(provider: str, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_FIRST_DELTA_PUBLISH_MS.labels(provider=provider).observe(ms)
+
+
+def record_arena_model_total(provider: str, model_family: str, success: bool, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_MODEL_TOTAL_MS.labels(
+        provider=provider, model_family=model_family, success=str(success).lower()
+    ).observe(ms)
+
+
+def record_arena_first_model_complete(mode: str, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_FIRST_MODEL_COMPLETE_MS.labels(mode=mode).observe(ms)
+
+
+def record_arena_all_models_complete(mode: str, model_count: int, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_ALL_MODELS_COMPLETE_MS.labels(mode=mode, model_count=str(model_count)).observe(ms)
+
+
+def record_arena_response_persist(provider: str, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_RESPONSE_PERSIST_MS.labels(provider=provider).observe(ms)
+
+
+def record_arena_synthesis_analysis(ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_SYNTHESIS_ANALYSIS_MS.observe(ms)
+
+
+def record_arena_synthesis_draft(ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_SYNTHESIS_DRAFT_MS.observe(ms)
+
+
+def record_arena_synthesis_verification(ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_SYNTHESIS_VERIFICATION_MS.observe(ms)
+
+
+def record_arena_total(mode: str, ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_TOTAL_MS.labels(mode=mode).observe(ms)

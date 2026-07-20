@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "name": "detects_openai_key",
+      "input": "Key: sk-000000000000000000000000",
+      "expected_sensitive": true,
+      "expected_categories": ["provider_key"],
+      "expected_redactions": ["[REDACTED_API_KEY]"]
+    },
+    {
+      "name": "detects_openai_project_key",
+      "input": "Key: sk-proj-000000000000000000000000",
+      "expected_sensitive": true,
+      "expected_categories": ["provider_key"],
+      "expected_redactions": ["[REDACTED_API_KEY]"]
+    },
+    {
+      "name": "detects_anthropic_key",
+      "input": "Key: sk-ant-000000000000000000000000",
+      "expected_sensitive": true,
+      "expected_categories": ["provider_key"],
+      "expected_redactions": ["[REDACTED_API_KEY]"]
+    },
+    {
+      "name": "detects_google_key",
+      "input": "Key: AIza000000000000000000000000000000",
+      "expected_sensitive": true,
+      "expected_categories": ["provider_key"],
+      "expected_redactions": ["[REDACTED_API_KEY]"]
+    },
+    {
+      "name": "detects_groq_key_in_code",
+      "input": "```env\nGROQ_KEY=gsk_000000000000000000000000\n```",
+      "expected_sensitive": true,
+      "expected_categories": ["provider_key"],
+      "expected_redactions": ["[REDACTED_API_KEY]"]
+    },
+    {
+      "name": "detects_xai_key",
+      "input": "Key: xai-000000000000000000000000",
+      "expected_sensitive": true,
+      "expected_categories": ["provider_key"],
+      "expected_redactions": ["[REDACTED_API_KEY]"]
+    },
+    {
+      "name": "rejects_malformed_provider_key",
+      "input": "The placeholder sk-short is not a credential.",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    },
+    {
+      "name": "detects_jwt",
+      "input": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.fake_signature",
+      "expected_sensitive": true,
+      "expected_categories": ["token"],
+      "expected_redactions": ["[REDACTED_TOKEN]"]
+    },
+    {
+      "name": "detects_bearer_token",
+      "input": "Authorization: Bearer abc.def-123=",
+      "expected_sensitive": true,
+      "expected_categories": ["token"],
+      "expected_redactions": ["[REDACTED_TOKEN]"]
+    },
+    {
+      "name": "rejects_empty_bearer",
+      "input": "Authorization: Bearer",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    },
+    {
+      "name": "detects_secret_assignment",
+      "input": "PASSWORD=correct-horse-placeholder",
+      "expected_sensitive": true,
+      "expected_categories": ["secret"],
+      "expected_redactions": ["[REDACTED_SECRET]"]
+    },
+    {
+      "name": "detects_token_url",
+      "input": "Visit https://example.test/callback?token=placeholder&next=home",
+      "expected_sensitive": true,
+      "expected_categories": ["token"],
+      "expected_redactions": ["[REDACTED_URL]"]
+    },
+    {
+      "name": "detects_email_in_markdown",
+      "input": "Contact **person@example.com** for help.",
+      "expected_sensitive": true,
+      "expected_categories": ["pii"],
+      "expected_redactions": ["[REDACTED_EMAIL]"]
+    },
+    {
+      "name": "detects_email_around_unicode",
+      "input": "İletişim: person@example.co.uk — teşekkürler",
+      "expected_sensitive": true,
+      "expected_categories": ["pii"],
+      "expected_redactions": ["[REDACTED_EMAIL]"]
+    },
+    {
+      "name": "detects_phone",
+      "input": "Call +1-555-123-4567 for the demo.",
+      "expected_sensitive": true,
+      "expected_categories": ["pii"],
+      "expected_redactions": ["[REDACTED_PHONE]"]
+    },
+    {
+      "name": "detects_valid_visa_test_card",
+      "input": "Public test card 4111 1111 1111 1111",
+      "expected_sensitive": true,
+      "expected_categories": ["payment_card"],
+      "expected_redactions": ["[REDACTED_CC]"]
+    },
+    {
+      "name": "detects_valid_mastercard_test_card",
+      "input": "Public test card 5555-5555-5555-4444",
+      "expected_sensitive": true,
+      "expected_categories": ["payment_card"],
+      "expected_redactions": ["[REDACTED_CC]"]
+    },
+    {
+      "name": "rejects_invalid_luhn",
+      "input": "Example digits 4111111111111112",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    },
+    {
+      "name": "rejects_grouped_digits_failing_luhn",
+      "input": "Example digits 4111 1111 1111 1112",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    },
+    {
+      "name": "phone_is_not_card",
+      "input": "Call 555-123-4567 today.",
+      "expected_sensitive": true,
+      "expected_categories": ["pii"],
+      "expected_redactions": ["[REDACTED_PHONE]"]
+    },
+    {
+      "name": "rejects_order_number",
+      "input": "Order number 1234567890123 is ready.",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    },
+    {
+      "name": "rejects_timestamp",
+      "input": "Build timestamp 20260720153045 completed.",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    },
+    {
+      "name": "allows_safe_prose",
+      "input": "Compare the tradeoffs and recommend a practical implementation.",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    },
+    {
+      "name": "allows_long_safe_input",
+      "input": "This deliberately long public prompt discusses architecture, reliability, observability, performance, testing, deployment, accessibility, maintainability, documentation, and operational readiness without containing credentials, personal information, payment details, private tokens, phone numbers, or secret assignments. It remains ordinary prose even after enough words are added to exercise every shared regular expression over a realistically sized metadata input.",
+      "expected_sensitive": false,
+      "expected_categories": [],
+      "expected_redactions": []
+    }
+  ]
+}

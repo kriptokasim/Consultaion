@@ -601,11 +601,8 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             </AlertDescription>
           </Alert>
 
-          {/* Render the ArenaRunView with persisted responses */}
-          {debate?.mode === "arena" ? (
-            <ArenaRunView debate={debate} events={normalizedResultsEvents} responses={responses} streamingBuffers={streamingState.buffers} isTerminal={isTerminal} responsesState={responsesState} responsesError={responsesError} timelineState={timelineState} profile={profile} onRefetch={refetch} />
-          ) : (
-            <ParliamentRunView
+          {/* Non-Arena failed runs render ParliamentRunView (arena already handled above) */}
+          <ParliamentRunView
               id={id}
               debate={debate}
               scores={scores}
@@ -617,7 +614,6 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
               voteBasis="threshold"
               apiBase={API_ORIGIN}
             />
-          )}
         </div>
       );
     }
@@ -806,7 +802,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   const liveEvents = events.map((e: any) => e.payload || e);
   const viewKind = resolveRunViewKind(debate?.mode);
 
-  if (viewKind === "arena" && !isCompleted) {
+  if (debate && viewKind === "arena" && !isCompleted) {
     return (
       <div className="container max-w-[1400px] py-6 space-y-6">
         <ArenaRunContent

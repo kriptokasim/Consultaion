@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
+import uuid
 from dataclasses import dataclass, field
 from typing import List
 
@@ -18,9 +20,24 @@ from arena.prompts import (
     get_compiled_model_prompt,
 )
 
+from observability.latency import (
+    PROMETHEUS_AVAILABLE,
+    record_connect_latency,
+    record_model_latency,
+    record_stream_dps,
+    record_stream_duration,
+    record_ttft,
+)
+
 logger = logging.getLogger(__name__)
 
 MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
+
+
+def _derive_model_family(model_info) -> str:
+    if model_info.litellm_model and "/" in model_info.litellm_model:
+        return model_info.litellm_model.split("/", 1)[1]
+    return model_info.id
 
 
 @dataclass
@@ -36,6 +53,9 @@ class ArenaModelResponse:
     persona_tagline: str | None = None
     error: str | None = None
     error_code: str | None = None
+    response_id: str | None = None
+    run_attempt: int = 1
+    retry_generation: int = 0
 
 
 async def persist_and_publish_arena_response(
@@ -53,7 +73,18 @@ async def persist_and_publish_arena_response(
     
     already_exists = False
     for msg in existing_messages:
-        if msg.meta and msg.meta.get("model_id") == response.model_id:
+        meta = msg.meta if isinstance(msg.meta, dict) else {}
+        existing_attempt = int(meta.get("run_attempt", 1) or 1)
+        existing_generation = int(meta.get("retry_generation", 0) or 0)
+        same_response_id = bool(
+            response.response_id and meta.get("response_id") == response.response_id
+        )
+        same_attempt = (
+            meta.get("model_id") == response.model_id
+            and existing_attempt == response.run_attempt
+            and existing_generation == response.retry_generation
+        )
+        if same_response_id or same_attempt:
             already_exists = True
             break
             
@@ -67,8 +98,12 @@ async def persist_and_publish_arena_response(
                 content=response.content,
                 meta={
                     "model_id": response.model_id,
+                    "display_name": response.display_name,
                     "provider": response.provider,
                     "mode": "arena",
+                    "response_id": response.response_id,
+                    "run_attempt": response.run_attempt,
+                    "retry_generation": response.retry_generation,
                     "logo_url": response.logo_url,
                     "persona_type": response.persona_type,
                     "persona_tagline": response.persona_tagline,
@@ -87,6 +122,7 @@ async def persist_and_publish_arena_response(
             "type": "arena_response",
             "debate_id": str(debate_id),
             "model_id": response.model_id,
+            "response_id": response.response_id,
             "display_name": response.display_name,
             "provider": response.provider,
             "content": response.content,
@@ -96,6 +132,8 @@ async def persist_and_publish_arena_response(
             "success": response.success,
             "error": response.error or (None if response.success else "Model failed to respond"),
             "error_code": response.error_code,
+            "run_attempt": response.run_attempt,
+            "retry_generation": response.retry_generation,
         },
     )
 
@@ -137,6 +175,7 @@ async def run_arena(
         config = debate.config or {}
         user_id = debate.user_id
         locale = config.get("locale")
+        run_attempt = debate.run_attempt or 1
 
     # Get arena models (filtered to enabled providers)
     arena_models = get_arena_models()
@@ -168,6 +207,9 @@ async def run_arena(
                 persona_tagline=msg.meta.get("persona_tagline") if msg.meta else None,
                 error=msg.meta.get("error") if msg.meta else None,
                 error_code=msg.meta.get("error_code") if msg.meta else None,
+                response_id=msg.meta.get("response_id") if msg.meta else str(msg.id),
+                run_attempt=int(msg.meta.get("run_attempt", 1) or 1) if msg.meta else 1,
+                retry_generation=int(msg.meta.get("retry_generation", 0) or 0) if msg.meta else 0,
             )
             for msg in existing
         ]
@@ -198,15 +240,23 @@ async def run_arena(
         if locale and locale != "en":
             _locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
 
-        async def _call_model(model_info):
+        async def _call_model(model_info, response_id: str, deadline: float, timing: dict | None = None):
             """Call a single SOTA model and return its response.
 
             Uses streaming when available: publishes model_response_delta events
             via SSE as tokens arrive, then persists the final response.
             """
+            if timing is not None:
+                timing["start_ts"] = time.monotonic()
             from config import settings as _settings
             stream_enabled = getattr(_settings, "STREAMING_RESPONSES_ENABLED", True)
             timeout_seconds = getattr(_settings, "ARENA_MODEL_TIMEOUT_SECONDS", 45)
+
+            def remaining_timeout() -> float:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError
+                return min(float(timeout_seconds), remaining)
 
             system_prompt = get_compiled_model_prompt(
                 model_display_name=model_info.display_name,
@@ -219,23 +269,16 @@ async def run_arena(
                 {"role": "user", "content": prompt},
             ]
 
-            response_id = f"resp-{debate_id}-{model_info.id}"
-
             if stream_enabled:
-                await backend.publish(
-                    f"debate:{debate_id}",
-                    {
-                        "type": "model_response_queued",
-                        "response_id": response_id,
-                        "model_id": model_info.id,
-                        "display_name": model_info.display_name,
-                    },
-                )
                 # Streaming path: publish deltas via SSE
                 seq_counter = {"seq": 0}
 
                 async def on_delta(delta):
                     seq_counter["seq"] += 1
+                    if timing is not None and timing.get("first_delta_ts") is None:
+                        timing["first_delta_ts"] = time.monotonic()
+                    if timing is not None:
+                        timing["delta_count"] = timing.get("delta_count", 0) + 1
                     await backend.publish(
                         f"debate:{debate_id}",
                         {
@@ -246,29 +289,12 @@ async def run_arena(
                             "text": delta.text,
                             "delta_sequence": delta.sequence,
                             "accumulated_chars": delta.accumulated_chars,
+                            "run_attempt": run_attempt,
+                            "retry_generation": 0,
                         },
                     )
 
                 try:
-                    await backend.publish(
-                        f"debate:{debate_id}",
-                        {
-                            "type": "model_response_connecting",
-                            "response_id": response_id,
-                            "model_id": model_info.id,
-                            "display_name": model_info.display_name,
-                        },
-                    )
-                    await backend.publish(
-                        f"debate:{debate_id}",
-                        {
-                            "type": "model_response_started",
-                            "response_id": response_id,
-                            "model_id": model_info.id,
-                            "display_name": model_info.display_name,
-                        },
-                    )
-
                     from model_gateway import route_llm_stream
                     arena_max = getattr(_settings, "ARENA_MAX_TOKENS", 1200)
 
@@ -284,21 +310,12 @@ async def run_arena(
                                 debate_id=debate_id,
                                 user_id=user_id,
                             ),
-                            timeout=timeout_seconds,
+                            timeout=remaining_timeout(),
                         )
                     except asyncio.TimeoutError:
                         raise RuntimeError(
                             f"Model {model_info.display_name} timed out after {timeout_seconds} seconds."
                         ) from None
-
-                    await backend.publish(
-                        f"debate:{debate_id}",
-                        {
-                            "type": "model_response_persisting",
-                            "response_id": response_id,
-                            "model_id": model_info.id,
-                        },
-                    )
 
                     if result.success:
                         return ArenaModelResponse(
@@ -330,7 +347,7 @@ async def run_arena(
                                     debate_id=debate_id,
                                     extra_tags={"mode": "arena", "arena_model": model_info.id},
                                 ),
-                                timeout=timeout_seconds,
+                                timeout=remaining_timeout(),
                             )
                             return ArenaModelResponse(
                                 model_id=model_info.id,
@@ -350,17 +367,6 @@ async def run_arena(
                             # Convert to failed ArenaModelResponse — do NOT raise
                             err_msg = result.error_message or str(fb_exc)
                             err_code = result.error_code or "stream_and_fallback_failed"
-                            await backend.publish(
-                                f"debate:{debate_id}",
-                                {
-                                    "type": "model_response_failed",
-                                    "response_id": response_id,
-                                    "model_id": model_info.id,
-                                    "display_name": model_info.display_name,
-                                    "error": err_msg[:200],
-                                    "error_code": err_code,
-                                },
-                            )
                             from llm_errors import classify_provider_exception
                             failure = classify_provider_exception(fb_exc)
                             return ArenaModelResponse(
@@ -375,18 +381,7 @@ async def run_arena(
                                 error=err_msg,
                                 error_code=failure.code.value,
                             ), None
-                except Exception as e:
-                    await backend.publish(
-                        f"debate:{debate_id}",
-                        {
-                            "type": "model_response_failed",
-                            "response_id": response_id,
-                            "model_id": model_info.id,
-                            "display_name": model_info.display_name,
-                            "error": str(e)[:200],
-                            "error_code": "model_timeout" if isinstance(e, RuntimeError) and "timed out" in str(e) else None,
-                        },
-                    )
+                except Exception:
                     raise
 
             # Non-streaming fallback
@@ -405,7 +400,7 @@ async def run_arena(
                             debate_id=debate_id,
                             extra_tags={"mode": "arena", "arena_model": model_info.id},
                         ),
-                        timeout=timeout_seconds,
+                        timeout=remaining_timeout(),
                     )
                 except asyncio.TimeoutError:
                     raise RuntimeError(
@@ -464,12 +459,39 @@ async def run_arena(
             Contract: this function NEVER raises. Provider/model errors are
             converted into ArenaModelResponse(success=False) and persisted.
             """
-            try:
-                from config import settings as _settings
-                total_timeout = getattr(_settings, "ARENA_MODEL_TOTAL_TIMEOUT_S", 60)
-                result = await asyncio.wait_for(
-                    _call_model(model_info), timeout=total_timeout
+            _timing: dict = {}
+            retry_generation = 0
+            response_id = (
+                f"resp-{debate_id}-"
+                f"a{run_attempt}-"
+                f"g{retry_generation}-"
+                f"{model_info.id}-"
+                f"{uuid.uuid4().hex[:12]}"
+            )
+            lifecycle_payload = {
+                "response_id": response_id,
+                "model_id": model_info.id,
+                "display_name": model_info.display_name,
+                "provider": model_info.provider,
+                "run_attempt": run_attempt,
+                "retry_generation": retry_generation,
+            }
+            from config import settings as _settings
+            total_timeout = float(getattr(_settings, "ARENA_MODEL_TOTAL_TIMEOUT_S", 60))
+            deadline = asyncio.get_running_loop().time() + total_timeout
+            for event_type in (
+                "model_response_queued",
+                "model_response_connecting",
+                "model_response_started",
+            ):
+                await backend.publish(
+                    f"debate:{debate_id}",
+                    {"type": event_type, **lifecycle_payload},
                 )
+
+            try:
+                async with asyncio.timeout_at(deadline):
+                    result = await _call_model(model_info, response_id, deadline, _timing)
                 response, call_usage = result
             except Exception as exc:
                 logger.error(f"Arena model task exception for {model_info.id}: {exc}")
@@ -506,10 +528,48 @@ async def run_arena(
                 )
                 call_usage = None
 
-            # Persist and publish immediately — this is the key change.
-            # Each model card appears in the UI as soon as that model finishes.
+            response.response_id = response_id
+            response.run_attempt = run_attempt
+            response.retry_generation = retry_generation
+
+            await backend.publish(
+                f"debate:{debate_id}",
+                {"type": "model_response_persisting", **lifecycle_payload},
+            )
+
+            # Persist before the terminal lifecycle event. A completed event
+            # therefore guarantees that the canonical response can be fetched.
             async with async_session_scope() as session:
                 await persist_and_publish_arena_response(session, backend, debate_id, response)
+
+            terminal_payload = {
+                "type": "model_response_completed" if response.success else "model_response_failed",
+                **lifecycle_payload,
+            }
+            if not response.success:
+                terminal_payload.update(
+                    {
+                        "error": (response.error or "Model failed to respond")[:200],
+                        "error_code": response.error_code,
+                    }
+                )
+            await backend.publish(f"debate:{debate_id}", terminal_payload)
+
+            if PROMETHEUS_AVAILABLE and _timing.get("start_ts"):
+                _provider = model_info.provider
+                _family = _derive_model_family(model_info)
+                _now = time.monotonic()
+                _total_sec = _now - _timing["start_ts"]
+                record_model_latency(_provider, _family, response.success, _total_sec)
+                _first = _timing.get("first_delta_ts")
+                if _first:
+                    _ttft_sec = _first - _timing["start_ts"]
+                    record_ttft(_provider, _family, _ttft_sec)
+                    record_connect_latency(_provider, _family, _ttft_sec)
+                    _stream_dur = _now - _first
+                    _dps = _timing.get("delta_count", 0) / _stream_dur if _stream_dur > 0 else 0
+                    record_stream_duration(_provider, "success" if response.success else "failure", _stream_dur)
+                    record_stream_dps(_provider, _dps)
 
             return response, call_usage
 
@@ -853,5 +913,3 @@ async def _synthesize_verdict(
             "divergence_breakdown": None,
         }
         return fallback_content, None, meta_updates
-
-
