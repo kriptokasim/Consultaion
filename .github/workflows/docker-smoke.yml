@@ -19,7 +19,10 @@ jobs:
       - name: Build and start containers
         run: |
           docker compose -f docker-compose.smoke.yml build
-          docker compose -f docker-compose.smoke.yml up -d
+          if ! docker compose -f docker-compose.smoke.yml up -d; then
+            docker compose -f docker-compose.smoke.yml logs migrate postgres
+            exit 1
+          fi
 
       - name: Wait for API health
         run: |
@@ -55,6 +58,8 @@ jobs:
       - name: Collect logs on failure
         if: failure()
         run: |
+          docker compose -f docker-compose.smoke.yml logs migrate
+          docker compose -f docker-compose.smoke.yml logs postgres
           docker compose -f docker-compose.smoke.yml logs api
           docker compose -f docker-compose.smoke.yml logs web
 

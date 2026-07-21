@@ -1,5 +1,3 @@
-version: "3.8"
-
 # Docker Compose for smoke tests — production-like topology.
 # API is reachable from web via service name, not localhost.
 # Uses PostgreSQL instead of SQLite for realistic testing.
