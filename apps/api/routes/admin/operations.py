@@ -6,7 +6,6 @@ from typing import Dict, Optional
 
 from auth import get_current_admin
 from billing.models import BillingUsage
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, Request
 from models import Debate, User
@@ -16,6 +15,8 @@ from ratelimit import ensure_rate_limiter_ready, get_recent_429_events
 from sqlalchemy import func
 from sqlmodel import Session, select
 from sse_backend import get_sse_backend
+
+from config import settings
 
 router = APIRouter()
 

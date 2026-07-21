@@ -19,7 +19,6 @@ import logging
 import time
 from typing import Callable, Optional
 
-from config import settings
 from core.operation_classes import (
     get_operation_class,
     get_operation_weight,
@@ -29,6 +28,7 @@ from ratelimit import get_rate_limiter_backend
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from config import settings
 from middleware.rate_limit_identity import resolve_identity
 
 logger = logging.getLogger(__name__)

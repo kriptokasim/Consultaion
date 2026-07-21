@@ -8,7 +8,6 @@ from typing import Any
 
 from auth import get_current_admin, get_current_user
 from checks import check_db_readiness, check_sse_readiness
-from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from litellm import acompletion
@@ -23,6 +22,8 @@ from models import (
 )
 from ratelimit import increment_ip_bucket, record_429
 from sqlmodel import Session, func, select
+
+from config import settings
 
 router = APIRouter(tags=["ops"])
 

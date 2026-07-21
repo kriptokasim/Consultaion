@@ -7,13 +7,13 @@ from typing import Any, Dict, List, Optional
 from auth import get_current_admin
 from billing.models import BillingPlan, BillingSubscription, BillingUsage
 from billing.service import get_active_plan
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from models import Debate, SupportNote, User
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from config import settings
 from routes.admin.dependencies import (
     _activity_snapshot,
     _latest_usage,

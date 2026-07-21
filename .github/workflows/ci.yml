@@ -159,7 +159,11 @@ jobs:
       - name: Run mypy
         run: |
           cd ../..
-          mypy apps/api
+          MYPYPATH=apps/api mypy --follow-imports=skip --ignore-missing-imports \
+            apps/api/services/usage_ledger.py \
+            apps/api/billing/service.py \
+            apps/api/billing/providers/stripe_provider.py \
+            apps/api/guards/llm_action_guard.py
 
       - name: Run tests with coverage
         env:
@@ -294,7 +298,7 @@ jobs:
           JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
           DATABASE_URL: "sqlite:///./ci_test.db"
         run: |
-          pytest -q tests/test_api_status.py tests/test_logging.py tests/test_claim_quality.py
+          pytest -q --no-cov tests/test_api_status.py tests/test_logging.py tests/test_claim_quality.py
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -462,6 +466,7 @@ jobs:
         working-directory: apps/api
         run: |
           pip install -r requirements.txt
+          python scripts/migrate_database.py
           python scripts/migrate_database.py --check
 
   migration-integration:

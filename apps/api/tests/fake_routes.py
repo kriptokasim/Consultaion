@@ -10,7 +10,6 @@ from auth import (
     hash_password,
     verify_password,
 )
-from config import settings
 from database import engine
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -25,6 +24,8 @@ from routes.auth import (
 from routes.common import serialize_user
 from schemas import AuthRequest, UserProfile as UserProfileSchema, UserProfileUpdate
 from sqlmodel import Session, select
+
+from config import settings
 
 test_router = APIRouter()
 

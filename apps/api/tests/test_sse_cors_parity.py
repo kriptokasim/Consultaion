@@ -20,10 +20,11 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import pytest
-from config import settings
 from fastapi.testclient import TestClient
 from main import app
 from sse_backend import get_sse_backend
+
+from config import settings
 
 # ── Fixtures ───────────────────────────────────────────────────
 

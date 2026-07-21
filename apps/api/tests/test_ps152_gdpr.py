@@ -209,22 +209,25 @@ class TestRuntimeConfigHelpers:
     """F1: WEB_APP_ORIGIN is accessed at runtime, not snapshot."""
 
     def test_get_web_app_origin_reads_settings(self):
-        from config import settings
         from routes.auth import get_web_app_origin
+
+        from config import settings
 
         with patch.object(settings, "WEB_APP_ORIGIN", "https://example.com"):
             assert get_web_app_origin() == "https://example.com"
 
     def test_get_web_app_origin_strips_trailing_slash(self):
-        from config import settings
         from routes.auth import get_web_app_origin
+
+        from config import settings
 
         with patch.object(settings, "WEB_APP_ORIGIN", "https://example.com/"):
             assert get_web_app_origin() == "https://example.com"
 
     def test_get_web_app_origin_raises_on_missing(self):
-        from config import settings
         from routes.auth import get_web_app_origin
+
+        from config import settings
 
         with patch.object(settings, "WEB_APP_ORIGIN", None):
             with pytest.raises(ValueError):

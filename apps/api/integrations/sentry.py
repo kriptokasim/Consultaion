@@ -1,9 +1,10 @@
 import logging
 
 import sentry_sdk
-from config import settings
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

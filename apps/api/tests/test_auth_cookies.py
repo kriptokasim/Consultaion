@@ -54,8 +54,9 @@ def test_production_env_cookie_settings(monkeypatch):
 def test_cookie_attributes_in_response():
     """Test that set_auth_cookie applies correct attributes"""
     from auth import set_auth_cookie
-    from config import settings
     from fastapi import Response
+
+    from config import settings
     
     response = Response()
     token = "fake_jwt_token"

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
-
 from arena.delta_publisher import ArenaDeltaPublisher
 from model_gateway.types import ModelDelta
 

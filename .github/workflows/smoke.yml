@@ -17,7 +17,12 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'deployment_status' &&
+       github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment_url != '' &&
+       vars.SMOKE_API_URL != '')
 
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +35,8 @@ jobs:
       - name: Run Smoke Tests
         run: npx tsx scripts/prod_smoke.ts
         env:
-          SMOKE_BASE_URL: ${{ github.event.inputs.frontend_url }}
-          SMOKE_API_URL: ${{ github.event.inputs.api_url }}
+          SMOKE_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.frontend_url || github.event.deployment_status.environment_url }}
+          SMOKE_API_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_url || vars.SMOKE_API_URL }}
 
       - name: Notify on failure
         if: failure()

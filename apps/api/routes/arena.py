@@ -69,7 +69,7 @@ async def get_divergence_report(
             action="divergence_recompute",
             session=session,
             debate_id=debate_id,
-            ip_address=request.client.host if request.client else "0.0.0.0",
+            ip_address=request.client.host if request.client else "unknown",
         )
 
         try:

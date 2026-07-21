@@ -7,13 +7,14 @@ from types import SimpleNamespace
 from typing import Dict, List, Optional
 
 from auth import get_current_admin, get_current_user
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from models import User
 from parliament.model_registry import get_model_info
 from pydantic import BaseModel
 from sqlmodel import Session, select
+
+from config import settings
 
 from .models import BillingPlan, BillingUsage
 from .providers import get_billing_provider

@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 import sqlalchemy as sa
 from auth import get_current_admin, get_optional_user
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, Query, Response
 from metrics import get_metrics_snapshot
@@ -15,6 +14,7 @@ from schemas import DebateConfig, default_debate_config, default_panel_config
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from config import settings
 from routes.common import (
     avg_scores_for_debate,
     champion_for_debate,

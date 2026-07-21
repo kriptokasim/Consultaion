@@ -16,11 +16,12 @@ from typing import Optional
 
 import jwt
 from api_key_utils import extract_prefix, verify_api_key
-from config import settings
 from database import engine
 from fastapi import Request
 from models import APIKey
 from sqlmodel import Session, select
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

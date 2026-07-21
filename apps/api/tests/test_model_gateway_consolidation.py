@@ -1,5 +1,4 @@
 import pytest
-from config import settings
 from model_gateway import route_llm_call
 from model_gateway.model_map import (
     ModelKeyError,
@@ -7,6 +6,8 @@ from model_gateway.model_map import (
     resolve_model_key,
 )
 from model_gateway.types import GatewayModelRestrictedError, GatewayRequest
+
+from config import settings
 
 
 def test_resolve_canonical_key():

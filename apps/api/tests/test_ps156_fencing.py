@@ -14,7 +14,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from config import settings
 from database import session_scope
 from models import Debate, DebateStageCheckpoint, Message
 from orchestration.checkpoints import (
@@ -31,6 +30,8 @@ from orchestration.execution_lease import (
     renew_execution_lease,
 )
 from orchestration.fencing import fenced_debate_update
+
+from config import settings
 
 
 def _mk_debate(debate_id: str, status: str = "queued") -> str:

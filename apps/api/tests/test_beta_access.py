@@ -1,9 +1,10 @@
 """Tests for beta access control."""
 import pytest
 from beta_access import is_beta_user, require_beta_access
-from config import settings
 from exceptions import PermissionError as AppPermissionError
 from models import User
+
+from config import settings
 
 
 def test_beta_access_disabled_allows_all():

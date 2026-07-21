@@ -1,5 +1,6 @@
 import debate_dispatch
 import pytest
+
 from config import settings
 
 

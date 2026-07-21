@@ -12,8 +12,9 @@ import logging
 import math
 from typing import List
 
-from config import settings
 from litellm import aembedding
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

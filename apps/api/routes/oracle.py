@@ -165,7 +165,7 @@ async def start_oracle_session(
         user=current_user,
         action="oracle_session",
         session=session,
-        ip_address=request.client.host if request.client else "0.0.0.0",
+        ip_address=request.client.host if request.client else "unknown",
     )
 
     oracle_sess = OracleSession(
@@ -268,7 +268,7 @@ async def fork_oracle_branch(
         user=current_user,
         action="oracle_fork",
         session=session,
-        ip_address=request.client.host if request.client else "0.0.0.0",
+        ip_address=request.client.host if request.client else "unknown",
     )
 
     # Verify parent branch exists

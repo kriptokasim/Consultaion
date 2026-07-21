@@ -8,7 +8,6 @@ from typing import Any, Optional
 import sqlalchemy as sa
 from auth import get_current_user, get_optional_user
 from channels import debate_channel_id
-from config import settings
 from deps import get_session, get_sse_backend
 from exceptions import (
     AppError,
@@ -21,6 +20,7 @@ from schemas import DebateConfig, default_debate_config
 from sqlmodel import Session, select
 from sse_backend import BaseSSEBackend
 
+from config import settings
 from routes.common import (
     is_debate_public,
     require_debate_access,

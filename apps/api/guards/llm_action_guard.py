@@ -67,7 +67,7 @@ async def require_llm_action_allowed(
     session: Session,
     debate_id: Optional[str] = None,
     estimated_cost_units: int = 1,
-    ip_address: str = "0.0.0.0",
+    ip_address: str = "unknown",
 ) -> None:
     """Enforce rate limit, quota, and access checks for LLM-triggering actions.
 

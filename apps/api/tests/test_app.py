@@ -15,7 +15,6 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 import database  # noqa: E402
 import debate_dispatch as debate_dispatch_module  # noqa: E402
 from billing.models import BillingUsage  # noqa: E402
-from config import settings  # noqa: E402
 from main import (  # noqa: E402
     AuthRequest,
     DebateCreate,
@@ -55,6 +54,7 @@ from routes.ops import healthz
 from schemas import default_debate_config, default_panel_config  # noqa: E402
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests  # noqa: E402
 
+from config import settings  # noqa: E402
 from tests.utils import settings_context  # noqa: E402
 
 

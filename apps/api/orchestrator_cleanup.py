@@ -9,11 +9,12 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 
-from config import settings
 from database import session_scope
 from models import APIKey, Debate, DebateCheckpoint, DebateError, User, Vote
 from sqlmodel import select
 from sse_backend import get_sse_backend
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

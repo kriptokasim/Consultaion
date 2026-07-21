@@ -6,12 +6,12 @@ from typing import Optional
 
 from auth import get_current_admin
 from billing.models import BillingPlan, BillingSubscription, BillingUsage
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, Query
 from models import User
 from sqlmodel import Session, select
 
+from config import settings
 from routes.admin.dependencies import _plan_payload
 
 router = APIRouter()

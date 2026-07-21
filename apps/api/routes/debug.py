@@ -8,9 +8,10 @@ import logging
 from typing import Optional
 
 from auth import get_cookie_name, get_optional_user
-from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import User
+
+from config import settings
 
 router = APIRouter(tags=["debug"])
 logger = logging.getLogger(__name__)

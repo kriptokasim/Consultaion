@@ -1,6 +1,7 @@
 import pytest
-from config import AppSettings
 from pydantic import ValidationError as PydanticValidationError
+
+from config import AppSettings
 
 
 def test_config_local_env_defaults(monkeypatch):

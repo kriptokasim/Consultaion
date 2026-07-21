@@ -5726,6 +5726,26 @@
         }
       }
     },
+    "/admin/leases": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Leases",
+        "description": "Return execution-lease state for all active (non-terminal) debates,\nplus summary counts.",
+        "operationId": "admin_leases_admin_leases_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/logs": {
       "get": {
         "tags": [
@@ -6666,6 +6686,26 @@
         ],
         "summary": "Admin Promotions",
         "operationId": "admin_promotions_api_v1_admin_promotions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/leases": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Leases",
+        "description": "Return execution-lease state for all active (non-terminal) debates,\nplus summary counts.",
+        "operationId": "admin_leases_api_v1_admin_leases_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -12010,6 +12050,11 @@
           },
           "role": {
             "type": "string",
+            "enum": [
+              "viewer",
+              "editor",
+              "owner"
+            ],
             "title": "Role",
             "default": "viewer"
           }

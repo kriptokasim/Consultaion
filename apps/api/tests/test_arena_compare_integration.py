@@ -1,10 +1,11 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from config import settings
 from models import Debate, Message
 from orchestrator import run_debate
 from sqlmodel import select
+
+from config import settings
 
 
 @pytest.mark.anyio

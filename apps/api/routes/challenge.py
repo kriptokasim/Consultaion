@@ -194,7 +194,7 @@ async def submit_challenge_round(
         action="challenge_round",
         session=session,
         debate_id=challenge_sess.debate_id,
-        ip_address=request.client.host if request.client else "0.0.0.0",
+        ip_address=request.client.host if request.client else "unknown",
     )
 
     # Get rounds

@@ -1,6 +1,7 @@
 import pytest
-from config import AppSettings
 from pydantic import ValidationError
+
+from config import AppSettings
 
 
 def test_cors_validation_local_allows_wildcard(monkeypatch):

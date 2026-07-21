@@ -106,10 +106,12 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
             return None
         if isinstance(value, int):
             return value
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
+        if isinstance(value, (str, float)):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
 
     max_debates = _as_int(limits.get("max_debates_per_month"))
     if max_debates is not None and usage.debates_created > max_debates:
@@ -220,9 +222,12 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
     # Check daily export limit
     max_exports_per_day = limits.get("max_exports_per_day")
     if max_exports_per_day is not None:
-        try:
-            limit = int(max_exports_per_day)
-        except (TypeError, ValueError):
+        if isinstance(max_exports_per_day, (str, int, float)):
+            try:
+                limit = int(max_exports_per_day)
+            except ValueError:
+                limit = None
+        else:
             limit = None
             
         if limit is not None:

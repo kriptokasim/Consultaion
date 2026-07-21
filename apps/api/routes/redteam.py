@@ -68,7 +68,7 @@ async def start_red_team_session(
         user=current_user,
         action="redteam_session",
         session=session,
-        ip_address=request.client.host if request.client else "0.0.0.0",
+        ip_address=request.client.host if request.client else "unknown",
     )
 
     rt_session = RedTeamSession(

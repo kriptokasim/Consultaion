@@ -702,6 +702,7 @@
   "debate.technicalDetails.title": "Teknik detaylar (hata ayıklama için)",
   "admin.users.emptySearch": "Aramanızla eşleşen kullanıcı bulunamadı.",
   "admin.quota.empty": "Kota kullanım verisi bulunamadı.",
+  "connection.idle": "Beklemede",
   "processing": "İşleniyor...",
   "confirm": "Onayla",
   "participation.hero.kicker": "Katılımcı Profili",

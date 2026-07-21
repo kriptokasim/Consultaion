@@ -10,7 +10,7 @@ Proves end-to-end execution by:
 5. Printing a concise report
 
 Usage:
-    python scripts/smoke_run_pipeline.py --base-url https://your-app.onrender.com --token <admin-jwt>
+    python scripts/smoke_run_pipeline.py --base-url https://api.example.com --token <admin-jwt>
 
 Exit code 0 on PASS, non-zero on failure.
 """
@@ -44,7 +44,7 @@ def _request(method: str, url: str, token: str | None = None, body: dict | None 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Pipeline Smoke Test")
-    parser.add_argument("--base-url", required=True, help="API base URL (e.g. https://app.onrender.com)")
+    parser.add_argument("--base-url", required=True, help="API base URL (e.g. https://api.example.com)")
     parser.add_argument("--token", required=True, help="Admin JWT token")
     parser.add_argument("--provider", default="openrouter", help="Provider to smoke test")
     parser.add_argument("--model-id", default=None, help="Model ID for smoke test")

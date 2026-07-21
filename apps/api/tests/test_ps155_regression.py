@@ -107,6 +107,7 @@ async def test_provider_credential_isolation_regression(monkeypatch):
             del os.environ[k]
 
     from agents import resolve_api_key
+
     from config import settings
     
     settings.OPENAI_API_KEY = "test_openai_key"

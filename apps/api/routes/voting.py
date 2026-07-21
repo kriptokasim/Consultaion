@@ -70,7 +70,7 @@ async def cast_prediction(
         session=session,
         debate_id=debate_id,
         estimated_cost_units=1,
-        ip_address=request.client.host if request.client else "0.0.0.0",
+        ip_address=request.client.host if request.client else "unknown",
     )
 
     if debate.status in ("completed", "completed_budget", "failed"):
@@ -188,7 +188,7 @@ async def reveal_prediction_and_reasons(
                 action="voting_prediction",
                 session=session,
                 debate_id=debate_id,
-                ip_address=request.client.host if request.client else "0.0.0.0",
+                ip_address=request.client.host if request.client else "unknown",
             )
             from worker.voting_tasks import _execute_vote_reasons_extraction
             try:

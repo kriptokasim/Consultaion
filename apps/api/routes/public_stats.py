@@ -7,13 +7,14 @@ import time
 from typing import Optional
 
 import sqlalchemy as sa
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends
 from models import Debate
 from parliament.model_registry import list_enabled_models
 from pydantic import BaseModel
 from sqlmodel import Session, select
+
+from config import settings
 
 router = APIRouter(prefix="/public", tags=["public"])
 

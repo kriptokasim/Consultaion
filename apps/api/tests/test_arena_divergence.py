@@ -1,5 +1,6 @@
 import pytest
 from models import Debate, DivergenceReport, Message, User, UserInteraction, VoteRecord
+from routes.arena import _compute_claim_id
 from sqlmodel import select
 from worker.arena_tasks import _execute_divergence_computation, compute_string_similarity
 
@@ -178,12 +179,22 @@ def test_cast_arena_vote_success(authenticated_client, db_session):
         config={}
     )
     db_session.add(debate)
+    claim_text = "We should use Postgres."
+    db_session.add(
+        DivergenceReport(
+            debate_id=debate_id,
+            divergence_score=0.5,
+            consensus_claims={"claims": []},
+            contested_claims={
+                "claims": [{"claim": claim_text, "model": "PostgresModel"}]
+            },
+        )
+    )
     db_session.commit()
-    
+
     payload = {
-        "claim_text": "We should use Postgres.",
-        "model_name": "PostgresModel",
-        "is_consensus": False
+        "claim_id": _compute_claim_id(claim_text),
+        "claim_text": claim_text,
     }
     
     resp = authenticated_client.post(f"/api/v1/arena/{debate_id}/user-vote", json=payload)
@@ -207,7 +218,7 @@ def test_cast_arena_vote_success(authenticated_client, db_session):
     ).first()
     assert interaction is not None
     assert interaction.user_id == user.id
-    assert interaction.details["model_name"] == "PostgresModel"
+    assert interaction.details["claim_id"] == _compute_claim_id(claim_text)
     
     # Duplicate vote must fail
     dup_resp = authenticated_client.post(f"/api/v1/arena/{debate_id}/user-vote", json=payload)

@@ -12,12 +12,13 @@ import os
 from datetime import datetime, timezone
 
 from auth import get_current_user
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, status
 from models import User
 from pydantic import BaseModel
 from sqlmodel import Session
+
+from config import settings
 
 from .service import (
     cancel_deletion_request,

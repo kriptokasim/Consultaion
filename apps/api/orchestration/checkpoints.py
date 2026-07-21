@@ -22,11 +22,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional
 
 import sqlalchemy as sa
-from config import settings
 from database_async import async_session_scope
 from models import Debate, DebateStageCheckpoint
 from sqlmodel import select
 
+from config import settings
 from orchestration.execution_context import (
     ExecutionLease,
     get_current_execution_lease,

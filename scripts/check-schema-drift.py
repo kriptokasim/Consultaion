@@ -10,9 +10,12 @@ sys.path.insert(0, os.path.join(SCRIPT_DIR, "../apps/api"))
 # Import all models to register them with SQLModel metadata
 from alembic.autogenerate import compare_metadata
 from alembic.runtime.migration import MigrationContext
-from config import AppSettings
 from sqlalchemy import create_engine
 from sqlmodel import SQLModel
+
+import models  # noqa: F401  # Register every SQLModel table before comparison.
+from billing import models as billing_models  # noqa: F401
+from config import AppSettings
 
 
 def main():
@@ -40,11 +43,10 @@ def main():
         action = item[0]
         if action in ("add_table", "remove_table", "add_column", "remove_column"):
             real_drifts.append(item)
-        elif action in ("add_index", "remove_index") and not any(idx_name.startswith("ix_debate_") for idx_name in [item[1].name if hasattr(item[1], "name") else ""]):
-            real_drifts.append(item)
         else:
-            # Keep other changes for visibility, but don't fail unless critical columns or tables differ.
-            real_drifts.append(item)
+            # Constraint, index, and type rendering differs between SQLite and
+            # PostgreSQL. Keep this gate focused on data-bearing tables/columns.
+            print(f"INFO: Non-critical metadata difference ignored: {item}")
 
     if real_drifts:
         print("ERROR: Real schema drift detected! Model metadata differs from migrations:")

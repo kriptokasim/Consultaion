@@ -32,10 +32,11 @@ os.environ["JWT_SECRET"] = "test-secret"
 os.environ["USE_MOCK"] = "1"
 os.environ["SSE_BACKEND"] = "memory"
 
-from config import settings  # noqa: E402
 from database import init_db, reset_engine  # noqa: E402
 from database_async import async_session_scope, reset_async_engine  # noqa: E402
 from models import Debate, DebateStageCheckpoint  # noqa: E402
+
+from config import settings  # noqa: E402
 
 # Force reload config settings and reset engines to SQLite
 settings.reload()

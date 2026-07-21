@@ -101,6 +101,7 @@ def test_trusted_proxy_forwarded_for(monkeypatch):
 
 def test_jwt_signature_check_success(monkeypatch):
     import jwt
+
     from config import settings
     monkeypatch.setattr(settings, "JWT_SECRET", "super-secret-key")
 
@@ -128,6 +129,7 @@ def test_jwt_signature_check_success(monkeypatch):
 
 def test_jwt_signature_check_failure(monkeypatch):
     import jwt
+
     from config import settings
     monkeypatch.setattr(settings, "JWT_SECRET", "super-secret-key")
 

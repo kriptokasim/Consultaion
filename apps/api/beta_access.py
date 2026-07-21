@@ -4,8 +4,9 @@ Provides functions to check beta access for features gated behind the beta progr
 """
 from typing import Optional
 
-from config import settings
 from models import User
+
+from config import settings
 
 
 def is_beta_user(user: Optional[User]) -> bool:

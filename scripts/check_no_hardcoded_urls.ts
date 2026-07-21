@@ -131,7 +131,7 @@ function walk(dir: string): string[] {
     const results: string[] = [];
     for (const entry of readdirSync(dir)) {
         const full = join(dir, entry);
-        const rel = relative(REPO_ROOT, full);
+        const rel = relative(REPO_ROOT, full).replaceAll("\\", "/");
         if (isAllowlisted(rel)) continue;
         let stat: ReturnType<typeof statSync>;
         try { stat = statSync(full); } catch { continue; }

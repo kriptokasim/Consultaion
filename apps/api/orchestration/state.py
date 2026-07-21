@@ -3,10 +3,11 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from config import settings
 from database_async import async_session_scope
 from models import Debate, DebateCheckpoint, DebateRound, Message, Score, Vote
 from sqlmodel import select
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

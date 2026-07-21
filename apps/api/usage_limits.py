@@ -4,11 +4,12 @@ import logging
 from datetime import date, timedelta, timezone
 from typing import Optional, TypedDict
 
-from config import settings
 from database import session_scope
 from models import UsageCounter, UsageQuota, utcnow
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
+
+from config import settings
 
 
 def _default_max_runs_per_hour() -> int:
@@ -303,8 +304,9 @@ def check_quota(
     """
     # Owner unlimited bypass
     if user is not None:
-        from config import settings as _settings
         from security.owner import is_owner
+
+        from config import settings as _settings
         if is_owner(user) and _settings.OWNER_UNLIMITED:
             import logging
             logging.getLogger(__name__).info(

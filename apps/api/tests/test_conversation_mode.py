@@ -1,11 +1,12 @@
 import pytest
-from config import settings
 from conversation.engine import run_conversation_debate
 from models import Debate, Message
 from orchestrator import run_debate
 from schemas import default_panel_config
 from sqlmodel import select
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests
+
+from config import settings
 
 
 @pytest.mark.anyio("asyncio")

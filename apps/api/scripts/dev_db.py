@@ -12,9 +12,10 @@ except ImportError:
 
 from alembic import command
 from alembic.config import Config
-from config import settings
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
+
+from config import settings
 
 
 # Helper to build Alembic config

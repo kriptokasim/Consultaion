@@ -5,11 +5,12 @@ import math
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from config import settings
 from database import session_scope
 from models import Debate, PairwiseVote, RatingPersona, Score, utcnow
 from sqlalchemy import delete
 from sqlmodel import Session, select
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

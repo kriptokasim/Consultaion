@@ -13,8 +13,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Tuple, TypedDict
 
-from config import settings
 from pydantic import BaseModel, ConfigDict
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

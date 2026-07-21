@@ -57,7 +57,6 @@ async def route_llm_call(
 
     # 1. Resolve canonical model key
     from config import settings
-
     from model_gateway.model_map import MODEL_ALIASES, MODEL_MAP
     # Diagnostic: log model resolution context before attempt
     logger.info(

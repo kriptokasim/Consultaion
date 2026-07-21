@@ -1,10 +1,11 @@
 from typing import List, Literal, Optional, Set
 
-from config import settings
 from database import engine
 from models import UserProviderKey
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
+
+from config import settings
 
 
 class ModelInfo(BaseModel):

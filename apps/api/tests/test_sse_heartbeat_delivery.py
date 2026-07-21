@@ -7,7 +7,6 @@ subscriber without altering the EventSource cursor.
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 
@@ -15,7 +14,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_memory_backend_heartbeat_forwarded():
     """Heartbeat events published to a channel are received by subscribers."""
-    from sse_backend import get_sse_backend, MemoryChannelBackend
+    from sse_backend import MemoryChannelBackend
 
     backend = MemoryChannelBackend()
     channel = "debate:test-heartbeat-1"
@@ -48,7 +47,7 @@ async def test_memory_backend_heartbeat_forwarded():
 @pytest.mark.asyncio
 async def test_heartbeat_has_no_last_event_id():
     """Heartbeats should not advance the resume cursor."""
-    from sse_backend import get_sse_backend, MemoryChannelBackend
+    from sse_backend import MemoryChannelBackend
 
     backend = MemoryChannelBackend()
     channel = "debate:test-heartbeat-cursor"
@@ -78,7 +77,7 @@ async def test_heartbeat_has_no_last_event_id():
 @pytest.mark.asyncio
 async def test_heartbeat_does_not_enter_timeline():
     """Heartbeat events should be filtered from the frontend timeline."""
-    from sse_backend import get_sse_backend, MemoryChannelBackend
+    from sse_backend import MemoryChannelBackend
 
     backend = MemoryChannelBackend()
     channel = "debate:test-timeline-filter"
@@ -106,7 +105,7 @@ async def test_heartbeat_does_not_enter_timeline():
 @pytest.mark.asyncio
 async def test_heartbeat_updates_activity_timestamp():
     """Heartbeats should keep the silence watchdog from firing."""
-    from sse_backend import get_sse_backend, MemoryChannelBackend
+    from sse_backend import MemoryChannelBackend
 
     backend = MemoryChannelBackend()
     channel = "debate:test-activity"

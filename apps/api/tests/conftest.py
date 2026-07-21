@@ -50,11 +50,11 @@ def test_database_url():
     from decimal import Decimal
 
     from billing.models import BillingPlan
-    from config import settings
     from database import init_db, reset_engine
     from database_async import reset_async_engine
     from sqlmodel import Session, select
 
+    from config import settings
     from tests.utils import cleanup_test_database, init_test_database, make_test_database_url
     
     # Generate unique test database URL
@@ -132,11 +132,11 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     This ensures complete isolation between tests even when application code
     creates its own database sessions.
     """
-    from config import settings
     from database import reset_engine
     from database_async import reset_async_engine
     from sse_backend import reset_sse_backend_for_tests
 
+    from config import settings
     from tests.utils import reset_provider_health, truncate_all_tables
 
     # Force environment to test mode and clear production flags

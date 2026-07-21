@@ -14,8 +14,9 @@ def test_retry_after_header_presence(client: TestClient, monkeypatch):
     # Reload config/ratelimit to pick up env change if needed
     import importlib
 
-    import config
     import ratelimit
+
+    import config
     config.settings.reload()
     importlib.reload(ratelimit)
     

@@ -11,8 +11,9 @@ import logging
 from typing import Any, Dict, List
 
 from agents import call_llm_for_role
-from config import settings
 from utils.json_utils import extract_and_parse_json
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

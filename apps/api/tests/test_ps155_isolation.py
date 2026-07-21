@@ -13,6 +13,7 @@ import pytest
 def test_resolve_api_key_byok_priority():
     """resolve_api_key should prefer user BYOK over global settings."""
     from agents import resolve_api_key
+
     from config import settings
 
     user_keys = {"openai": "byok_sk_123"}

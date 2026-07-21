@@ -4,7 +4,6 @@ import logging
 from typing import Any, List
 
 from agents import UsageAccumulator, call_llm_for_role
-from config import settings
 from database import session_scope
 from integrations.langfuse import update_trace_metadata
 from models import Debate, Message
@@ -15,6 +14,8 @@ from prompts.conversation import (
 )
 from schemas import PanelConfig, default_panel_config
 from sse_backend import get_sse_backend
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 

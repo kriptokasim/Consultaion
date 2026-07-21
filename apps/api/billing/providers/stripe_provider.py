@@ -9,9 +9,8 @@ try:
 except ImportError:  # pragma: no cover
     stripe = None
 
-from config import settings
-
 from billing.models import BillingPlan
+from config import settings
 
 from .base import BillingProvider
 

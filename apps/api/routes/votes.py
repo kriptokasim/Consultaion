@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from auth import get_current_user, get_optional_user
-from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import ConversationVote, Debate, Message, User
@@ -20,6 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from config import settings
 from routes.common import require_debate_access
 
 logger = logging.getLogger(__name__)

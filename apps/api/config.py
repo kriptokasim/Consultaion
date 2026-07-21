@@ -393,7 +393,7 @@ class AppSettings(BaseSettings):
             object.__setattr__(self, "COOKIE_SAMESITE", "none")
             # FH125 C-2: COOKIE_DOMAIN defaults to unset (host-only cookies).
             # Never auto-derive from WEB_APP_ORIGIN — public suffixes like
-            # .vercel.app or .onrender.com must NOT be used as cookie domains.
+            # Provider preview hostnames must NOT be used as cookie domains.
             # Only set if explicitly configured via COOKIE_DOMAIN env var.
         
         # Production secret validation

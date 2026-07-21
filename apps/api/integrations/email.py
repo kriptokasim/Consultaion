@@ -1,7 +1,8 @@
 import httpx
-from config import settings
 from loguru import logger
 from schemas import DebateSummary
+
+from config import settings
 
 RESEND_API_BASE = "https://api.resend.com"
 

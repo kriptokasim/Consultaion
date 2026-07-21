@@ -10,9 +10,10 @@ import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from config import settings
 from models import Debate, DebateError, SupportNote, utcnow
 from sqlmodel import select
+
+from config import settings
 
 if TYPE_CHECKING:
     from sqlmodel import Session
