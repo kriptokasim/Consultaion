@@ -4,6 +4,11 @@ from pydantic import ValidationError as PydanticValidationError
 from config import AppSettings
 
 
+@pytest.fixture(autouse=True)
+def secure_internal_secret(monkeypatch):
+    monkeypatch.setenv("INTERNAL_SECRET", "test-internal-secret-at-least-32-characters")
+
+
 def test_config_local_env_defaults(monkeypatch):
     # ENV=local -> COOKIE_SECURE=False, ENABLE_SEC_HEADERS=False
     monkeypatch.setenv("ENV", "local")
@@ -14,6 +19,22 @@ def test_config_local_env_defaults(monkeypatch):
     assert settings.IS_LOCAL_ENV is True
     assert settings.COOKIE_SECURE is False
     assert settings.ENABLE_SEC_HEADERS is False
+
+
+def test_async_database_url_preserves_psycopg_postgres_credentials(monkeypatch):
+    monkeypatch.setenv("ENV", "local")
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://postgres:password@localhost:5432/consultaion",
+    )
+    monkeypatch.delenv("DATABASE_URL_ASYNC", raising=False)
+
+    settings = AppSettings()
+
+    assert settings.DATABASE_URL_ASYNC == (
+        "postgresql+psycopg://postgres:password@localhost:5432/consultaion"
+    )
 
 def test_config_prod_env_defaults(monkeypatch):
     # ENV=production -> COOKIE_SECURE=True, ENABLE_SEC_HEADERS=True

@@ -471,9 +471,13 @@ class AppSettings(BaseSettings):
             url = self.DATABASE_URL
             async_url = url
             if url.startswith("sqlite"):
-                async_url = url.replace("sqlite:", "sqlite+aiosqlite:")
-            elif url.startswith("postgres"):
-                async_url = url.replace("postgresql:", "postgresql+psycopg:").replace("postgres:", "postgresql+psycopg:")
+                async_url = url.replace("sqlite:", "sqlite+aiosqlite:", 1)
+            elif url.startswith("postgresql+psycopg:"):
+                async_url = url
+            elif url.startswith("postgresql:"):
+                async_url = url.replace("postgresql:", "postgresql+psycopg:", 1)
+            elif url.startswith("postgres:"):
+                async_url = url.replace("postgres:", "postgresql+psycopg:", 1)
             object.__setattr__(self, "DATABASE_URL_ASYNC", async_url)
 
         if not self.SSE_REDIS_URL and self.REDIS_URL:
