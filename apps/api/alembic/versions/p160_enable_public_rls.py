@@ -88,15 +88,14 @@ def _complete_usage_ledger_state() -> None:
             )
 
 
-def _set_public_table_rls(*, enabled: bool) -> None:
+def _enable_public_table_rls() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
 
-    action = "ENABLE" if enabled else "DISABLE"
     op.execute(
         sa.text(
-            f"""
+            """
             DO $$
             DECLARE
                 target record;
@@ -109,7 +108,7 @@ def _set_public_table_rls(*, enabled: bool) -> None:
                       AND c.relkind IN ('r', 'p')
                 LOOP
                     EXECUTE format(
-                        'ALTER TABLE %I.%I {action} ROW LEVEL SECURITY',
+                        'ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY',
                         target.schema_name,
                         target.table_name
                     );
@@ -124,10 +123,15 @@ def _set_public_table_rls(*, enabled: bool) -> None:
 def upgrade() -> None:
     _ensure_billing_webhook_events()
     _complete_usage_ledger_state()
-    _set_public_table_rls(enabled=True)
+    _enable_public_table_rls()
 
 
 def downgrade() -> None:
-    _set_public_table_rls(enabled=False)
+    # RLS is a one-way security hardening. Some public tables may have had RLS
+    # enabled before P160, so a blanket disable would silently remove their
+    # pre-existing protection. Keep RLS enabled when rolling this revision
+    # back; operators can make an explicit, table-scoped policy change if a
+    # genuine rollback of row security is ever required.
     # Keep additive billing repairs in place: dropping them would discard
     # settlement history and webhook idempotency records.
+    pass

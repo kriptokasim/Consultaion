@@ -9,6 +9,8 @@
  *   NEXT_PUBLIC_API_URL  — canonical API origin (e.g. https://api.consultaion.com)
  */
 
+import { resolveServerApiOrigin } from "./apiOrigin";
+
 // ---------------------------------------------------------------------------
 // App Origin — used for canonical URLs, OG tags, absolute redirects
 // ---------------------------------------------------------------------------
@@ -25,7 +27,7 @@ export const APP_ORIGIN =
 export const API_ORIGIN =
   typeof window !== "undefined" && process.env.NODE_ENV === "production"
     ? "/api"
-    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    : resolveServerApiOrigin();
 
 /**
  * Build an absolute API URL for a given path.

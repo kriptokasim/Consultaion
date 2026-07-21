@@ -51,6 +51,11 @@ jobs:
           curl -sf http://localhost:3000 > /dev/null
           echo "Web server OK"
 
+      - name: Verify web-to-API proxy
+        run: |
+          curl -sf http://localhost:3000/api/healthz | python -m json.tool
+          echo "Web API proxy OK"
+
       - name: Verify Alembic migrations exist in API container
         run: |
           docker compose -f docker-compose.smoke.yml exec -T api python -c "from alembic.config import Config; from alembic.script import ScriptDirectory; config = Config('alembic.ini'); script = ScriptDirectory.from_config(config); heads = script.get_heads(); print(f'Heads: {heads}'); assert len(heads) == 1, f'Expected 1 head, got {len(heads)}'"

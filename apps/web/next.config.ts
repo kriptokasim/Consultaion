@@ -2,6 +2,7 @@ import path from 'path'
 import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
 import bundleAnalyzer from '@next/bundle-analyzer'
+import { resolveServerApiOrigin } from './lib/config/apiOrigin'
 
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
@@ -42,7 +43,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/:path*`,
+        destination: `${resolveServerApiOrigin()}/:path*`,
       },
     ];
   },
