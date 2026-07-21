@@ -263,7 +263,7 @@ jobs:
         run: |
           ./scripts/check_openapi_drift.sh
 
-  python-3.12-compatibility-nonblocking:
+  python-3-12-compatibility-nonblocking:
     runs-on: ubuntu-latest
     continue-on-error: true
     defaults:

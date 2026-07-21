@@ -30,23 +30,6 @@ useDefault = true
     '''docs/audits/.*''',
   ]
 
-  # Allow specific documented false-positive patterns
-  [[allowlist.regexes]]
-    description = "Example URLs in documentation"
-    regex = '''https?://(example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0)'''
-    # Only in markdown and config docs
-    paths = ['''\.md$''', '''\.txt$''', '''\.example$''', '''\.env\.example$''']
-
-  [[allowlist.regexes]]
-    description = "Test JWT tokens (short-lived, test-only)"
-    regex = '''eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
-    paths = ['''tests/.*''', '''test/.*''', '''e2e/.*''']
-
-  [[allowlist.regexes]]
-    description = "Dev-only bcrypt hashes in test fixtures"
-    regex = '''\$2[aby]?\$\d{1,2}\$[A-Za-z0-9/.]{53}'''
-    paths = ['''tests/.*''', '''test/.*''']
-
 # Custom rules for this project
 [[rules]]
   id = "supabase-pooler-url"
@@ -59,7 +42,7 @@ useDefault = true
   description = "PostgreSQL connection URL with embedded password"
   regex = '''postgres(?:ql)?://[^:\s]+:[^@\s]+@[^\s]+'''
   tags = ["postgres", "credential"]
-  [rules.allowlist]
+  [[rules.allowlists]]
     paths = ['''\.env\.example$''', '''\.example$''', '''tests/.*''', '''docs/.*''']
 
 [[rules]]
@@ -67,7 +50,7 @@ useDefault = true
   description = "Hardcoded password in variable assignment"
   regex = '''(?i)(?:password|passwd|pwd|secret|api_?key|token)\s*[=:]\s*["'][^"']{8,}["']'''
   tags = ["password", "credential"]
-  [rules.allowlist]
+  [[rules.allowlists]]
     paths = ['''tests/.*''', '''\.env\.example$''', '''tests/.*\.py$''']
     # Allow settings.py / config.py defaults
     regexes = ['''(?i)change_me|default|placeholder|example''']
