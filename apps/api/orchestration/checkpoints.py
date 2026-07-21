@@ -96,6 +96,18 @@ async def _assert_debate_lease(session, lease: ExecutionLease) -> None:
     )
     result = await session.execute(stmt)
     if result.first() is None:
+        debate = await session.get(Debate, lease.debate_id)
+        logger.warning(
+            "checkpoint.debate_lease_rejected debate_id=%s expected_owner=%s "
+            "expected_epoch=%s status=%s actual_owner=%s actual_epoch=%s expires_at=%s",
+            lease.debate_id,
+            lease.owner_id,
+            lease.lease_epoch,
+            debate.status if debate else None,
+            debate.runner_id if debate else None,
+            debate.lease_epoch if debate else None,
+            debate.lease_expires_at if debate else None,
+        )
         lease.lease_lost_event.set()
         raise ExecutionSupersededError(
             f"Debate {lease.debate_id}: lease no longer owned by "

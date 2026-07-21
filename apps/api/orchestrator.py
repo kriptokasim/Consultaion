@@ -914,6 +914,13 @@ async def run_debate(
                 # masking it with the generic superseded error below.
                 await body_task
             elif lease_lost_task in done:
+                # A body-side guard sets the event immediately before raising.
+                # Give that task one loop turn to publish its precise failure;
+                # a genuine heartbeat/takeover loss will remain pending and is
+                # still cancelled below.
+                await asyncio.sleep(0)
+                if body_task.done():
+                    await body_task
                 body_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await body_task
