@@ -9,7 +9,10 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 RUN addgroup -g 1001 -S consultaion && adduser -S consultaion -u 1001 -G consultaion
 WORKDIR /app
-COPY --from=builder --chown=consultaion:consultaion /app/.next/standalone ./
+# outputFileTracingRoot points at the monorepo root. In this image the web app
+# lives at /app relative to that root, so Next nests the runnable standalone
+# bundle under `standalone/app`.
+COPY --from=builder --chown=consultaion:consultaion /app/.next/standalone/app ./
 COPY --from=builder --chown=consultaion:consultaion /app/.next/static ./.next/static
 COPY --from=builder --chown=consultaion:consultaion /app/public ./public
 USER consultaion
