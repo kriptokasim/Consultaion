@@ -9,8 +9,17 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator
 
-ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_CONTRACT_PATH = ROOT / "config" / "safety-patterns.json"
+API_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = (
+    API_ROOT.parent.parent
+    if API_ROOT.name == "api" and API_ROOT.parent.name == "apps"
+    else API_ROOT
+)
+SHARED_CONTRACT_PATH = SOURCE_ROOT / "config" / "safety-patterns.json"
+BUNDLED_CONTRACT_PATH = API_ROOT / "safety" / "safety-patterns.json"
+DEFAULT_CONTRACT_PATH = (
+    SHARED_CONTRACT_PATH if SHARED_CONTRACT_PATH.is_file() else BUNDLED_CONTRACT_PATH
+)
 
 _PATTERN_KEYS = {
     "name",

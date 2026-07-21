@@ -11,6 +11,13 @@ from utils.text_safety import contains_sensitive_pattern, sanitize_public_text
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES_PATH = ROOT / "config" / "safety-pattern-fixtures.json"
+BUNDLED_CONTRACT_PATH = ROOT / "apps" / "api" / "safety" / "safety-patterns.json"
+
+
+def test_bundled_backend_contract_matches_shared_source() -> None:
+    shared = json.loads((ROOT / "config" / "safety-patterns.json").read_text(encoding="utf-8"))
+    bundled = json.loads(BUNDLED_CONTRACT_PATH.read_text(encoding="utf-8"))
+    assert bundled == shared
 
 
 def test_backend_matches_shared_safety_fixtures() -> None:
