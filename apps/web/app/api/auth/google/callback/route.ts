@@ -41,11 +41,20 @@ export async function GET(request: NextRequest) {
   try {
     // 4. Exchange code server-side via backend
     const internalSecret = process.env.INTERNAL_SECRET || "";
-    const response = await fetch(`${API_BASE}/auth/google/callback`, {
+    // Canonical app origin — required by backend origin check when state is
+    // frontend-generated (not in backend state_store).
+    const appOrigin =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "https://web.consultaion.com";
+    const apiBase = API_BASE.replace(/\/$/, "");
+    const response = await fetch(`${apiBase}/auth/google/callback`, {
       method: "POST",
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
-        "x-internal-secret": internalSecret
+        "x-internal-secret": internalSecret,
+        Origin: appOrigin,
+        Referer: `${appOrigin}/`,
       },
       body: JSON.stringify({ code, state }),
     });
@@ -75,6 +84,8 @@ export async function GET(request: NextRequest) {
     const redirectUrl = new URL(nextPath, request.url);
     const responseNext = NextResponse.redirect(redirectUrl);
 
+    // Same cookie name the backend reads (COOKIE_NAME / consultaion_token).
+    // sameSite=lax is correct for same-site web.consultaion.com → /api proxy.
     responseNext.cookies.set("consultaion_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
