@@ -2,7 +2,8 @@ from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from models import Debate, DebateContinuation, LLMUsageLog, User
-from sqlmodel import select
+from sqlalchemy.sql.dml import Update
+from sqlmodel import Session, select
 
 
 def test_continue_conditional_transition(authenticated_client, db_session):
@@ -129,6 +130,56 @@ def test_continue_idempotency_key(authenticated_client, db_session):
         db_session.refresh(continuation)
         assert continuation.id == old_cont_id
         assert continuation.status == "failed"
+
+
+def test_continue_schedule_conflict_marks_rolled_back_continuation_failed(
+    authenticated_client,
+    db_session,
+    monkeypatch,
+):
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-continue-schedule-conflict",
+        user_id=user.id,
+        prompt="Test prompt",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+
+    original_execute = Session.execute
+
+    def execute_with_schedule_conflict(self, statement, *args, **kwargs):
+        if isinstance(statement, Update) and statement.table.name == Debate.__tablename__:
+            return MagicMock(rowcount=0)
+        return original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "execute", execute_with_schedule_conflict)
+    headers = {"X-Idempotency-Key": "test-schedule-conflict-key"}
+
+    response = authenticated_client.post(
+        f"/api/v1/debates/{debate.id}/continue",
+        headers=headers,
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "debate.continue_conflict"
+
+    continuation = db_session.exec(
+        select(DebateContinuation).where(
+            DebateContinuation.debate_id == debate.id,
+            DebateContinuation.idempotency_key == "test-schedule-conflict-key",
+        )
+    ).first()
+    assert continuation is not None
+    assert continuation.status == "failed"
+    assert continuation.failure_code == "debate.continue_conflict"
+
+    replay = authenticated_client.post(
+        f"/api/v1/debates/{debate.id}/continue",
+        headers=headers,
+    )
+    assert replay.status_code == 409
+    assert replay.json()["error"]["code"] == "continuation.new_idempotency_key_required"
 
 
 def test_continue_preflight_budget(authenticated_client, db_session):
@@ -383,6 +434,5 @@ def test_continue_retry_of_continuation_id(authenticated_client, db_session):
         assert data["retry_of_continuation_id"] == failed_cont.id
         assert data["idempotency_key"] == "new-key-2"
         mock_dispatch.assert_called_once()
-
 
 

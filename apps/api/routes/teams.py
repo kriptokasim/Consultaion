@@ -36,6 +36,16 @@ def _get_team_or_404(session: Session, team_id: str) -> Team:
     return team
 
 
+def _lock_team_for_membership_mutation(session: Session, team_id: str) -> Team:
+    """Serialize membership role changes against the owning team row."""
+    team = session.exec(
+        select(Team).where(Team.id == team_id).with_for_update()
+    ).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="team not found")
+    return team
+
+
 @router.post("/teams")
 async def create_team(
     body: TeamCreate,
@@ -114,7 +124,9 @@ async def add_team_member(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    team = _get_team_or_404(session, team_id)
+    # All owner counts and role mutations for a team share this row lock, so
+    # concurrent demotions cannot both observe a stale owner count.
+    team = _lock_team_for_membership_mutation(session, team_id)
     if not user_is_team_editor(session, current_user, team.id):
         raise HTTPException(status_code=403, detail="team editor permission required")
     actor_role = "owner" if current_user.role == "admin" else user_team_role(

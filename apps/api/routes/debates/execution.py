@@ -371,7 +371,10 @@ async def continue_debate_run(
             try:
                 from services.continuations import transition_continuation_sync
                 transition_continuation_sync(
-                    session, continuation_record.id, ["preflight_passed"], "failed",
+                    session,
+                    continuation_record.id,
+                    ["requested", "preflight_passed"],
+                    "failed",
                     failure_code="debate.continue_conflict",
                     failure_detail_safe="This run is no longer waiting for continuation.",
                 )

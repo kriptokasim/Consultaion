@@ -50,6 +50,32 @@ def test_preflight_passed_to_dispatched(db_session: Session):
     assert res.dispatched_at is not None
 
 
+def test_rolled_back_preflight_can_be_marked_failed(db_session: Session):
+    _, _, cont = _create_debate_and_continuation(
+        db_session, "sm-rollback-conflict", "key-rollback-conflict"
+    )
+    transition_continuation_sync(
+        db_session,
+        cont.id,
+        ["requested"],
+        "preflight_passed",
+        commit=False,
+    )
+
+    # A lost debate scheduling CAS rolls this uncommitted transition back.
+    db_session.rollback()
+
+    result = transition_continuation_sync(
+        db_session,
+        cont.id,
+        ["requested", "preflight_passed"],
+        "failed",
+        failure_code="debate.continue_conflict",
+    )
+    assert result.status == "failed"
+    assert result.failure_code == "debate.continue_conflict"
+
+
 def test_dispatched_to_running(db_session: Session):
     user, debate, cont = _create_debate_and_continuation(db_session, "sm-3", "key-3")
     transition_continuation_sync(db_session, cont.id, ["requested"], "preflight_passed")
