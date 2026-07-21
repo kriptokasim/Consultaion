@@ -1,7 +1,16 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from config import AppSettings
+from config import AppSettings, _resolve_settings_root
+
+
+def test_settings_root_supports_source_and_flat_container_layouts():
+    assert _resolve_settings_root(
+        Path("/workspace/apps/api/config.py")
+    ) == Path("/workspace")
+    assert _resolve_settings_root(Path("/app/config.py")) == Path("/app")
 
 
 @pytest.fixture(autouse=True)

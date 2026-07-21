@@ -11,7 +11,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+
+def _resolve_settings_root(config_path: Path) -> Path:
+    """Locate the env-file root in source and flattened container layouts."""
+    api_dir = config_path.parent
+    if api_dir.name == "api" and api_dir.parent.name == "apps":
+        return api_dir.parent.parent
+    return api_dir
+
+
+BASE_DIR = _resolve_settings_root(Path(__file__).resolve())
 
 
 class AppSettings(BaseSettings):
