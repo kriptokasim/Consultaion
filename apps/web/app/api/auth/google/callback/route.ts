@@ -6,9 +6,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { resolveServerApiOrigin } from "@/lib/config/apiOrigin";
 import { sanitizeInternalPath } from "@/lib/security/internalPath";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = resolveServerApiOrigin();
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

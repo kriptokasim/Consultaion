@@ -46,6 +46,23 @@ jobs:
         run: |
           curl -sf http://localhost:8000/readyz || echo "readyz not available (non-critical)"
 
+      - name: Wait for web image healthcheck
+        run: |
+          for i in $(seq 1 40); do
+            if docker inspect --format='{{.State.Health.Status}}' consultaion-smoke-web | grep -qx healthy; then
+              echo "Web image healthcheck is healthy"
+              exit 0
+            fi
+            if docker inspect --format='{{.State.Health.Status}}' consultaion-smoke-web | grep -qx unhealthy; then
+              docker compose -f docker-compose.smoke.yml logs web api
+              exit 1
+            fi
+            echo "Waiting for web image healthcheck ($i/40)..."
+            sleep 2
+          done
+          docker inspect --format='{{json .State.Health}}' consultaion-smoke-web
+          exit 1
+
       - name: Verify web server
         run: |
           curl -sf http://localhost:3000 > /dev/null
