@@ -21,6 +21,9 @@ def _prepare_postgres_integration(db_session, user_id: str) -> None:
 async def test_arena_run_integration(db_session, monkeypatch):
     # Set FAST_DEBATE to False so we run the real arena flow
     monkeypatch.setattr(settings, "FAST_DEBATE", False)
+    # The streaming gateway is covered separately; keep this orchestration test
+    # on its patched, deterministic non-streaming path.
+    monkeypatch.setattr(settings, "STREAMING_RESPONSES_ENABLED", False)
     
     # Setup
     debate_id = "test-arena-debate"
