@@ -379,6 +379,7 @@ async def _conditional_finish(
     async with async_session_scope() as session:
         # Distinguish "deleted" (integrity error, G7) from "lost ownership".
         cp = await _get_checkpoint(session, lease.debate_id, stage_key)
+        debate = await session.get(Debate, lease.debate_id)
         result = await session.execute(stmt)
         await session.commit()
 
@@ -389,6 +390,21 @@ async def _conditional_finish(
             f"Debate {lease.debate_id}: stage {stage_key} checkpoint "
             "disappeared between execution and completion."
         )
+    logger.warning(
+        "checkpoint.finish_rejected debate_id=%s stage=%s target_status=%s "
+        "checkpoint_status=%s checkpoint_owner=%s checkpoint_epoch=%s "
+        "checkpoint_attempt=%s debate_status=%s debate_owner=%s debate_epoch=%s",
+        lease.debate_id,
+        stage_key,
+        status,
+        cp.status,
+        cp.owner_id,
+        cp.lease_epoch,
+        cp.attempt,
+        debate.status if debate else None,
+        debate.runner_id if debate else None,
+        debate.lease_epoch if debate else None,
+    )
     lease.lease_lost_event.set()
     raise CheckpointOwnershipLostError(
         f"Debate {lease.debate_id}: stage {stage_key} {status} write "

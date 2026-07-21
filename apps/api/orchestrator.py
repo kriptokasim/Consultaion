@@ -907,23 +907,32 @@ async def run_debate(
             done, _pending = await asyncio.wait(
                 {body_task, lease_lost_task}, return_when=asyncio.FIRST_COMPLETED
             )
+            if body_task in done:
+                # A fenced write can set lease_lost_event immediately before
+                # raising its specific exception. When both tasks complete in
+                # the same loop turn, preserve that root cause instead of
+                # masking it with the generic superseded error below.
+                await body_task
+            elif lease_lost_task in done:
+                body_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await body_task
+                from metrics import increment_metric as _inc_metric
+                _inc_metric("debate.lease.execution_cancelled")
+                logger.warning(
+                    "debate.execution_superseded debate_id=%s owner=%s epoch=%s",
+                    debate_id, lease.owner_id, lease.lease_epoch,
+                )
+                raise ExecutionSupersededError(
+                    f"Debate {debate_id} execution superseded — lease epoch "
+                    f"{lease.lease_epoch} no longer owned by {lease.owner_id}."
+                )
+            else:  # Defensive: FIRST_COMPLETED must return one of the tasks.
+                await body_task
         finally:
             lease_lost_task.cancel()
-        if lease_lost_task in done:
-            body_task.cancel()
             with suppress(asyncio.CancelledError):
-                await body_task
-            from metrics import increment_metric as _inc_metric
-            _inc_metric("debate.lease.execution_cancelled")
-            logger.warning(
-                "debate.execution_superseded debate_id=%s owner=%s epoch=%s",
-                debate_id, lease.owner_id, lease.lease_epoch,
-            )
-            raise ExecutionSupersededError(
-                f"Debate {debate_id} execution superseded — lease epoch "
-                f"{lease.lease_epoch} no longer owned by {lease.owner_id}."
-            )
-        await body_task  # propagate body exceptions into the handlers below
+                await lease_lost_task
         await _settle_terminal_hosted_credit(debate_id, continuation_id)
 
     except asyncio.CancelledError:
