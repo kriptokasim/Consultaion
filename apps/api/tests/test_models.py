@@ -91,21 +91,17 @@ def test_call_llm_uses_registry_model(monkeypatch):
     agents_module.USE_MOCK = False
     calls = {}
 
-    async def fake_completion(**kwargs):
+    async def fake_gateway_call(**kwargs):
         calls.update(kwargs)
+        return "hello", agents_module.UsageCall(
+            prompt_tokens=5,
+            completion_tokens=3,
+            total_tokens=8,
+            provider="openai",
+            model=kwargs.get("model_id"),
+        )
 
-        class Response:
-            def __init__(self):
-                self.choices = [type("obj", (), {"message": {"content": "hello"}})]
-                self.usage = {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
-                self.response_cost = None
-                self.provider = "test-provider"
-                self.model = kwargs.get("model")
-
-        return Response()
-
-    monkeypatch.setattr(agents_module, "acompletion", fake_completion)
-    monkeypatch.setattr("model_gateway.adapters.acompletion", fake_completion)
+    monkeypatch.setattr("model_gateway.agent_bridge.call_model_via_gateway", fake_gateway_call)
     monkeypatch.setenv("OPENAI_API_KEY", "test")
     monkeypatch.setattr("log_config.get_log_context", lambda: {"user_id": "test-pro-user"})
     monkeypatch.setattr(
@@ -142,7 +138,7 @@ def test_call_llm_uses_registry_model(monkeypatch):
     assert usage.total_tokens == 8.0
     assert usage.provider == "openai"
 
-    assert calls.get("model") == "openai/custom-model"
+    assert calls.get("model_id") == "custom-model"
 
 
 def test_billing_model_usage_endpoint(monkeypatch):

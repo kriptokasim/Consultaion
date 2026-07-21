@@ -162,6 +162,7 @@ def truncate_all_tables() -> None:
     creates its own database sessions.
     """
     from database import engine
+    from sqlalchemy import inspect
     from sqlmodel import SQLModel
     
     # Get all table names from SQLModel metadata
@@ -169,16 +170,20 @@ def truncate_all_tables() -> None:
     
     # Use a connection to execute raw SQL
     with engine.begin() as connection:
+        existing_tables = set(inspect(connection).get_table_names())
         # For SQLite, we need to disable foreign key constraints temporarily
         if engine.url.get_backend_name() == "sqlite":
             connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
         
         # Truncate each table (in reverse order to handle dependencies)
         for table in reversed(tables):
+            if table.name not in existing_tables:
+                continue
+            table_identifier = connection.dialect.identifier_preparer.format_table(table)
             try:
                 if engine.url.get_backend_name() == "sqlite":
                     # SQLite doesn't support TRUNCATE, use DELETE
-                    connection.exec_driver_sql(f"DELETE FROM {table.name}")
+                    connection.exec_driver_sql(f"DELETE FROM {table_identifier}")
                     # Reset the auto-increment counter for SQLite (if it exists)
                     # sqlite_sequence only exists if there are tables with AUTOINCREMENT
                     try:
@@ -190,7 +195,9 @@ def truncate_all_tables() -> None:
                         pass
                 else:
                     # PostgreSQL and others support TRUNCATE
-                    connection.exec_driver_sql(f"TRUNCATE TABLE {table.name} RESTART IDENTITY CASCADE")
+                    connection.exec_driver_sql(
+                        f"TRUNCATE TABLE {table_identifier} RESTART IDENTITY CASCADE"
+                    )
             except Exception as e:
                 # Log but don't fail - some tables might not exist or can't be truncated
                 import sys

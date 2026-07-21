@@ -1,11 +1,20 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from models import Debate, Message
+from models import Debate, Message, User
 from orchestrator import run_debate
 from sqlmodel import select
 
 from config import settings
+
+
+def _prepare_postgres_integration(db_session, user_id: str) -> None:
+    from database import engine
+
+    if engine.url.get_backend_name() != "postgresql":
+        pytest.skip("multi-session orchestration integration requires PostgreSQL")
+    db_session.add(User(id=user_id, email=f"{user_id}@example.com", password_hash="test"))
+    db_session.commit()
 
 
 @pytest.mark.anyio
@@ -17,6 +26,7 @@ async def test_arena_run_integration(db_session, monkeypatch):
     debate_id = "test-arena-debate"
     user_id = "test-user-id"
     prompt = "Why is water wet?"
+    _prepare_postgres_integration(db_session, user_id)
     
     # Create Debate record
     debate = Debate(
@@ -99,6 +109,7 @@ async def test_compare_run_integration(db_session, monkeypatch):
     debate_id = "test-compare-debate"
     user_id = "test-user-id"
     prompt = "Rust vs Go"
+    _prepare_postgres_integration(db_session, user_id)
     
     # Create Debate record with compare models
     debate = Debate(
@@ -145,7 +156,7 @@ async def test_compare_run_integration(db_session, monkeypatch):
             debate_id=debate_id,
             prompt=prompt,
             channel_id=f"debate:{debate_id}",
-            config_data={"compare_models": ["gpt4o-mini", "claude-haiku"]}
+            config_data={}
         )
         
         # Expire all cached objects in the test session to force fresh DB fetch
@@ -178,6 +189,7 @@ async def test_conversation_run_integration(db_session, monkeypatch):
     debate_id = "test-conversation-debate"
     user_id = "test-user-id"
     prompt = "Let's discuss Next.js"
+    _prepare_postgres_integration(db_session, user_id)
     
     # Create Debate record with conversation mode
     debate = Debate(
@@ -259,6 +271,7 @@ async def test_parliament_run_integration(db_session, monkeypatch):
     debate_id = "test-parliament-debate"
     user_id = "test-user-id"
     prompt = "Is AI good?"
+    _prepare_postgres_integration(db_session, user_id)
     
     # Create Debate record with parliament configuration
     debate = Debate(
