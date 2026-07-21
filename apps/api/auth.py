@@ -6,12 +6,13 @@ import time
 from typing import Any, Dict, Optional
 
 import jwt
-from config import settings
 from deps import get_session
 from fastapi import Depends, HTTPException, Request, Response, status
 from log_config import update_log_context
 from models import User
 from sqlmodel import Session, select
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -179,9 +180,10 @@ def resolve_user_from_token(token: Optional[str], session: Session) -> Optional[
     if not user_id:
         return None
     user = session.get(User, user_id)
-    if user:
+    if user and user.is_active:
         update_log_context(user_id=user.id)
-    return user
+        return user
+    return None
 
 
 def get_optional_user(

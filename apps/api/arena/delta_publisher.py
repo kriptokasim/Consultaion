@@ -48,6 +48,7 @@ class ArenaDeltaPublisher:
         self._first = True
         self._closed = False
         self._flush_task: Optional[asyncio.Task] = None
+        self._publish_tasks: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         if self._flush_task is not None:
@@ -84,6 +85,8 @@ class ArenaDeltaPublisher:
     async def flush(self) -> None:
         if self._pending:
             await self._flush()
+        if self._publish_tasks:
+            await asyncio.gather(*tuple(self._publish_tasks), return_exceptions=True)
 
     async def close(self) -> None:
         self._closed = True
@@ -106,17 +109,32 @@ class ArenaDeltaPublisher:
             await result
 
     async def _publish_one(self, delta: ModelDelta) -> None:
+        event = {
+            "type": "model_response_delta",
+            "_already_coalesced": True,
+            "response_id": self._response_id,
+            "model_id": self._model_id,
+            "text": delta.text,
+            "delta_sequence": delta.sequence,
+            "accumulated_chars": delta.accumulated_chars,
+        }
         try:
-            await self._call_publish({
-                "type": "model_response_delta",
-                "response_id": self._response_id,
-                "model_id": self._model_id,
-                "text": delta.text,
-                "delta_sequence": delta.sequence,
-                "accumulated_chars": delta.accumulated_chars,
-            })
+            result = self._publish_fn(event)
         except Exception:
             logger.warning("Delta publish failed (non-fatal)", exc_info=True)
+            return
+        if not inspect.isawaitable(result):
+            return
+
+        async def _background_publish() -> None:
+            try:
+                await result
+            except Exception:
+                logger.warning("Delta publish failed (non-fatal)", exc_info=True)
+
+        task = asyncio.create_task(_background_publish())
+        self._publish_tasks.add(task)
+        task.add_done_callback(self._publish_tasks.discard)
 
     async def _flush(self) -> None:
         if not self._pending:

@@ -3,7 +3,6 @@ import uuid
 from typing import Any, Optional
 
 import sqlalchemy as sa
-from config import settings
 from log_config import update_log_context
 from metrics import increment_metric
 from models import Debate, RatingPersona, Score, Team, TeamMember, User
@@ -11,6 +10,8 @@ from schemas import DebateConfig, PanelConfig
 from sqlalchemy import func
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, select
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +336,15 @@ def require_schema_current(session: Session) -> None:
     except HTTPException:
         raise
     except Exception as exc:
-        logger.warning("schema_current_check_failed error=%s", exc)
+        logger.error("schema_current_check_failed error=%s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "schema_check_unavailable",
+                "retryable": True,
+                "message": "Database schema safety could not be verified.",
+            },
+        ) from exc
 
 
 def excerpt(text: Optional[str], limit: int = 220) -> Optional[str]:

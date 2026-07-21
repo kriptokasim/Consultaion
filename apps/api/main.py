@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager, suppress
 
 from auth import get_csrf_cookie_name, get_current_admin, get_optional_user
 from billing.routes import billing_router
-from config import settings
 from correlation import CorrelationContext, set_correlation_context
 from database import init_db
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -78,6 +77,8 @@ from routes.teams import (
 from schemas import DebateCreate
 from sse_backend import get_sse_backend
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from config import settings
 
 root_level = settings.LOG_LEVEL.upper()
 # MyPy sees LOGGING_CONFIG as Dict[str, Any] but inferred loosely.
@@ -202,22 +203,32 @@ async def lifespan(app: FastAPI):
 
     # Verify migration version matches code
     try:
-        from alembic import config
+        from pathlib import Path
+
+        from alembic.config import Config
         from alembic.migration import MigrationContext
-        
-        # Assume alembic.ini is in the root or accessible
-        _alembic_cfg = config.Config("alembic.ini") 
-        # We need to set the script location relative to where we are or use absolute path
-        # If alembic.ini relies on recursive search or specific paths, this might be tricky.
-        # Simplification: Just verify alembic_version table is readable and has a revision.
+        from alembic.script import ScriptDirectory
+
+        api_root = Path(__file__).resolve().parent
+        alembic_cfg = Config(str(api_root / "alembic.ini"))
+        alembic_cfg.set_main_option("script_location", str(api_root / "alembic"))
+        heads = set(ScriptDirectory.from_config(alembic_cfg).get_heads())
         with engine.connect() as connection:
-             context = MigrationContext.configure(connection)
-             current_rev = context.get_current_revision()
-             logger.info(f"Current database revision: {current_rev}")
-             if not current_rev:
-                 logger.warning("Database has no migration revision! Changes may be missing.")
+            context = MigrationContext.configure(connection)
+            current_heads = set(context.get_current_heads())
+        logger.info("Database revisions current=%s expected=%s", current_heads, heads)
+        if current_heads != heads:
+            message = (
+                f"Database migration mismatch: current={sorted(current_heads)} "
+                f"expected={sorted(heads)}"
+            )
+            if settings.APP_ENV in ("production", "staging"):
+                raise RuntimeError(message)
+            logger.warning(message)
     except Exception as e:
-        logger.warning(f"Could not verify migration version: {e}")
+        if settings.APP_ENV in ("production", "staging"):
+            raise RuntimeError(f"FATAL: Could not verify migration head: {e}") from e
+        logger.warning("Could not verify migration version: %s", e)
         
     # Secondary startup validation for production safety
     if settings.APP_ENV in ("production", "staging"):

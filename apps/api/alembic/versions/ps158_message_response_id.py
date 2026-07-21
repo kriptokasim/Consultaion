@@ -43,6 +43,15 @@ def upgrade() -> None:
         )
         op.execute(
             sa.text(
+                "UPDATE message SET response_id = NULL WHERE id IN ("
+                "SELECT id FROM (SELECT id, ROW_NUMBER() OVER ("
+                "PARTITION BY debate_id, response_id ORDER BY id"
+                ") AS duplicate_rank FROM message WHERE response_id IS NOT NULL"
+                ") ranked WHERE duplicate_rank > 1)"
+            )
+        )
+        op.execute(
+            sa.text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_message_debate_response_id "
                 "ON message (debate_id, response_id) "
                 "WHERE response_id IS NOT NULL"
@@ -62,6 +71,15 @@ def upgrade() -> None:
             )
         except Exception:
             pass
+        op.execute(
+            sa.text(
+                "UPDATE message SET response_id = NULL WHERE id IN ("
+                "SELECT id FROM (SELECT id, ROW_NUMBER() OVER ("
+                "PARTITION BY debate_id, response_id ORDER BY id"
+                ") AS duplicate_rank FROM message WHERE response_id IS NOT NULL"
+                ") ranked WHERE duplicate_rank > 1)"
+            )
+        )
         if "uq_message_debate_response_id" not in indexes:
             op.create_index(
                 "uq_message_debate_response_id",

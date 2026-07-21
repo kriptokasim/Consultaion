@@ -86,7 +86,7 @@ export async function logout() {
   });
   // Clear the frontend bootstrap cookie set during Google OAuth redirect
   if (typeof window !== "undefined") {
-    document.cookie = "consultaion_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=lax";
+    document.cookie = "consultaion_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=lax";
   }
 }
 

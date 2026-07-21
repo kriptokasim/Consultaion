@@ -82,6 +82,7 @@ async def assert_execution_ownership(session, lease: ExecutionLease) -> None:
         .where(Debate.status == "running")
         .where(Debate.lease_expires_at.is_not(None))
         .where(Debate.lease_expires_at > now)
+        .with_for_update()
     )
     result = await session.execute(stmt)
     if result.first() is None:

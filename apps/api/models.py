@@ -201,6 +201,8 @@ class Debate(SQLModel, table=True):
     lease_expires_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     last_heartbeat_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     run_attempt: int = Field(default=0, nullable=False)
+    # Exact billing ledger reservation for the initial execution attempt.
+    credit_reservation_id: Optional[str] = Field(default=None, nullable=True, index=True)
 
     # PS155.1: Monotonic lease epoch — incremented atomically on every lease acquisition
     lease_epoch: int = Field(default=0, nullable=False)
@@ -272,6 +274,9 @@ class Team(SQLModel, table=True):
 
 class TeamMember(SQLModel, table=True):
     __tablename__ = "team_member"
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", name="uq_team_member_team_user"),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
     team_id: str = Field(foreign_key="team.id", nullable=False, index=True)
     user_id: str = Field(foreign_key="user.id", nullable=False, index=True)

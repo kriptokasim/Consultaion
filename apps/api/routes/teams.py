@@ -1,3 +1,4 @@
+from typing import Literal
 
 from audit import record_audit
 from auth import get_current_user
@@ -5,9 +6,16 @@ from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Team, TeamMember, User
 from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from routes.common import serialize_team, user_is_team_editor, user_is_team_member
+from routes.common import (
+    serialize_team,
+    user_is_team_editor,
+    user_is_team_member,
+    user_team_role,
+)
 
 router = APIRouter(tags=["teams"])
 
@@ -18,7 +26,7 @@ class TeamCreate(BaseModel):
 
 class TeamMemberCreate(BaseModel):
     email: str
-    role: str = "viewer"
+    role: Literal["viewer", "editor", "owner"] = "viewer"
 
 
 def _get_team_or_404(session: Session, team_id: str) -> Team:
@@ -108,7 +116,12 @@ async def add_team_member(
 ):
     team = _get_team_or_404(session, team_id)
     if not user_is_team_editor(session, current_user, team.id):
-        raise HTTPException(status_code=403, detail="only owners can manage members")
+        raise HTTPException(status_code=403, detail="team editor permission required")
+    actor_role = "owner" if current_user.role == "admin" else user_team_role(
+        session, current_user.id, team.id
+    )
+    if body.role == "owner" and actor_role != "owner":
+        raise HTTPException(status_code=403, detail="only owners can grant ownership")
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
     if not user:
@@ -117,12 +130,27 @@ async def add_team_member(
         select(TeamMember).where(TeamMember.team_id == team.id, TeamMember.user_id == user.id)
     ).first()
     if member:
+        if member.role == "owner" and actor_role != "owner":
+            raise HTTPException(status_code=403, detail="only owners can modify an owner")
+        if member.role == "owner" and body.role != "owner":
+            owner_count = session.exec(
+                select(func.count()).select_from(TeamMember).where(
+                    TeamMember.team_id == team.id,
+                    TeamMember.role == "owner",
+                )
+            ).one()
+            if owner_count <= 1:
+                raise HTTPException(status_code=409, detail="team must retain an owner")
         member.role = body.role
         session.add(member)
     else:
         member = TeamMember(team_id=team.id, user_id=user.id, role=body.role)
         session.add(member)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="team member already exists") from None
     record_audit(
         "team_member_added",
         user_id=current_user.id,

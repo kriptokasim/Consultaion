@@ -16,10 +16,10 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from agents import call_llm_for_role
-from config import settings
 from utils.json_utils import extract_and_parse_json
 from worker.arena_tasks import _extract_claims_from_response
 
+from config import settings
 from reporting.claim_contradiction import classify_contradiction
 from reporting.claim_quality import filter_claims
 from reporting.claim_similarity import compute_semantic_similarity, get_claim_embeddings
@@ -28,6 +28,11 @@ from reporting.report_integrity import validate_report_integrity
 from reporting.synthesis_schema import DecisionReport, QualityMeta
 
 logger = logging.getLogger(__name__)
+
+
+def _int_setting(name: str, default: int) -> int:
+    value = getattr(settings, name, default)
+    return value if isinstance(value, int) and not isinstance(value, bool) else default
 
 
 async def run_semantic_claims_analysis(
@@ -54,15 +59,24 @@ async def run_semantic_claims_analysis(
         name = resp.get("persona", resp.get("model", "Model"))
         claims_tasks.append(_extract_claims_from_response(prompt, content, name, debate_id))
     
-    extracted_lists = await asyncio.gather(*claims_tasks)
+    extracted_lists = await asyncio.gather(*claims_tasks, return_exceptions=True)
     
     all_claims = []
     for resp, claims in zip(responses, extracted_lists, strict=False):
+        if isinstance(claims, BaseException):
+            logger.warning("Claim extraction failed for one model: %s", claims)
+            continue
         model_name = resp.get("persona", resp.get("model", "Model"))
         # Phase 2: Apply claim quality filter before analysis
-        cleaned_claims = filter_claims(claims)
+        cleaned_claims = filter_claims(claims)[
+            : _int_setting("SYNTHESIS_MAX_CLAIMS_PER_MODEL", 12)
+        ]
         for c in cleaned_claims:
             all_claims.append({"claim": c, "model": model_name})
+            if len(all_claims) >= _int_setting("SYNTHESIS_MAX_TOTAL_CLAIMS", 60):
+                break
+        if len(all_claims) >= _int_setting("SYNTHESIS_MAX_TOTAL_CLAIMS", 60):
+            break
 
     # Fetch embeddings in batch for performance
     claim_texts = [item["claim"] for item in all_claims]
@@ -92,6 +106,14 @@ async def run_semantic_claims_analysis(
     ]
     similarity_pairs = []
     similarity_tasks = []
+    similarity_semaphore = asyncio.Semaphore(
+        _int_setting("SYNTHESIS_SIMILARITY_CONCURRENCY", 16)
+    )
+
+    async def _bounded_similarity(*args):
+        async with similarity_semaphore:
+            return await compute_semantic_similarity(*args)
+
     for i, item1 in enumerate(all_claims):
         for j in range(i + 1, len(all_claims)):
             item2 = all_claims[j]
@@ -99,15 +121,20 @@ async def run_semantic_claims_analysis(
             embed2 = embeddings[j] if j < len(embeddings) else None
             similarity_pairs.append((i, j))
             similarity_tasks.append(
-                compute_semantic_similarity(
+                _bounded_similarity(
                     item1["claim"],
                     item2["claim"],
                     embed1,
                     embed2,
                 )
             )
-    similarity_values = await asyncio.gather(*similarity_tasks)
+    similarity_values = await asyncio.gather(
+        *similarity_tasks, return_exceptions=True
+    )
     for (i, j), similarity in zip(similarity_pairs, similarity_values, strict=False):
+        if isinstance(similarity, BaseException):
+            logger.warning("Claim similarity failed for one pair: %s", similarity)
+            similarity = 0.0
         similarity_matrix[i][j] = similarity
         similarity_matrix[j][i] = similarity
 
@@ -165,7 +192,9 @@ async def run_semantic_claims_analysis(
 
     # Sort candidates by similarity descending & cap to avoid O(n^2) LLM calls
     candidate_pairs.sort(key=lambda x: x["similarity"], reverse=True)
-    limited_pairs = candidate_pairs[:25]  # Cap at 25 pairs maximum
+    limited_pairs = candidate_pairs[
+        : _int_setting("SYNTHESIS_MAX_CONTRADICTION_PAIRS", 25)
+    ]
 
     # Classify contradictions for limited pairs in parallel
     contradiction_tasks = []
@@ -174,11 +203,16 @@ async def run_semantic_claims_analysis(
         claim_b = pair["item_b"]["claim"]
         contradiction_tasks.append(classify_contradiction(claim_a, claim_b, debate_id, usage))
 
-    contra_results = await asyncio.gather(*contradiction_tasks)
+    contra_results = await asyncio.gather(
+        *contradiction_tasks, return_exceptions=True
+    )
 
     contradictions_count = 0
     contradiction_details = []
     for pair, res in zip(limited_pairs, contra_results, strict=False):
+        if isinstance(res, BaseException):
+            logger.warning("Contradiction classification failed for one pair: %s", res)
+            continue
         if res.get("is_contradictory"):
             contradictions_count += 1
             contradiction_details.append({
@@ -239,7 +273,25 @@ async def _run_synthesis_preanalysis(
     evaluations, semantic_analysis = await asyncio.gather(
         evaluate_models_blind(prompt, responses, debate_id, usage),
         run_semantic_claims_analysis(prompt, responses, debate_id, usage),
+        return_exceptions=True,
     )
+    if isinstance(evaluations, BaseException):
+        logger.warning("Blind model evaluation failed; continuing: %s", evaluations)
+        evaluations = []
+    if isinstance(semantic_analysis, BaseException):
+        logger.warning("Semantic analysis failed; continuing: %s", semantic_analysis)
+        semantic_analysis = {
+            "consensus_claims": [],
+            "unique_insights": [],
+            "contested_claims": [],
+            "active_contradictions": [],
+            "contradictions_count": 0,
+            "contradiction_details": [],
+            "divergence_score": 0.0,
+            "semantic_analysis_mode": "unavailable",
+            "embedding_success": False,
+            "contradiction_pairs_classified": 0,
+        }
     return evaluations, semantic_analysis
 
 
@@ -438,6 +490,8 @@ async def generate_decision_report(
                 usage.add_call(call_usage)
             
             data = extract_and_parse_json(raw_content) or {}
+            if not data:
+                raise ValueError("Synthesizer returned no valid JSON object")
             
             draft_report = DecisionReport.model_validate(data)
             # Check initial report integrity
@@ -453,6 +507,7 @@ async def generate_decision_report(
                 {"role": "system", "content": "You are a JSON repair tool. Correct the provided text to output strictly valid JSON matching the schema of a Decision Report. Do not include markdown fences or explanation."},
                 {"role": "user", "content": f"Schema: {DecisionReport.model_json_schema()}\n\nError: {exc}\n\nInvalid Content:\n{raw_content}\n\nReturn repaired JSON:"}
             ]
+            repaired_json = ""
             try:
                 repaired_raw, call_usage = await call_llm_for_role(
                     repair_messages,
@@ -464,6 +519,8 @@ async def generate_decision_report(
                 if usage is not None and hasattr(usage, "add_call"):
                     usage.add_call(call_usage)
                 data = extract_and_parse_json(repaired_raw) or {}
+                if not data:
+                    raise ValueError("JSON repair returned no valid object")
                 repaired_json = json.dumps(data)
                 draft_report = DecisionReport.model_validate(data)
                 # Check repaired report integrity

@@ -93,6 +93,15 @@ export async function GET(request: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 30, // 30 days
     });
+    // Double-submit CSRF token. This one must remain readable by the browser
+    // client so it can mirror the value in X-CSRF-Token on mutations.
+    responseNext.cookies.set("csrf_token", crypto.randomUUID().replaceAll("-", ""), {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
 
     // Clear the OAuth state and next cookies
     responseNext.cookies.set("oauth_state", "", {

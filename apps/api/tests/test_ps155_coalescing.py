@@ -6,7 +6,13 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sse_backend import DeltaCoalescer, RedisChannelBackend, _delta_key, _is_delta
+from sse_backend import (
+    DeltaCoalescer,
+    RedisChannelBackend,
+    SSESequenceError,
+    _delta_key,
+    _is_delta,
+)
 
 
 def _make_delta(response_id: str, text: str, accumulated_chars: int = 0, seq: int = 1) -> dict:
@@ -160,7 +166,7 @@ async def test_redis_backend_coalesces_deltas_before_lifecycle_event():
     """Production Redis transport must match memory coalescing semantics."""
     backend = RedisChannelBackend.__new__(RedisChannelBackend)
     backend._redis = AsyncMock()
-    backend._redis.incr.side_effect = [1, 2]
+    backend._redis.incr.side_effect = [1, 2, 3]
     history_pipeline = MagicMock()
     history_pipeline.rpush.return_value = history_pipeline
     history_pipeline.expire.return_value = history_pipeline
@@ -209,3 +215,18 @@ async def test_redis_backend_pipelines_history_maintenance():
     history_pipeline.expire.assert_called_once_with("sse:history:debate:d1", 60)
     history_pipeline.ltrim.assert_called_once_with("sse:history:debate:d1", -100, -1)
     history_pipeline.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_redis_sequence_allocation_failure_is_fail_closed():
+    backend = RedisChannelBackend.__new__(RedisChannelBackend)
+    backend._redis = AsyncMock()
+    backend._redis.incr.side_effect = RuntimeError("redis unavailable")
+    backend._ttl_seconds = 60
+    backend._max_queue_size = 100
+    backend._coalescers = {}
+    backend._coalescer_flush_tasks = {}
+
+    with pytest.raises(SSESequenceError):
+        await backend.publish("debate:d1", _make_non_delta("notice"))
+    backend._redis.publish.assert_not_awaited()

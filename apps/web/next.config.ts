@@ -10,7 +10,9 @@ const withBundleAnalyzer = bundleAnalyzer({
 const workspaceRoot = path.join(__dirname, '..', '..')
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // Standalone tracing creates symlinks that standard Windows accounts may
+  // not be permitted to create. Deployments keep standalone enabled.
+  output: process.env.NEXT_STANDALONE === 'false' ? undefined : 'standalone',
   // Patchset 112: Optimize package imports to reduce bundle size
   experimental: {
     optimizePackageImports: [

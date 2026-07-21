@@ -204,6 +204,10 @@ class StreamLeaseResult(Enum):
     ERROR_FAIL_CLOSED = "error_fail_closed"
 
 
+class SSESequenceError(RuntimeError):
+    """A durable monotonic SSE event identity could not be allocated."""
+
+
 class BaseSSEBackend(Protocol):
     async def start(self) -> None: ...
 
@@ -303,6 +307,11 @@ class MemoryChannelBackend:
             self._last_seen[channel_id] = time.time()
 
     async def publish(self, channel_id: str, event: dict) -> None:
+        if event.get("_already_coalesced"):
+            event = dict(event)
+            event.pop("_already_coalesced", None)
+            await self._publish_single(channel_id, event)
+            return
         # PS155.2: Route through delta coalescer
         if channel_id not in self._coalescers:
             self._coalescers[channel_id] = DeltaCoalescer()
@@ -651,6 +660,11 @@ class RedisChannelBackend:
         await self._redis.set(key, "1", ex=self._ttl_seconds)
 
     async def publish(self, channel_id: str, event: dict) -> None:
+        if event.get("_already_coalesced"):
+            event = dict(event)
+            event.pop("_already_coalesced", None)
+            await self._publish_single(channel_id, event)
+            return
         # Keep production Redis behavior aligned with the memory backend: token
         # fragments are coalesced per response and flushed before lifecycle
         # events so transport ordering remains intact.
@@ -708,7 +722,9 @@ class RedisChannelBackend:
                     seq = int(seq)
         except Exception as e:
             logger.error(f"Failed to increment Redis sequence for {channel_id}: {e}")
-            seq = 0
+            raise SSESequenceError(
+                f"Cannot allocate monotonic SSE sequence for {channel_id}"
+            ) from e
 
         # Create unified event envelope
         envelope = {

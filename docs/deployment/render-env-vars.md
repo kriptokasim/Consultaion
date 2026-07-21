@@ -26,7 +26,7 @@ Replace `consultaion.vercel.app` with your actual Vercel deployment URL.
 ### Auth Cookie Configuration
 
 ```bash
-COOKIE_NAME=consultaion_session
+COOKIE_NAME=consultaion_token
 ```
 
 **Auto-configured** (do not set manually):
@@ -163,7 +163,7 @@ CORS_ORIGINS=https://consultaion.vercel.app
 # Auth
 JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters-long
 JWT_TTL_SECONDS=86400
-COOKIE_NAME=consultaion_session
+COOKIE_NAME=consultaion_token
 ENABLE_CSRF=1
 
 # Database
@@ -211,7 +211,7 @@ After setting environment variables and deploying:
 2. **Test Auth Flow**:
    - Navigate to your Vercel URL and login
    - Check browser DevTools → Application → Cookies
-   - Verify `consultaion_session` cookie exists for `consultaion.onrender.com`
+   - Verify `consultaion_token` cookie exists for `consultaion.onrender.com`
    - Verify it has `Secure` and `SameSite=None` flags
 
 ## Troubleshooting

@@ -190,6 +190,10 @@ class AppSettings(BaseSettings):
     ARENA_MODEL_TIMEOUT_SECONDS: int = Field(45, ge=5, le=300, description="Per-model timeout for Arena perspective calls")
     ARENA_MODEL_TOTAL_TIMEOUT_S: int = Field(60, ge=10, le=600, description="PS155.3: Total max execution time for an Arena model streaming run")
     ARENA_DELTA_FLUSH_MS: int = Field(150, ge=0, le=1000, description="PS155.2: SSE server-side delta coalescing flush interval in milliseconds")
+    SYNTHESIS_MAX_CLAIMS_PER_MODEL: int = Field(12, ge=1, le=100)
+    SYNTHESIS_MAX_TOTAL_CLAIMS: int = Field(60, ge=1, le=500)
+    SYNTHESIS_SIMILARITY_CONCURRENCY: int = Field(16, ge=1, le=100)
+    SYNTHESIS_MAX_CONTRADICTION_PAIRS: int = Field(25, ge=0, le=200)
 
     RESPONSES_CONTRACT_VERSION: int = 1
 

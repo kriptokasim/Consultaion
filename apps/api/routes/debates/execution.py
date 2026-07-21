@@ -326,7 +326,7 @@ async def continue_debate_run(
                 session,
                 current_user.id,
                 debate_id=debate_id,
-                run_attempt=getattr(debate, "run_attempt", None) or 1,
+                run_attempt=(getattr(debate, "run_attempt", 0) or 0) + 1,
                 continuation_id=continuation_record.id if continuation_record else None,
             )
             credit_reserved = True
@@ -349,7 +349,11 @@ async def continue_debate_run(
     if continuation_record:
         from services.continuations import transition_continuation_sync
         transition_continuation_sync(
-            session, continuation_record.id, ["requested"], "preflight_passed"
+            session,
+            continuation_record.id,
+            ["requested"],
+            "preflight_passed",
+            commit=False,
         )
 
     # 4. Conditional atomic update
@@ -360,19 +364,9 @@ async def continue_debate_run(
         .values(status="scheduled")
     )
     result = session.execute(stmt_upd)
-    session.commit()
-
     if result.rowcount == 0:
-        if credit_reserved:
-            refund_hosted_credit(
-                session,
-                current_user.id,
-                reservation_id=getattr(continuation_record, "credit_reservation_id", None)
-                if continuation_record
-                else None,
-                debate_id=debate_id,
-            )
-            session.commit()
+        # Roll back reservation, preflight transition and scheduling together.
+        session.rollback()
         if continuation_record:
             try:
                 from services.continuations import transition_continuation_sync
@@ -388,6 +382,10 @@ async def continue_debate_run(
             code="debate.continue_conflict",
             status_code=409
         )
+
+    # Reservation + reservation identity + preflight transition + scheduling
+    # become visible atomically.
+    session.commit()
 
     # Refresh debate object
     session.refresh(debate)
@@ -420,7 +418,14 @@ async def continue_debate_run(
             
     except Exception as dispatch_exc:
         if credit_reserved:
-            refund_hosted_credit(session, current_user.id)
+            refund_hosted_credit(
+                session,
+                current_user.id,
+                reservation_id=getattr(continuation_record, "credit_reservation_id", None)
+                if continuation_record
+                else None,
+                debate_id=debate_id,
+            )
         
         stmt_revert = (
             sa.update(Debate)

@@ -270,6 +270,7 @@ def reserve_hosted_credit(
     from exceptions import ValidationError
     from models import UsageLedgerEntry, User
     from sqlalchemy import update
+    from sqlalchemy.exc import IntegrityError
     from sqlmodel import select
 
     uid = _normalize_user_id(user_id)
@@ -293,28 +294,40 @@ def reserve_hosted_credit(
             select(UsageLedgerEntry).where(UsageLedgerEntry.idempotency_key == idempotency_key)
         ).first()
         if existing:
-            return existing.id
+            if (
+                existing.user_id == uid
+                and existing.kind == "credit_reservation"
+                and existing.debate_id == debate_id
+            ):
+                return existing.id
+            raise ValidationError(
+                message="Hosted-credit reservation identity conflicts with its billing context.",
+                code="hosted_credits.reservation_conflict",
+            )
 
     limit = getattr(user, "hosted_credits_limit", 10)
-    stmt = (
-        update(User)
-        .where(User.id == uid)
-        .where(User.hosted_credits_used < User.hosted_credits_limit)
-        .values(hosted_credits_used=User.hosted_credits_used + 1)
-        .execution_options(synchronize_session=False)
-    )
-    result = db.exec(stmt)
-    if result.rowcount == 0:
-        db.refresh(user)
-        used = getattr(user, "hosted_credits_used", 0)
-        raise ValidationError(
-            message=f"You have exhausted your free hosted runs ({used}/{limit}).",
-            code="hosted_credits.exhausted",
-            hint="Please upgrade to a Pro plan, add your own API key under Settings, or run a mock/demo run.",
+
+    def _increment_counter() -> None:
+        stmt = (
+            update(User)
+            .where(User.id == uid)
+            .where(User.hosted_credits_used < User.hosted_credits_limit)
+            .values(hosted_credits_used=User.hosted_credits_used + 1)
+            .execution_options(synchronize_session=False)
         )
-    db.expire(user, ["hosted_credits_used"])
+        result = db.exec(stmt)
+        if result.rowcount == 0:
+            db.refresh(user)
+            used = getattr(user, "hosted_credits_used", 0)
+            raise ValidationError(
+                message=f"You have exhausted your free hosted runs ({used}/{limit}).",
+                code="hosted_credits.exhausted",
+                hint="Please upgrade to a Pro plan, add your own API key under Settings, or run a mock/demo run.",
+            )
+        db.expire(user, ["hosted_credits_used"])
 
     if not debate_id or not idempotency_key:
+        _increment_counter()
         return None
 
     entry = UsageLedgerEntry(
@@ -325,14 +338,43 @@ def reserve_hosted_credit(
         idempotency_key=idempotency_key,
         amount=1,
         debate_id=debate_id,
-        meta={
-            "run_attempt": attempt_part,
-            "continuation_id": continuation_id,
-        },
+        meta={"run_attempt": attempt_part, "continuation_id": continuation_id},
     )
-    db.add(entry)
-    db.flush()
+    try:
+        # The savepoint keeps a losing idempotency insert from rolling back the
+        # caller's surrounding debate/continuation transaction.
+        with db.begin_nested():
+            db.add(entry)
+            db.flush()
+            _increment_counter()
+    except IntegrityError:
+        existing = db.exec(
+            select(UsageLedgerEntry).where(UsageLedgerEntry.idempotency_key == idempotency_key)
+        ).first()
+        if (
+            existing
+            and existing.user_id == uid
+            and existing.kind == "credit_reservation"
+            and existing.debate_id == debate_id
+        ):
+            return existing.id
+        raise
     return entry.id
+
+
+def _reservation_matches(
+    entry: object,
+    *,
+    user_id: str,
+    debate_id: str | None,
+) -> bool:
+    """Reject reservation identifiers that do not belong to this billing context."""
+    return bool(
+        entry
+        and getattr(entry, "user_id", None) == user_id
+        and getattr(entry, "kind", None) == "credit_reservation"
+        and (debate_id is None or getattr(entry, "debate_id", None) == debate_id)
+    )
 
 
 def refund_hosted_credit(
@@ -363,12 +405,10 @@ def refund_hosted_credit(
     if not user:
         return False
 
-    plan = get_active_plan(db, uid)
-    if not plan.is_default_free:
-        return False
-
     entry: UsageLedgerEntry | None = None
     if reservation_id:
+        if not debate_id:
+            return False
         entry = db.get(UsageLedgerEntry, reservation_id)
     elif debate_id:
         entry = db.exec(
@@ -379,6 +419,11 @@ def refund_hosted_credit(
             .where(UsageLedgerEntry.user_id == uid)
             .order_by(UsageLedgerEntry.created_at.desc())
         ).first()
+
+    if entry is not None and not _reservation_matches(
+        entry, user_id=uid, debate_id=debate_id
+    ):
+        return False
 
     if entry is None:
         # Legacy path without ledger row: single atomic counter floor (not exactly-once)
@@ -442,10 +487,12 @@ def consume_hosted_credit(
     from sqlmodel import select
 
     entry: UsageLedgerEntry | None = None
+    uid = _normalize_user_id(user_id)
     if reservation_id:
+        if not debate_id:
+            return False
         entry = db.get(UsageLedgerEntry, reservation_id)
     elif debate_id:
-        uid = _normalize_user_id(user_id)
         entry = db.exec(
             select(UsageLedgerEntry)
             .where(UsageLedgerEntry.debate_id == debate_id)
@@ -455,7 +502,11 @@ def consume_hosted_credit(
             .order_by(UsageLedgerEntry.created_at.desc())
         ).first()
 
-    if entry is None or entry.status != "reserved":
+    if (
+        entry is None
+        or not _reservation_matches(entry, user_id=uid, debate_id=debate_id)
+        or entry.status != "reserved"
+    ):
         return False
 
     now = datetime.now(timezone.utc)

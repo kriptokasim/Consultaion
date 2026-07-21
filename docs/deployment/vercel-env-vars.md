@@ -112,7 +112,7 @@ After deployment:
    - Navigate to your Vercel URL
    - Open Network tab in DevTools
    - Look for requests to your API URL
-   - Verify requests include `Cookie` header with `consultaion_session`
+   - Verify requests include `Cookie` header with `consultaion_token`
 
 3. **Test Auth Flow**:
    - Login via Google or email/password
@@ -198,7 +198,7 @@ module.exports = {
         has: [
           {
             type: 'cookie',
-            key: 'consultaion_session',
+            key: 'consultaion_token',
           },
         ],
       },

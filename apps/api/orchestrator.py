@@ -86,6 +86,62 @@ async def _update_continuation_status(
         logger.warning(f"Failed to update continuation status for {continuation_id} to {status}: {e}")
 
 
+async def _settle_terminal_hosted_credit(
+    debate_id: str,
+    continuation_id: Optional[str],
+) -> None:
+    """Settle exactly the reservation attached to this terminal execution."""
+    from billing.service import consume_hosted_credit, refund_hosted_credit
+    from database import engine
+    from models import DebateContinuation
+    from sqlmodel import Session
+
+    def _settle() -> None:
+        with Session(engine) as session:
+            debate = session.get(Debate, debate_id)
+            if not debate or debate.status not in {
+                "completed",
+                "completed_with_warnings",
+                "failed",
+                "cancelled",
+            }:
+                return
+
+            reservation_id = debate.credit_reservation_id
+            if continuation_id:
+                continuation = session.get(DebateContinuation, continuation_id)
+                if not continuation or continuation.debate_id != debate_id:
+                    return
+                reservation_id = continuation.credit_reservation_id
+
+            if not debate.user_id or not reservation_id:
+                return
+            operation = (
+                consume_hosted_credit
+                if debate.status in {"completed", "completed_with_warnings"}
+                else refund_hosted_credit
+            )
+            operation(
+                session,
+                debate.user_id,
+                reservation_id=reservation_id,
+                debate_id=debate_id,
+            )
+            session.commit()
+
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, _settle)
+    except Exception as exc:
+        # Billing settlement can be retried safely because the ledger transition
+        # is conditional and the reservation identity is durable.
+        logger.error(
+            "Hosted-credit terminal settlement failed: debate_id=%s continuation_id=%s error=%s",
+            debate_id,
+            continuation_id,
+            exc,
+        )
+
+
 async def _try_acquire_lease(
     debate_id: str, runner_id: str, lease_seconds: int = 60
 ) -> tuple[bool, int]:
@@ -868,6 +924,7 @@ async def run_debate(
                 f"{lease.lease_epoch} no longer owned by {lease.owner_id}."
             )
         await body_task  # propagate body exceptions into the handlers below
+        await _settle_terminal_hosted_credit(debate_id, continuation_id)
 
     except asyncio.CancelledError:
         logger.warning(
@@ -935,26 +992,6 @@ async def run_debate(
                         session.add(debate)
                     await session.commit()
                     
-                    # Exactly-once hosted credit refund via durable ledger reservation
-                    if debate.user_id:
-                        try:
-                            from billing.service import refund_hosted_credit
-                            from database import engine
-                            from sqlmodel import Session
-
-                            uid = debate.user_id
-                            did = debate_id
-
-                            def _run_refund():
-                                with Session(engine) as sync_session:
-                                    refund_hosted_credit(
-                                        sync_session, uid, debate_id=did
-                                    )
-                                    sync_session.commit()
-
-                            await asyncio.get_running_loop().run_in_executor(None, _run_refund)
-                        except Exception as refund_err:
-                            logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except ExecutionSupersededError:
             raise
         except Exception as inner_exc:
@@ -964,6 +1001,7 @@ async def run_debate(
             channel_id,
             {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Temporary AI provider issue. Please retry."}},
         )
+        await _settle_terminal_hosted_credit(debate_id, continuation_id)
 
     except Exception as exc:
         logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
@@ -1040,26 +1078,6 @@ async def run_debate(
                         session.add(debate)
                     await session.commit()
                     
-                    # Exactly-once hosted credit refund via durable ledger reservation
-                    if debate.user_id:
-                        try:
-                            from billing.service import refund_hosted_credit
-                            from database import engine
-                            from sqlmodel import Session
-
-                            uid = debate.user_id
-                            did = debate_id
-
-                            def _run_refund():
-                                with Session(engine) as sync_session:
-                                    refund_hosted_credit(
-                                        sync_session, uid, debate_id=did
-                                    )
-                                    sync_session.commit()
-
-                            await asyncio.get_running_loop().run_in_executor(None, _run_refund)
-                        except Exception as refund_err:
-                            logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except ExecutionSupersededError:
             raise
         except Exception as inner_exc:
@@ -1069,6 +1087,7 @@ async def run_debate(
             channel_id,
             {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Debate failed due to an internal error."}},
         )
+        await _settle_terminal_hosted_credit(debate_id, continuation_id)
 
     finally:
         # PS156 Track E: stop heartbeat, conditionally release only our own

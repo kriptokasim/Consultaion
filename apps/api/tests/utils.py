@@ -1,11 +1,13 @@
 import contextlib
 import os
+import tempfile
 from pathlib import Path
 from typing import Dict, Generator, Optional
 from uuid import uuid4
 
-from config import settings
 from parliament.provider_health import clear_all_health_states, reset_health_state
+
+from config import settings
 
 
 @contextlib.contextmanager
@@ -96,8 +98,8 @@ def make_test_database_url(test_id: Optional[str] = None) -> str:
     if test_id is None:
         test_id = uuid4().hex[:12]
     
-    # Use /tmp for test databases to avoid cluttering the project directory
-    db_path = Path(f"/tmp/consultaion_test_{test_id}.db")
+    # Use the platform temp directory (works on Windows and POSIX).
+    db_path = Path(tempfile.gettempdir()) / f"consultaion_test_{test_id}.db"
     return f"sqlite:///{db_path}"
 
 

@@ -18,8 +18,13 @@ REQUIRED_TABLES = [
 ]
 
 MODEL_CRITICAL_COLUMNS: dict[str, list[str]] = {
-    "debate": ["id", "prompt", "status", "created_at", "updated_at", "user_id"],
-    "message": ["id", "debate_id", "role", "content", "created_at"],
+    "debate": [
+        "id", "prompt", "status", "created_at", "updated_at", "user_id",
+        "credit_reservation_id",
+    ],
+    "message": [
+        "id", "debate_id", "role", "content", "created_at", "response_id",
+    ],
     "score": ["id", "debate_id", "persona", "score", "created_at"],
     "debate_continuation": [
         "id", "debate_id", "status", "created_at",

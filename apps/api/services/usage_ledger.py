@@ -177,32 +177,59 @@ def record_export(session: Session, user_id: str, debate_id: str) -> UsageLedger
 
 
 def reserve_hosted_credit(session: Session, user_id: str, debate_id: str) -> UsageLedgerEntry:
-    """Record a hosted credit reservation."""
-    return _idempotent_write(
-        session,
-        user_id=user_id,
-        kind="credit_reservation",
-        idempotency_key=f"credit_reserve:{debate_id}",
-        amount=1,
-        debate_id=debate_id,
+    """Compatibility wrapper around the canonical billing implementation."""
+    from billing.service import reserve_hosted_credit as canonical_reserve
+
+    reservation_id = canonical_reserve(
+        session, user_id, debate_id=debate_id, run_attempt=0
     )
+    if not reservation_id:
+        raise ValueError("Hosted-credit reservation is not required for this plan")
+    entry = session.get(UsageLedgerEntry, reservation_id)
+    if not entry:
+        raise RuntimeError("Canonical hosted-credit reservation was not persisted")
+    return entry
 
 
 def settle_hosted_credit(session: Session, user_id: str, debate_id: str) -> UsageLedgerEntry:
-    """Settle hosted credit after operation completes."""
+    """Settle through the canonical billing state transition."""
+    from billing.service import consume_hosted_credit
+
     entry = session.exec(
-        select(UsageLedgerEntry).where(UsageLedgerEntry.idempotency_key == f"credit_reserve:{debate_id}")
+        select(UsageLedgerEntry)
+        .where(UsageLedgerEntry.debate_id == debate_id)
+        .where(UsageLedgerEntry.user_id == user_id)
+        .where(UsageLedgerEntry.kind == "credit_reservation")
+        .order_by(UsageLedgerEntry.created_at.desc())
     ).first()
     if not entry:
         raise ValueError(f"No credit reservation found for debate {debate_id}")
-    return _transition(session, entry, "settled")
+    changed = consume_hosted_credit(
+        session, user_id, reservation_id=entry.id, debate_id=debate_id
+    )
+    if not changed:
+        raise LedgerTransitionError(entry.status, "settled")
+    session.refresh(entry)
+    return entry
 
 
 def refund_hosted_credit(session: Session, user_id: str, debate_id: str) -> UsageLedgerEntry:
-    """Refund hosted credit (operation failed/cancelled)."""
+    """Refund through the canonical billing state transition."""
+    from billing.service import refund_hosted_credit as canonical_refund
+
     entry = session.exec(
-        select(UsageLedgerEntry).where(UsageLedgerEntry.idempotency_key == f"credit_reserve:{debate_id}")
+        select(UsageLedgerEntry)
+        .where(UsageLedgerEntry.debate_id == debate_id)
+        .where(UsageLedgerEntry.user_id == user_id)
+        .where(UsageLedgerEntry.kind == "credit_reservation")
+        .order_by(UsageLedgerEntry.created_at.desc())
     ).first()
     if not entry:
         raise ValueError(f"No credit reservation found for debate {debate_id}")
-    return _transition(session, entry, "refunded")
+    changed = canonical_refund(
+        session, user_id, reservation_id=entry.id, debate_id=debate_id
+    )
+    if not changed:
+        raise LedgerTransitionError(entry.status, "refunded")
+    session.refresh(entry)
+    return entry

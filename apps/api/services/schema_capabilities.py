@@ -21,6 +21,8 @@ class SchemaCapabilities:
     has_pairwise_vote_table: bool = False
     has_score_table: bool = False
     has_message_table: bool = False
+    has_message_response_id: bool = False
+    has_debate_credit_reservation_id: bool = False
     is_at_alembic_head: bool = False
     inspection_succeeded: bool = False
 
@@ -124,6 +126,12 @@ def get_schema_capabilities(
             has_pairwise_vote_table=_check_table_exists(session, "pairwise_vote"),
             has_score_table=_check_table_exists(session, "score"),
             has_message_table=_check_table_exists(session, "message"),
+            has_message_response_id=_check_column_exists(
+                session, "message", "response_id"
+            ),
+            has_debate_credit_reservation_id=_check_column_exists(
+                session, "debate", "credit_reservation_id"
+            ),
             is_at_alembic_head=_check_alembic_head(session),
             inspection_succeeded=True,
         )
@@ -143,6 +151,10 @@ def get_schema_capabilities(
         missing.append("scores")
     if not caps.has_message_table:
         missing.append("messages")
+    if not caps.has_message_response_id:
+        missing.append("message.response_id")
+    if not caps.has_debate_credit_reservation_id:
+        missing.append("debate.credit_reservation_id")
     if not caps.is_at_alembic_head:
         missing.append("schema_behind_head")
     caps.missing_capabilities = missing

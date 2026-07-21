@@ -45,6 +45,8 @@ def transition_continuation_sync(
     target_status: str,
     failure_code: Optional[str] = None,
     failure_detail_safe: Optional[str] = None,
+    *,
+    commit: bool = True,
 ) -> DebateContinuation:
     """Transition a specific continuation record atomically to target_status.
 
@@ -87,8 +89,11 @@ def transition_continuation_sync(
     record_continuation_transition(original_status, target_status)
 
     session.add(continuation)
-    session.commit()
-    session.refresh(continuation)
+    if commit:
+        session.commit()
+        session.refresh(continuation)
+    else:
+        session.flush()
     return continuation
 
 

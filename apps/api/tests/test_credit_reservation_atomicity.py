@@ -9,7 +9,7 @@ conditional UPDATE (``used < limit``); these tests pin that behavior.
 import uuid
 
 import pytest
-from billing.service import refund_hosted_credit, reserve_hosted_credit
+from billing.service import consume_hosted_credit, refund_hosted_credit, reserve_hosted_credit
 from exceptions import ValidationError
 from models import User
 from sqlmodel import Session
@@ -87,6 +87,60 @@ def test_refund_decrements_and_floors_at_zero(db_session: Session):
     db_session.refresh(user)
     assert user.hosted_credits_used == 0
 
+
+def test_exact_reservation_is_bound_to_user_kind_and_debate(db_session: Session):
+    owner = _make_free_user(db_session, limit=5, used=0)
+    other = _make_free_user(db_session, limit=5, used=0)
+    reservation_id = reserve_hosted_credit(
+        db_session, owner.id, debate_id="debate-owned", run_attempt=1
+    )
+    assert reservation_id
+
+    assert (
+        refund_hosted_credit(
+            db_session,
+            other.id,
+            reservation_id=reservation_id,
+            debate_id="debate-owned",
+        )
+        is False
+    )
+    assert (
+        consume_hosted_credit(
+            db_session,
+            owner.id,
+            reservation_id=reservation_id,
+            debate_id="debate-wrong",
+        )
+        is False
+    )
+    assert refund_hosted_credit(db_session, owner.id, reservation_id=reservation_id) is False
+
+
+def test_reserved_credit_refunds_even_if_plan_changes(db_session: Session, monkeypatch):
+    user = _make_free_user(db_session, limit=5, used=0)
+    reservation_id = reserve_hosted_credit(
+        db_session, user.id, debate_id="debate-upgraded", run_attempt=1
+    )
+    db_session.commit()
+
+    # Refund is governed by the durable reservation, never today's plan.
+    monkeypatch.setattr(
+        "billing.service.get_active_plan",
+        lambda *_args, **_kwargs: pytest.fail("refund must not re-check the plan"),
+    )
+    assert (
+        refund_hosted_credit(
+            db_session,
+            user.id,
+            reservation_id=reservation_id,
+            debate_id="debate-upgraded",
+        )
+        is True
+    )
+    db_session.commit()
+    db_session.refresh(user)
+    assert user.hosted_credits_used == 0
     # A second refund must not drive the counter negative.
     refund_hosted_credit(db_session, user.id)
     db_session.commit()

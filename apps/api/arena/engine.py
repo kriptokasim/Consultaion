@@ -33,6 +33,62 @@ logger = logging.getLogger(__name__)
 MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
 
 
+async def _publish_lifecycle_best_effort(backend, channel: str, event: dict) -> None:
+    """Lifecycle telemetry must never cancel model execution."""
+    try:
+        await backend.publish(channel, event)
+    except Exception:
+        logger.warning(
+            "arena.lifecycle_publish_failed channel=%s type=%s",
+            channel,
+            event.get("type"),
+            exc_info=True,
+        )
+
+
+def _is_response_identity_conflict(exc: Exception) -> bool:
+    """Return true only for the expected durable response collision."""
+    orig = getattr(exc, "orig", None)
+    constraint = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    if constraint == "uq_message_debate_response_id":
+        return True
+    message = str(orig or exc).lower()
+    return (
+        "uq_message_debate_response_id" in message
+        or (
+            "unique constraint failed" in message
+            and "message.debate_id" in message
+            and "message.response_id" in message
+        )
+    )
+
+
+def _lease_for_arena_write(
+    debate_id: str,
+    run_attempt: int,
+    owner_id: str | None,
+    lease_epoch: int | None,
+):
+    """Resolve the fencing identity; production writes always require one."""
+    from orchestration.execution_context import ExecutionLease, get_current_execution_lease
+
+    from config import settings
+
+    lease = get_current_execution_lease()
+    if lease is not None:
+        return lease
+    if owner_id and lease_epoch is not None:
+        return ExecutionLease.create(
+            debate_id,
+            owner_id=owner_id,
+            lease_epoch=lease_epoch,
+            run_attempt=run_attempt,
+        )
+    if getattr(settings, "APP_ENV", "local") in {"production", "staging"}:
+        raise RuntimeError("Arena write attempted without an execution lease")
+    return None
+
+
 def _derive_model_family(model_info) -> str:
     if model_info.litellm_model and "/" in model_info.litellm_model:
         return model_info.litellm_model.split("/", 1)[1]
@@ -80,7 +136,7 @@ async def persist_and_publish_arena_response(
 
     from orchestration.execution_context import get_current_execution_lease
     from orchestration.execution_lease import ExecutionSupersededError
-    from sqlalchemy import select as sa_select, text
+    from sqlalchemy import select as sa_select
     from sqlalchemy.exc import IntegrityError
 
     lease = get_current_execution_lease()
@@ -98,20 +154,14 @@ async def persist_and_publish_arena_response(
     # --- Ownership gate: row-lock Debate so lease takeover cannot race INSERT ---
     if owner_id and lease_epoch is not None:
         ownership = await session.execute(
-            text(
-                "SELECT 1 FROM debate "
-                "WHERE id = :did AND runner_id = :owner "
-                "AND lease_epoch = :epoch AND status = 'running' "
-                "AND lease_expires_at IS NOT NULL AND lease_expires_at > :now "
-                "LIMIT 1 "
-                "FOR UPDATE"
-            ),
-            {
-                "did": debate_id,
-                "owner": owner_id,
-                "epoch": lease_epoch,
-                "now": now,
-            },
+            sa_select(Debate.id)
+            .where(Debate.id == debate_id)
+            .where(Debate.runner_id == owner_id)
+            .where(Debate.lease_epoch == lease_epoch)
+            .where(Debate.status == "running")
+            .where(Debate.lease_expires_at.is_not(None))
+            .where(Debate.lease_expires_at > now)
+            .with_for_update()
         )
         if ownership.first() is None:
             logger.warning(
@@ -162,14 +212,17 @@ async def persist_and_publish_arena_response(
     session.add(msg)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
+        if not _is_response_identity_conflict(exc):
+            raise
         # Concurrent insert of same (debate_id, response_id) — durable duplicate
         return False
 
     # Post-commit SSE is best-effort — never abort model fan-out
     try:
-        await backend.publish(
+        await _publish_lifecycle_best_effort(
+            backend,
             f"debate:{debate_id}",
             {
                 "type": "arena_response",
@@ -276,7 +329,8 @@ async def run_arena(
 
     async def run_perspectives_fn():
         # Notify start
-        await backend.publish(
+        await _publish_lifecycle_best_effort(
+            backend,
             f"debate:{debate_id}",
             {
                 "type": "arena_started",
@@ -551,7 +605,8 @@ async def run_arena(
                 "model_response_connecting",
                 "model_response_started",
             ):
-                await backend.publish(
+                await _publish_lifecycle_best_effort(
+                    backend,
                     f"debate:{debate_id}",
                     {"type": event_type, **lifecycle_payload},
                 )
@@ -599,7 +654,8 @@ async def run_arena(
             response.run_attempt = run_attempt
             response.retry_generation = retry_generation
 
-            await backend.publish(
+            await _publish_lifecycle_best_effort(
+                backend,
                 f"debate:{debate_id}",
                 {"type": "model_response_persisting", **lifecycle_payload},
             )
@@ -627,7 +683,9 @@ async def run_arena(
             # Only emit terminal event if response was actually persisted (or already existed)
             # to prevent frontend from seeing "completed" for a response that isn't in DB.
             # persisted=False means duplicate already in DB — still safe to emit terminal.
-            await backend.publish(f"debate:{debate_id}", terminal_payload)
+            await _publish_lifecycle_best_effort(
+                backend, f"debate:{debate_id}", terminal_payload
+            )
 
             if PROMETHEUS_AVAILABLE and _timing.get("start_ts"):
                 _provider = model_info.provider
@@ -655,7 +713,18 @@ async def run_arena(
         responses = []
         try:
             for task in asyncio.as_completed(tasks):
-                response, call_usage = await task
+                try:
+                    response, call_usage = await task
+                except Exception as exc:
+                    from orchestration.execution_lease import ExecutionSupersededError
+                    if isinstance(exc, ExecutionSupersededError):
+                        raise
+                    logger.error(
+                        "Arena model task failed outside provider boundary: %s",
+                        exc,
+                        exc_info=True,
+                    )
+                    continue
                 responses.append(response)
                 if call_usage:
                     usage.add_call(call_usage)
@@ -689,7 +758,8 @@ async def run_arena(
     successful = [r for r in model_responses if r.success]
     min_required = getattr(settings, "MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS", MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS)
     if len(successful) < min_required:
-        await backend.publish(
+        await _publish_lifecycle_best_effort(
+            backend,
             f"debate:{debate_id}",
             {
                 "type": "debate_failed",
@@ -710,14 +780,26 @@ async def run_arena(
     if settings.STAGED_DECISION_PIPELINE and not continue_pipeline:
         # Update debate status to perspectives_ready in DB
         async with async_session_scope() as session:
-            db_debate = await session.get(Debate, debate_id)
-            if db_debate:
+            from orchestration.fencing import fenced_debate_update
+            write_lease = _lease_for_arena_write(
+                debate_id, run_attempt, execution_owner_id, lease_epoch
+            )
+            if write_lease is not None:
+                await fenced_debate_update(
+                    session,
+                    write_lease,
+                    {"status": "perspectives_ready"},
+                    what="arena perspectives pause",
+                )
+            else:
+                db_debate = await session.get(Debate, debate_id)
                 db_debate.status = "perspectives_ready"
                 session.add(db_debate)
-                await session.commit()
+            await session.commit()
 
         # Publish early pause event
-        await backend.publish(
+        await _publish_lifecycle_best_effort(
+            backend,
             f"debate:{debate_id}",
             {
                 "type": "perspectives_ready",
@@ -756,7 +838,12 @@ async def run_arena(
     }
 
     async def load_synthesis_fn(session):
-        stmt = select(Message).where(Message.debate_id == debate_id).where(Message.role == "arena_synthesis")
+        stmt = (
+            select(Message)
+            .where(Message.debate_id == debate_id)
+            .where(Message.role == "arena_synthesis")
+            .where(Message.response_id == f"synth-{debate_id}-a{run_attempt}")
+        )
         result = await session.execute(stmt)
         msg = result.scalars().first()
         if msg:
@@ -788,9 +875,26 @@ async def run_arena(
 
         # Persist synthesis
         async with async_session_scope() as session:
+            from models import DebateAttempt
+            from orchestration.fencing import assert_execution_ownership
+            from sqlalchemy.exc import IntegrityError
+
+            write_lease = _lease_for_arena_write(
+                debate_id, run_attempt, execution_owner_id, lease_epoch
+            )
+            if write_lease is not None:
+                await assert_execution_ownership(session, write_lease)
+            attempt_result = await session.execute(
+                select(DebateAttempt.id).where(
+                    DebateAttempt.debate_id == debate_id,
+                    DebateAttempt.attempt_number == run_attempt,
+                )
+            )
             session.add(
                 Message(
                     debate_id=debate_id,
+                    attempt_id=attempt_result.scalar_one_or_none(),
+                    response_id=f"synth-{debate_id}-a{run_attempt}",
                     round_index=2,
                     role="arena_synthesis",
                     persona="Synthesizer",
@@ -804,7 +908,12 @@ async def run_arena(
                     },
                 )
             )
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                if not _is_response_identity_conflict(exc):
+                    raise
         return scontent, sreport, meta
 
     synthesis_content, synthesis_report, meta_updates = await run_with_checkpoint(

@@ -339,7 +339,9 @@ async def create_debate(
             panel_config=panel.model_dump(),
             engine_version=panel.engine_version,
             mode=body.mode or "arena",
-            run_attempt=1,
+            # The execution lease increments this to attempt 1 when work starts.
+            run_attempt=0,
+            credit_reservation_id=credit_reservation_id,
         )
         session.add(debate)
 

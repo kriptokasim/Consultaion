@@ -23,7 +23,6 @@ from auth import (
     set_csrf_cookie,
     verify_password,
 )
-from config import settings
 from deps import get_session
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -32,6 +31,7 @@ from ratelimit import increment_ip_bucket, record_429
 from schemas import AuthRequest, UserProfile as UserProfileSchema, UserProfileUpdate
 from sqlmodel import Session, select
 
+from config import settings
 from routes.common import AUTH_MAX_CALLS, AUTH_WINDOW, serialize_user, user_team_role
 
 router = APIRouter(tags=["auth"])
@@ -131,8 +131,9 @@ def _validate_avatar_url(url: Optional[str]) -> Optional[str]:
 
     Allows http:// only in local/test environments; blocks SSRF-dangerous targets.
     """
-    from config import settings
     from utils.avatar_validator import validate_avatar_url
+
+    from config import settings
 
     is_local = getattr(settings, "IS_LOCAL_ENV", False)
     try:
@@ -460,10 +461,26 @@ async def google_callback_post(
 
         # H-API-9: Even with valid internal secret, verify the request origin
         # to prevent abuse if the secret is leaked.
+        from urllib.parse import urlsplit
+
         origin = request.headers.get("origin") or ""
         referer = request.headers.get("referer") or ""
         expected_origin = settings.WEB_APP_ORIGIN or ""
-        if expected_origin and not origin.startswith(expected_origin) and not referer.startswith(expected_origin):
+
+        def _same_origin(value: str, expected: str) -> bool:
+            try:
+                parsed = urlsplit(value)
+                wanted = urlsplit(expected)
+                return bool(
+                    parsed.scheme
+                    and parsed.scheme.lower() == wanted.scheme.lower()
+                    and parsed.hostname == wanted.hostname
+                    and parsed.port == wanted.port
+                )
+            except (TypeError, ValueError):
+                return False
+
+        if expected_origin and not _same_origin(origin, expected_origin) and not _same_origin(referer, expected_origin):
             logger.warning(
                 "Google OAuth internal-secret bypass rejected: origin/referer mismatch. "
                 "origin=%s referer=%s expected=%s IP=%s",

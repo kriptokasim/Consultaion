@@ -46,14 +46,14 @@ Go to `https://your-app.vercel.app`:
 
 **Application Tab** → Cookies → `consultaion.onrender.com`:
 
-- Name: `consultaion_session`
+- Name: `consultaion_token`
 - Secure: ✓
 - SameSite: None
 - HttpOnly: ✓
 
 **Network Tab** → Filter for `/me`:
 
-- Request shows `Cookie: consultaion_session=...`
+- Request shows `Cookie: consultaion_token=...`
 - Response is `200 OK` with user data
 - Response headers include `Access-Control-Allow-Credentials: true`
 
