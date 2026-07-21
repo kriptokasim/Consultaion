@@ -66,34 +66,54 @@ async def persist_and_publish_arena_response(
     owner_id: str | None = None,
     lease_epoch: int | None = None,
 ) -> bool:
-    """Persist the arena model response with PS156 fencing.
+    """Persist arena response with statement-level fencing + DB unique identity.
 
-    Returns True if the response was newly persisted (and SSE event was
-    published), False if a duplicate was detected (SSE already emitted or
-    skipped). Raises ExecutionSupersededError if the lease expired.
+    1. Lock/verify Debate ownership (lease_expires_at + owner + epoch) in-tx
+    2. INSERT Message with response_id; unique constraint makes concurrent
+       duplicates fail closed (IntegrityError → treated as already-exists)
+    3. Commit; post-commit SSE is best-effort and never aborts fan-out
+
+    Returns True if newly inserted, False if duplicate response_id.
+    Raises ExecutionSupersededError if lease is no longer owned.
     """
+    from datetime import datetime, timezone
+
     from orchestration.execution_context import get_current_execution_lease
     from orchestration.execution_lease import ExecutionSupersededError
-    from sqlalchemy import text
+    from sqlalchemy import select as sa_select, text
+    from sqlalchemy.exc import IntegrityError
 
-    # Resolve fencing parameters: explicit > context var
     lease = get_current_execution_lease()
     if owner_id is None and lease is not None:
         owner_id = lease.owner_id
     if lease_epoch is None and lease is not None:
         lease_epoch = lease.lease_epoch
 
-    # --- Ownership gate (best-effort) ---
+    response_id = response.response_id
+    if not response_id:
+        raise ValueError("Arena response requires a durable response_id")
+
+    now = datetime.now(timezone.utc)
+
+    # --- Ownership gate: row-lock Debate so lease takeover cannot race INSERT ---
     if owner_id and lease_epoch is not None:
-        ownership_row = await session.execute(
+        ownership = await session.execute(
             text(
                 "SELECT 1 FROM debate "
                 "WHERE id = :did AND runner_id = :owner "
-                "AND lease_epoch = :epoch AND status = 'running'"
+                "AND lease_epoch = :epoch AND status = 'running' "
+                "AND lease_expires_at IS NOT NULL AND lease_expires_at > :now "
+                "LIMIT 1 "
+                "FOR UPDATE"
             ),
-            {"did": debate_id, "owner": owner_id, "epoch": lease_epoch},
+            {
+                "did": debate_id,
+                "owner": owner_id,
+                "epoch": lease_epoch,
+                "now": now,
+            },
         )
-        if ownership_row.first() is None:
+        if ownership.first() is None:
             logger.warning(
                 "arena_response.fenced_rejected debate_id=%s owner=%s epoch=%s",
                 debate_id, owner_id, lease_epoch,
@@ -105,74 +125,75 @@ async def persist_and_publish_arena_response(
                 f"{owner_id} at epoch {lease_epoch}"
             )
 
-    # --- Idempotency: deduplicate by response_id only ---
-    from sqlmodel import select as sa_select
-    stmt = sa_select(Message).where(
-        Message.debate_id == debate_id,
-        Message.role == "arena_response",
+    # Fast path: already durable under this response_id
+    existing = await session.execute(
+        sa_select(Message.id).where(
+            Message.debate_id == debate_id,
+            Message.response_id == response_id,
+        ).limit(1)
     )
-    res = await session.execute(stmt)
-    existing_messages = res.scalars().all()
-
-    response_id = response.response_id
-    already_exists = False
-    for msg in existing_messages:
-        meta = msg.meta if isinstance(msg.meta, dict) else {}
-        if response_id and meta.get("response_id") == response_id:
-            already_exists = True
-            break
-
-    if already_exists:
+    if existing.first() is not None:
         return False
 
-    # --- Persist ---
-    session.add(
-        Message(
-            debate_id=debate_id,
-            round_index=1,
-            role="arena_response",
-            persona=response.display_name,
-            content=response.content,
-            meta={
-                "model_id": response.model_id,
-                "display_name": response.display_name,
-                "provider": response.provider,
-                "mode": "arena",
-                "response_id": response.response_id,
-                "run_attempt": response.run_attempt,
-                "retry_generation": response.retry_generation,
-                "logo_url": response.logo_url,
-                "persona_type": response.persona_type,
-                "persona_tagline": response.persona_tagline,
-                "success": response.success,
-                "error": response.error or (None if response.success else "Model failed to respond"),
-                "error_code": response.error_code,
-            },
-        )
-    )
-    await session.commit()
-
-    # --- Publish SSE only after confirmed persistence ---
-    await backend.publish(
-        f"debate:{debate_id}",
-        {
-            "type": "arena_response",
-            "debate_id": str(debate_id),
+    msg = Message(
+        debate_id=debate_id,
+        response_id=response_id,
+        round_index=1,
+        role="arena_response",
+        persona=response.display_name,
+        content=response.content,
+        meta={
             "model_id": response.model_id,
-            "response_id": response.response_id,
             "display_name": response.display_name,
             "provider": response.provider,
-            "content": response.content,
+            "mode": "arena",
+            "response_id": response.response_id,
+            "run_attempt": response.run_attempt,
+            "retry_generation": response.retry_generation,
             "logo_url": response.logo_url,
             "persona_type": response.persona_type,
             "persona_tagline": response.persona_tagline,
             "success": response.success,
             "error": response.error or (None if response.success else "Model failed to respond"),
             "error_code": response.error_code,
-            "run_attempt": response.run_attempt,
-            "retry_generation": response.retry_generation,
         },
+        created_at=now,
     )
+    session.add(msg)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        # Concurrent insert of same (debate_id, response_id) — durable duplicate
+        return False
+
+    # Post-commit SSE is best-effort — never abort model fan-out
+    try:
+        await backend.publish(
+            f"debate:{debate_id}",
+            {
+                "type": "arena_response",
+                "debate_id": str(debate_id),
+                "model_id": response.model_id,
+                "response_id": response.response_id,
+                "display_name": response.display_name,
+                "provider": response.provider,
+                "content": response.content,
+                "logo_url": response.logo_url,
+                "persona_type": response.persona_type,
+                "persona_tagline": response.persona_tagline,
+                "success": response.success,
+                "error": response.error or (None if response.success else "Model failed to respond"),
+                "error_code": response.error_code,
+                "run_attempt": response.run_attempt,
+                "retry_generation": response.retry_generation,
+            },
+        )
+    except Exception:
+        logger.warning(
+            "arena_response.sse_publish_failed debate_id=%s response_id=%s",
+            debate_id, response_id, exc_info=True,
+        )
     return True
 
 
@@ -309,29 +330,32 @@ async def run_arena(
             ]
 
             if stream_enabled:
-                # Streaming path: publish deltas via SSE
-                seq_counter = {"seq": 0}
+                # Streaming path: ArenaDeltaPublisher (first immediate, rest coalesced)
+                from arena.delta_publisher import ArenaDeltaPublisher
+                from config import settings as _cfg
+
+                channel = f"debate:{debate_id}"
+
+                async def _publish_delta_event(event: dict) -> None:
+                    event.setdefault("display_name", model_info.display_name)
+                    event.setdefault("run_attempt", run_attempt)
+                    event.setdefault("retry_generation", 0)
+                    await backend.publish(channel, event)
+
+                delta_pub = ArenaDeltaPublisher(
+                    publish_fn=_publish_delta_event,
+                    response_id=response_id,
+                    model_id=model_info.id,
+                    flush_interval_ms=int(getattr(_cfg, "ARENA_DELTA_FLUSH_MS", 30) or 30),
+                )
+                await delta_pub.start()
 
                 async def on_delta(delta):
-                    seq_counter["seq"] += 1
                     if timing is not None and timing.get("first_delta_ts") is None:
                         timing["first_delta_ts"] = time.monotonic()
                     if timing is not None:
                         timing["delta_count"] = timing.get("delta_count", 0) + 1
-                    await backend.publish(
-                        f"debate:{debate_id}",
-                        {
-                            "type": "model_response_delta",
-                            "response_id": response_id,
-                            "model_id": model_info.id,
-                            "display_name": model_info.display_name,
-                            "text": delta.text,
-                            "delta_sequence": delta.sequence,
-                            "accumulated_chars": delta.accumulated_chars,
-                            "run_attempt": run_attempt,
-                            "retry_generation": 0,
-                        },
-                    )
+                    await delta_pub.push(delta)
 
                 try:
                     from model_gateway import route_llm_stream
@@ -355,6 +379,10 @@ async def run_arena(
                         raise RuntimeError(
                             f"Model {model_info.display_name} timed out after {timeout_seconds} seconds."
                         ) from None
+                    finally:
+                        # Flush pending tokens before lifecycle boundary
+                        await delta_pub.flush()
+                        await delta_pub.close()
 
                     if result.success:
                         return ArenaModelResponse(

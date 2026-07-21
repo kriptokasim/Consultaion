@@ -5,7 +5,6 @@ from typing import Optional
 import sqlalchemy as sa
 from auth import get_current_user
 from channels import debate_channel_id
-from config import settings
 from debate_dispatch import dispatch_debate_run
 from deps import get_session, get_sse_backend
 from exceptions import (
@@ -22,6 +21,7 @@ from schemas import (
 from sqlmodel import Session, select
 from sse_backend import BaseSSEBackend
 
+from config import settings
 from routes.common import (
     require_debate_access,
     require_debate_mutation_access,
@@ -322,10 +322,16 @@ async def continue_debate_run(
     
     if plan.is_default_free and is_sota_run:
         try:
-            reserve_hosted_credit(session, current_user.id)
+            reservation_id = reserve_hosted_credit(
+                session,
+                current_user.id,
+                debate_id=debate_id,
+                run_attempt=getattr(debate, "run_attempt", None) or 1,
+                continuation_id=continuation_record.id if continuation_record else None,
+            )
             credit_reserved = True
-            if continuation_record:
-                continuation_record.credit_reservation_id = "hosted_credit"
+            if continuation_record and reservation_id:
+                continuation_record.credit_reservation_id = reservation_id
         except Exception as exc:
             if continuation_record:
                 try:
@@ -358,7 +364,14 @@ async def continue_debate_run(
 
     if result.rowcount == 0:
         if credit_reserved:
-            refund_hosted_credit(session, current_user.id)
+            refund_hosted_credit(
+                session,
+                current_user.id,
+                reservation_id=getattr(continuation_record, "credit_reservation_id", None)
+                if continuation_record
+                else None,
+                debate_id=debate_id,
+            )
             session.commit()
         if continuation_record:
             try:

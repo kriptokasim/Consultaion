@@ -935,30 +935,26 @@ async def run_debate(
                         session.add(debate)
                     await session.commit()
                     
-                    # Refund free hosted credit (idempotent: check meta flag)
+                    # Exactly-once hosted credit refund via durable ledger reservation
                     if debate.user_id:
-                        already_refunded = False
-                        if isinstance(debate.final_meta, dict):
-                            already_refunded = debate.final_meta.get("hosted_credit_refunded", False)
-                        if not already_refunded:
-                            try:
-                                from billing.service import refund_hosted_credit
-                                from database import engine
-                                from sqlmodel import Session
-                                
-                                def _run_refund():
-                                    with Session(engine) as sync_session:
-                                        refund_hosted_credit(sync_session, debate.user_id)
-                                        sync_session.commit()
-                                await asyncio.get_running_loop().run_in_executor(None, _run_refund)
-                                # Mark as refunded in meta to prevent duplicate refunds
-                                if not isinstance(debate.final_meta, dict):
-                                    debate.final_meta = {}
-                                debate.final_meta["hosted_credit_refunded"] = True
-                                session.add(debate)
-                                await session.commit()
-                            except Exception as refund_err:
-                                logger.warning(f"Failed to refund hosted credits: {refund_err}")
+                        try:
+                            from billing.service import refund_hosted_credit
+                            from database import engine
+                            from sqlmodel import Session
+
+                            uid = debate.user_id
+                            did = debate_id
+
+                            def _run_refund():
+                                with Session(engine) as sync_session:
+                                    refund_hosted_credit(
+                                        sync_session, uid, debate_id=did
+                                    )
+                                    sync_session.commit()
+
+                            await asyncio.get_running_loop().run_in_executor(None, _run_refund)
+                        except Exception as refund_err:
+                            logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except ExecutionSupersededError:
             raise
         except Exception as inner_exc:
@@ -1044,30 +1040,26 @@ async def run_debate(
                         session.add(debate)
                     await session.commit()
                     
-                    # Refund free hosted credit (idempotent: check meta flag)
+                    # Exactly-once hosted credit refund via durable ledger reservation
                     if debate.user_id:
-                        already_refunded = False
-                        if isinstance(debate.final_meta, dict):
-                            already_refunded = debate.final_meta.get("hosted_credit_refunded", False)
-                        if not already_refunded:
-                            try:
-                                from billing.service import refund_hosted_credit
-                                from database import engine
-                                from sqlmodel import Session
-                                
-                                def _run_refund():
-                                    with Session(engine) as sync_session:
-                                        refund_hosted_credit(sync_session, debate.user_id)
-                                        sync_session.commit()
-                                await asyncio.get_running_loop().run_in_executor(None, _run_refund)
-                                # Mark as refunded in meta to prevent duplicate refunds
-                                if not isinstance(debate.final_meta, dict):
-                                    debate.final_meta = {}
-                                debate.final_meta["hosted_credit_refunded"] = True
-                                session.add(debate)
-                                await session.commit()
-                            except Exception as refund_err:
-                                logger.warning(f"Failed to refund hosted credits: {refund_err}")
+                        try:
+                            from billing.service import refund_hosted_credit
+                            from database import engine
+                            from sqlmodel import Session
+
+                            uid = debate.user_id
+                            did = debate_id
+
+                            def _run_refund():
+                                with Session(engine) as sync_session:
+                                    refund_hosted_credit(
+                                        sync_session, uid, debate_id=did
+                                    )
+                                    sync_session.commit()
+
+                            await asyncio.get_running_loop().run_in_executor(None, _run_refund)
+                        except Exception as refund_err:
+                            logger.warning(f"Failed to refund hosted credits: {refund_err}")
         except ExecutionSupersededError:
             raise
         except Exception as inner_exc:

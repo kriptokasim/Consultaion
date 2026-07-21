@@ -232,6 +232,8 @@ class Message(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
     attempt_id: Optional[str] = Field(default=None, foreign_key="debate_attempt.id", nullable=True, index=True)
+    # Durable stream identity for arena responses (PS157). Unique with debate_id when set.
+    response_id: Optional[str] = Field(default=None, nullable=True, index=True)
     round_index: int = Field(index=True)
     role: str
     persona: Optional[str] = None
@@ -452,6 +454,15 @@ class LLMUsageLog(SQLModel, table=True):
 
 
 Index("ix_message_debate_round", Message.debate_id, Message.round_index)
+# Partial unique: one durable response_id per debate (NULL allowed for legacy rows)
+Index(
+    "uq_message_debate_response_id",
+    Message.debate_id,
+    Message.response_id,
+    unique=True,
+    postgresql_where=Message.response_id.isnot(None),
+    sqlite_where=Message.response_id.isnot(None),
+)
 Index("ix_score_debate_persona", Score.debate_id, Score.persona)
 Index("ix_round_debate_index", DebateRound.debate_id, DebateRound.index)
 Index("ix_debate_created_at", Debate.created_at)

@@ -59,7 +59,7 @@ async def test_close_stops_future_pushes(publisher, collected):
     await publisher.push(ModelDelta(text="First", sequence=1, accumulated_chars=5))
     await publisher.close()
     await publisher.push(ModelDelta(text="Second", sequence=2, accumulated_chars=10))
-    assert len(collected) == 1
+    assert len(collected) == 1  # Second rejected after close
 
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_fail_closes(publisher, collected):
     await publisher.push(ModelDelta(text="First", sequence=1, accumulated_chars=5))
     await publisher.fail()
     await publisher.push(ModelDelta(text="Second", sequence=2, accumulated_chars=10))
-    assert len(collected) == 1
+    assert len(collected) == 1  # Second rejected after fail/close
 
 
 @pytest.mark.asyncio
@@ -75,8 +75,9 @@ async def test_flush_before_close_publishes_pending(publisher, collected):
     await publisher.push(ModelDelta(text="A", sequence=1, accumulated_chars=1))
     await publisher.push(ModelDelta(text="B", sequence=2, accumulated_chars=2))
     await publisher.close()
-    # close does not auto-flush; pending deltas are lost
-    assert len(collected) == 1
+    # close flushes pending deltas
+    assert len(collected) == 2
+    assert collected[1]["text"] == "B"
 
 
 @pytest.mark.asyncio

@@ -140,7 +140,9 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
 
     item: Dict[str, Any] = {
         "id": msg.id,
-        "response_id": _getattr_safely(meta, "response_id") or msg.id,
+        "response_id": getattr(msg, "response_id", None)
+        or _getattr_safely(meta, "response_id")
+        or msg.id,
         "debate_id": msg.debate_id,
         "response_type": response_type,
         "role": role,

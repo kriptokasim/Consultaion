@@ -1,24 +1,27 @@
 """PS157 Track I: Server-side arena delta publisher.
 
-Wraps the DeltaCoalescer with a managed lifecycle:
+Managed lifecycle per model call:
 
-- first delta per model is published immediately
-- later deltas are coalesced per response_id
-- flush is forced before lifecycle boundaries (persisting, completed, failed)
-- bounded memory via configurable max items / max chars
+- first delta published immediately
+- later deltas coalesced per response_id
+- flush forced before lifecycle boundaries
+- bounded memory: flush (never drop) when max items/chars hit
 - publish failures never abort provider generation
-- all background tasks stop when the Run ends
+- close() flushes pending then stops timer
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional, Union
 
 from model_gateway.types import ModelDelta
 
 logger = logging.getLogger(__name__)
+
+PublishFn = Callable[[dict], Union[None, Awaitable[None]]]
 
 
 class ArenaDeltaPublisher:
@@ -26,7 +29,7 @@ class ArenaDeltaPublisher:
 
     def __init__(
         self,
-        publish_fn: Callable[[dict], None],
+        publish_fn: PublishFn,
         response_id: str,
         model_id: str,
         *,
@@ -47,13 +50,11 @@ class ArenaDeltaPublisher:
         self._flush_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
-        """Start the background timer-based flush loop."""
         if self._flush_task is not None:
             return
         self._flush_task = asyncio.create_task(self._timer_loop())
 
     async def _timer_loop(self) -> None:
-        """Periodically flush pending deltas."""
         interval = self._flush_interval_ms / 1000.0
         try:
             while not self._closed:
@@ -85,7 +86,6 @@ class ArenaDeltaPublisher:
             await self._flush()
 
     async def close(self) -> None:
-        """Stop timer and flush remaining pending deltas."""
         self._closed = True
         if self._flush_task:
             self._flush_task.cancel()
@@ -94,16 +94,20 @@ class ArenaDeltaPublisher:
             except (asyncio.CancelledError, Exception):
                 pass
             self._flush_task = None
-        # Flush any remaining deltas
         if self._pending:
             await self._flush()
 
     async def fail(self, error: Optional[Exception] = None) -> None:
         await self.close()
 
+    async def _call_publish(self, event: dict) -> None:
+        result = self._publish_fn(event)
+        if inspect.isawaitable(result):
+            await result
+
     async def _publish_one(self, delta: ModelDelta) -> None:
         try:
-            self._publish_fn({
+            await self._call_publish({
                 "type": "model_response_delta",
                 "response_id": self._response_id,
                 "model_id": self._model_id,

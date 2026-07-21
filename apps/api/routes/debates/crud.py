@@ -5,7 +5,6 @@ from typing import Optional
 import sqlalchemy as sa
 from auth import get_current_user, get_optional_user
 from channels import debate_channel_id
-from config import settings
 from debate_dispatch import dispatch_debate_run
 from deps import get_session, get_sse_backend
 from exceptions import (
@@ -36,6 +35,7 @@ from sqlmodel import Session, select
 from sse_backend import BaseSSEBackend
 from usage_limits import reserve_run_slot
 
+from config import settings
 from routes.common import (
     is_debate_owner,
     is_debate_public,
@@ -213,19 +213,10 @@ async def create_debate(
 
         # Phase 8: Hosted Credits check for Free plan users - only for advanced/SOTA models
         is_sota_run = (model_tier == "advanced" or body.mode == "arena")
+        # Reservation happens after debate_id is assigned (durable ledger key).
+        needs_hosted_credit = bool(plan.is_default_free and is_sota_run)
         has_hosted_credits = False
-        if plan.is_default_free and is_sota_run:
-            try:
-                reserve_hosted_credit(session, current_user.id)
-                has_hosted_credits = True
-            except ValidationError as exc:
-                if exc.code == "hosted_credits.exhausted" and body.model_id is not None:
-                    raise ValidationError(
-                        message=f"Model '{target_model_info.display_name if target_model_info else target_model_id}' is not available on your plan.",
-                        code="debate.model_tier_restricted",
-                        hint="Please upgrade to Pro to use advanced models."
-                    ) from exc
-                raise exc
+        credit_reservation_id: str | None = None
 
         allowed_tiers = plan.limits.get("allowed_model_tiers")
 
@@ -237,8 +228,8 @@ async def create_debate(
             else:
                 allowed_tiers = ["standard", "advanced"]
 
-        # Free tier user who successfully reserved a hosted credit is permitted to run advanced models
-        if plan.is_default_free and has_hosted_credits:
+        # Free tier users may use advanced models when a hosted credit will be reserved
+        if plan.is_default_free and needs_hosted_credit:
             allowed_tiers = list(allowed_tiers)
             if "advanced" not in allowed_tiers:
                 allowed_tiers.append("advanced")
@@ -295,6 +286,24 @@ async def create_debate(
             track_metric("routing.explicit_override")
         
         debate_id = str(uuid.uuid4())
+
+        if needs_hosted_credit:
+            try:
+                credit_reservation_id = reserve_hosted_credit(
+                    session,
+                    current_user.id,
+                    debate_id=debate_id,
+                    run_attempt=1,
+                )
+                has_hosted_credits = credit_reservation_id is not None or True
+            except ValidationError as exc:
+                if exc.code == "hosted_credits.exhausted" and body.model_id is not None:
+                    raise ValidationError(
+                        message=f"Model '{target_model_info.display_name if target_model_info else target_model_id}' is not available on your plan.",
+                        code="debate.model_tier_restricted",
+                        hint="Please upgrade to Pro to use advanced models."
+                    ) from exc
+                raise exc
 
         # Patchset 41.0: Start Langfuse trace
         trace_id = start_debate_trace(
@@ -363,7 +372,12 @@ async def create_debate(
                 # A hosted credit was reserved before the failure — return it
                 # so users are not charged for debates that were never created.
                 from billing.service import refund_hosted_credit
-                refund_hosted_credit(session, current_user.id)
+                refund_hosted_credit(
+                    session,
+                    current_user.id,
+                    reservation_id=credit_reservation_id,
+                    debate_id=debate_id,
+                )
             session.commit()
         except Exception as refund_err:
             logger.error(f"Failed to refund quotas during creation failure: {refund_err}")

@@ -164,10 +164,10 @@ async def test_delta_coalescing_preserves_order(backend):
         events.append(env)
 
     delta_events = [e for e in events if e.get("payload", {}).get("type") == "model_response_delta"]
-    # The flush timer must emit the buffered batch even if no later event
-    # arrives, while preserving fragment order in the coalesced payload.
-    assert len(delta_events) == 1
-    assert delta_events[0]["payload"]["text"] == "".join(f"chunk{i}" for i in range(20))
+    # First delta is immediate; remaining 19 coalesce into one batch on timer flush.
+    assert len(delta_events) == 2
+    assert delta_events[0]["payload"]["text"] == "chunk0"
+    assert delta_events[1]["payload"]["text"] == "".join(f"chunk{i}" for i in range(1, 20))
 
 
 @pytest.mark.asyncio

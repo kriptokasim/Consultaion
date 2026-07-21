@@ -37,11 +37,25 @@ class TestDeltaCoalescer:
         assert len(result) == 1
         assert result[0]["payload"]["text"] == "hello"
 
+    def test_first_delta_published_immediately(self):
+        """First delta per response_id bypasses the flush window."""
+        coalescer = DeltaCoalescer(flush_interval_ms=5000)
+        r1 = coalescer.ingest(_make_delta("r1", "hel", seq=1))
+        assert len(r1) == 1
+        assert r1[0]["payload"]["text"] == "hel"
+
+        r2 = coalescer.ingest(_make_delta("r1", "lo ", seq=2))
+        assert r2 == []  # subsequent buffered
+
+        flushed = coalescer.flush_all()
+        assert len(flushed) == 1
+        assert flushed[0]["payload"]["text"] == "lo "
+
     def test_rapid_deltas_coalesced_within_window(self):
-        """Multiple deltas within the flush window should be buffered."""
+        """Subsequent deltas within the flush window should be buffered."""
         coalescer = DeltaCoalescer(flush_interval_ms=5000)  # 5s window
         r1 = coalescer.ingest(_make_delta("r1", "hel", seq=1))
-        assert r1 == []  # buffered
+        assert len(r1) == 1  # first immediate
 
         r2 = coalescer.ingest(_make_delta("r1", "lo ", seq=2))
         assert r2 == []  # still buffered
@@ -49,34 +63,35 @@ class TestDeltaCoalescer:
         # Manual flush
         flushed = coalescer.flush_all()
         assert len(flushed) == 1
-        assert flushed[0]["payload"]["text"] == "hello "
+        assert flushed[0]["payload"]["text"] == "lo "
 
     def test_non_delta_forces_flush(self):
         """A non-delta event should flush all pending deltas first."""
         coalescer = DeltaCoalescer(flush_interval_ms=5000)
 
-        coalescer.ingest(_make_delta("r1", "one"))
+        first = coalescer.ingest(_make_delta("r1", "one"))
+        assert len(first) == 1  # immediate
         coalescer.ingest(_make_delta("r1", "two"))
 
         result = coalescer.ingest(_make_non_delta())
-        # Should get: coalesced delta + the non-delta
+        # Should get: pending "two" + the non-delta
         assert len(result) == 2
-        assert result[0]["payload"]["text"] == "onetwo"
+        assert result[0]["payload"]["text"] == "two"
         assert result[1]["type"] == "model_response_completed"
 
     def test_different_response_ids_coalesced_independently(self):
         """Deltas for different response_ids should be separate coalesced events."""
         coalescer = DeltaCoalescer(flush_interval_ms=5000)
 
-        coalescer.ingest(_make_delta("r1", "aaa", seq=1))
-        coalescer.ingest(_make_delta("r2", "bbb", seq=1))
+        r1_first = coalescer.ingest(_make_delta("r1", "aaa", seq=1))
+        r2_first = coalescer.ingest(_make_delta("r2", "bbb", seq=1))
+        assert len(r1_first) == 1 and len(r2_first) == 1
         coalescer.ingest(_make_delta("r1", "ccc", seq=2))
 
         flushed = coalescer.flush_all()
-        assert len(flushed) == 2
-        texts = {f["payload"]["response_id"]: f["payload"]["text"] for f in flushed}
-        assert texts["r1"] == "aaaccc"
-        assert texts["r2"] == "bbb"
+        assert len(flushed) == 1
+        assert flushed[0]["payload"]["response_id"] == "r1"
+        assert flushed[0]["payload"]["text"] == "ccc"
 
     def test_flush_with_no_pending_returns_empty(self):
         """Flushing with nothing pending should return empty list."""
@@ -84,25 +99,25 @@ class TestDeltaCoalescer:
         assert coalescer.flush_all() == []
 
     def test_single_delta_not_merged(self):
-        """A single delta in a flush batch should not be merged (optimization)."""
+        """A single first delta is published immediately without merge."""
         coalescer = DeltaCoalescer(flush_interval_ms=5000)
-        coalescer.ingest(_make_delta("r1", "only"))
-        flushed = coalescer.flush_all()
-        assert len(flushed) == 1
-        # Should be the original event, not a copy
-        assert flushed[0]["payload"]["text"] == "only"
+        result = coalescer.ingest(_make_delta("r1", "only"))
+        assert len(result) == 1
+        assert result[0]["payload"]["text"] == "only"
+        assert coalescer.flush_all() == []
 
     def test_coalesced_event_uses_last_delta_metadata(self):
         """Merged event should use the latest delta's sequence/accumulated_chars."""
         coalescer = DeltaCoalescer(flush_interval_ms=5000)
-        coalescer.ingest(_make_delta("r1", "a", accumulated_chars=1, seq=1))
+        first = coalescer.ingest(_make_delta("r1", "a", accumulated_chars=1, seq=1))
+        assert len(first) == 1
         coalescer.ingest(_make_delta("r1", "b", accumulated_chars=2, seq=2))
         coalescer.ingest(_make_delta("r1", "c", accumulated_chars=3, seq=3))
 
         flushed = coalescer.flush_all()
         assert len(flushed) == 1
         payload = flushed[0]["payload"]
-        assert payload["text"] == "abc"
+        assert payload["text"] == "bc"
         assert payload["accumulated_chars"] == 3
         assert payload["delta_sequence"] == 3
 
@@ -120,8 +135,9 @@ class TestDeltaCoalescer:
             )
 
         flushed = coalescer.flush_all()
+        # first delta (chunk0) was immediate; remaining coalesce
         assert len(flushed) == 1
-        assert flushed[0]["text"] == "chunk0chunk1chunk2"
+        assert flushed[0]["text"] == "chunk1chunk2"
         assert flushed[0]["delta_sequence"] == 3
 
 
@@ -161,10 +177,12 @@ async def test_redis_backend_coalesces_deltas_before_lifecycle_event():
     await backend.publish("debate:d1", _make_non_delta())
 
     published = [json.loads(call.args[1]) for call in backend._redis.publish.await_args_list]
-    assert len(published) == 2
-    assert published[0]["payload"]["payload"]["text"] == "hello world"
-    assert published[0]["payload"]["payload"]["delta_sequence"] == 2
-    assert published[1]["payload"]["type"] == "model_response_completed"
+    # First delta immediate; second coalesced until lifecycle non-delta flushes it
+    assert len(published) == 3
+    assert published[0]["payload"]["payload"]["text"] == "hello"
+    assert published[1]["payload"]["payload"]["text"] == " world"
+    assert published[1]["payload"]["payload"]["delta_sequence"] == 2
+    assert published[2]["payload"]["type"] == "model_response_completed"
 
 
 @pytest.mark.asyncio

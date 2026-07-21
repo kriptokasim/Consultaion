@@ -4,12 +4,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional, Union
 
-from config import settings
 from fastapi import HTTPException, status
 from integrations.events import emit_event
 from sqlmodel import Session, select
 
 from billing.models import BillingPlan, BillingSubscription, BillingUsage
+from config import settings
 
 UserID = Union[str, uuid.UUID]
 
@@ -30,9 +30,10 @@ def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
     uid = _normalize_user_id(user_id)
     
     # Check owner override
-    from config import settings
     from models import User
     from security.owner import is_owner
+
+    from config import settings
     
     user = db.get(User, uid)
     if is_owner(user):
@@ -246,28 +247,53 @@ def add_tokens_usage(db: Session, user_id: UserID, model_id: str, tokens: int) -
     return usage
 
 
-def reserve_hosted_credit(db: Session, user_id: UserID) -> None:
+def reserve_hosted_credit(
+    db: Session,
+    user_id: UserID,
+    *,
+    debate_id: str | None = None,
+    run_attempt: int | None = None,
+    continuation_id: str | None = None,
+) -> str | None:
     """
-    Checks if a user is on the free plan, and if so, verifies and increments
-    their hosted_credits_used counter.
-    Raises ValidationError if they have exhausted their credits.
+    Reserve one hosted credit for a free-plan user.
 
-    The increment is an atomic conditional UPDATE (``used < limit``) rather
-    than a read-check-write, so two concurrent requests cannot both pass the
-    credit check and double-spend the final free credit.
+    Atomic conditional UPDATE on the counter, plus a durable
+    ``usage_ledger_entry`` row keyed by debate/attempt/continuation so
+    refunds are exactly-once.
+
+    Returns the ledger reservation id (or None if the user is not on free plan).
+    Raises ValidationError if credits are exhausted.
     """
+    import uuid as _uuid
+
     from exceptions import ValidationError
-    from models import User
+    from models import UsageLedgerEntry, User
     from sqlalchemy import update
+    from sqlmodel import select
 
     uid = _normalize_user_id(user_id)
     user = db.get(User, uid)
     if not user:
-        return
+        return None
 
     plan = get_active_plan(db, uid)
     if not plan.is_default_free:
-        return
+        return None
+
+    # Durable ledger only when debate_id is known (exactly-once refund path).
+    # Without debate_id: atomic counter only (legacy / race tests).
+    attempt_part = run_attempt if run_attempt is not None else 0
+    cont_part = continuation_id or "none"
+    existing = None
+    idempotency_key = None
+    if debate_id:
+        idempotency_key = f"credit_reserve:{debate_id}:a{attempt_part}:c{cont_part}"
+        existing = db.exec(
+            select(UsageLedgerEntry).where(UsageLedgerEntry.idempotency_key == idempotency_key)
+        ).first()
+        if existing:
+            return existing.id
 
     limit = getattr(user, "hosted_credits_limit", 10)
     stmt = (
@@ -279,8 +305,6 @@ def reserve_hosted_credit(db: Session, user_id: UserID) -> None:
     )
     result = db.exec(stmt)
     if result.rowcount == 0:
-        # No row matched the credit guard — the user is exhausted. Refresh to
-        # report the true counter values in the error message.
         db.refresh(user)
         used = getattr(user, "hosted_credits_used", 0)
         raise ValidationError(
@@ -288,29 +312,104 @@ def reserve_hosted_credit(db: Session, user_id: UserID) -> None:
             code="hosted_credits.exhausted",
             hint="Please upgrade to a Pro plan, add your own API key under Settings, or run a mock/demo run.",
         )
-    # Keep the ORM instance consistent for any later reads in this session.
     db.expire(user, ["hosted_credits_used"])
 
+    if not debate_id or not idempotency_key:
+        return None
 
-def refund_hosted_credit(db: Session, user_id: UserID) -> None:
-    """
-    Refunds a hosted credit for the user if they are on the free plan.
+    entry = UsageLedgerEntry(
+        id=str(_uuid.uuid4()),
+        user_id=uid,
+        kind="credit_reservation",
+        status="reserved",
+        idempotency_key=idempotency_key,
+        amount=1,
+        debate_id=debate_id,
+        meta={
+            "run_attempt": attempt_part,
+            "continuation_id": continuation_id,
+        },
+    )
+    db.add(entry)
+    db.flush()
+    return entry.id
 
-    Atomic decrement floored at 0 (same semantics as the previous
-    ``max(0, used - 1)``), so concurrent refunds cannot lose updates or
-    drive the counter negative.
+
+def refund_hosted_credit(
+    db: Session,
+    user_id: UserID,
+    *,
+    reservation_id: str | None = None,
+    debate_id: str | None = None,
+) -> bool:
     """
-    from models import User
+    Exactly-once refund for a free-plan hosted credit reservation.
+
+    Prefers ``reservation_id`` (ledger row). Falls back to latest reserved
+    credit_reservation for ``debate_id``. Counter decrement only runs when the
+    ledger row transitions reserved → refunded in the same transaction.
+
+    Returns True if a credit was refunded, False if already settled/refunded
+    or no reservation found.
+    """
+    from datetime import datetime, timezone
+
+    from models import UsageLedgerEntry, User
     from sqlalchemy import update
+    from sqlmodel import select
 
     uid = _normalize_user_id(user_id)
     user = db.get(User, uid)
     if not user:
-        return
+        return False
 
     plan = get_active_plan(db, uid)
     if not plan.is_default_free:
-        return
+        return False
+
+    entry: UsageLedgerEntry | None = None
+    if reservation_id:
+        entry = db.get(UsageLedgerEntry, reservation_id)
+    elif debate_id:
+        entry = db.exec(
+            select(UsageLedgerEntry)
+            .where(UsageLedgerEntry.debate_id == debate_id)
+            .where(UsageLedgerEntry.kind == "credit_reservation")
+            .where(UsageLedgerEntry.status == "reserved")
+            .where(UsageLedgerEntry.user_id == uid)
+            .order_by(UsageLedgerEntry.created_at.desc())
+        ).first()
+
+    if entry is None:
+        # Legacy path without ledger row: single atomic counter floor (not exactly-once)
+        if reservation_id is None and debate_id is None:
+            stmt = (
+                update(User)
+                .where(User.id == uid)
+                .where(User.hosted_credits_used > 0)
+                .values(hosted_credits_used=User.hosted_credits_used - 1)
+                .execution_options(synchronize_session=False)
+            )
+            result = db.exec(stmt)
+            db.expire(user, ["hosted_credits_used"])
+            return bool(result.rowcount)
+        return False
+
+    if entry.status != "reserved":
+        return False
+
+    # Conditional transition — only one concurrent caller wins
+    now = datetime.now(timezone.utc)
+    transition = (
+        update(UsageLedgerEntry)
+        .where(UsageLedgerEntry.id == entry.id)
+        .where(UsageLedgerEntry.status == "reserved")
+        .values(status="refunded", refunded_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    tr = db.exec(transition)
+    if tr.rowcount == 0:
+        return False
 
     stmt = (
         update(User)
@@ -321,18 +420,52 @@ def refund_hosted_credit(db: Session, user_id: UserID) -> None:
     )
     db.exec(stmt)
     db.expire(user, ["hosted_credits_used"])
+    return True
 
 
-def consume_hosted_credit(db: Session, user_id: UserID) -> None:
+def consume_hosted_credit(
+    db: Session,
+    user_id: UserID,
+    *,
+    reservation_id: str | None = None,
+    debate_id: str | None = None,
+) -> bool:
     """
-    FH125: Finalize hosted credit consumption after successful debate completion.
+    Mark a hosted credit reservation as consumed (successful completion).
 
-    The credit lifecycle is:
-    1. reserve_hosted_credit() — increments hosted_credits_used
-    2. consume_hosted_credit() — settlement marker (no-op; usage already incremented)
-    3. refund_hosted_credit() — decrements hosted_credits_used on failure
-
-    Successful settlement does NOT decrement — the reservation already consumed the credit.
+    Does not decrement the counter — reservation already consumed the credit.
     """
-    pass
+    from datetime import datetime, timezone
+
+    from models import UsageLedgerEntry
+    from sqlalchemy import update
+    from sqlmodel import select
+
+    entry: UsageLedgerEntry | None = None
+    if reservation_id:
+        entry = db.get(UsageLedgerEntry, reservation_id)
+    elif debate_id:
+        uid = _normalize_user_id(user_id)
+        entry = db.exec(
+            select(UsageLedgerEntry)
+            .where(UsageLedgerEntry.debate_id == debate_id)
+            .where(UsageLedgerEntry.kind == "credit_reservation")
+            .where(UsageLedgerEntry.status == "reserved")
+            .where(UsageLedgerEntry.user_id == uid)
+            .order_by(UsageLedgerEntry.created_at.desc())
+        ).first()
+
+    if entry is None or entry.status != "reserved":
+        return False
+
+    now = datetime.now(timezone.utc)
+    transition = (
+        update(UsageLedgerEntry)
+        .where(UsageLedgerEntry.id == entry.id)
+        .where(UsageLedgerEntry.status == "reserved")
+        .values(status="settled", settled_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    result = db.exec(transition)
+    return bool(result.rowcount)
 

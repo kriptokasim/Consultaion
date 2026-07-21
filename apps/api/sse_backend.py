@@ -86,10 +86,9 @@ class DeltaCoalescer:
     Non-delta events trigger an immediate flush of all pending deltas so that
     event ordering remains correct.
 
-    Bounded memory: ``max_items`` caps per-key pending count and
-    ``max_chars`` caps total accumulated text.  When either bound is hit
-    the oldest pending deltas are evicted (loss-tolerant — only deltas
-    arrive here, so dropping intermediate tokens is safe).
+    Bounded memory: ``max_items`` / ``max_chars`` trigger an immediate flush
+    (never drop fragments — frontend concatenates ``text``).
+    First delta per response_id is published immediately.
     """
 
     def __init__(
@@ -111,11 +110,17 @@ class DeltaCoalescer:
         self._max_chars = max_chars
         # {response_id: [delta_event, ...]}
         self._pending: dict[str, list[dict]] = {}
+        self._seen_keys: set[str] = set()
         self._last_flush: float = time.monotonic()
 
     @property
     def flush_interval_seconds(self) -> float:
         return self._flush_seconds
+
+    def _delta_text_len(self, delta: dict) -> int:
+        if isinstance(delta.get("payload"), dict):
+            return len(delta.get("payload", {}).get("text", "") or "")
+        return len(delta.get("text", "") or "")
 
     def _merge_deltas(self, deltas: list[dict]) -> dict:
         """Merge a list of delta events for the same response_id into one."""
@@ -154,21 +159,24 @@ class DeltaCoalescer:
             return flushed
 
         key = _delta_key(event) or "__default__"
+
+        # First delta per response_id: publish immediately (no 150ms delay)
+        if key not in self._seen_keys:
+            self._seen_keys.add(key)
+            flushed = self.flush_all()
+            flushed.append(event)
+            return flushed
+
         if key not in self._pending:
             self._pending[key] = []
         self._pending[key].append(event)
 
-        # Enforce bounds: evict oldest deltas if over limits
         pending = self._pending[key]
-        while len(pending) > self._max_items or (
-            pending and sum(len(d.get("text", "") or d.get("payload", {}).get("text", "")) for d in pending) > self._max_chars
-        ):
-            if pending:
-                pending.pop(0)
-            else:
-                break
+        pending_chars = sum(self._delta_text_len(d) for d in pending)
+        # Bounds: flush immediately — never drop text fragments
+        if len(pending) >= self._max_items or pending_chars >= self._max_chars:
+            return self.flush_all()
 
-        # Check if flush interval has elapsed
         elapsed = now - self._last_flush
         if elapsed >= self._flush_seconds:
             return self.flush_all()
