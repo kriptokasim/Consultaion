@@ -58,14 +58,18 @@ def _now() -> datetime:
 
 
 def _active_debate_lease_exists(lease: ExecutionLease, *, now: Optional[datetime] = None):
-    """SQL predicate proving that *lease* is still live at statement time."""
+    """Prove the fencing identity is still live at statement time.
+
+    Debate status is intentionally not part of ownership. The owner retains
+    its lease through terminal post-processing (for example divergence
+    computation) and releases it only after those checkpoints finish.
+    """
     checked_at = now or _now()
     return sa.exists(
         sa.select(Debate.id)
         .where(Debate.id == lease.debate_id)
         .where(Debate.runner_id == lease.owner_id)
         .where(Debate.lease_epoch == lease.lease_epoch)
-        .where(Debate.status == "running")
         .where(Debate.lease_expires_at.is_not(None))
         .where(Debate.lease_expires_at > checked_at)
     )
@@ -82,14 +86,17 @@ def _checkpoint_is_stale(cp: DebateStageCheckpoint, *, now: datetime) -> bool:
 
 
 async def _assert_debate_lease(session, lease: ExecutionLease) -> None:
-    """Verify the Debate-level lease is still ours (fails closed)."""
+    """Verify the live fencing identity is still ours (fails closed).
+
+    Terminal status does not end ownership: the orchestrator deliberately
+    keeps the lease while it runs checkpointed post-processing.
+    """
     now = _now()
     stmt = (
         sa.select(Debate.id)
         .where(Debate.id == lease.debate_id)
         .where(Debate.runner_id == lease.owner_id)
         .where(Debate.lease_epoch == lease.lease_epoch)
-        .where(Debate.status == "running")
         .where(Debate.lease_expires_at.is_not(None))
         .where(Debate.lease_expires_at > now)
         .with_for_update()

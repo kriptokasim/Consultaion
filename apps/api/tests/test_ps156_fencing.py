@@ -457,6 +457,43 @@ async def test_completed_checkpoint_reuse_and_hash_change_reexecutes():
         assert checkpoint.output_reference is None
 
 
+@pytest.mark.anyio
+async def test_terminal_owner_can_complete_postprocessing_checkpoint():
+    """A terminal status must not revoke an otherwise live execution lease."""
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    _owned_debate(debate_id, "owner-a")
+    lease = ExecutionLease.create(
+        debate_id, owner_id="owner-a", lease_epoch=1, run_attempt=1
+    )
+
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        debate.status = "completed"
+        session.add(debate)
+        session.commit()
+
+    runs = []
+
+    async def _run():
+        runs.append(1)
+        return "postprocessed"
+
+    async def _load(session):
+        return "loaded"
+
+    result = await run_with_checkpoint(
+        debate_id,
+        "terminal-postprocessing",
+        {"kind": "divergence"},
+        _run,
+        _load,
+        execution_lease=lease,
+    )
+
+    assert result == "postprocessed"
+    assert runs == [1]
+
+
 # ── 25/26. Stale completion/failure rejection ────────────────────────────
 
 
