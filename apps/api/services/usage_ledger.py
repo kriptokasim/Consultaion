@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Valid state transitions
 _VALID_TRANSITIONS = {
-    "reserved": {"settled", "refunded", "failed"},
+    "reserved": {"settled", "refunded", "failed", "settlement_pending", "reconciliation_pending"},
+    "settlement_pending": {"settled", "refunded", "failed", "reconciliation_pending"},
+    "reconciliation_pending": {"settled", "refunded", "failed"},
     "settled": set(),      # Terminal state
     "refunded": set(),     # Terminal state
     "failed": set(),       # Terminal state
