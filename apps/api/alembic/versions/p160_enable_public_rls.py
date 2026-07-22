@@ -37,9 +37,16 @@ def _ensure_billing_webhook_events() -> None:
 def _complete_usage_ledger_state() -> None:
     """Add the settlement fields expected by the billing state machine.
 
-    Historical rows are marked settled so deploying this repair cannot make an
-    already-accounted charge refundable a second time. New ORM writes always
-    provide an explicit status; PostgreSQL's raw-insert default is reserved.
+    Historical rows are backfilled based on the status of their associated
+    debate/continuation rather than blanket-settling everything:
+
+    - completed/completed_with_warnings debates → settled
+    - failed/cancelled debates → refunded (credit was returned)
+    - running/scheduled/queued debates → reserved (still in-flight)
+    - rows with no debate association → settled (conservative default)
+
+    This prevents losing track of genuinely in-flight reservations during
+    deployment while ensuring terminal debates are properly accounted.
     """
 
     bind = op.get_bind()
@@ -66,6 +73,33 @@ def _complete_usage_ledger_state() -> None:
         if name not in existing_columns:
             op.add_column("usage_ledger_entry", column)
 
+    # Backfill status based on associated debate state (not blanket 'settled')
+    if bind.dialect.name == "postgresql":
+        # Check if debate table exists for backfill
+        debate_exists = "debate" in inspector.get_table_names()
+        if debate_exists:
+            # Terminal success → settled
+            op.execute(sa.text(
+                "UPDATE usage_ledger_entry SET status = 'settled' "
+                "WHERE debate_id IN ("
+                "  SELECT id FROM debate WHERE status IN ('completed', 'completed_with_warnings')"
+                ")"
+            ))
+            # Terminal failure → refunded
+            op.execute(sa.text(
+                "UPDATE usage_ledger_entry SET status = 'refunded' "
+                "WHERE debate_id IN ("
+                "  SELECT id FROM debate WHERE status IN ('failed', 'cancelled')"
+                ") AND status != 'refunded'"
+            ))
+            # In-flight → reserved
+            op.execute(sa.text(
+                "UPDATE usage_ledger_entry SET status = 'reserved' "
+                "WHERE debate_id IN ("
+                "  SELECT id FROM debate WHERE status NOT IN ('completed', 'completed_with_warnings', 'failed', 'cancelled')"
+                ") AND status = 'settled'"
+            ))
+
     if bind.dialect.name == "postgresql":
         op.alter_column(
             "usage_ledger_entry",
@@ -88,50 +122,16 @@ def _complete_usage_ledger_state() -> None:
             )
 
 
-def _enable_public_table_rls() -> None:
-    bind = op.get_bind()
-    if bind.dialect.name != "postgresql":
-        return
-
-    op.execute(
-        sa.text(
-            """
-            DO $$
-            DECLARE
-                target record;
-            BEGIN
-                FOR target IN
-                    SELECT n.nspname AS schema_name, c.relname AS table_name
-                    FROM pg_class AS c
-                    JOIN pg_namespace AS n ON n.oid = c.relnamespace
-                    WHERE n.nspname = 'public'
-                      AND c.relkind IN ('r', 'p')
-                LOOP
-                    EXECUTE format(
-                        'ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY',
-                        target.schema_name,
-                        target.table_name
-                    );
-                END LOOP;
-            END
-            $$;
-            """
-        )
-    )
-
-
 def upgrade() -> None:
+    # Backend-only trusted model: FastAPI handles authentication and
+    # authorization. PostgreSQL RLS is intentionally NOT blanket-enabled
+    # because no per-table policies exist; enabling RLS without policies
+    # would lock out the backend service account and break production.
     _ensure_billing_webhook_events()
     _complete_usage_ledger_state()
-    _enable_public_table_rls()
 
 
 def downgrade() -> None:
-    # RLS is a one-way security hardening. Some public tables may have had RLS
-    # enabled before P160, so a blanket disable would silently remove their
-    # pre-existing protection. Keep RLS enabled when rolling this revision
-    # back; operators can make an explicit, table-scoped policy change if a
-    # genuine rollback of row security is ever required.
     # Keep additive billing repairs in place: dropping them would discard
     # settlement history and webhook idempotency records.
     pass
