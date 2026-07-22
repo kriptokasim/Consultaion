@@ -248,6 +248,48 @@ async def test_all_models_fail_graceful():
             assert r.error is not None
 
 
+@pytest.mark.anyio
+async def test_unpersisted_success_is_excluded_from_synthesis():
+    """Generated content is not successful until its canonical row is durable."""
+
+    from arena.engine import ArenaResult, run_arena
+
+    async def successful_provider(*args, **kwargs):
+        return "This answer exists only in memory", _FakeUsage()
+
+    backend = AsyncMock()
+    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]), \
+         patch("arena.engine.call_llm_for_role", side_effect=successful_provider), \
+         patch("arena.engine.get_sse_backend", return_value=backend), \
+         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
+         patch(
+             "arena.engine.persist_and_publish_arena_response",
+             new=AsyncMock(side_effect=RuntimeError("database unavailable")),
+         ), \
+         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
+         patch("reporting.synthesizer.generate_decision_report") as mock_synthesis, \
+         patch("config.settings") as mock_settings:
+        mock_settings.FAST_DEBATE = False
+        mock_settings.STREAMING_RESPONSES_ENABLED = False
+        mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
+        mock_settings.ARENA_MAX_TOKENS = 1200
+        mock_settings.STAGED_DECISION_PIPELINE = False
+        mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
+
+        result = await run_arena("test-debate-storage-failure")
+
+    assert isinstance(result, ArenaResult)
+    assert result.status == "failed"
+    assert result.error_reason == "all_models_failed"
+    assert len(result.model_responses) == 1
+    response = result.model_responses[0]
+    assert response.success is False
+    assert response.error_code == "persistence_failed"
+    assert "only in memory" not in response.content
+    mock_synthesis.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # 5. as_completed preserves immediate persist/publish
 # ---------------------------------------------------------------------------

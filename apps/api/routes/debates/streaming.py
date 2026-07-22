@@ -29,6 +29,8 @@ from routes.common import (
 
 logger = logging.getLogger(__name__)
 
+SSE_GENERATOR_START_TIMEOUT_SECONDS = 5.0
+
 
 def _parse_allowed_origins() -> set[str]:
     """Build allowed CORS origins from settings.WEB_APP_ORIGIN and settings.CORS_ORIGINS."""
@@ -409,23 +411,33 @@ async def stream_events(
         from observability.metrics import record_sse_reconnect
         record_sse_reconnect()
 
-    # P2 #12: Lease acquisition moved into the generator so that a client
-    # disconnect before the first byte does not leak the lease until TTL.
-    # A background guard task releases the lease if the generator never starts.
+    # Acquire before constructing the response so denial remains a real HTTP
+    # 503 with Retry-After.  Once StreamingResponse sends its headers, an
+    # exception raised by the generator can only truncate a 200 response.
     from sse_backend import StreamLeaseResult, get_stream_lease_manager
     lease_mgr = get_stream_lease_manager()
     subscriber_id = f"{user.id}:{uuid.uuid4().hex}"
+    lease_result = await lease_mgr.try_acquire(debate_id, subscriber_id)
+    if lease_result in (StreamLeaseResult.DENIED, StreamLeaseResult.ERROR_FAIL_CLOSED):
+        active = await lease_mgr.active_count(debate_id)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Too many concurrent streams for debate {debate_id} ({active} active)",
+            headers={"Retry-After": "30"},
+        )
 
-    # Guard: if the generator is never entered (client disconnects early),
-    # the lease must still be released. We create a task that waits briefly
-    # then checks whether the generator has started; if not, it releases.
+    # Guard the pre-response acquisition: if the client disconnects or ASGI
+    # fails before entering the generator, release instead of waiting for TTL.
     _generator_started = asyncio.Event()
 
     async def _lease_guard():
         """Release the lease if the generator never starts."""
         try:
             # Give the generator a short window to start (headers flush).
-            await asyncio.wait_for(_generator_started.wait(), timeout=5.0)
+            await asyncio.wait_for(
+                _generator_started.wait(),
+                timeout=SSE_GENERATOR_START_TIMEOUT_SECONDS,
+            )
         except asyncio.TimeoutError:
             # Generator never started — release the lease.
             logger.info(
@@ -437,25 +449,12 @@ async def stream_events(
     async def eventgen():
         # Use exactly-once lease context manager
         from metrics import increment_metric
-        from sse_backend import acquired_stream_lease, get_stream_lease_manager
-
-        lease_mgr = get_stream_lease_manager()
-
-        # Acquire lease inside the generator so the context manager
-        # covers the full subscribe lifecycle.
-        lease_result = await lease_mgr.try_acquire(debate_id, subscriber_id)
-        if lease_result in (StreamLeaseResult.DENIED, StreamLeaseResult.ERROR_FAIL_CLOSED):
-            active = await lease_mgr.active_count(debate_id)
-            raise HTTPException(
-                status_code=503,
-                detail=f"Too many concurrent streams for debate {debate_id} ({active} active)",
-                headers={"Retry-After": "30"},
-            )
-
-        # Signal that the generator has started — disarm the guard.
-        _generator_started.set()
+        from sse_backend import acquired_stream_lease
 
         async with acquired_stream_lease(lease_mgr, debate_id, subscriber_id):
+            # The generator now owns cleanup; disarm the pre-start guard only
+            # after entering the exactly-once release context.
+            _generator_started.set()
             # Force headers through proxy/browser buffers before the first
             # application event, which may not arrive for several seconds.
             yield ": connected\n\n"

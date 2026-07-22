@@ -132,6 +132,59 @@ def test_continue_idempotency_key(authenticated_client, db_session):
         assert continuation.status == "failed"
 
 
+def test_preflight_passed_scheduled_continuation_recovers_dispatch(
+    authenticated_client,
+    db_session,
+):
+    """Retry closes the crash window after scheduling commit, before dispatch."""
+
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-continue-recover-scheduled",
+        user_id=user.id,
+        prompt="Recover this continuation",
+        status="scheduled",
+    )
+    continuation = DebateContinuation(
+        debate_id=debate.id,
+        user_id=user.id,
+        idempotency_key="recover-scheduled-key",
+        status="preflight_passed",
+        credit_reservation_id="durable-reservation-id",
+    )
+    db_session.add(debate)
+    db_session.add(continuation)
+    db_session.commit()
+
+    headers = {"X-Idempotency-Key": continuation.idempotency_key}
+    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch, \
+         patch("routes.debates.execution.check_continue_preflight") as mock_preflight, \
+         patch("billing.service.reserve_hosted_credit") as mock_reserve:
+        response = authenticated_client.post(
+            f"/api/v1/debates/{debate.id}/continue",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    mock_preflight.assert_not_called()
+    mock_reserve.assert_not_called()
+    mock_dispatch.assert_called_once_with(
+        debate.id,
+        debate.prompt,
+        f"debate:{debate.id}",
+        {},
+        None,
+        trace_id=None,
+        resume=True,
+        continuation_id=continuation.id,
+    )
+    db_session.refresh(continuation)
+    db_session.refresh(debate)
+    assert continuation.status == "dispatched"
+    assert continuation.credit_reservation_id == "durable-reservation-id"
+    assert debate.status == "scheduled"
+
+
 def test_continue_schedule_conflict_marks_rolled_back_continuation_failed(
     authenticated_client,
     db_session,
@@ -434,5 +487,4 @@ def test_continue_retry_of_continuation_id(authenticated_client, db_session):
         assert data["retry_of_continuation_id"] == failed_cont.id
         assert data["idempotency_key"] == "new-key-2"
         mock_dispatch.assert_called_once()
-
 

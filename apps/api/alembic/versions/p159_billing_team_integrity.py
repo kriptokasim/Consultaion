@@ -1,5 +1,4 @@
 """P159: durable initial credit identity and unique team membership."""
-"""P159: durable initial credit identity and unique team membership."""
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -28,17 +27,27 @@ def upgrade() -> None:
         )
 
     # --- Duplicate team membership cleanup with audit preservation ---
-    # 1. Preserve duplicate rows in an audit table before deletion.
-    op.execute(sa.text(
-        "CREATE TABLE IF NOT EXISTS team_member_dedup_audit ("
-        "  id SERIAL PRIMARY KEY,"
-        "  original_id INTEGER NOT NULL,"
-        "  team_id VARCHAR NOT NULL,"
-        "  user_id VARCHAR NOT NULL,"
-        "  role VARCHAR NOT NULL,"
-        "  migrated_at TIMESTAMP WITH TIME ZONE DEFAULT now()"
-        ")"
-    ))
+    # 1. Preserve duplicate rows in an audit table before deletion.  Use
+    # Alembic's typed DDL instead of PostgreSQL-only SERIAL/now() syntax so the
+    # complete migration chain remains executable under SQLite test/dev.
+    if "team_member_dedup_audit" not in inspector.get_table_names():
+        op.create_table(
+            "team_member_dedup_audit",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("original_id", sa.Integer(), nullable=False),
+            sa.Column("team_id", sa.String(), nullable=False),
+            sa.Column("user_id", sa.String(), nullable=False),
+            sa.Column("role", sa.String(), nullable=False),
+            sa.Column(
+                "migrated_at",
+                sa.DateTime(timezone=True),
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            ),
+            sa.UniqueConstraint(
+                "original_id", name="uq_team_member_dedup_audit_original_id"
+            ),
+        )
     # Copy duplicate rows (those NOT selected for preservation) into audit table
     op.execute(sa.text(
         "INSERT INTO team_member_dedup_audit (original_id, team_id, user_id, role) "

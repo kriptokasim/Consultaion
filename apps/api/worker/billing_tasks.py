@@ -90,6 +90,27 @@ def _renew_lock(lock: object) -> bool:
         return False
 
 
+@celery_app.task(name="billing.reconcile_terminal_hosted_credits", bind=True, max_retries=3)
+def reconcile_terminal_hosted_credits(self):
+    """Settle/refund terminal hosted-credit reservations left by transient errors."""
+
+    from billing.reconciliation import reconcile_terminal_hosted_credit_reservations
+    from database import SessionLocal
+
+    try:
+        with SessionLocal() as db:
+            summary = reconcile_terminal_hosted_credit_reservations(db)
+        if summary["failed"]:
+            raise RuntimeError(
+                f"{summary['failed']} terminal hosted-credit reservations failed reconciliation"
+            )
+        logger.info("Terminal hosted-credit reconciliation completed: %s", summary)
+        return summary
+    except Exception as exc:
+        logger.error("Terminal hosted-credit reconciliation failed: %s", exc)
+        raise self.retry(exc=exc, countdown=60) from exc
+
+
 @celery_app.task(name="billing.reconcile_previous_day", bind=True, max_retries=3)
 def reconcile_previous_day(self):
     """Reconcile the previous calendar day's usage.

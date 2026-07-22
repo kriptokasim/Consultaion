@@ -31,6 +31,134 @@ RECONCILIATION_TOKEN_TOLERANCE_PERCENT = 5.0
 RECONCILIATION_COST_TOLERANCE_USD = 1.0
 RECONCILIATION_COST_TOLERANCE_PERCENT = 10.0
 RECONCILIATION_DEBATE_TOLERANCE_PERCENT = 2.0
+TERMINAL_CREDIT_RECONCILIATION_GRACE_SECONDS = 300
+
+
+def reconcile_terminal_hosted_credit_reservations(
+    db: Session,
+    *,
+    older_than: datetime | None = None,
+    limit: int = 200,
+) -> Dict[str, int]:
+    """Retry terminal hosted-credit settlement from durable ledger state.
+
+    A failed inline settlement leaves its reservation in ``reserved`` (or
+    ``settlement_pending``) state.  This periodic pass derives the operation
+    from the exact durable Debate/Continuation identity and applies the same
+    conditional, idempotent settle/refund transition.  Ambiguous identities
+    are quarantined instead of guessing and risking a duplicate refund.
+    """
+
+    from models import Debate, DebateContinuation, UsageLedgerEntry
+
+    from billing.service import consume_hosted_credit, refund_hosted_credit
+
+    cutoff = older_than or (
+        datetime.now(timezone.utc)
+        - timedelta(seconds=TERMINAL_CREDIT_RECONCILIATION_GRACE_SECONDS)
+    )
+    candidates = db.exec(
+        select(UsageLedgerEntry)
+        .where(UsageLedgerEntry.kind == "credit_reservation")
+        .where(UsageLedgerEntry.status.in_(["reserved", "settlement_pending"]))
+        .where(UsageLedgerEntry.created_at <= cutoff)
+        .order_by(UsageLedgerEntry.created_at)
+        .limit(limit)
+    ).all()
+
+    summary = {
+        "checked": 0,
+        "settled": 0,
+        "refunded": 0,
+        "quarantined": 0,
+        "skipped_nonterminal": 0,
+        "already_terminal": 0,
+        "failed": 0,
+    }
+
+    # Keep only identifiers across commits/rollbacks; ORM instances may expire.
+    candidate_ids = [entry.id for entry in candidates]
+    for entry_id in candidate_ids:
+        summary["checked"] += 1
+        try:
+            entry = db.get(UsageLedgerEntry, entry_id)
+            if entry is None or entry.status not in {"reserved", "settlement_pending"}:
+                summary["already_terminal"] += 1
+                continue
+
+            debate = db.get(Debate, entry.debate_id) if entry.debate_id else None
+            if debate is None or debate.user_id != entry.user_id:
+                entry.status = "reconciliation_pending"
+                db.add(entry)
+                db.commit()
+                summary["quarantined"] += 1
+                continue
+
+            meta = entry.meta if isinstance(entry.meta, dict) else {}
+            continuation_id = meta.get("continuation_id")
+            operation = None
+            outcome = None
+
+            if continuation_id:
+                continuation = db.get(DebateContinuation, str(continuation_id))
+                if (
+                    continuation is None
+                    or continuation.debate_id != debate.id
+                    or continuation.credit_reservation_id != entry.id
+                ):
+                    entry.status = "reconciliation_pending"
+                    db.add(entry)
+                    db.commit()
+                    summary["quarantined"] += 1
+                    continue
+                if continuation.status == "completed":
+                    operation = consume_hosted_credit
+                    outcome = "settled"
+                elif continuation.status in {"failed", "cancelled"}:
+                    operation = refund_hosted_credit
+                    outcome = "refunded"
+                else:
+                    summary["skipped_nonterminal"] += 1
+                    continue
+            else:
+                if debate.credit_reservation_id != entry.id:
+                    entry.status = "reconciliation_pending"
+                    db.add(entry)
+                    db.commit()
+                    summary["quarantined"] += 1
+                    continue
+                if debate.status in {"completed", "completed_with_warnings"}:
+                    operation = consume_hosted_credit
+                    outcome = "settled"
+                elif debate.status in {"failed", "cancelled"}:
+                    operation = refund_hosted_credit
+                    outcome = "refunded"
+                else:
+                    summary["skipped_nonterminal"] += 1
+                    continue
+
+            changed = operation(
+                db,
+                entry.user_id,
+                reservation_id=entry.id,
+                debate_id=debate.id,
+            )
+            db.commit()
+            if changed:
+                summary[outcome] += 1
+            else:
+                # A concurrent reconciler or inline settlement may have won.
+                summary["already_terminal"] += 1
+        except Exception as exc:
+            db.rollback()
+            summary["failed"] += 1
+            logger.exception(
+                "Terminal hosted-credit reconciliation failed: reservation_id=%s error=%s",
+                entry_id,
+                exc,
+            )
+
+    return summary
 
 
 @dataclasses.dataclass

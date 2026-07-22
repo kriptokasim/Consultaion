@@ -1,7 +1,7 @@
 """Tests for worker.billing_tasks reconciliation tasks.
 
-Validates reconcile_previous_day, reconcile_current_period, and
-reconcile_closed_period including distributed lock behavior, retry
+Validates terminal-credit, previous-day, current-period, and closed-period
+reconciliation including distributed lock behavior, retry
 on Redis unavailability, and lock release in finally blocks.
 
 We call the inner function body directly via the task's __call__
@@ -61,6 +61,7 @@ from worker.billing_tasks import (
     reconcile_closed_period as _manual_task,
     reconcile_current_period as _monthly_task,
     reconcile_previous_day as _daily_task,
+    reconcile_terminal_hosted_credits as _terminal_credit_task,
 )
 
 # ---------------------------------------------------------------------------
@@ -126,6 +127,35 @@ class TestSuccessfulReconciliation:
             _daily_task()
 
         mock_release.assert_called_once_with(mock_lock_info)
+
+    def test_terminal_credit_task_runs_durable_reconciler(self):
+        patches = _reconciliation_module_patches()
+        summary = {
+            "checked": 1,
+            "settled": 1,
+            "refunded": 0,
+            "quarantined": 0,
+            "skipped_nonterminal": 0,
+            "already_terminal": 0,
+            "failed": 0,
+        }
+        patches[
+            "billing.reconciliation"
+        ].reconcile_terminal_hosted_credit_reservations.return_value = summary
+
+        with patch.dict("sys.modules", patches):
+            assert _terminal_credit_task() == summary
+
+
+def test_terminal_credit_task_is_registered_with_beat_and_worker_imports():
+    from worker.celery_app import celery_app
+
+    schedule = celery_app.conf.beat_schedule
+    assert (
+        schedule["billing-reconcile-terminal-hosted-credits"]["task"]
+        == "billing.reconcile_terminal_hosted_credits"
+    )
+    assert "worker.billing_tasks" in celery_app.conf.imports
 
 
 class TestFailureReleasesLock:

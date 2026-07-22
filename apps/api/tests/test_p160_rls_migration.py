@@ -4,6 +4,10 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+
 
 def _load_migration() -> ModuleType:
     path = (
@@ -85,3 +89,31 @@ def test_p160_keeps_billing_repairs() -> None:
 
     assert hasattr(migration, "_ensure_billing_webhook_events")
     assert hasattr(migration, "_complete_usage_ledger_state")
+
+
+def test_p160_unknown_historical_credit_is_quarantined_on_sqlite(monkeypatch) -> None:
+    migration = _load_migration()
+    engine = sa.create_engine("sqlite://")
+
+    with engine.begin() as connection:
+        connection.execute(sa.text(
+            "CREATE TABLE usage_ledger_entry ("
+            "id VARCHAR PRIMARY KEY, user_id VARCHAR NOT NULL, kind VARCHAR NOT NULL, "
+            "idempotency_key VARCHAR NOT NULL, amount INTEGER NOT NULL, "
+            "meta JSON, created_at TIMESTAMP NOT NULL)"
+        ))
+        connection.execute(sa.text(
+            "INSERT INTO usage_ledger_entry "
+            "(id, user_id, kind, idempotency_key, amount, meta, created_at) "
+            "VALUES ('legacy-credit', 'user-1', 'credit_reservation', "
+            "'legacy-key', 1, NULL, CURRENT_TIMESTAMP)"
+        ))
+
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(migration, "op", operations)
+        migration.upgrade()
+
+        status = connection.execute(sa.text(
+            "SELECT status FROM usage_ledger_entry WHERE id = 'legacy-credit'"
+        )).scalar_one()
+        assert status == "reconciliation_pending"

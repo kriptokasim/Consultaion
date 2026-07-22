@@ -420,7 +420,7 @@ def refund_hosted_credit(
             select(UsageLedgerEntry)
             .where(UsageLedgerEntry.debate_id == debate_id)
             .where(UsageLedgerEntry.kind == "credit_reservation")
-            .where(UsageLedgerEntry.status == "reserved")
+            .where(UsageLedgerEntry.status.in_(["reserved", "settlement_pending"]))
             .where(UsageLedgerEntry.user_id == uid)
             .order_by(UsageLedgerEntry.created_at.desc())
         ).first()
@@ -445,7 +445,7 @@ def refund_hosted_credit(
             return bool(result.rowcount)
         return False
 
-    if entry.status != "reserved":
+    if entry.status not in {"reserved", "settlement_pending"}:
         return False
 
     # Conditional transition — only one concurrent caller wins
@@ -453,7 +453,7 @@ def refund_hosted_credit(
     transition = (
         update(UsageLedgerEntry)
         .where(UsageLedgerEntry.id == entry.id)
-        .where(UsageLedgerEntry.status == "reserved")
+        .where(UsageLedgerEntry.status.in_(["reserved", "settlement_pending"]))
         .values(status="refunded", refunded_at=now)
         .execution_options(synchronize_session=False)
     )
@@ -502,7 +502,7 @@ def consume_hosted_credit(
             select(UsageLedgerEntry)
             .where(UsageLedgerEntry.debate_id == debate_id)
             .where(UsageLedgerEntry.kind == "credit_reservation")
-            .where(UsageLedgerEntry.status == "reserved")
+            .where(UsageLedgerEntry.status.in_(["reserved", "settlement_pending"]))
             .where(UsageLedgerEntry.user_id == uid)
             .order_by(UsageLedgerEntry.created_at.desc())
         ).first()
@@ -510,7 +510,7 @@ def consume_hosted_credit(
     if (
         entry is None
         or not _reservation_matches(entry, user_id=uid, debate_id=debate_id)
-        or entry.status != "reserved"
+        or entry.status not in {"reserved", "settlement_pending"}
     ):
         return False
 
@@ -518,10 +518,9 @@ def consume_hosted_credit(
     transition = (
         update(UsageLedgerEntry)
         .where(UsageLedgerEntry.id == entry.id)
-        .where(UsageLedgerEntry.status == "reserved")
+        .where(UsageLedgerEntry.status.in_(["reserved", "settlement_pending"]))
         .values(status="settled", settled_at=now)
         .execution_options(synchronize_session=False)
     )
     result = db.exec(transition)
     return bool(result.rowcount)
-

@@ -122,6 +122,10 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
                 "task": "billing.reconcile_current_period",
                 "schedule": crontab(hour=4, minute=0, day_of_month=1),
             },
+            "billing-reconcile-terminal-hosted-credits": {
+                "task": "billing.reconcile_terminal_hosted_credits",
+                "schedule": 300.0,
+            },
             "worker-heartbeat": {
                 "task": "worker.heartbeat_tick",
                 "schedule": 30.0,
@@ -137,6 +141,10 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
                 "task": "billing.reconcile_current_period",
                 "schedule": {"day_of_month": 1, "hour": 4, "minute": 0},
             },
+            "billing-reconcile-terminal-hosted-credits": {
+                "task": "billing.reconcile_terminal_hosted_credits",
+                "schedule": 300.0,
+            },
             "worker-heartbeat": {
                 "task": "worker.heartbeat_tick",
                 "schedule": 30.0,
@@ -150,6 +158,7 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
         timezone="UTC",
         enable_utc=True,
         task_track_started=True,
+        imports=("worker.billing_tasks",),
         beat_schedule=beat_schedule,
         # Three-queue routing
         task_routes={

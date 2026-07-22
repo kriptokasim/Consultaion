@@ -7,7 +7,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -23,7 +23,7 @@ from database import engine, init_db  # noqa: E402
 from models import Debate, User  # noqa: E402
 from routes.debates import stream_events  # noqa: E402
 from schemas import default_debate_config  # noqa: E402
-from sse_backend import MemoryChannelBackend  # noqa: E402
+from sse_backend import MemoryChannelBackend, StreamLeaseResult  # noqa: E402
 
 init_db()
 
@@ -639,6 +639,70 @@ async def test_missing_production_origins_do_not_acquire_stream_lease():
         get_lease_manager.assert_not_called()
 
     await backend.stop()
+
+
+@pytest.mark.anyio
+async def test_lease_denial_is_http_503_before_stream_headers():
+    """A full lease pool must not become a truncated HTTP 200 stream."""
+
+    from fastapi import HTTPException
+    from sqlmodel import Session
+
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+    lease_manager = AsyncMock()
+    lease_manager.try_acquire.return_value = StreamLeaseResult.DENIED
+    lease_manager.active_count.return_value = 5
+
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        request = _make_request(token=token)
+        with patch("sse_backend.get_stream_lease_manager", return_value=lease_manager):
+            with pytest.raises(HTTPException) as exc_info:
+                await stream_events(
+                    debate_id,
+                    request=request,
+                    last_sequence=None,
+                    session=session,
+                    sse_backend=backend,
+                )
+
+    await backend.stop()
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.headers == {"Retry-After": "30"}
+    lease_manager.release.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_pre_response_lease_is_released_if_generator_never_starts():
+    """ASGI cancellation before iteration must not leave a lease until TTL."""
+
+    from sqlmodel import Session
+
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+    lease_manager = AsyncMock()
+    lease_manager.try_acquire.return_value = StreamLeaseResult.ACQUIRED
+
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        request = _make_request(token=token)
+        with patch("sse_backend.get_stream_lease_manager", return_value=lease_manager), \
+             patch(
+                 "routes.debates.streaming.SSE_GENERATOR_START_TIMEOUT_SECONDS",
+                 0.01,
+             ):
+            response = await stream_events(
+                debate_id,
+                request=request,
+                last_sequence=None,
+                session=session,
+                sse_backend=backend,
+            )
+            await response._lease_guard_task
+
+    await backend.stop()
+    lease_manager.release.assert_awaited_once()
 
 
 # ─── Test 11: Forbidden debate ───────────────────────────────────────────────

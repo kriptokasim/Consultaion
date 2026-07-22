@@ -7,7 +7,7 @@ import logging
 import re
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import List
 
 from agents import UsageAccumulator, call_llm_for_role
@@ -690,7 +690,17 @@ async def run_arena(
                         "error_code": "persistence_failed",
                     },
                 )
-                # Still publish terminal event so frontend doesn't hang.
+                # Return a failed response as well as publishing the terminal
+                # event.  The original provider response may be successful,
+                # but content that was not durably persisted must never enter
+                # synthesis or be reported as a successful model result.
+                failed_response = replace(
+                    response,
+                    success=False,
+                    content="Response could not be stored. Please retry this model.",
+                    error=f"Persistence failed: {str(persist_exc)[:200]}",
+                    error_code="persistence_failed",
+                )
                 terminal_payload = {
                     "type": "model_response_failed",
                     **lifecycle_payload,
@@ -700,7 +710,7 @@ async def run_arena(
                 await _publish_lifecycle_best_effort(
                     backend, f"debate:{debate_id}", terminal_payload
                 )
-                return response, call_usage
+                return failed_response, call_usage
 
             terminal_payload = {
                 "type": "model_response_completed" if response.success else "model_response_failed",

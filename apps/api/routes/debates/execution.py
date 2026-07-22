@@ -304,7 +304,10 @@ async def continue_debate_run(
                     )
                     continuation_record = session.execute(stmt_lock).scalars().first()
                     if not continuation_record:
-                        raise NotFoundError(message="Continuation disappeared during resume", code="continuation.not_found")
+                        raise NotFoundError(
+                            message="Continuation disappeared during resume",
+                            code="continuation.not_found",
+                        ) from None
                     if continuation_record.status in {"dispatched", "running", "completed", "paused"}:
                         return ContinuationResponse(
                             continuation_id=str(continuation_record.id),
@@ -325,7 +328,7 @@ async def continue_debate_run(
                         code="continuation.new_idempotency_key_required",
                         status_code=409,
                         details={"new_idempotency_key_required": True}
-                    )
+                    ) from None
     else:
         continuation_record = DebateContinuation(
             debate_id=debate_id,
@@ -339,7 +342,18 @@ async def continue_debate_run(
         session.add(continuation_record)
         session.commit()
 
-    if debate.status not in {"perspectives_ready", "failed"}:
+    # A process can crash after atomically committing preflight + scheduling,
+    # but before registering the dispatch task.  That durable combination is
+    # safe to resume: the reservation and scheduled Debate already exist, so
+    # retry must continue at dispatch instead of rejecting the scheduled row.
+    session.refresh(debate)
+    resume_scheduled_dispatch = bool(
+        continuation_record
+        and continuation_record.status == "preflight_passed"
+        and debate.status == "scheduled"
+    )
+
+    if not resume_scheduled_dispatch and debate.status not in {"perspectives_ready", "failed"}:
         exc = ValidationError(
             message="Debate is not paused or ready for continuation",
             code="debate.not_paused",
@@ -357,108 +371,118 @@ async def continue_debate_run(
                 logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
         raise exc
 
-    # 2. Preflight checks
-    try:
-        check_continue_preflight(debate, current_user, session)
-    except Exception as exc:
-        if continuation_record:
-            try:
-                from services.continuations import transition_continuation_sync
-                transition_continuation_sync(
-                    session, continuation_record.id, ["requested"], "failed",
-                    failure_code=getattr(exc, "code", "preflight_failed"),
-                    failure_detail_safe=str(exc.detail) if hasattr(exc, "detail") else str(exc),
-                )
-            except Exception:
-                logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
-        raise exc
-
-    # 3. Credit Reservation prior to state transition
     from billing.service import get_active_plan, refund_hosted_credit, reserve_hosted_credit
-    plan = get_active_plan(session, current_user.id)
-    
-    enabled_models = {m.id: m for m in list_enabled_models()}
-    target_model_id = debate.model_id or get_default_model().id
-    target_model_info = enabled_models.get(target_model_id)
-    model_tier = "standard"
-    if target_model_info:
-        model_tier = getattr(target_model_info, "tier", "standard")
-        
-    is_sota_run = (model_tier == "advanced" or debate.mode == "arena")
-    credit_reserved = False
-    
-    if plan.is_default_free and is_sota_run:
+
+    # A recovered scheduled continuation may already own a durable credit
+    # reservation.  Preserve that identity for dispatch compensation without
+    # reserving a second credit or rerunning preflight against a later state.
+    credit_reserved = bool(
+        resume_scheduled_dispatch
+        and continuation_record
+        and continuation_record.credit_reservation_id
+    )
+
+    if not resume_scheduled_dispatch:
+        # 2. Preflight checks
         try:
-            reservation_id = reserve_hosted_credit(
-                session,
-                current_user.id,
-                debate_id=debate_id,
-                run_attempt=(getattr(debate, "run_attempt", 0) or 0) + 1,
-                continuation_id=continuation_record.id if continuation_record else None,
-            )
-            credit_reserved = True
-            if continuation_record and reservation_id:
-                continuation_record.credit_reservation_id = reservation_id
+            check_continue_preflight(debate, current_user, session)
         except Exception as exc:
             if continuation_record:
                 try:
                     from services.continuations import transition_continuation_sync
                     transition_continuation_sync(
                         session, continuation_record.id, ["requested"], "failed",
-                        failure_code=getattr(exc, "code", "hosted_credits.exhausted"),
-                        failure_detail_safe=str(exc),
+                        failure_code=getattr(exc, "code", "preflight_failed"),
+                        failure_detail_safe=str(exc.detail) if hasattr(exc, "detail") else str(exc),
                     )
                 except Exception:
                     logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
             raise exc
 
-    # Mark preflight passed (skip if already at preflight_passed from a resumed orphan)
-    if continuation_record and continuation_record.status == "requested":
-        from services.continuations import transition_continuation_sync
-        transition_continuation_sync(
-            session,
-            continuation_record.id,
-            ["requested"],
-            "preflight_passed",
-            commit=False,
-        )
+        # 3. Credit reservation prior to state transition
+        plan = get_active_plan(session, current_user.id)
 
-    # 4. Conditional atomic update
-    stmt_upd = (
-        sa.update(Debate)
-        .where(Debate.id == debate_id)
-        .where(Debate.status.in_(["perspectives_ready", "failed"]))
-        .values(status="scheduled")
-    )
-    result = session.execute(stmt_upd)
-    if result.rowcount == 0:
-        # Roll back reservation, preflight transition and scheduling together.
-        session.rollback()
-        if continuation_record:
+        enabled_models = {m.id: m for m in list_enabled_models()}
+        target_model_id = debate.model_id or get_default_model().id
+        target_model_info = enabled_models.get(target_model_id)
+        model_tier = "standard"
+        if target_model_info:
+            model_tier = getattr(target_model_info, "tier", "standard")
+
+        is_sota_run = model_tier == "advanced" or debate.mode == "arena"
+
+        if plan.is_default_free and is_sota_run:
             try:
-                from services.continuations import transition_continuation_sync
-                transition_continuation_sync(
+                reservation_id = reserve_hosted_credit(
                     session,
-                    continuation_record.id,
-                    ["requested", "preflight_passed"],
-                    "failed",
-                    failure_code="debate.continue_conflict",
-                    failure_detail_safe="This run is no longer waiting for continuation.",
+                    current_user.id,
+                    debate_id=debate_id,
+                    run_attempt=(getattr(debate, "run_attempt", 0) or 0) + 1,
+                    continuation_id=continuation_record.id if continuation_record else None,
                 )
-            except Exception:
-                logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
-        raise ValidationError(
-            message="This run is no longer waiting for continuation.",
-            code="debate.continue_conflict",
-            status_code=409
+                credit_reserved = True
+                if continuation_record and reservation_id:
+                    continuation_record.credit_reservation_id = reservation_id
+            except Exception as exc:
+                if continuation_record:
+                    try:
+                        from services.continuations import transition_continuation_sync
+                        transition_continuation_sync(
+                            session, continuation_record.id, ["requested"], "failed",
+                            failure_code=getattr(exc, "code", "hosted_credits.exhausted"),
+                            failure_detail_safe=str(exc),
+                        )
+                    except Exception:
+                        logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
+                raise exc
+
+        # Mark preflight passed (skip if already at preflight_passed from a resumed orphan)
+        if continuation_record and continuation_record.status == "requested":
+            from services.continuations import transition_continuation_sync
+            transition_continuation_sync(
+                session,
+                continuation_record.id,
+                ["requested"],
+                "preflight_passed",
+                commit=False,
+            )
+
+        # 4. Conditional atomic update
+        stmt_upd = (
+            sa.update(Debate)
+            .where(Debate.id == debate_id)
+            .where(Debate.status.in_(["perspectives_ready", "failed"]))
+            .values(status="scheduled")
         )
+        result = session.execute(stmt_upd)
+        if result.rowcount == 0:
+            # Roll back reservation, preflight transition and scheduling together.
+            session.rollback()
+            if continuation_record:
+                try:
+                    from services.continuations import transition_continuation_sync
+                    transition_continuation_sync(
+                        session,
+                        continuation_record.id,
+                        ["requested", "preflight_passed"],
+                        "failed",
+                        failure_code="debate.continue_conflict",
+                        failure_detail_safe="This run is no longer waiting for continuation.",
+                    )
+                except Exception:
+                    logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
+            raise ValidationError(
+                message="This run is no longer waiting for continuation.",
+                code="debate.continue_conflict",
+                status_code=409,
+            )
 
-    # Reservation + reservation identity + preflight transition + scheduling
-    # become visible atomically.
-    session.commit()
+        # Reservation + reservation identity + preflight transition + scheduling
+        # become visible atomically.
+        session.commit()
 
-    # Refresh debate object
-    session.refresh(debate)
+        # Refresh debate object
+        session.refresh(debate)
 
     # 5. Dispatch task
     try:
