@@ -90,7 +90,16 @@ async def _settle_terminal_hosted_credit(
     debate_id: str,
     continuation_id: Optional[str],
 ) -> None:
-    """Settle exactly the reservation attached to this terminal execution."""
+    """Settle exactly the reservation attached to this terminal execution.
+
+    P1 #6: When a continuation_id is provided, the settle/refund decision is
+    derived from the *continuation's* status (not the debate's global status).
+    This prevents a completed debate from incorrectly consuming a reservation
+    belonging to a failed continuation on the same debate.
+
+    P1 #7: The boolean result of consume/refund is now logged with structured
+    detail so accounting drift is observable.
+    """
     from billing.service import consume_hosted_credit, refund_hosted_credit
     from database import engine
     from models import DebateContinuation
@@ -108,26 +117,62 @@ async def _settle_terminal_hosted_credit(
                 return
 
             reservation_id = debate.credit_reservation_id
+            target_status: str | None = None
             if continuation_id:
                 continuation = session.get(DebateContinuation, continuation_id)
                 if not continuation or continuation.debate_id != debate_id:
                     return
                 reservation_id = continuation.credit_reservation_id
+                # P1 #6: Derive operation from continuation status, not debate status.
+                if continuation.status == "completed":
+                    target_status = "settled"
+                elif continuation.status in {"failed", "cancelled"}:
+                    target_status = "refunded"
+                else:
+                    # Continuation not yet terminal — nothing to settle.
+                    logger.info(
+                        "billing.settlement_skipped continuation_not_terminal: "
+                        "debate_id=%s continuation_id=%s continuation_status=%s",
+                        debate_id, continuation_id, continuation.status,
+                    )
+                    return
+            else:
+                # Initial reservation (no continuation): use debate status.
+                target_status = (
+                    "settled"
+                    if debate.status in {"completed", "completed_with_warnings"}
+                    else "refunded"
+                )
 
             if not debate.user_id or not reservation_id:
                 return
+
             operation = (
                 consume_hosted_credit
-                if debate.status in {"completed", "completed_with_warnings"}
+                if target_status == "settled"
                 else refund_hosted_credit
             )
-            operation(
+            changed = operation(
                 session,
                 debate.user_id,
                 reservation_id=reservation_id,
                 debate_id=debate_id,
             )
             session.commit()
+
+            # P1 #7: Log settlement outcome for observability.
+            if changed:
+                logger.info(
+                    "billing.settlement_completed: debate_id=%s continuation_id=%s "
+                    "reservation_id=%s target=%s",
+                    debate_id, continuation_id, reservation_id, target_status,
+                )
+            else:
+                logger.warning(
+                    "billing.settlement_noop: debate_id=%s continuation_id=%s "
+                    "reservation_id=%s target=%s (already terminal or not found)",
+                    debate_id, continuation_id, reservation_id, target_status,
+                )
 
     try:
         await asyncio.get_running_loop().run_in_executor(None, _settle)
@@ -1013,11 +1058,17 @@ async def run_debate(
         except Exception as inner_exc:
             logger.error("Failed to update debate status after transient error: debate_id=%s error=%s", debate_id, inner_exc)
 
-        await backend.publish(
-            channel_id,
-            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Temporary AI provider issue. Please retry."}},
-        )
+        # P1 #4: Billing settlement must not depend on SSE publish success.
+        # Settle first, then publish (best-effort). Transport failures
+        # should never block accounting.
         await _settle_terminal_hosted_credit(debate_id, continuation_id)
+        try:
+            await backend.publish(
+                channel_id,
+                {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Temporary AI provider issue. Please retry."}},
+            )
+        except Exception:
+            logger.warning("Failed to publish transient error event for debate %s", debate_id)
 
     except Exception as exc:
         logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
@@ -1099,11 +1150,15 @@ async def run_debate(
         except Exception as inner_exc:
             logger.error("Failed to update debate status after terminal error: debate_id=%s error=%s", debate_id, inner_exc)
 
-        await backend.publish(
-            channel_id,
-            {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Debate failed due to an internal error."}},
-        )
+        # P1 #4: Billing settlement must not depend on SSE publish success.
         await _settle_terminal_hosted_credit(debate_id, continuation_id)
+        try:
+            await backend.publish(
+                channel_id,
+                {"type": "error", "debate_id": debate_id, "round": 0, "payload": {"message": "Debate failed due to an internal error."}},
+            )
+        except Exception:
+            logger.warning("Failed to publish terminal error event for debate %s", debate_id)
 
     finally:
         # PS156 Track E: stop heartbeat, conditionally release only our own

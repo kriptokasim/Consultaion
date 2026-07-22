@@ -216,7 +216,10 @@ async def continue_debate_run(
         )
         continuation_record = session.execute(stmt_chk).scalars().first()
         if continuation_record:
-            if continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed", "paused"}:
+            # Only terminal or in-flight-beyond-preflight statuses are safe to
+            # early-return. "requested" and "preflight_passed" may be orphaned
+            # (crash after commit but before scheduling) and must be resumed.
+            if continuation_record.status in {"dispatched", "running", "completed", "paused"}:
                 return ContinuationResponse(
                     continuation_id=str(continuation_record.id),
                     debate_id=debate_id,
@@ -233,6 +236,39 @@ async def continue_debate_run(
                     status_code=409,
                     details={"new_idempotency_key_required": True}
                 )
+            # "requested" or "preflight_passed" — resume the flow below.
+            # Lock the row to prevent concurrent retries from double-dispatching.
+            stmt_lock = (
+                select(DebateContinuation)
+                .where(DebateContinuation.id == continuation_record.id)
+                .with_for_update()
+            )
+            continuation_record = session.execute(stmt_lock).scalars().first()
+            if not continuation_record:
+                raise NotFoundError(message="Continuation disappeared during resume", code="continuation.not_found")
+            # Re-check status after acquiring lock — another worker may have progressed it.
+            if continuation_record.status in {"dispatched", "running", "completed", "paused"}:
+                return ContinuationResponse(
+                    continuation_id=str(continuation_record.id),
+                    debate_id=debate_id,
+                    status=continuation_record.status,
+                    debate_status=debate.status,
+                    idempotency_key=continuation_record.idempotency_key,
+                    created=False,
+                    retry_of_continuation_id=continuation_record.retry_of_continuation_id,
+                )
+            if continuation_record.status in {"failed", "cancelled"}:
+                raise ValidationError(
+                    message="The previous continuation attempt failed or was cancelled. A new idempotency key is required.",
+                    code="continuation.new_idempotency_key_required",
+                    status_code=409,
+                    details={"new_idempotency_key_required": True}
+                )
+            # Status is still "requested" or "preflight_passed" — resume below.
+            logger.info(
+                "Resuming orphaned continuation %s (status=%s) for debate %s",
+                continuation_record.id, continuation_record.status, debate_id,
+            )
         else:
             continuation_record = DebateContinuation(
                 debate_id=debate_id,
@@ -249,7 +285,7 @@ async def continue_debate_run(
             except sa.exc.IntegrityError:
                 session.rollback()
                 continuation_record = session.execute(stmt_chk).scalars().first()
-                if continuation_record and continuation_record.status in {"requested", "preflight_passed", "dispatched", "running", "completed", "paused"}:
+                if continuation_record and continuation_record.status in {"dispatched", "running", "completed", "paused"}:
                     return ContinuationResponse(
                         continuation_id=str(continuation_record.id),
                         debate_id=debate_id,
@@ -258,6 +294,37 @@ async def continue_debate_run(
                         idempotency_key=continuation_record.idempotency_key,
                         created=False,
                         retry_of_continuation_id=continuation_record.retry_of_continuation_id,
+                    )
+                # If found in requested/preflight_passed after integrity error, resume it.
+                if continuation_record and continuation_record.status in {"requested", "preflight_passed"}:
+                    stmt_lock = (
+                        select(DebateContinuation)
+                        .where(DebateContinuation.id == continuation_record.id)
+                        .with_for_update()
+                    )
+                    continuation_record = session.execute(stmt_lock).scalars().first()
+                    if not continuation_record:
+                        raise NotFoundError(message="Continuation disappeared during resume", code="continuation.not_found")
+                    if continuation_record.status in {"dispatched", "running", "completed", "paused"}:
+                        return ContinuationResponse(
+                            continuation_id=str(continuation_record.id),
+                            debate_id=debate_id,
+                            status=continuation_record.status,
+                            debate_status=debate.status,
+                            idempotency_key=continuation_record.idempotency_key,
+                            created=False,
+                            retry_of_continuation_id=continuation_record.retry_of_continuation_id,
+                        )
+                    logger.info(
+                        "Resuming orphaned continuation %s (status=%s) for debate %s after integrity error",
+                        continuation_record.id, continuation_record.status, debate_id,
+                    )
+                elif continuation_record and continuation_record.status in {"failed", "cancelled"}:
+                    raise ValidationError(
+                        message="The previous continuation attempt failed or was cancelled. A new idempotency key is required.",
+                        code="continuation.new_idempotency_key_required",
+                        status_code=409,
+                        details={"new_idempotency_key_required": True}
                     )
     else:
         continuation_record = DebateContinuation(
@@ -345,8 +412,8 @@ async def continue_debate_run(
                     logger.warning("Failed to transition continuation %s to failed", continuation_record.id)
             raise exc
 
-    # Mark preflight passed
-    if continuation_record:
+    # Mark preflight passed (skip if already at preflight_passed from a resumed orphan)
+    if continuation_record and continuation_record.status == "requested":
         from services.continuations import transition_continuation_sync
         transition_continuation_sync(
             session,
@@ -420,6 +487,9 @@ async def continue_debate_run(
             )
             
     except Exception as dispatch_exc:
+        # P1 #5: All compensation must be in a single transaction.
+        # transition_continuation_sync defaults to commit=True which would
+        # commit refund + debate revert + continuation failure prematurely.
         if credit_reserved:
             refund_hosted_credit(
                 session,
@@ -444,6 +514,7 @@ async def continue_debate_run(
                     session, continuation_record.id, ["dispatched", "preflight_passed"], "failed",
                     failure_code="debate.dispatch_failed",
                     failure_detail_safe=str(dispatch_exc),
+                    commit=False,
                 )
             except Exception:
                 logger.warning("Failed to transition continuation %s to failed", continuation_record.id)

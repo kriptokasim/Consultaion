@@ -662,12 +662,45 @@ async def run_arena(
 
             # Persist before the terminal lifecycle event. A completed event
             # therefore guarantees that the canonical response can be fetched.
-            async with async_session_scope() as session:
-                await persist_and_publish_arena_response(
-                    session, backend, debate_id, response,
-                    owner_id=execution_owner_id,
-                    lease_epoch=lease_epoch,
+            try:
+                async with async_session_scope() as session:
+                    await persist_and_publish_arena_response(
+                        session, backend, debate_id, response,
+                        owner_id=execution_owner_id,
+                        lease_epoch=lease_epoch,
+                    )
+            except Exception as persist_exc:
+                # P2 #10: Even persistence failures must not escape — the parent
+                # loop should see every model task complete normally.
+                from orchestration.execution_lease import ExecutionSupersededError
+                if isinstance(persist_exc, ExecutionSupersededError):
+                    raise
+                logger.error(
+                    "Arena response persistence failed for %s: %s",
+                    model_info.id, persist_exc, exc_info=True,
                 )
+                # Publish a storage failure event so the frontend doesn't hang.
+                await _publish_lifecycle_best_effort(
+                    backend,
+                    f"debate:{debate_id}",
+                    {
+                        "type": "model_response_storage_failed",
+                        **lifecycle_payload,
+                        "error": f"Response generated but persistence failed: {str(persist_exc)[:200]}",
+                        "error_code": "persistence_failed",
+                    },
+                )
+                # Still publish terminal event so frontend doesn't hang.
+                terminal_payload = {
+                    "type": "model_response_failed",
+                    **lifecycle_payload,
+                    "error": f"Persistence failed: {str(persist_exc)[:200]}",
+                    "error_code": "persistence_failed",
+                }
+                await _publish_lifecycle_best_effort(
+                    backend, f"debate:{debate_id}", terminal_payload
+                )
+                return response, call_usage
 
             terminal_payload = {
                 "type": "model_response_completed" if response.success else "model_response_failed",
@@ -914,6 +947,36 @@ async def run_arena(
                 await session.rollback()
                 if not _is_response_identity_conflict(exc):
                     raise
+                # P2 #11: After a duplicate conflict, fetch the canonical existing
+                # row and return its content instead of the newly computed one.
+                # This prevents durable/live divergence when the DB already has
+                # a synthesis for this identity.
+                existing_result = await session.execute(
+                    select(Message).where(
+                        Message.debate_id == debate_id,
+                        Message.response_id == f"synth-{debate_id}-a{run_attempt}",
+                    )
+                )
+                existing_msg = existing_result.scalars().first()
+                if existing_msg:
+                    logger.info(
+                        "arena_synthesis.conflict_resolved_using_canonical: "
+                        "debate_id=%s response_id=%s",
+                        debate_id, f"synth-{debate_id}-a{run_attempt}",
+                    )
+                    existing_meta = existing_msg.meta or {}
+                    existing_report = existing_meta.get("synthesis_report")
+                    existing_meta_updates = {
+                        "synthesis_status": "succeeded" if existing_meta.get("synthesis_success") else "failed",
+                        "synthesis_error": existing_meta.get("synthesis_error"),
+                        "fallback_model": existing_meta.get("fallback_model"),
+                        "fallback_reason": existing_meta.get("fallback_reason"),
+                        "fallback_response": existing_meta.get("fallback_response"),
+                        "semantic_analysis": existing_meta.get("semantic_analysis"),
+                        "divergence_breakdown": existing_meta.get("divergence_breakdown"),
+                    }
+                    return existing_msg.content, existing_report, existing_meta_updates
+                # No existing row found (unexpected) — fall through with new content.
         return scontent, sreport, meta
 
     synthesis_content, synthesis_report, meta_updates = await run_with_checkpoint(

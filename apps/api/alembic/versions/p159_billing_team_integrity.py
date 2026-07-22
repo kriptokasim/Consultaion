@@ -1,4 +1,5 @@
 """P159: durable initial credit identity and unique team membership."""
+"""P159: durable initial credit identity and unique team membership."""
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -26,7 +27,32 @@ def upgrade() -> None:
             ["credit_reservation_id"], unique=False,
         )
 
-    # Collapse historical duplicates while preserving their strongest role.
+    # --- Duplicate team membership cleanup with audit preservation ---
+    # 1. Preserve duplicate rows in an audit table before deletion.
+    op.execute(sa.text(
+        "CREATE TABLE IF NOT EXISTS team_member_dedup_audit ("
+        "  id SERIAL PRIMARY KEY,"
+        "  original_id INTEGER NOT NULL,"
+        "  team_id VARCHAR NOT NULL,"
+        "  user_id VARCHAR NOT NULL,"
+        "  role VARCHAR NOT NULL,"
+        "  migrated_at TIMESTAMP WITH TIME ZONE DEFAULT now()"
+        ")"
+    ))
+    # Copy duplicate rows (those NOT selected for preservation) into audit table
+    op.execute(sa.text(
+        "INSERT INTO team_member_dedup_audit (original_id, team_id, user_id, role) "
+        "SELECT tm.id, tm.team_id, tm.user_id, tm.role "
+        "FROM team_member tm "
+        "WHERE tm.id NOT IN ("
+        "  SELECT MIN(id) FROM team_member GROUP BY team_id, user_id"
+        ") "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM team_member_dedup_audit a WHERE a.original_id = tm.id"
+        ")"
+    ))
+
+    # 2. Collapse historical duplicates while preserving their strongest role.
     op.execute(sa.text(
         "UPDATE team_member SET role = 'owner' WHERE id IN ("
         "SELECT MIN(id) FROM team_member GROUP BY team_id, user_id "
