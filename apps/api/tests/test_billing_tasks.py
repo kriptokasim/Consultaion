@@ -159,14 +159,43 @@ def test_terminal_credit_task_is_registered_with_beat_and_worker_imports():
     assert "worker.billing_tasks" in celery_app.conf.imports
 
 
-def test_compose_deploys_single_beat_and_consumes_maintenance_queue():
+def test_worker_queue_inventory_follows_dispatch_settings():
+    from worker.celery_app import configured_worker_queue_names
+
+    class _Settings:
+        DEBATE_FAST_QUEUE_NAME = "fast-custom"
+        DEBATE_DEEP_QUEUE_NAME = "deep-custom"
+        DEBATE_DEFAULT_QUEUE = "fast-custom"
+        CELERY_INTERACTIVE_QUEUE = "interactive-custom"
+
+    assert configured_worker_queue_names(_Settings()) == (
+        "fast-custom",
+        "deep-custom",
+        "interactive-custom",
+        "maintenance",
+        "default",
+    )
+
+
+def test_celery_declares_every_configured_worker_queue():
+    from worker.celery_app import WORKER_QUEUE_NAMES, celery_app
+
+    declared = {
+        getattr(queue, "name", str(queue)) for queue in celery_app.conf.task_queues
+    }
+    assert declared == set(WORKER_QUEUE_NAMES)
+    assert "maintenance" in declared
+
+
+def test_compose_deploys_single_beat_and_uses_declared_worker_queues():
     compose_path = Path(__file__).resolve().parents[3] / "infra" / "docker-compose.yml"
     compose = compose_path.read_text(encoding="utf-8")
 
     assert compose.count("\n  beat:\n") == 1
     assert '"beat"' in compose
     assert '"--schedule=/tmp/celerybeat-schedule"' in compose
-    assert '"interactive,maintenance,default"' in compose
+    assert '"interactive,maintenance,default"' not in compose
+    assert '"-Q"' not in compose
     assert "celerybeat-schedule*" in compose
 
 

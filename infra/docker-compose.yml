@@ -25,17 +25,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command:
-      [
-        "celery",
-        "-A",
-        "worker.celery_app",
-        "worker",
-        "-l",
-        "info",
-        "-Q",
-        "interactive,maintenance,default",
-      ]
+    # Queue inventory is declared by worker.celery_app from the same settings
+    # used by debate dispatch, including custom fast/deep/default queue names.
+    command: ["celery", "-A", "worker.celery_app", "worker", "-l", "info"]
   beat:
     build: ../apps/api
     env_file: ../.env

@@ -41,6 +41,23 @@ JWT_SECRET=<64-char random string>
 INTERNAL_SECRET=<64-char random string>
 ```
 
+### One-time P162 RLS review
+
+P162 repairs databases that may already have run the first, over-broad P161
+revision. If the migration finds disabled, policyless tables outside the frozen
+Consultaion inventory, it stops instead of guessing their intended security
+state. Review the listed tables, then run the migration with an explicit
+inventory:
+
+```bash
+P162_RLS_REVIEWED=1
+P162_RLS_RESTORE_TABLES=public.external_default_deny,public.partner_records
+```
+
+Use an empty `P162_RLS_RESTORE_TABLES` value only after confirming that every
+listed candidate is intentionally unprotected. Remove both one-time variables
+after `alembic upgrade head` reaches `p162_restore_unmanaged_rls`.
+
 ### LLM Provider Keys
 
 At least one provider key is required. OpenRouter provides access to multiple models:
@@ -85,10 +102,15 @@ CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
 ```bash
 cd apps/api
 celery -A worker.celery_app.celery_app worker \
-  -Q interactive,maintenance,default \
   --loglevel=INFO \
   --concurrency=4
 ```
+
+The worker declares its queue inventory from `DEBATE_FAST_QUEUE_NAME`,
+`DEBATE_DEEP_QUEUE_NAME`, `DEBATE_DEFAULT_QUEUE`, and
+`CELERY_INTERACTIVE_QUEUE`, plus the required `maintenance` and `default`
+queues. Do not pass a fixed `-Q` list unless it contains the resolved values of
+all of those settings.
 
 Run one Celery Beat process as a separate service so periodic maintenance jobs,
 including terminal hosted-credit reconciliation, are actually published:

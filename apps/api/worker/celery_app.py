@@ -15,8 +15,10 @@ _WORKER_ID = os.environ.get("CELERY_WORKER_HOSTNAME", os.environ.get("HOSTNAME",
 try:
     from celery import Celery
     from celery.schedules import crontab
+    from kombu import Queue
 except ImportError:  # pragma: no cover - allow tests without celery installed
     crontab = None
+    Queue = None  # type: ignore[assignment,misc]
 
     class _EagerConfig(dict):
         def __getattr__(self, item):
@@ -67,6 +69,34 @@ celery_app = Celery(
 )
 
 
+def configured_worker_queue_names(settings_obj=settings) -> tuple[str, ...]:
+    """Return every queue this worker may receive work on.
+
+    Debate dispatch queue names are configurable, so the worker declaration
+    must be derived from the same settings rather than a hard-coded Compose
+    command.  ``dict.fromkeys`` preserves priority while removing aliases.
+    """
+
+    candidates = (
+        settings_obj.DEBATE_FAST_QUEUE_NAME,
+        settings_obj.DEBATE_DEEP_QUEUE_NAME,
+        settings_obj.DEBATE_DEFAULT_QUEUE,
+        settings_obj.CELERY_INTERACTIVE_QUEUE,
+        "maintenance",
+        "default",
+    )
+    return tuple(
+        dict.fromkeys(
+            name.strip()
+            for name in candidates
+            if isinstance(name, str) and name.strip()
+        )
+    )
+
+
+WORKER_QUEUE_NAMES = configured_worker_queue_names()
+
+
 def _write_worker_heartbeat():
     """Write worker heartbeat to Redis for ops visibility."""
     try:
@@ -75,23 +105,11 @@ def _write_worker_heartbeat():
         if not redis_client:
             return
 
-        queue_names = []
-        task_routes = getattr(celery_app.conf, "task_routes", None) or {}
-        if isinstance(task_routes, dict):
-            seen = set()
-            for route in task_routes.values():
-                q = route.get("queue") if isinstance(route, dict) else None
-                if q and q not in seen:
-                    seen.add(q)
-                    queue_names.append(q)
-        if not queue_names:
-            queue_names = [getattr(celery_app.conf, "task_default_queue", "default")]
-
         heartbeat = {
             "timestamp": time.time(),
             "git_sha": _GIT_SHA,
             "worker_id": _WORKER_ID,
-            "queue_names": queue_names,
+            "queue_names": list(WORKER_QUEUE_NAMES),
             "providers": {
                 "openai": bool(settings.OPENAI_API_KEY),
                 "anthropic": bool(settings.ANTHROPIC_API_KEY),
@@ -151,6 +169,13 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
             },
         }
 
+    interactive_queue = settings.CELERY_INTERACTIVE_QUEUE or "interactive"
+    declared_queues = (
+        tuple(Queue(name) for name in WORKER_QUEUE_NAMES)
+        if Queue is not None
+        else WORKER_QUEUE_NAMES
+    )
+
     celery_app.conf.update(
         task_serializer="json",
         accept_content=["json"],
@@ -160,12 +185,13 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
         task_track_started=True,
         imports=("worker.billing_tasks",),
         beat_schedule=beat_schedule,
-        # Three-queue routing
+        task_queues=declared_queues,
         task_routes={
-            "arena.*": {"queue": "interactive"},
-            "debate.*": {"queue": "interactive"},
-            "voting.*": {"queue": "interactive"},
-            "coding.*": {"queue": "interactive"},
+            "arena.*": {"queue": interactive_queue},
+            "debate.*": {"queue": interactive_queue},
+            "debates.*": {"queue": interactive_queue},
+            "voting.*": {"queue": interactive_queue},
+            "coding.*": {"queue": interactive_queue},
             "billing.*": {"queue": "maintenance"},
             "maintenance.*": {"queue": "maintenance"},
         },
