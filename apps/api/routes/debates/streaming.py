@@ -428,10 +428,17 @@ async def stream_events(
 
     # Guard the pre-response acquisition: if the client disconnects or ASGI
     # fails before entering the generator, release instead of waiting for TTL.
+    # The lock makes timeout cleanup and generator ownership transfer atomic.
+    # A generator that arrives after cleanup must reacquire before subscribing;
+    # it can never continue under a lease the guard already released.
     _generator_started = asyncio.Event()
+    _guard_release_done = asyncio.Event()
+    _lease_handoff_lock = asyncio.Lock()
+    _lease_handoff_state = "prestart"
 
     async def _lease_guard():
         """Release the lease if the generator never starts."""
+        nonlocal _lease_handoff_state
         try:
             # Give the generator a short window to start (headers flush).
             await asyncio.wait_for(
@@ -439,22 +446,54 @@ async def stream_events(
                 timeout=SSE_GENERATOR_START_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
-            # Generator never started — release the lease.
+            async with _lease_handoff_lock:
+                if _lease_handoff_state != "prestart":
+                    return
+                _lease_handoff_state = "guard_releasing"
+
             logger.info(
                 "SSE lease guard: generator never started for debate %s, releasing lease",
                 debate_id,
             )
-            await lease_mgr.release(debate_id, subscriber_id)
+            try:
+                await lease_mgr.release(debate_id, subscriber_id)
+            finally:
+                async with _lease_handoff_lock:
+                    _lease_handoff_state = "released"
+                _guard_release_done.set()
 
     async def eventgen():
+        nonlocal _lease_handoff_state
         # Use exactly-once lease context manager
         from metrics import increment_metric
         from sse_backend import acquired_stream_lease
 
+        owns_initial_lease = False
+        async with _lease_handoff_lock:
+            if _lease_handoff_state == "prestart":
+                _lease_handoff_state = "generator"
+                owns_initial_lease = True
+                _generator_started.set()
+
+        if not owns_initial_lease:
+            # The timeout guard won the ownership race.  Wait until its release
+            # completes before trying to acquire the same subscriber identity;
+            # otherwise the late release could delete the replacement lease.
+            await _guard_release_done.wait()
+            reacquire_result = await lease_mgr.try_acquire(debate_id, subscriber_id)
+            if reacquire_result in (
+                StreamLeaseResult.DENIED,
+                StreamLeaseResult.ERROR_FAIL_CLOSED,
+            ):
+                yield (
+                    "event: stream_unavailable\n"
+                    f"data: {json.dumps({'type': 'stream_unavailable', 'retry_after': 30})}\n\n"
+                )
+                return
+            async with _lease_handoff_lock:
+                _lease_handoff_state = "generator"
+
         async with acquired_stream_lease(lease_mgr, debate_id, subscriber_id):
-            # The generator now owns cleanup; disarm the pre-start guard only
-            # after entering the exactly-once release context.
-            _generator_started.set()
             # Force headers through proxy/browser buffers before the first
             # application event, which may not arrive for several seconds.
             yield ": connected\n\n"

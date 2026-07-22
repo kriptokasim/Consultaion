@@ -25,7 +25,47 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["celery", "-A", "worker.celery_app", "worker", "-l", "info"]
+    command:
+      [
+        "celery",
+        "-A",
+        "worker.celery_app",
+        "worker",
+        "-l",
+        "info",
+        "-Q",
+        "interactive,maintenance,default",
+      ]
+  beat:
+    build: ../apps/api
+    env_file: ../.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SSE_REDIS_URL=${SSE_REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      [
+        "celery",
+        "-A",
+        "worker.celery_app",
+        "beat",
+        "-l",
+        "info",
+        "--pidfile=",
+        "--schedule=/tmp/celerybeat-schedule",
+      ]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ls /tmp/celerybeat-schedule* >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
   web:
     build: ../apps/web
     environment:

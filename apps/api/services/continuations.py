@@ -11,7 +11,12 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_CONTINUATION_TRANSITIONS = {
     "requested": {"preflight_passed", "failed", "cancelled"},
-    "preflight_passed": {"dispatched", "failed", "cancelled"},
+    # Inline dispatch moves directly into the orchestrator.  There is no
+    # durable queue hand-off to represent with ``dispatched``, so the runner
+    # may claim a preflight-passed continuation directly as ``running``.
+    # This also lets a Celery task recover if it was durably enqueued but the
+    # route process died before persisting the dispatched timestamp.
+    "preflight_passed": {"dispatched", "running", "failed", "cancelled"},
     "dispatched": {"running", "failed", "cancelled"},
     "running": {"paused", "completed", "failed"},
     "paused": set(),

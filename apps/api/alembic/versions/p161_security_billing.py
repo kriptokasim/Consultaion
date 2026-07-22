@@ -15,6 +15,63 @@ down_revision: Union[str, None] = "p160_enable_public_rls"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Frozen inventory of Consultaion-owned public tables that existed when the
+# blanket P160 migration shipped.  This list is intentionally explicit: a
+# policyless table owned by another application (or deliberately configured as
+# default-deny) must never lose RLS merely because it shares the public schema.
+P160_MANAGED_PUBLIC_TABLES = (
+    "admin_event",
+    "alembic_version",
+    "api_key",
+    "api_keys",
+    "audit_log",
+    "billing_plans",
+    "billing_reconciliation_discrepancies",
+    "billing_reconciliation_runs",
+    "billing_subscriptions",
+    "billing_usage",
+    "billing_webhook_events",
+    "challenge_round",
+    "challenge_session",
+    "coding_lane_result",
+    "coding_patch_artifact",
+    "coding_run",
+    "coding_turn",
+    "conversation_votes",
+    "debate",
+    "debate_attempt",
+    "debate_checkpoint",
+    "debate_continuation",
+    "debate_error",
+    "debate_stage_checkpoint",
+    "debate_turn",
+    "debateround",
+    "divergence_report",
+    "llm_usage_log",
+    "message",
+    "oracle_branch",
+    "oracle_session",
+    "pairwise_vote",
+    "promotions",
+    "rating_persona",
+    "red_team_session",
+    "score",
+    "support_note",
+    "team",
+    "team_member",
+    "team_member_dedup_audit",
+    "terminal_transition",
+    "usage_counter",
+    "usage_ledger_entry",
+    "usage_quota",
+    "user",
+    "user_interaction",
+    "user_prediction",
+    "user_provider_keys",
+    "vote",
+    "vote_record",
+)
+
 
 def _disable_policyless_public_rls() -> None:
     """Undo the historical blanket RLS enable without weakening real policies.
@@ -27,6 +84,9 @@ def _disable_policyless_public_rls() -> None:
     if bind.dialect.name != "postgresql":
         return
 
+    managed_tables_sql = ", ".join(
+        f"'{table_name}'" for table_name in P160_MANAGED_PUBLIC_TABLES
+    )
     op.execute(sa.text(
         "DO $$ "
         "DECLARE target RECORD; "
@@ -37,6 +97,7 @@ def _disable_policyless_public_rls() -> None:
         "    JOIN pg_namespace AS n ON n.oid = c.relnamespace "
         "    WHERE n.nspname = 'public' "
         "      AND c.relkind IN ('r', 'p') "
+        f"      AND c.relname IN ({managed_tables_sql}) "
         "      AND c.relrowsecurity "
         "      AND NOT EXISTS ("
         "        SELECT 1 FROM pg_policy AS p WHERE p.polrelid = c.oid"

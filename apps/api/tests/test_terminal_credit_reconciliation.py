@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from billing.reconciliation import reconcile_terminal_hosted_credit_reservations
 from models import Debate, DebateContinuation, UsageLedgerEntry, User
@@ -129,3 +129,68 @@ def test_reconciler_quarantines_ambiguous_reservation_without_counter_change(db_
     assert summary["quarantined"] == 1
     assert reservation.status == "reconciliation_pending"
     assert user.hosted_credits_used == 1
+
+
+def test_nonterminal_reservations_do_not_starve_later_terminal_work(db_session):
+    user = _user("credit-reconcile-no-starvation")
+    now = datetime.now(timezone.utc)
+    records = [user]
+
+    # These exact, active reservations are older than the terminal row and
+    # would consume the entire limited page in the historical query.
+    for index in range(2):
+        reservation_id = f"active-reservation-{index}"
+        debate = Debate(
+            id=f"active-debate-{index}",
+            user_id=user.id,
+            prompt="still running",
+            status="running",
+            credit_reservation_id=reservation_id,
+        )
+        reservation = UsageLedgerEntry(
+            id=reservation_id,
+            user_id=user.id,
+            kind="credit_reservation",
+            status="reserved",
+            idempotency_key=f"active-reservation-key-{index}",
+            amount=1,
+            debate_id=debate.id,
+            created_at=now - timedelta(hours=2, minutes=index),
+            meta={"run_attempt": 1, "continuation_id": None},
+        )
+        records.extend([debate, reservation])
+
+    terminal_reservation_id = "later-terminal-reservation"
+    terminal_debate = Debate(
+        id="later-terminal-debate",
+        user_id=user.id,
+        prompt="completed after active rows",
+        status="completed",
+        credit_reservation_id=terminal_reservation_id,
+    )
+    terminal_reservation = UsageLedgerEntry(
+        id=terminal_reservation_id,
+        user_id=user.id,
+        kind="credit_reservation",
+        status="reserved",
+        idempotency_key="later-terminal-reservation-key",
+        amount=1,
+        debate_id=terminal_debate.id,
+        created_at=now - timedelta(hours=1),
+        meta={"run_attempt": 1, "continuation_id": None},
+    )
+    records.extend([terminal_debate, terminal_reservation])
+    db_session.add_all(records)
+    db_session.commit()
+
+    summary = reconcile_terminal_hosted_credit_reservations(
+        db_session,
+        older_than=now,
+        limit=2,
+    )
+
+    db_session.refresh(terminal_reservation)
+    assert summary["checked"] == 1
+    assert summary["settled"] == 1
+    assert summary["skipped_nonterminal"] == 0
+    assert terminal_reservation.status == "settled"

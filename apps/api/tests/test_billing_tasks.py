@@ -7,6 +7,7 @@ on Redis unavailability, and lock release in finally blocks.
 We call the inner function body directly via the task's __call__
 to avoid Celery broker/backend teardown issues in test environments.
 """
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -156,6 +157,17 @@ def test_terminal_credit_task_is_registered_with_beat_and_worker_imports():
         == "billing.reconcile_terminal_hosted_credits"
     )
     assert "worker.billing_tasks" in celery_app.conf.imports
+
+
+def test_compose_deploys_single_beat_and_consumes_maintenance_queue():
+    compose_path = Path(__file__).resolve().parents[3] / "infra" / "docker-compose.yml"
+    compose = compose_path.read_text(encoding="utf-8")
+
+    assert compose.count("\n  beat:\n") == 1
+    assert '"beat"' in compose
+    assert '"--schedule=/tmp/celerybeat-schedule"' in compose
+    assert '"interactive,maintenance,default"' in compose
+    assert "celerybeat-schedule*" in compose
 
 
 class TestFailureReleasesLock:

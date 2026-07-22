@@ -490,24 +490,55 @@ async def continue_debate_run(
         channel_id = debate_channel_id(debate_id)
         await sse_backend.create_channel(channel_id)
 
-        # Dispatch task (resume = True)
-        background_tasks.add_task(
-            dispatch_debate_run,
+        dispatch_args = (
             debate_id,
             debate.prompt,
             channel_id,
             debate.config or {},
             debate.model_id,
-            trace_id=None,
-            resume=True,
-            continuation_id=continuation_record.id if continuation_record else None,
         )
+        dispatch_kwargs = {
+            "trace_id": None,
+            "resume": True,
+            "continuation_id": continuation_record.id if continuation_record else None,
+        }
 
-        # Mark continuation as dispatched
-        if continuation_record:
-            from services.continuations import transition_continuation_sync
-            transition_continuation_sync(
-                session, continuation_record.id, ["preflight_passed"], "dispatched"
+        if (settings.DEBATE_DISPATCH_MODE or "inline").lower() == "celery":
+            # A Celery broker acknowledgement is the durable hand-off.  Enqueue
+            # synchronously before publishing ``dispatched`` so a web-process
+            # restart cannot leave a continuation that looks dispatched even
+            # though no worker task exists.
+            await dispatch_debate_run(*dispatch_args, **dispatch_kwargs)
+
+            if continuation_record:
+                from services.continuations import transition_continuation_sync
+
+                try:
+                    transition_continuation_sync(
+                        session,
+                        continuation_record.id,
+                        ["preflight_passed"],
+                        "dispatched",
+                    )
+                except Exception:
+                    # The task is already durable.  Never refund or revert the
+                    # scheduled Debate after broker acknowledgement: the worker
+                    # can safely claim preflight_passed -> running, and execution
+                    # fencing prevents duplicate ownership.
+                    session.rollback()
+                    logger.exception(
+                        "Celery task enqueued but continuation %s could not be marked dispatched",
+                        continuation_record.id,
+                    )
+        else:
+            # Inline work starts only after Starlette has sent the response.
+            # Keep the durable state at preflight_passed until the orchestrator
+            # actually starts and transitions it to running.  A crash before
+            # BackgroundTasks begins therefore remains resumable.
+            background_tasks.add_task(
+                dispatch_debate_run,
+                *dispatch_args,
+                **dispatch_kwargs,
             )
             
     except Exception as dispatch_exc:

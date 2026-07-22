@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
+import sqlalchemy as sa
 from sqlmodel import Session, func, select
 
 logger = logging.getLogger(__name__)
@@ -57,11 +58,53 @@ def reconcile_terminal_hosted_credit_reservations(
         datetime.now(timezone.utc)
         - timedelta(seconds=TERMINAL_CREDIT_RECONCILIATION_GRACE_SECONDS)
     )
+    # Apply the page limit only after excluding reservations that are provably
+    # attached to non-terminal work.  Otherwise a stable prefix of long-running
+    # or paused rows can occupy every batch forever and starve newer terminal
+    # reservations.  Unknown identities remain candidates so they can be
+    # quarantined instead of silently ignored.
+    any_continuation_identity = (
+        select(DebateContinuation.id)
+        .where(DebateContinuation.credit_reservation_id == UsageLedgerEntry.id)
+        .where(DebateContinuation.debate_id == UsageLedgerEntry.debate_id)
+        .exists()
+    )
+    terminal_continuation_identity = (
+        select(DebateContinuation.id)
+        .where(DebateContinuation.credit_reservation_id == UsageLedgerEntry.id)
+        .where(DebateContinuation.debate_id == UsageLedgerEntry.debate_id)
+        .where(DebateContinuation.status.in_(["completed", "failed", "cancelled"]))
+        .exists()
+    )
+    any_debate_identity = (
+        select(Debate.id)
+        .where(Debate.credit_reservation_id == UsageLedgerEntry.id)
+        .where(Debate.id == UsageLedgerEntry.debate_id)
+        .exists()
+    )
+    terminal_debate_identity = (
+        select(Debate.id)
+        .where(Debate.credit_reservation_id == UsageLedgerEntry.id)
+        .where(Debate.id == UsageLedgerEntry.debate_id)
+        .where(
+            Debate.status.in_(
+                ["completed", "completed_with_warnings", "failed", "cancelled"]
+            )
+        )
+        .exists()
+    )
+    terminal_or_ambiguous = sa.or_(
+        terminal_continuation_identity,
+        terminal_debate_identity,
+        sa.and_(~any_continuation_identity, ~any_debate_identity),
+    )
+
     candidates = db.exec(
         select(UsageLedgerEntry)
         .where(UsageLedgerEntry.kind == "credit_reservation")
         .where(UsageLedgerEntry.status.in_(["reserved", "settlement_pending"]))
         .where(UsageLedgerEntry.created_at <= cutoff)
+        .where(terminal_or_ambiguous)
         .order_by(UsageLedgerEntry.created_at)
         .limit(limit)
     ).all()

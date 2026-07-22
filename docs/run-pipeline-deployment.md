@@ -80,7 +80,7 @@ CELERY_BROKER_URL=redis://<redis-host>:6379/0
 CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
 ```
 
-### Starting the Worker
+### Starting the Worker and Scheduler
 
 ```bash
 cd apps/api
@@ -89,6 +89,22 @@ celery -A worker.celery_app.celery_app worker \
   --loglevel=INFO \
   --concurrency=4
 ```
+
+Run one Celery Beat process as a separate service so periodic maintenance jobs,
+including terminal hosted-credit reconciliation, are actually published:
+
+```bash
+cd apps/api
+celery -A worker.celery_app.celery_app beat \
+  --loglevel=INFO \
+  --pidfile= \
+  --schedule=/tmp/celerybeat-schedule
+```
+
+Deploy exactly one Beat replica for a given schedule. Multiple Beat replicas can
+publish the same periodic task more than once; the reconciliation task's
+distributed lock is a secondary safeguard, not a substitute for singleton
+scheduling. The worker must continue consuming the `maintenance` queue.
 
 ### Verifying Worker Health
 
@@ -100,6 +116,8 @@ curl -H "Authorization: Bearer <admin-token>" \
 ```
 
 The response should show `"heartbeat_seen": true` with a recent `last_heartbeat_age_seconds`.
+Also verify that the Beat service stays healthy and logs periodic publication of
+`billing.reconcile_terminal_hosted_credits` at the configured five-minute interval.
 
 ## Inline Mode (Development Only)
 

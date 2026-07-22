@@ -1,4 +1,4 @@
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from models import Debate, DebateContinuation, LLMUsageLog, User
@@ -61,7 +61,10 @@ def test_continue_conditional_transition(authenticated_client, db_session):
         mock_dispatch.assert_not_called()
 
 
-def test_continue_idempotency_key(authenticated_client, db_session):
+def test_continue_idempotency_key(authenticated_client, db_session, monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(settings, "DEBATE_DISPATCH_MODE", "celery")
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     
     debate = Debate(
@@ -135,8 +138,13 @@ def test_continue_idempotency_key(authenticated_client, db_session):
 def test_preflight_passed_scheduled_continuation_recovers_dispatch(
     authenticated_client,
     db_session,
+    monkeypatch,
 ):
     """Retry closes the crash window after scheduling commit, before dispatch."""
+
+    from config import settings
+
+    monkeypatch.setattr(settings, "DEBATE_DISPATCH_MODE", "celery")
 
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     debate = Debate(
@@ -182,6 +190,202 @@ def test_preflight_passed_scheduled_continuation_recovers_dispatch(
     db_session.refresh(debate)
     assert continuation.status == "dispatched"
     assert continuation.credit_reservation_id == "durable-reservation-id"
+    assert debate.status == "scheduled"
+
+
+def test_inline_continuation_stays_resumable_until_background_task_starts(
+    authenticated_client,
+    db_session,
+    monkeypatch,
+):
+    """A response/process crash before BackgroundTasks starts remains retryable."""
+
+    from config import settings
+
+    monkeypatch.setattr(settings, "DEBATE_DISPATCH_MODE", "inline")
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-inline-dispatch-crash-window",
+        user_id=user.id,
+        prompt="Keep inline dispatch resumable",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+    headers = {"X-Idempotency-Key": "inline-dispatch-crash-key"}
+
+    # Simulate a process that returns the response but never executes the
+    # registered Starlette background task.
+    with patch("starlette.background.BackgroundTasks.add_task") as add_task:
+        response = authenticated_client.post(
+            f"/api/v1/debates/{debate.id}/continue",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    add_task.assert_called_once()
+    continuation = db_session.exec(
+        select(DebateContinuation).where(
+            DebateContinuation.debate_id == debate.id,
+            DebateContinuation.idempotency_key == headers["X-Idempotency-Key"],
+        )
+    ).first()
+    assert continuation is not None
+    db_session.refresh(continuation)
+    db_session.refresh(debate)
+    assert continuation.status == "preflight_passed"
+    assert debate.status == "scheduled"
+
+    # The same key must recover the durable scheduled state and register work
+    # again instead of early-returning a false dispatched acknowledgement.
+    with patch("starlette.background.BackgroundTasks.add_task") as retry_add_task:
+        retry = authenticated_client.post(
+            f"/api/v1/debates/{debate.id}/continue",
+            headers=headers,
+        )
+
+    assert retry.status_code == 200
+    retry_add_task.assert_called_once()
+
+
+def test_celery_continuation_is_dispatched_only_after_enqueue_ack(
+    authenticated_client,
+    db_session,
+    monkeypatch,
+):
+    from config import settings
+
+    monkeypatch.setattr(settings, "DEBATE_DISPATCH_MODE", "celery")
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-celery-dispatch-order",
+        user_id=user.id,
+        prompt="Enqueue before acknowledge",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+    observed_statuses = []
+
+    async def observe_enqueue(*_args, **_kwargs):
+        continuation = db_session.exec(
+            select(DebateContinuation).where(
+                DebateContinuation.debate_id == debate.id,
+            )
+        ).first()
+        db_session.refresh(continuation)
+        observed_statuses.append(continuation.status)
+
+    with patch(
+        "routes.debates.execution.dispatch_debate_run",
+        new=AsyncMock(side_effect=observe_enqueue),
+    ) as dispatch:
+        response = authenticated_client.post(
+            f"/api/v1/debates/{debate.id}/continue",
+            headers={"X-Idempotency-Key": "celery-dispatch-order-key"},
+        )
+
+    assert response.status_code == 200
+    dispatch.assert_awaited_once()
+    assert observed_statuses == ["preflight_passed"]
+    continuation = db_session.exec(
+        select(DebateContinuation).where(
+            DebateContinuation.debate_id == debate.id,
+        )
+    ).first()
+    db_session.refresh(continuation)
+    assert continuation.status == "dispatched"
+
+
+def test_celery_enqueue_failure_never_publishes_dispatched(
+    authenticated_client,
+    db_session,
+    monkeypatch,
+):
+    from config import settings
+
+    monkeypatch.setattr(settings, "DEBATE_DISPATCH_MODE", "celery")
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-celery-enqueue-failure",
+        user_id=user.id,
+        prompt="Broker unavailable",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+
+    with patch(
+        "routes.debates.execution.dispatch_debate_run",
+        new=AsyncMock(side_effect=RuntimeError("broker unavailable")),
+    ):
+        with pytest.raises(RuntimeError, match="broker unavailable"):
+            authenticated_client.post(
+                f"/api/v1/debates/{debate.id}/continue",
+                headers={"X-Idempotency-Key": "celery-enqueue-failure-key"},
+            )
+
+    continuation = db_session.exec(
+        select(DebateContinuation).where(
+            DebateContinuation.debate_id == debate.id,
+        )
+    ).first()
+    db_session.refresh(continuation)
+    db_session.refresh(debate)
+    assert continuation.status == "failed"
+    assert continuation.failure_code == "debate.dispatch_failed"
+    assert debate.status == "perspectives_ready"
+
+
+def test_post_enqueue_status_failure_does_not_compensate_durable_task(
+    authenticated_client,
+    db_session,
+    monkeypatch,
+):
+    from services import continuations as continuation_service
+
+    from config import settings
+
+    monkeypatch.setattr(settings, "DEBATE_DISPATCH_MODE", "celery")
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate = Debate(
+        id="test-celery-post-enqueue-transition-failure",
+        user_id=user.id,
+        prompt="Task is already durable",
+        status="perspectives_ready",
+    )
+    db_session.add(debate)
+    db_session.commit()
+    original_transition = continuation_service.transition_continuation_sync
+
+    def fail_dispatched_transition(*args, **kwargs):
+        target_status = args[3] if len(args) > 3 else kwargs.get("target_status")
+        if target_status == "dispatched":
+            raise RuntimeError("database unavailable after enqueue")
+        return original_transition(*args, **kwargs)
+
+    with patch(
+        "routes.debates.execution.dispatch_debate_run",
+        new=AsyncMock(),
+    ) as dispatch, patch(
+        "services.continuations.transition_continuation_sync",
+        side_effect=fail_dispatched_transition,
+    ):
+        response = authenticated_client.post(
+            f"/api/v1/debates/{debate.id}/continue",
+            headers={"X-Idempotency-Key": "post-enqueue-transition-failure-key"},
+        )
+
+    assert response.status_code == 200
+    dispatch.assert_awaited_once()
+    continuation = db_session.exec(
+        select(DebateContinuation).where(
+            DebateContinuation.debate_id == debate.id,
+        )
+    ).first()
+    db_session.refresh(continuation)
+    db_session.refresh(debate)
+    assert continuation.status == "preflight_passed"
     assert debate.status == "scheduled"
 
 
@@ -487,4 +691,3 @@ def test_continue_retry_of_continuation_id(authenticated_client, db_session):
         assert data["retry_of_continuation_id"] == failed_cont.id
         assert data["idempotency_key"] == "new-key-2"
         mock_dispatch.assert_called_once()
-

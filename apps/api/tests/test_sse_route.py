@@ -705,6 +705,85 @@ async def test_pre_response_lease_is_released_if_generator_never_starts():
     lease_manager.release.assert_awaited_once()
 
 
+@pytest.mark.anyio
+async def test_late_generator_reacquires_after_guard_releases_lease():
+    """A slow ASGI start must transfer ownership instead of streaming unleased."""
+
+    from sqlmodel import Session
+
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+    lease_manager = AsyncMock()
+    lease_manager.try_acquire.side_effect = [
+        StreamLeaseResult.ACQUIRED,
+        StreamLeaseResult.ACQUIRED,
+    ]
+
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        request = _make_request(token=token)
+        with patch("sse_backend.get_stream_lease_manager", return_value=lease_manager), \
+             patch(
+                 "routes.debates.streaming.SSE_GENERATOR_START_TIMEOUT_SECONDS",
+                 0.01,
+             ):
+            response = await stream_events(
+                debate_id,
+                request=request,
+                last_sequence=None,
+                session=session,
+                sse_backend=backend,
+            )
+            await response._lease_guard_task
+
+            first = await response.body_iterator.__anext__()
+            assert first == ": connected\n\n"
+            assert lease_manager.try_acquire.await_count == 2
+            await response.body_iterator.aclose()
+
+    await backend.stop()
+    assert lease_manager.release.await_count == 2
+
+
+@pytest.mark.anyio
+async def test_late_generator_does_not_subscribe_when_reacquire_is_denied():
+    from sqlmodel import Session
+
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+    lease_manager = AsyncMock()
+    lease_manager.try_acquire.side_effect = [
+        StreamLeaseResult.ACQUIRED,
+        StreamLeaseResult.DENIED,
+    ]
+
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        request = _make_request(token=token)
+        with patch("sse_backend.get_stream_lease_manager", return_value=lease_manager), \
+             patch(
+                 "routes.debates.streaming.SSE_GENERATOR_START_TIMEOUT_SECONDS",
+                 0.01,
+             ), patch.object(backend, "subscribe") as subscribe:
+            response = await stream_events(
+                debate_id,
+                request=request,
+                last_sequence=None,
+                session=session,
+                sse_backend=backend,
+            )
+            await response._lease_guard_task
+
+            unavailable = await response.body_iterator.__anext__()
+            assert unavailable.startswith("event: stream_unavailable\n")
+            with pytest.raises(StopAsyncIteration):
+                await response.body_iterator.__anext__()
+            subscribe.assert_not_called()
+
+    await backend.stop()
+    lease_manager.release.assert_awaited_once()
+
+
 # ─── Test 11: Forbidden debate ───────────────────────────────────────────────
 
 @pytest.mark.anyio

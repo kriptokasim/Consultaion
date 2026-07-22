@@ -65,6 +65,11 @@ def test_p161_postgres_repairs_only_policyless_rls_and_quarantines_unknowns(
     assert "DISABLE ROW LEVEL SECURITY" in rendered
     assert "NOT EXISTS" in rendered
     assert "pg_policy" in rendered
+    assert "c.relname IN" in rendered
+    assert "'debate'" in rendered
+    assert "'usage_ledger_entry'" in rendered
+    assert "unmanaged_default_deny_table" not in migration.P160_MANAGED_PUBLIC_TABLES
+    assert "unmanaged_default_deny_table" not in rendered
     assert "reconciliation_pending" in rendered
     assert "credit_reservation_id = ule.id" in rendered
     assert "continuation_id" in rendered
