@@ -571,6 +571,76 @@ async def test_unauthorized_returns_401():
     await backend.stop()
 
 
+@pytest.mark.anyio
+async def test_rejected_origin_does_not_acquire_stream_lease():
+    """A CORS rejection must happen before a scarce stream slot is acquired."""
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+
+    from fastapi import HTTPException
+    from sqlmodel import Session
+
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        req = _make_request(
+            headers={"origin": "https://blocked.example"},
+            token=token,
+        )
+
+        with patch(
+            "routes.debates.streaming._parse_allowed_origins",
+            return_value={"https://allowed.example"},
+        ), patch("sse_backend.get_stream_lease_manager") as get_lease_manager:
+            with pytest.raises(HTTPException) as exc_info:
+                await stream_events(
+                    debate_id,
+                    request=req,
+                    last_sequence=None,
+                    session=session,
+                    sse_backend=backend,
+                )
+
+        assert exc_info.value.status_code == 403
+        get_lease_manager.assert_not_called()
+
+    await backend.stop()
+
+
+@pytest.mark.anyio
+async def test_missing_production_origins_do_not_acquire_stream_lease():
+    """A production CORS misconfiguration must not leave a ghost lease."""
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+
+    from fastapi import HTTPException
+    from sqlmodel import Session
+
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        req = _make_request(token=token)
+
+        with patch(
+            "routes.debates.streaming._parse_allowed_origins",
+            return_value=set(),
+        ), patch(
+            "routes.debates.streaming.settings.IS_LOCAL_ENV",
+            False,
+        ), patch("sse_backend.get_stream_lease_manager") as get_lease_manager:
+            with pytest.raises(HTTPException) as exc_info:
+                await stream_events(
+                    debate_id,
+                    request=req,
+                    last_sequence=None,
+                    session=session,
+                    sse_backend=backend,
+                )
+
+        assert exc_info.value.status_code == 500
+        get_lease_manager.assert_not_called()
+
+    await backend.stop()
+
+
 # ─── Test 11: Forbidden debate ───────────────────────────────────────────────
 
 @pytest.mark.anyio
