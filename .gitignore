@@ -38,6 +38,8 @@ coverage/
 coverage.xml
 apps/api/coverage.xml
 test_output*.txt
+test_out.txt
+vitest_output.txt
 apps/api/dev.db
 apps/api/ci_migrate.db
 apps/web/.playwright-browsers/

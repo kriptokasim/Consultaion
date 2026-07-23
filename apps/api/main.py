@@ -1,5 +1,6 @@
 import asyncio
 import logging.config
+import hmac
 import os
 import time
 import uuid
@@ -8,7 +9,7 @@ from contextlib import asynccontextmanager, suppress
 from auth import get_csrf_cookie_name, get_current_admin, get_optional_user
 from billing.routes import billing_router
 from correlation import CorrelationContext, set_correlation_context
-from database import init_db
+from database import engine, init_db
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -141,7 +142,7 @@ async def csrf_protect(request: Request) -> None:
         return
     csrf_cookie = request.cookies.get(get_csrf_cookie_name())
     csrf_header = request.headers.get("x-csrf-token") or request.headers.get("X-CSRF-Token")
-    if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+    if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="CSRF token missing or invalid",
@@ -159,8 +160,7 @@ async def lifespan(app: FastAPI):
     init_db()
     # Verify that critical tables exist; retry briefly if DB is warming up
     try:
-        from sqlalchemy import create_engine, inspect
-        engine = create_engine(settings.DATABASE_URL)
+        from sqlalchemy import inspect
         critical_tables = {
             "user",
             "team_member",
@@ -232,13 +232,13 @@ async def lifespan(app: FastAPI):
         
     # Secondary startup validation for production safety
     if settings.APP_ENV in ("production", "staging"):
-        if getattr(settings, "USE_MOCK", False):
+        if settings.USE_MOCK:
             raise RuntimeError("FATAL: Refusing startup in production/staging with USE_MOCK=True.")
-        if not getattr(settings, "REQUIRE_REAL_LLM", False):
+        if not settings.REQUIRE_REAL_LLM:
             raise RuntimeError("FATAL: Refusing startup in production/staging with REQUIRE_REAL_LLM=False.")
-        if not getattr(settings, "ENABLE_SEC_HEADERS", True):
+        if not settings.ENABLE_SEC_HEADERS:
             raise RuntimeError("FATAL: Refusing startup in production/staging with ENABLE_SEC_HEADERS=False.")
-        if not getattr(settings, "ENABLE_CSRF", True):
+        if not settings.ENABLE_CSRF:
             logger.warning("WARNING: Startup permitted with ENABLE_CSRF=False but this is not recommended in production.")
             
     _warn_on_multi_worker()

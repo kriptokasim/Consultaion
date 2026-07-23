@@ -73,6 +73,8 @@ def init_db() -> None:
                 }
                 for col, col_type in new_cols.items():
                     if col not in columns:
+                        if not col.isidentifier():
+                            raise ValueError(f"Invalid column identifier: {col}")
                         conn.execute(text(f"ALTER TABLE llm_usage_log ADD COLUMN {col} {col_type}"))
                         conn.commit()
             except Exception as e:
@@ -88,6 +90,8 @@ def init_db() -> None:
                 }
                 for col, col_type in new_user_cols.items():
                     if col not in columns:
+                        if not col.isidentifier():
+                            raise ValueError(f"Invalid column identifier: {col}")
                         conn.execute(text(f"ALTER TABLE user ADD COLUMN {col} {col_type}"))
                         conn.commit()
             except Exception as e:
@@ -102,6 +106,8 @@ def init_db() -> None:
                 }
                 for col, col_type in new_key_cols.items():
                     if col not in columns:
+                        if not col.isidentifier():
+                            raise ValueError(f"Invalid column identifier: {col}")
                         conn.execute(text(f"ALTER TABLE api_keys ADD COLUMN {col} {col_type}"))
                         conn.commit()
             except Exception as e:
@@ -151,7 +157,7 @@ from sqlalchemy.orm import sessionmaker
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=Session)
 
 def get_session():
-    session = Session(engine)
+    session = SessionLocal()
     try:
         yield session
     finally:
@@ -160,7 +166,7 @@ def get_session():
 
 @contextmanager
 def session_scope():
-    session = Session(engine)
+    session = SessionLocal()
     try:
         yield session
         session.commit()
@@ -172,9 +178,11 @@ def session_scope():
 
 
 def reset_engine() -> None:
-    global engine
+    global engine, SessionLocal
     try:
         engine.dispose()
     except Exception:
         pass
     engine = _create_engine()
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=Session)
+

@@ -1,3 +1,4 @@
+import bcrypt
 import hashlib
 import hmac
 import logging
@@ -43,10 +44,7 @@ def _get_jwt_secret() -> str:
     return secret
 
 def _get_cookie_samesite() -> str:
-    val = settings.COOKIE_SAMESITE.strip().lower()
-    if val not in {"lax", "strict", "none"}:
-        return "Lax"
-    return "none" if val == "none" else val.capitalize()
+    return get_cookie_samesite()
 
 # BUG-API-3: Dynamic accessors — never cache settings at module level.
 # All call-sites use these functions, which read settings at call time.
@@ -102,18 +100,29 @@ JWT_ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), settings.PASSWORD_ITERATIONS)
-    return f"pbkdf2_sha256${salt}${digest.hex()}"
+    pw_bytes = password.encode("utf-8")
+    rounds = 4 if settings.ENV == "test" or settings.IS_LOCAL_ENV else 12
+    salt = bcrypt.gensalt(rounds=rounds)
+    return bcrypt.hashpw(pw_bytes, salt).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        _, salt, stored = password_hash.split("$")
-    except ValueError:
+    if not password or not password_hash:
         return False
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), settings.PASSWORD_ITERATIONS)
-    return hmac.compare_digest(digest.hex(), stored)
+    # Legacy PBKDF2 support
+    if password_hash.startswith("pbkdf2_sha256$"):
+        try:
+            _, salt, stored = password_hash.split("$")
+        except ValueError:
+            return False
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), settings.PASSWORD_ITERATIONS)
+        return hmac.compare_digest(digest.hex(), stored)
+    
+    # Standard bcrypt verification
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def _build_claims(payload: Dict[str, Any], ttl_seconds: int | None = None) -> Dict[str, Any]:

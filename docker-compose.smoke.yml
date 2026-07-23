@@ -8,7 +8,7 @@ services:
     container_name: consultaion-smoke-postgres
     environment:
       POSTGRES_USER: consultaion
-      POSTGRES_PASSWORD: smoke_test_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smoke_test_password}
       POSTGRES_DB: consultaion_smoke
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U consultaion -d consultaion_smoke"]
@@ -39,8 +39,8 @@ services:
       - APP_ENV=smoke
       - USE_MOCK=true
       - REQUIRE_REAL_LLM=false
-      - DATABASE_URL=postgresql+psycopg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
-      - JWT_SECRET=smoke-test-secret-key-for-ci-only
+      - DATABASE_URL=postgresql+psycopg://consultaion:${POSTGRES_PASSWORD:-smoke_test_password}@postgres:5432/consultaion_smoke
+      - JWT_SECRET=${JWT_SECRET:-smoke-test-secret-key-for-ci-only}
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       postgres:
@@ -61,8 +61,8 @@ services:
       - APP_ENV=smoke
       - USE_MOCK=true
       - REQUIRE_REAL_LLM=false
-      - DATABASE_URL=postgresql+psycopg://consultaion:smoke_test_password@postgres:5432/consultaion_smoke
-      - JWT_SECRET=smoke-test-secret-key-for-ci-only
+      - DATABASE_URL=postgresql+psycopg://consultaion:${POSTGRES_PASSWORD:-smoke_test_password}@postgres:5432/consultaion_smoke
+      - JWT_SECRET=${JWT_SECRET:-smoke-test-secret-key-for-ci-only}
       - WEB_APP_ORIGIN=http://localhost:3000
       - REDIS_URL=redis://redis:6379/0
       - SSE_BACKEND=redis
