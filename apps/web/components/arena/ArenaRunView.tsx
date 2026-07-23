@@ -32,9 +32,10 @@ interface ArenaRunViewProps {
     presentation?: "historical" | "live";
     profile?: any;
     onRefetch?: () => Promise<any> | void;
+    showDivergenceAnalysis?: boolean;
 }
 
-export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, isTerminal, responsesState, responsesError, timelineState, presentation = "historical", profile, onRefetch }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, isTerminal, responsesState, responsesError, timelineState, presentation = "historical", profile, onRefetch, showDivergenceAnalysis = true }: ArenaRunViewProps) {
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
         const eventResponses: Array<ModelResponse> = [];
@@ -419,11 +420,13 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             </div>
 
             {/* Claims Divergence Analysis */}
-            <DivergenceMeter 
-                debateId={debate.id} 
-                isCompleted={isSuccessfulRunStatus(debate.status)} 
-                synthesisStatus={artifacts.synthesisStatus || debate.synthesis_status || debate.final_meta?.synthesis_status}
-            />
+            {showDivergenceAnalysis ? (
+                <DivergenceMeter
+                    debateId={debate.id}
+                    isCompleted={isSuccessfulRunStatus(debate.status)}
+                    synthesisStatus={artifacts.synthesisStatus || debate.synthesis_status || debate.final_meta?.synthesis_status}
+                />
+            ) : null}
 
             {/* Decision Report Section — live vs historical */}
             {presentation === "live" ? (

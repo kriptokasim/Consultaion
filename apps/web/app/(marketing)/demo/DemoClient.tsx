@@ -385,6 +385,7 @@ export default function DemoClient() {
               debate={currentDebate as any}
               events={visibleEvents}
               profile={null}
+              showDivergenceAnalysis={false}
             />
           )}
 

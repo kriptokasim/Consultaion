@@ -13,11 +13,12 @@ import { SkeletonLoader } from "@/components/ui/skeleton"
 import { login } from "@/lib/auth"
 import { useI18n } from "@/lib/i18n/client"
 import { getUserFriendlyError } from "@/lib/api/getUserFriendlyError"
+import { sanitizeInternalPath } from "@/lib/security/internalPath"
 
 export default function LoginClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextPath = searchParams.get("next") || "/live"
+  const nextPath = sanitizeInternalPath(searchParams.get("next"), "/live")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)

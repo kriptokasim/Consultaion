@@ -42,7 +42,6 @@ export const metadata: Metadata = {
 }
 
 import { AnalyticsProvider } from '@/components/analytics-provider'
-import { MobileBottomNav } from '@/components/navigation/MobileBottomNav'
 
 import { ViewTransitions } from 'next-view-transitions'
 
@@ -56,7 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         </head>
-        <body className="min-h-screen bg-background text-foreground pb-16 sm:pb-0">
+        <body className="min-h-screen bg-background text-foreground">
           <a
             href="#main-content"
             className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 z-50 rounded bg-primary px-3 py-1 text-primary-foreground"
@@ -67,7 +66,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <AnalyticsProvider />
             <I18nProvider locale={locale} messages={messages}>
               {children}
-              <MobileBottomNav />
             </I18nProvider>
           </Providers>
         </body>

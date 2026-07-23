@@ -2,7 +2,9 @@
 
 import { Moon, Sun } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
+import { useTheme } from "next-themes"
 import { BrandWordmark } from "@/components/brand"
+import { useI18n } from "@/lib/i18n/client"
 
 interface AuthShellProps {
   title: string
@@ -12,24 +14,16 @@ interface AuthShellProps {
 }
 
 export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
-  const [theme, setTheme] = useState<"light" | "dark">("light")
+  const { resolvedTheme, setTheme } = useTheme()
+  const { t } = useI18n()
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    const stored = window.localStorage.getItem("consultaion-theme")
-    const initial = stored === "dark" ? "dark" : "light"
-    setTheme(initial)
-    document.documentElement.classList.toggle("dark", initial === "dark")
+    setMounted(true)
   }, [])
 
   const toggleTheme = () => {
-    if (typeof window === "undefined") return
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark"
-      document.documentElement.classList.toggle("dark", next === "dark")
-      window.localStorage.setItem("consultaion-theme", next)
-      return next
-    })
+    setTheme(resolvedTheme === "dark" ? "light" : "dark")
   }
 
   return (
@@ -45,10 +39,10 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
             <button
               type="button"
               onClick={toggleTheme}
-              aria-label="Toggle theme"
+              aria-label={t("auth.theme.toggle")}
               className="focus-ring absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:-translate-y-[1px] dark:border-slate-600 dark:bg-slate-800 dark:text-white"
             >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {mounted && resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <header className="mb-6 space-y-2 text-center">
               <div className="flex justify-center">

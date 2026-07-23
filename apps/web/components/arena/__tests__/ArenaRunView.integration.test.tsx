@@ -3,6 +3,10 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 import type { DebateDetail, PersistedModelResponse } from "@/lib/api/types";
 
+const mocks = vi.hoisted(() => ({
+  divergenceMeter: vi.fn(() => null),
+}));
+
 vi.mock("@/lib/apiClient", () => ({
   apiRequest: vi.fn(),
 }));
@@ -25,7 +29,7 @@ vi.mock("@/components/arena/CTABanner", () => ({
 }));
 
 vi.mock("@/components/arena/DivergenceMeter", () => ({
-  DivergenceMeter: () => null,
+  DivergenceMeter: mocks.divergenceMeter,
 }));
 
 vi.mock("@/components/arena/ModelCard", () => ({
@@ -143,5 +147,19 @@ describe("ArenaRunView Integration", () => {
     // Ensure ModelCards are also correctly rendered based on the responses
     const cards = screen.getAllByTestId("model-card");
     expect(cards.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not mount divergence analysis when the caller disables it", () => {
+    render(
+      <ArenaRunView
+        debate={makeDebate()}
+        events={[]}
+        isTerminal={true}
+        responsesState="ready"
+        showDivergenceAnalysis={false}
+      />,
+    );
+
+    expect(mocks.divergenceMeter).not.toHaveBeenCalled();
   });
 });
