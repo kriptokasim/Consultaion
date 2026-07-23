@@ -41,7 +41,7 @@ JWT_SECRET=<64-char random string>
 INTERNAL_SECRET=<64-char random string>
 ```
 
-### One-time P162 RLS review
+### One-time P162/P163 RLS review
 
 P162 repairs databases that may already have run the first, over-broad P161
 revision. If the migration finds RLS-disabled tables outside the frozen
@@ -57,7 +57,11 @@ P162_RLS_RESTORE_TABLES=public.external_default_deny,public.partner_records
 
 Use an empty `P162_RLS_RESTORE_TABLES` value only after confirming that every
 listed candidate is intentionally unprotected. Remove both one-time variables
-after `alembic upgrade head` reaches `p162_restore_unmanaged_rls`.
+after `alembic upgrade head` reaches `p163_recheck_unmanaged_rls`.
+
+P163 deliberately repeats this review as a new forward revision. This ensures
+databases that had already recorded the originally published P162 revision run
+the corrected policy-bearing-table scan instead of silently skipping it.
 
 ### LLM Provider Keys
 
