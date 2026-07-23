@@ -44,10 +44,11 @@ INTERNAL_SECRET=<64-char random string>
 ### One-time P162 RLS review
 
 P162 repairs databases that may already have run the first, over-broad P161
-revision. If the migration finds disabled, policyless tables outside the frozen
+revision. If the migration finds RLS-disabled tables outside the frozen
 Consultaion inventory, it stops instead of guessing their intended security
-state. Review the listed tables, then run the migration with an explicit
-inventory:
+state and reports whether each table currently has policies. Policies remain
+ineffective while RLS is disabled. Review the listed tables, then run the
+migration with an explicit inventory:
 
 ```bash
 P162_RLS_REVIEWED=1

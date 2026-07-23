@@ -25,13 +25,10 @@ def _load_migration():
     return module
 
 
-class _ScalarResult:
+class _Result:
     def __init__(self, *, values=(), scalar=None):
         self._values = list(values)
         self._scalar = scalar
-
-    def scalars(self):
-        return self
 
     def all(self):
         return self._values
@@ -43,22 +40,22 @@ class _ScalarResult:
 class _Bind:
     dialect = postgresql.dialect()
 
-    def __init__(self, states, policyless=()):
+    def __init__(self, states, candidates=()):
         self.states = dict(states)
-        self.policyless = tuple(policyless)
+        self.candidates = tuple(candidates)
         self.statements = []
 
     def execute(self, statement, params=None):
         rendered = str(statement)
         self.statements.append((rendered, params))
         if rendered.startswith("SELECT c.relname"):
-            return _ScalarResult(values=self.policyless)
+            return _Result(values=self.candidates)
         if rendered.startswith("SELECT c.relrowsecurity"):
-            return _ScalarResult(scalar=self.states.get(params["table_name"]))
+            return _Result(scalar=self.states.get(params["table_name"]))
         if rendered.startswith("ALTER TABLE"):
             table_name = rendered.rsplit(".", 1)[1].split()[0].strip('"')
             self.states[table_name] = True
-            return _ScalarResult()
+            return _Result()
         raise AssertionError(f"Unexpected SQL: {rendered}")
 
 
@@ -73,7 +70,7 @@ def test_p162_blocks_ambiguous_applied_p161_state_without_review(monkeypatch):
     migration = _load_migration()
     bind = _Bind(
         {"external_default_deny": False},
-        policyless=("external_default_deny",),
+        candidates=(("external_default_deny", False),),
     )
     monkeypatch.setattr(migration.op, "get_bind", lambda: bind)
     monkeypatch.delenv(migration.RLS_REVIEWED_ENV, raising=False)
@@ -85,6 +82,30 @@ def test_p162_blocks_ambiguous_applied_p161_state_without_review(monkeypatch):
     assert bind.states["external_default_deny"] is False
 
 
+def test_p162_blocks_policy_bearing_table_left_disabled_after_p161(monkeypatch):
+    migration = _load_migration()
+    bind = _Bind(
+        {"external_policy_added_after_p161": False},
+        candidates=(("external_policy_added_after_p161", True),),
+    )
+    monkeypatch.setattr(migration.op, "get_bind", lambda: bind)
+    monkeypatch.delenv(migration.RLS_REVIEWED_ENV, raising=False)
+    monkeypatch.delenv(migration.RLS_RESTORE_TABLES_ENV, raising=False)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"external_policy_added_after_p161 \(policies present\)",
+    ):
+        migration.upgrade()
+
+    candidate_query = next(
+        sql for sql, _ in bind.statements if sql.startswith("SELECT c.relname")
+    )
+    assert "EXISTS (" in candidate_query
+    assert "AND NOT EXISTS" not in candidate_query
+    assert bind.states["external_policy_added_after_p161"] is False
+
+
 def test_p162_restores_only_explicitly_reviewed_inventory(monkeypatch):
     migration = _load_migration()
     bind = _Bind(
@@ -92,7 +113,10 @@ def test_p162_restores_only_explicitly_reviewed_inventory(monkeypatch):
             "external_default_deny": False,
             "external_intentionally_open": False,
         },
-        policyless=("external_default_deny", "external_intentionally_open"),
+        candidates=(
+            ("external_default_deny", False),
+            ("external_intentionally_open", False),
+        ),
     )
     monkeypatch.setattr(migration.op, "get_bind", lambda: bind)
     monkeypatch.setenv(migration.RLS_REVIEWED_ENV, "1")
@@ -113,7 +137,10 @@ def test_p162_restores_only_explicitly_reviewed_inventory(monkeypatch):
 
 def test_p162_rejects_unknown_or_managed_restore_targets(monkeypatch):
     migration = _load_migration()
-    bind = _Bind({"external_table": False}, policyless=("external_table",))
+    bind = _Bind(
+        {"external_table": False},
+        candidates=(("external_table", False),),
+    )
     monkeypatch.setattr(migration.op, "get_bind", lambda: bind)
     monkeypatch.setenv(migration.RLS_REVIEWED_ENV, "1")
 

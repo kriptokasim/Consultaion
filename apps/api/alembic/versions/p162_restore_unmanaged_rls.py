@@ -6,8 +6,9 @@ Revises: p161_security_billing
 The first published P161 revision disabled RLS on every policyless table in the
 public schema.  Editing that already-applied revision cannot repair existing
 databases, and the prior RLS state of an unmanaged table cannot be inferred
-safely.  This forward migration therefore stops on ambiguous tables until an
-operator supplies an explicit deployment inventory.
+safely.  A policy may also have been added after P161 while RLS remained
+disabled, so this forward migration reviews every unmanaged RLS-disabled table
+and reports whether policies currently exist.
 """
 
 from __future__ import annotations
@@ -103,24 +104,24 @@ def _parse_restore_inventory(raw: str | None) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _ambiguous_unmanaged_tables(bind) -> tuple[str, ...]:
+def _ambiguous_unmanaged_tables(bind) -> tuple[tuple[str, bool], ...]:
     managed_tables_sql = ", ".join(
         f"'{table_name}'" for table_name in P160_MANAGED_PUBLIC_TABLES
     )
     result = bind.execute(sa.text(
-        "SELECT c.relname "
+        "SELECT c.relname, "
+        "EXISTS ("
+        "  SELECT 1 FROM pg_policy AS p WHERE p.polrelid = c.oid"
+        ") AS has_policies "
         "FROM pg_class AS c "
         "JOIN pg_namespace AS n ON n.oid = c.relnamespace "
         "WHERE n.nspname = 'public' "
         "AND c.relkind IN ('r', 'p') "
         "AND NOT c.relrowsecurity "
         f"AND c.relname NOT IN ({managed_tables_sql}) "
-        "AND NOT EXISTS ("
-        "  SELECT 1 FROM pg_policy AS p WHERE p.polrelid = c.oid"
-        ") "
         "ORDER BY c.relname"
     ))
-    return tuple(result.scalars().all())
+    return tuple((row[0], bool(row[1])) for row in result.all())
 
 
 def _table_rls_enabled(bind, table_name: str) -> bool | None:
@@ -177,10 +178,15 @@ def upgrade() -> None:
     }
 
     if (ambiguous or restore_tables) and not reviewed:
-        candidate_list = ", ".join(f"public.{name}" for name in ambiguous) or "none"
+        candidate_list = ", ".join(
+            f"public.{name} "
+            f"({'policies present' if has_policies else 'no policies'})"
+            for name, has_policies in ambiguous
+        ) or "none"
         raise RuntimeError(
             "P162 cannot infer the pre-P161 RLS state of unmanaged tables. "
-            f"Review these disabled policyless tables: {candidate_list}. "
+            f"Review these RLS-disabled tables: {candidate_list}. "
+            "Policies do not enforce access while RLS is disabled. "
             f"Set {RLS_REVIEWED_ENV}=1 and list every table that must regain RLS "
             f"in {RLS_RESTORE_TABLES_ENV}. Use an empty restore list only after "
             "confirming that all candidates are intentionally unprotected."
