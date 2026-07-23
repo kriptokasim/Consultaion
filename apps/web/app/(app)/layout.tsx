@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0">
+    <div className="min-h-screen [--mobile-bottom-nav-height:4rem] pb-[calc(var(--mobile-bottom-nav-height)+env(safe-area-inset-bottom))] sm:pb-0">
       <DashboardShell initialProfile={profile}>{children}</DashboardShell>
       <MobileBottomNav />
     </div>
