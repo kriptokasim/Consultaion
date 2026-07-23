@@ -41,6 +41,15 @@ class TestModelResolution:
         "router-deep",
     ]
 
+    LEGACY_WEB_PANEL_IDS = [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "claude-3-5-sonnet",
+        "claude-3-5-haiku",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+    ]
+
     LITELLM_FORMAT_IDS = [
         "openai/gpt-4o-mini",
         "openai/gpt-4o",
@@ -71,6 +80,11 @@ class TestModelResolution:
         assert resolved in MODEL_MAP, (
             f"Frontend model ID '{model_id}' → '{resolved}' not in MODEL_MAP"
         )
+
+    @pytest.mark.parametrize("model_id", LEGACY_WEB_PANEL_IDS)
+    def test_legacy_web_panel_ids_resolve(self, model_id: str):
+        """Historical Debate.panel_config values remain executable."""
+        assert resolve_model_key(model_id) in MODEL_MAP
 
     @pytest.mark.parametrize("model_id", LITELLM_FORMAT_IDS)
     def test_litellm_format_ids_resolve(self, model_id: str):

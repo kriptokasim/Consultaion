@@ -21,7 +21,7 @@ export interface ModelOption {
 
 export const AVAILABLE_MODELS: ModelOption[] = [
   {
-    id: 'gpt-4o-mini',
+    id: 'gpt4o-mini',
     name: 'GPT-4o Mini',
     provider: 'OpenAI',
     providerKey: 'openai',
@@ -30,7 +30,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     estimatedCost: '$0.15 / 1M tokens',
   },
   {
-    id: 'gpt-4o',
+    id: 'gpt4o-deep',
     name: 'GPT-4o',
     provider: 'OpenAI',
     providerKey: 'openai',
@@ -39,7 +39,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     estimatedCost: '$5.00 / 1M tokens',
   },
   {
-    id: 'claude-3-5-sonnet',
+    id: 'claude-sonnet',
     name: 'Claude 3.5 Sonnet',
     provider: 'Anthropic',
     providerKey: 'anthropic',
@@ -48,8 +48,8 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     estimatedCost: '$3.00 / 1M tokens',
   },
   {
-    id: 'claude-3-5-haiku',
-    name: 'Claude 3.5 Haiku',
+    id: 'claude-haiku',
+    name: 'Claude 3 Haiku',
     provider: 'Anthropic',
     providerKey: 'anthropic',
     capability: 'Fast',
@@ -57,8 +57,8 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     estimatedCost: '$0.25 / 1M tokens',
   },
   {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
+    id: 'gemini-2-flash',
+    name: 'Gemini 2.0 Flash',
     provider: 'Google',
     providerKey: 'google',
     capability: 'Multimodal',
@@ -66,8 +66,8 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     estimatedCost: '$0.35 / 1M tokens',
   },
   {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
+    id: 'gemini-2-5-pro',
+    name: 'Gemini 2.5 Pro',
     provider: 'Google',
     providerKey: 'google',
     capability: 'Deep Reasoning',

@@ -139,19 +139,24 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
     // FH121: Correct loading formula — terminal Runs never show skeletons
     const showResponseSkeletons = !isTerminal && (responsesState === "idle" || responsesState === "loading");
     const isLoading = showResponseSkeletons && modelResponses.length === 0 && !artifacts.hasSynthesisOutput;
-    const expectedModels =
-        debate?.models_expected ||
-        debate?.panel_config?.seats?.length ||
-        debate?.final_meta?.models?.length ||
-        (debate?.config as any)?.models?.length ||
-        (debate as any)?.models?.length ||
-        2;
     const [activeTab, setActiveTab] = useState<number>(0);
     const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
-    const { containerRef: cardContainerRef } = useCardKeyboardNav(modelResponses.length || expectedModels);
+
+    const executionModels = useMemo(() => {
+        for (let index = events.length - 1; index >= 0; index -= 1) {
+            const raw = events[index] as unknown as Record<string, unknown>;
+            if (raw.type !== "arena_started") continue;
+            const payload = raw.payload && typeof raw.payload === "object"
+                ? raw.payload as Record<string, unknown>
+                : raw;
+            if (Array.isArray(payload.models)) return payload.models;
+        }
+        return undefined;
+    }, [events]);
 
     const renderSlots = useMemo(() => {
         const arenaSlots = buildArenaSlots({
+            executionModels,
             panelSeats: debate?.panel_config?.seats,
             finalMetaModels: debate?.final_meta?.models,
             debateModels: debate?.models,
@@ -169,7 +174,19 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             streamBuf: slot.streaming,
             key: slot.key,
         }));
-    }, [debate, persistedResponses, streamingBuffers]);
+    }, [debate, executionModels, persistedResponses, streamingBuffers]);
+
+    const expectedModels =
+        renderSlots.length ||
+        debate?.models_expected ||
+        debate?.panel_config?.seats?.length ||
+        debate?.final_meta?.models?.length ||
+        (debate?.config as any)?.models?.length ||
+        (debate as any)?.models?.length ||
+        2;
+    const { containerRef: cardContainerRef } = useCardKeyboardNav(expectedModels);
+    const mobileSectionClass = (section: typeof mobileSegment) =>
+        mobileSegment === section ? "block" : "hidden sm:block";
 
     return (
         <div className="flex flex-col gap-6 pb-8">
@@ -233,8 +250,10 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 ] as const).map(({ key, label, icon: Icon }) => (
                     <button
                         key={key}
+                        id={`arena-tab-${key}`}
                         role="tab"
                         aria-selected={mobileSegment === key}
+                        aria-controls={`arena-panel-${key}`}
                         onClick={() => setMobileSegment(key)}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
                             mobileSegment === key
@@ -248,8 +267,14 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 ))}
             </div>
 
-            {/* FH121: Terminal empty/failed response states */}
-            {isTerminal && responsesState === "empty" && modelResponses.length === 0 && (
+            <section
+                id="arena-panel-perspectives"
+                role="tabpanel"
+                aria-labelledby="arena-tab-perspectives"
+                className={`${mobileSectionClass("perspectives")} space-y-6`}
+            >
+              {/* FH121: Terminal empty/failed response states */}
+              {isTerminal && responsesState === "empty" && modelResponses.length === 0 && (
                 <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-6 text-center">
                     <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
@@ -266,9 +291,9 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         Retry response loading
                     </button>
                 </div>
-            )}
+              )}
 
-            {isTerminal && responsesState === "failed" && modelResponses.length === 0 && (
+              {isTerminal && responsesState === "failed" && modelResponses.length === 0 && (
                 <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6 text-center">
                     <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
                     <p className="text-sm font-medium text-red-800 dark:text-red-200">
@@ -285,10 +310,10 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         Retry loading responses
                     </button>
                 </div>
-            )}
+              )}
 
-            {/* Model Response Cards */}
-            <div>
+              {/* Model Response Cards */}
+              <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
                     <Bot className="h-4 w-4" />
                     Model Responses
@@ -296,7 +321,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
 
                 {/* Mobile: full-width card with peek swipe */}
                 <div className="flex sm:hidden flex-col gap-3">
-                    {activeTab === 0 && modelResponses.length > 0 && (
+                    {activeTab === 0 && renderSlots.length > 1 && (
                         <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground animate-fade-in">
                             <span>Swipe to compare</span>
                             <ChevronRight className="h-3 w-3" />
@@ -307,7 +332,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         style={{ scrollbarWidth: "none" }}
                         onScroll={(e) => {
                             const el = e.currentTarget;
-                            const maxCards = Math.max(modelResponses.length || expectedModels, 1);
+                            const maxCards = Math.max(renderSlots.length, 1);
                             const cardWidth = el.scrollWidth / maxCards;
                             if (cardWidth > 0) {
                                 const idx = Math.round(el.scrollLeft / cardWidth);
@@ -358,15 +383,15 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         <div className="shrink-0 w-8" aria-hidden />
                     </div>
                     {/* Dot indicators */}
-                    {(modelResponses.length || expectedModels) > 1 && (
+                    {renderSlots.length > 1 && (
                         <div className="flex justify-center gap-1.5">
-                            {Array.from({ length: expectedModels }).map((_, i) => (
+                            {Array.from({ length: renderSlots.length }).map((_, i) => (
                                 <div
                                     key={i}
                                     className={`h-1.5 rounded-full transition-all ${
                                         i === activeTab
                                             ? "w-4 bg-primary"
-                                            : i < modelResponses.length
+                                            : renderSlots[i]?.type !== "skeleton"
                                                 ? "w-1.5 bg-primary/40"
                                                 : "w-1.5 bg-muted-foreground/20"
                                     }`}
@@ -417,19 +442,37 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         );
                     })}
                 </div>
-            </div>
+              </div>
+            </section>
 
             {/* Claims Divergence Analysis */}
-            {showDivergenceAnalysis ? (
-                <DivergenceMeter
-                    debateId={debate.id}
-                    isCompleted={isSuccessfulRunStatus(debate.status)}
-                    synthesisStatus={artifacts.synthesisStatus || debate.synthesis_status || debate.final_meta?.synthesis_status}
-                />
-            ) : null}
+            <section
+                id="arena-panel-verification"
+                role="tabpanel"
+                aria-labelledby="arena-tab-verification"
+                className={mobileSectionClass("verification")}
+            >
+                {showDivergenceAnalysis ? (
+                    <DivergenceMeter
+                        debateId={debate.id}
+                        isCompleted={isSuccessfulRunStatus(debate.status)}
+                        synthesisStatus={artifacts.synthesisStatus || debate.synthesis_status || debate.final_meta?.synthesis_status}
+                    />
+                ) : (
+                    <p className="text-sm text-muted-foreground">
+                        Verification analysis is unavailable for this Run.
+                    </p>
+                )}
+            </section>
 
             {/* Decision Report Section — live vs historical */}
-            {presentation === "live" ? (
+            <section
+                id="arena-panel-decision"
+                role="tabpanel"
+                aria-labelledby="arena-tab-decision"
+                className={mobileSectionClass("decision")}
+            >
+              {presentation === "live" ? (
                 (() => {
                     const hasReport = artifacts.hasStructuredReport && artifacts.synthesisReport;
                     const isSynthesizing = modelResponses.length > 0 && !artifacts.hasSynthesisOutput && !artifacts.hasStructuredReport;
@@ -531,7 +574,8 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         <SynthesisLoading successfulCount={modelResponses.filter(r => r.success).length} />
                     )}
                 </>
-            )}
+              )}
+            </section>
 
             {!profile && debate.status === "completed" && (
                 <PublicRunCTAFooter debateId={debate.id} />

@@ -47,7 +47,7 @@ describe("buildArenaSlots", () => {
     ];
     const slots = buildArenaSlots({ panelSeats: seats });
     expect(slots).toHaveLength(2);
-    expect(slots[0].modelId).toBe("gpt-4o");
+    expect(slots[0].modelId).toBe("gpt4o-deep");
     expect(slots[0].displayName).toBe("GPT-4o");
     expect(slots[1].modelId).toBe("claude-3");
   });
@@ -58,7 +58,7 @@ describe("buildArenaSlots", () => {
       { seat_id: "s2", display_name: "Gemini" }, // no model, falls back to seat_id
     ];
     const slots = buildArenaSlots({ panelSeats: seats });
-    expect(slots[0].modelId).toBe("gpt-4o");
+    expect(slots[0].modelId).toBe("gpt4o-deep");
     expect(slots[1].modelId).toBe("s2");
   });
 
@@ -68,14 +68,14 @@ describe("buildArenaSlots", () => {
     ];
     const slots = buildArenaSlots({ finalMetaModels: models });
     expect(slots).toHaveLength(1);
-    expect(slots[0].modelId).toBe("gpt-4o");
+    expect(slots[0].modelId).toBe("gpt4o-deep");
   });
 
   it("falls back to debate.models", () => {
     const models = ["gpt-4o", "claude-3"];
     const slots = buildArenaSlots({ debateModels: models });
     expect(slots).toHaveLength(2);
-    expect(slots[0].modelId).toBe("gpt-4o");
+    expect(slots[0].modelId).toBe("gpt4o-deep");
     expect(slots[1].modelId).toBe("claude-3");
   });
 
@@ -98,7 +98,7 @@ describe("buildArenaSlots", () => {
     ];
     const slots = buildArenaSlots({ panelSeats: seats, persistedResponses: persisted });
     // Slot order should follow seats, not persisted response order
-    expect(slots[0].modelId).toBe("gpt-4o");
+    expect(slots[0].modelId).toBe("gpt4o-deep");
     expect(slots[1].modelId).toBe("claude-3");
   });
 
@@ -131,6 +131,49 @@ describe("buildArenaSlots", () => {
     expect(slots[0].modelId).toBe("model-a");
     expect(slots[1].modelId).toBe("model-c");
     expect(slots[1].key).toContain("unexpected");
+  });
+
+  it("uses the execution manifest instead of retaining stale panel placeholders", () => {
+    const seats = [
+      { model: "gpt-4o", display_name: "Legacy GPT-4o" },
+      { model: "claude-3-5-sonnet", display_name: "Legacy Claude" },
+    ];
+    const executionModels = [
+      { model_id: "gpt4o-deep", display_name: "GPT-4o" },
+    ];
+    const persisted = [
+      makePersisted({ model_id: "gpt4o-deep", display_name: "GPT-4o" }),
+    ];
+
+    const slots = buildArenaSlots({
+      executionModels,
+      panelSeats: seats,
+      persistedResponses: persisted,
+    });
+
+    expect(slots).toHaveLength(1);
+    expect(slots[0].modelId).toBe("gpt4o-deep");
+    expect(slots[0].type).toBe("persisted");
+  });
+
+  it("reconciles a legacy panel ID with the canonical streamed response", () => {
+    const seats = [
+      { model: "openai/gpt-4o-mini", display_name: "GPT-4o Mini" },
+    ];
+    const streams = new Map([
+      ["response-1", makeStream({
+        responseId: "response-1",
+        modelId: "gpt4o-mini",
+        accumulatedText: "Visible immediately",
+      })],
+    ]);
+
+    const slots = buildArenaSlots({ panelSeats: seats, streamingBuffers: streams });
+
+    expect(slots).toHaveLength(1);
+    expect(slots[0].modelId).toBe("gpt4o-mini");
+    expect(slots[0].type).toBe("streaming");
+    expect(slots[0].streaming?.accumulatedText).toBe("Visible immediately");
   });
 
   it("handles failed responses in configured location", () => {
@@ -172,6 +215,59 @@ describe("buildArenaSlots", () => {
     expect(slots[1].modelId).toBe("model-b");
   });
 
+  it("keeps a newer retry stream visible over stale persisted content", () => {
+    const persisted = [makePersisted({
+      id: "old",
+      response_id: "resp-debate-a1-g0-model-a-old",
+      model_id: "model-a",
+      content: "Old answer",
+      metadata: { run_attempt: 1, retry_generation: 0 },
+    })];
+    const streams = new Map([[
+      "resp-debate-a1-g1-model-a-new",
+      makeStream({
+        responseId: "resp-debate-a1-g1-model-a-new",
+        modelId: "model-a",
+        accumulatedText: "Retry answer",
+      }),
+    ]]);
+
+    const [slot] = buildArenaSlots({
+      panelSeats: [{ model: "model-a" }],
+      persistedResponses: persisted,
+      streamingBuffers: streams,
+    });
+
+    expect(slot.type).toBe("streaming");
+    expect(slot.streaming?.accumulatedText).toBe("Retry answer");
+    expect(slot.persisted).toBeUndefined();
+  });
+
+  it("selects the latest persisted retry independent of response ordering", () => {
+    const newest = makePersisted({
+      id: "new",
+      response_id: "resp-debate-a2-g1-model-a-new",
+      model_id: "model-a",
+      content: "Latest answer",
+      metadata: { run_attempt: 2, retry_generation: 1 },
+    });
+    const stale = makePersisted({
+      id: "old",
+      response_id: "resp-debate-a1-g0-model-a-old",
+      model_id: "model-a",
+      content: "Stale answer",
+      metadata: { run_attempt: 1, retry_generation: 0 },
+    });
+
+    const [slot] = buildArenaSlots({
+      panelSeats: [{ model: "model-a" }],
+      persistedResponses: [newest, stale],
+    });
+
+    expect(slot.type).toBe("persisted");
+    expect(slot.persisted?.content).toBe("Latest answer");
+  });
+
   it("no duplicate slot identities", () => {
     const seats = [
       { seat_id: "s1", model: "model-a", display_name: "Model A" },
@@ -189,6 +285,6 @@ describe("buildArenaSlots", () => {
   it("missing panel metadata uses fallback", () => {
     const slots = buildArenaSlots({ fallbackModelIds: ["gpt-4o", "claude-3"] });
     expect(slots).toHaveLength(2);
-    expect(slots[0].modelId).toBe("gpt-4o");
+    expect(slots[0].modelId).toBe("gpt4o-deep");
   });
 });

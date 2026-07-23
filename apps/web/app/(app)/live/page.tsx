@@ -550,7 +550,7 @@ function ArenaPageContent() {
           onNewRun={resetToNewRun}
         />
 
-        <PromptPresets onPresetSelected={handlePresetSelected} />
+        {!activeRunId && <PromptPresets onPresetSelected={handlePresetSelected} />}
 
         {authStatus === 'authed' && !activeRunId && (
           <div className="mt-8 border-t border-slate-100 pt-8 dark:border-slate-800">
@@ -571,7 +571,7 @@ function ArenaPageContent() {
 
       {/* Active workspace — wider container */}
       {activeRunId && (
-        <div className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto px-4 lg:px-6 mt-8">
+        <div className="w-full max-w-[1600px] 2xl:max-w-[1800px] mx-auto px-4 lg:px-6 mt-2 sm:mt-8">
           <RunDetailClient
             key={activeRunId}
             runId={activeRunId}

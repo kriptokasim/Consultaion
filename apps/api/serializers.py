@@ -249,6 +249,10 @@ def _get_models_expected(debate) -> int:
     config = debate.config or {}
     mode = getattr(debate, "mode", "arena")
     if mode == "arena":
+        panel = debate.panel_config or {}
+        seats = panel.get("seats") if isinstance(panel, dict) else None
+        if isinstance(seats, list) and seats:
+            return len(seats)
         from parliament.model_registry import get_arena_models
         try:
             return len(get_arena_models())

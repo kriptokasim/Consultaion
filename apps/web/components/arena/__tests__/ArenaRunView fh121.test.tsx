@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import type { ResponsesState } from "@/hooks/useRunWorkspace";
@@ -183,6 +183,69 @@ describe("ArenaRunView — FH121 regression tests", () => {
     expect(screen.getAllByText("Llama").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("uses the live execution manifest without leaving ghost placeholders", () => {
+    const debate = makeDebate({
+      status: "running",
+      panel_config: {
+        engine_version: "parliament-v1",
+        seats: [
+          {
+            seat_id: "legacy-openai",
+            display_name: "Legacy OpenAI",
+            provider_key: "openai",
+            model: "gpt-4o",
+            role_profile: "architect",
+          },
+        ],
+      },
+    });
+    const response = makeResponses(1)[0];
+    response.model_id = "gpt4o-deep";
+    response.display_name = "GPT-4o";
+    const events = [{
+      type: "arena_started",
+      models: [{ model_id: "gpt4o-deep", display_name: "GPT-4o", provider: "openai" }],
+    }] as DebateEvent[];
+
+    render(
+      <ArenaRunView
+        debate={debate}
+        events={events}
+        responses={[response]}
+        isTerminal={false}
+        responsesState="ready"
+      />
+    );
+
+    expect(screen.queryByTestId("skeleton-card-0")).not.toBeInTheDocument();
+    expect(screen.getAllByText("GPT-4o")).toHaveLength(2);
+  });
+
+  it("mobile segment tabs control which Run section is visible", () => {
+    const debate = makeDebate({ status: "running", models: [] });
+    render(
+      <ArenaRunView
+        debate={debate}
+        events={[]}
+        responses={[]}
+        isTerminal={false}
+        responsesState="loading"
+      />
+    );
+
+    const perspectives = document.getElementById("arena-panel-perspectives");
+    const decision = document.getElementById("arena-panel-decision");
+    const verification = document.getElementById("arena-panel-verification");
+    expect(perspectives?.className).not.toContain("hidden");
+    expect(decision?.className).toContain("hidden sm:block");
+    expect(verification?.className).toContain("hidden sm:block");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Decision" }));
+
+    expect(perspectives?.className).toContain("hidden sm:block");
+    expect(decision?.className).not.toContain("hidden");
+  });
+
   // ─── P143: Structured report without raw synthesis ───────────────
   it("renders SynthesisReveal when debate.synthesis_report exists but events and final_content are empty", () => {
     const debate = makeDebate({
@@ -258,4 +321,3 @@ describe("ArenaRunView — FH121 regression tests", () => {
     expect(cards.length).toBeGreaterThanOrEqual(4);
   });
 });
-

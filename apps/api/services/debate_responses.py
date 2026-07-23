@@ -109,7 +109,7 @@ def _expected_model_count(debate: Debate) -> int:
         return len(models)
 
     panel = debate.panel_config or {}
-    panel_models = panel.get("models") or panel.get("panel") or []
+    panel_models = panel.get("seats") or panel.get("models") or panel.get("panel") or []
     if isinstance(panel_models, list) and panel_models:
         return len(panel_models)
 

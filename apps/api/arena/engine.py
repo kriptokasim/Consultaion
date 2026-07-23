@@ -21,7 +21,7 @@ from observability.latency import (
     record_stream_duration,
     record_ttft,
 )
-from parliament.model_registry import get_arena_models
+from parliament.model_registry import get_arena_models, resolve_model_info
 from sse_backend import get_sse_backend
 
 from arena.prompts import (
@@ -93,6 +93,41 @@ def _derive_model_family(model_info) -> str:
     if model_info.litellm_model and "/" in model_info.litellm_model:
         return model_info.litellm_model.split("/", 1)[1]
     return model_info.id
+
+
+def _resolve_arena_models_from_panel(panel_config: dict | None):
+    """Resolve a durable panel into the ordered Arena execution manifest.
+
+    Legacy clients stored provider IDs and LiteLLM strings while current
+    clients store registry IDs.  Resolution canonicalizes both forms and
+    deduplicates model identities so response IDs, checkpoints, billing
+    counts, SSE events, and UI slots all describe the same execution set.
+    """
+    if not isinstance(panel_config, dict):
+        return []
+
+    seats = panel_config.get("seats")
+    if not isinstance(seats, list):
+        return []
+
+    resolved = []
+    seen: set[str] = set()
+    for seat in seats:
+        if not isinstance(seat, dict):
+            continue
+        model_key = seat.get("model") or seat.get("model_id")
+        if not isinstance(model_key, str) or not model_key.strip():
+            continue
+        model_info = resolve_model_info(model_key.strip())
+        if model_info is None:
+            logger.warning("arena.panel_model_unresolved model=%s", model_key)
+            continue
+        if model_info.id in seen:
+            logger.info("arena.panel_model_deduplicated model=%s", model_info.id)
+            continue
+        seen.add(model_info.id)
+        resolved.append(model_info)
+    return resolved
 
 
 @dataclass
@@ -286,12 +321,14 @@ async def run_arena(
             raise ValueError(f"Debate {debate_id} not found")
         prompt = debate.prompt
         config = debate.config or {}
+        panel_config = debate.panel_config
         user_id = debate.user_id
         locale = config.get("locale")
         run_attempt = debate.run_attempt or 1
 
-    # Get arena models (filtered to enabled providers)
-    arena_models = get_arena_models()
+    # The stored panel is the execution contract. Legacy runs without a
+    # resolvable panel retain the historical global Arena fallback.
+    arena_models = _resolve_arena_models_from_panel(panel_config) or get_arena_models()
     if not arena_models:
         raise ValueError("No arena models available. Configure at least one provider API key.")
 
@@ -812,7 +849,22 @@ async def run_arena(
         )
         return ArenaResult(
             final_answer="All models failed to respond. Please try again.",
-            final_meta={"mode": "arena", "error": "all_models_failed"},
+            final_meta={
+                "mode": "arena",
+                "error": "all_models_failed",
+                "models": [
+                    {
+                        "model_id": r.model_id,
+                        "display_name": r.display_name,
+                        "provider": r.provider,
+                        "success": r.success,
+                        "logo_url": r.logo_url,
+                    }
+                    for r in model_responses
+                ],
+                "successful_count": 0,
+                "total_count": len(model_responses),
+            },
             usage_tracker=usage,
             status="failed",
             error_reason="all_models_failed",

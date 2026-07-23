@@ -17,7 +17,11 @@ from exceptions import (
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from integrations.langfuse import start_debate_trace
 from models import Debate, DebateContinuation, Team, User, utcnow
-from parliament.model_registry import list_enabled_models_for_user
+from parliament.model_registry import (
+    ARENA_MODELS,
+    list_enabled_models_for_user,
+    resolve_model_info,
+)
 from parliament.providers import PROVIDERS
 from parliament.roles import ROLE_PROFILES
 from parliament.router_v2 import RouteContext, choose_model
@@ -27,6 +31,7 @@ from ratelimit import increment_ip_bucket, record_429
 from schemas import (
     DebateCreate,
     PanelConfig,
+    PanelSeat,
     default_debate_config,
     default_panel_config,
 )
@@ -241,7 +246,29 @@ async def create_debate(
                 hint="Please upgrade to Pro to use advanced models."
             )
 
-        panel_config = body.panel_config or default_panel_config()
+        if body.mode == "arena" and body.panel_config is None:
+            default_arena_models = [
+                enabled_models[model_id]
+                for model_id in ARENA_MODELS
+                if model_id in enabled_models
+            ]
+            if not default_arena_models:
+                default_arena_models = list(enabled_models.values())[:4]
+            panel_config = PanelConfig(
+                seats=[
+                    PanelSeat(
+                        seat_id=model.id,
+                        display_name=model.display_name,
+                        provider_key="google" if model.provider == "gemini" else model.provider,
+                        model=model.id,
+                        role_profile="architect",
+                        temperature=0.7,
+                    )
+                    for model in default_arena_models
+                ]
+            )
+        else:
+            panel_config = body.panel_config or default_panel_config()
         try:
             panel = PanelConfig.model_validate(panel_config)
         except Exception as exc:  # pragma: no cover - validation
@@ -251,6 +278,56 @@ async def create_debate(
                 raise ValidationError(message=f"Unknown provider_key '{seat.provider_key}'", code="debate.invalid_provider")
             if seat.role_profile not in ROLE_PROFILES:
                 raise ValidationError(message=f"Unknown role_profile '{seat.role_profile}'", code="debate.invalid_role")
+
+        if body.mode == "arena":
+            normalized_seats: list[PanelSeat] = []
+            seen_model_ids: set[str] = set()
+            for seat in panel.seats:
+                model_info = resolve_model_info(seat.model)
+                if model_info is None or model_info.id not in enabled_models:
+                    raise ValidationError(
+                        message=f"Model '{seat.model}' is invalid or unavailable.",
+                        code="debate.invalid_model",
+                        hint="Please select a currently available model.",
+                    )
+
+                expected_provider = "google" if model_info.provider == "gemini" else model_info.provider
+                if seat.provider_key != expected_provider:
+                    raise ValidationError(
+                        message=(
+                            f"Model '{seat.model}' does not belong to provider "
+                            f"'{seat.provider_key}'."
+                        ),
+                        code="debate.invalid_provider",
+                    )
+                if model_info.tier not in allowed_tiers:
+                    raise ValidationError(
+                        message=f"Model '{model_info.display_name}' is not available on your plan.",
+                        code="debate.model_tier_restricted",
+                        hint="Please upgrade to Pro or select a standard model.",
+                    )
+                if model_info.id in seen_model_ids:
+                    continue
+
+                seen_model_ids.add(model_info.id)
+                normalized_seats.append(
+                    seat.model_copy(
+                        update={
+                            "seat_id": model_info.id,
+                            "display_name": model_info.display_name,
+                            "provider_key": expected_provider,
+                            "model": model_info.id,
+                        }
+                    )
+                )
+
+            if not normalized_seats:
+                raise ProviderCircuitOpenError(
+                    message="No Arena models are available.",
+                    code="models.unavailable",
+                    hint="Configure a provider or select another model.",
+                )
+            panel = panel.model_copy(update={"seats": normalized_seats})
 
         # Routing decision
         route_ctx = RouteContext(

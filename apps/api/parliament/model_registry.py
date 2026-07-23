@@ -302,6 +302,31 @@ def get_model_info(name: str) -> Optional[ModelInfo]:
     return None
 
 
+def resolve_model_info(model_key: str) -> Optional[ModelInfo]:
+    """Resolve registry IDs, gateway aliases, and LiteLLM IDs to ModelInfo.
+
+    Debate.panel_config is durable and contains identifiers produced by
+    several generations of the web client.  Arena execution and rendering
+    need one canonical registry ID, so resolution lives at this boundary
+    instead of being reimplemented by each caller.
+    """
+    direct = get_model_info(model_key)
+    if direct is not None:
+        return direct
+
+    from model_gateway.model_map import MODEL_MAP, ModelKeyError, resolve_model_key
+    try:
+        canonical_key = resolve_model_key(model_key)
+        litellm_model = MODEL_MAP[canonical_key]["litellm_model"]
+    except (KeyError, ModelKeyError, TypeError, ValueError):
+        return None
+
+    for model in ALL_MODELS:
+        if model.litellm_model == litellm_model:
+            return model
+    return None
+
+
 def get_default_model() -> ModelInfo:
     """Get the default recommended model from enabled models."""
     enabled = list_enabled_models()

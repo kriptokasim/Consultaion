@@ -272,6 +272,14 @@ MODEL_ALIASES: dict[str, str] = {
     "gemini-2-5-pro": "gemini_pro",
     "groq-llama-3-3": "groq_fast",
     "mistral-large": "mistral_large",
+    # Legacy web panel IDs. These were persisted in Debate.panel_config
+    # before the live Arena used the registry IDs as its execution contract.
+    "gpt-4o-mini": "openai_fast",
+    "gpt-4o": "openai_premium",
+    "claude-3-5-sonnet": "anthropic_reasoning",
+    "claude-3-5-haiku": "anthropic_reasoning",
+    "gemini-1.5-flash": "gemini_general",
+    "gemini-1.5-pro": "gemini_pro",
     # deepseek-r1, router-smart, router-deep, llama-3-free, mimo-v2-free
     # are now first-class MODEL_MAP entries — no alias needed.
 
@@ -335,5 +343,4 @@ def get_model_cost_class(model_key: str) -> str:
 def is_free_model(model_key: str) -> bool:
     """Return True only if the model's cost_class is explicitly 'free'."""
     return get_model_cost_class(model_key) == "free"
-
 
