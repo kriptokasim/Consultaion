@@ -275,6 +275,9 @@ MODEL_ALIASES: dict[str, str] = {
     # Legacy web panel IDs. These were persisted in Debate.panel_config
     # before the live Arena used the registry IDs as its execution contract.
     "gpt-4o-mini": "openai_fast",
+    # Retired web preset ID. Preserve durable panels by explicitly routing it
+    # to the current low-latency OpenAI seat rather than silently dropping it.
+    "gpt-4.1-mini": "openai_fast",
     "gpt-4o": "openai_premium",
     "claude-3-5-sonnet": "anthropic_reasoning",
     "claude-3-5-haiku": "anthropic_reasoning",
@@ -343,4 +346,3 @@ def get_model_cost_class(model_key: str) -> str:
 def is_free_model(model_key: str) -> bool:
     """Return True only if the model's cost_class is explicitly 'free'."""
     return get_model_cost_class(model_key) == "free"
-

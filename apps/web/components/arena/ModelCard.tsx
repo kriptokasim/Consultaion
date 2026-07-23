@@ -220,6 +220,48 @@ export function ErrorCardBody({
     );
 }
 
+/* ─── Explicit terminal state when a configured model has no response ─── */
+export function UnavailableModelCard({
+    displayName,
+    provider,
+    logoUrl,
+    className = "",
+}: {
+    displayName: string;
+    provider?: string;
+    logoUrl?: string;
+    className?: string;
+}) {
+    const colors = getColors(provider);
+
+    return (
+        <article
+            className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm overflow-hidden min-h-[350px] sm:min-h-[400px] ${className}`}
+            aria-label={`Response unavailable from ${displayName}`}
+            data-response-state="unavailable"
+        >
+            <div className={`p-4 border-b ${colors.border} flex items-center gap-3`}>
+                <div className={`shrink-0 rounded-xl ${colors.accent} p-2`}>
+                    <ModelLogo logoUrl={logoUrl} displayName={displayName} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                        <p className={`font-semibold text-sm truncate ${colors.text}`}>
+                            {displayName}
+                        </p>
+                        <XCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                    </div>
+                </div>
+            </div>
+            <ErrorCardBody
+                friendly="This Run finished without a stored response from this model."
+                technical={null}
+                displayName={displayName}
+            />
+        </article>
+    );
+}
+
 /* ─── Streaming state badge ─── */
 function StreamingStateBadge({ state }: { state: ModelState }) {
     switch (state) {

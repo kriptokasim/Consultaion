@@ -176,6 +176,26 @@ describe("buildArenaSlots", () => {
     expect(slots[0].streaming?.accumulatedText).toBe("Visible immediately");
   });
 
+  it("reconciles the retired GPT-4.1 Mini panel ID with its compatibility seat", () => {
+    const seats = [
+      { model: "gpt-4.1-mini", display_name: "GPT-4.1 Mini" },
+    ];
+    const persisted = [
+      makePersisted({
+        model_id: "gpt4o-mini",
+        display_name: "GPT-4o Mini",
+        content: "Durable compatibility response",
+      }),
+    ];
+
+    const slots = buildArenaSlots({ panelSeats: seats, persistedResponses: persisted });
+
+    expect(slots).toHaveLength(1);
+    expect(slots[0].modelId).toBe("gpt4o-mini");
+    expect(slots[0].type).toBe("persisted");
+    expect(slots[0].persisted?.content).toBe("Durable compatibility response");
+  });
+
   it("handles failed responses in configured location", () => {
     const seats = [
       { seat_id: "s1", model: "model-a", display_name: "Model A" },

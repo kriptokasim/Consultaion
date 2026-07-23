@@ -43,6 +43,7 @@ class TestModelResolution:
 
     LEGACY_WEB_PANEL_IDS = [
         "gpt-4o-mini",
+        "gpt-4.1-mini",
         "gpt-4o",
         "claude-3-5-sonnet",
         "claude-3-5-haiku",

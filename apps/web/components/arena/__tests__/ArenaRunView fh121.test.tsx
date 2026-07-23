@@ -39,6 +39,9 @@ vi.mock("@/components/arena/ModelCard", () => ({
     <div data-testid="model-card">{resp.display_name}</div>
   ),
   StreamingModelCard: () => <div data-testid="streaming-card" />,
+  UnavailableModelCard: ({ displayName }: any) => (
+    <div data-testid="unavailable-card">{displayName} unavailable</div>
+  ),
   ModelLogo: () => null,
   SkeletonCard: ({ index }: any) => (
     <div data-testid={`skeleton-card-${index}`} className="skeleton" />
@@ -113,6 +116,83 @@ describe("ArenaRunView — FH121 regression tests", () => {
     expect(
       screen.getByText(/no persisted model responses/i)
     ).toBeInTheDocument();
+  });
+
+  it("renders explicit unavailable cards instead of terminal skeletons", () => {
+    const debate = makeDebate({
+      status: "completed",
+      panel_config: {
+        engine_version: "parliament-v1",
+        seats: [
+          {
+            seat_id: "openai",
+            display_name: "OpenAI",
+            provider_key: "openai",
+            model: "gpt4o-mini",
+            role_profile: "architect",
+          },
+          {
+            seat_id: "anthropic",
+            display_name: "Anthropic",
+            provider_key: "anthropic",
+            model: "claude-sonnet",
+            role_profile: "critic",
+          },
+        ],
+      },
+    });
+
+    render(
+      <ArenaRunView
+        debate={debate}
+        events={[]}
+        responses={[]}
+        isTerminal={true}
+        responsesState="empty"
+      />
+    );
+
+    expect(screen.queryAllByTestId(/^skeleton-card-/)).toHaveLength(0);
+    expect(screen.getAllByTestId("unavailable-card")).toHaveLength(4);
+  });
+
+  it("renders a partial terminal response beside an explicit unavailable state", () => {
+    const debate = makeDebate({
+      status: "completed_with_warnings",
+      panel_config: {
+        engine_version: "parliament-v1",
+        seats: [
+          {
+            seat_id: "openai",
+            display_name: "OpenAI",
+            provider_key: "openai",
+            model: "model-0",
+            role_profile: "architect",
+          },
+          {
+            seat_id: "anthropic",
+            display_name: "Anthropic",
+            provider_key: "anthropic",
+            model: "model-1",
+            role_profile: "critic",
+          },
+        ],
+      },
+    });
+
+    render(
+      <ArenaRunView
+        debate={debate}
+        events={[]}
+        responses={makeResponses(1)}
+        isTerminal={true}
+        responsesState="ready"
+      />
+    );
+
+    expect(screen.queryAllByTestId(/^skeleton-card-/)).toHaveLength(0);
+    expect(screen.getAllByTestId("model-card")).toHaveLength(2);
+    expect(screen.getAllByTestId("unavailable-card")).toHaveLength(2);
   });
 
   it("test_terminal_failed_shows_error_state", () => {

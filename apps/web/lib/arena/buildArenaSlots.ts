@@ -14,6 +14,7 @@ export interface ArenaSlot {
 
 const MODEL_ID_ALIASES: Record<string, string> = {
   "gpt-4o-mini": "gpt4o-mini",
+  "gpt-4.1-mini": "gpt4o-mini",
   "openai/gpt-4o-mini": "gpt4o-mini",
   "gpt-4o": "gpt4o-deep",
   "openai/gpt-4o": "gpt4o-deep",

@@ -102,6 +102,8 @@ def _resolve_arena_models_from_panel(panel_config: dict | None):
     clients store registry IDs.  Resolution canonicalizes both forms and
     deduplicates model identities so response IDs, checkpoints, billing
     counts, SSE events, and UI slots all describe the same execution set.
+    A non-empty durable panel is fail-closed: silently dropping even one seat
+    would mutate the user's selected and billed execution contract.
     """
     if not isinstance(panel_config, dict):
         return []
@@ -112,22 +114,43 @@ def _resolve_arena_models_from_panel(panel_config: dict | None):
 
     resolved = []
     seen: set[str] = set()
-    for seat in seats:
+    unresolved: list[str] = []
+    for index, seat in enumerate(seats):
         if not isinstance(seat, dict):
+            unresolved.append(f"seat[{index}]")
             continue
         model_key = seat.get("model") or seat.get("model_id")
         if not isinstance(model_key, str) or not model_key.strip():
+            unresolved.append(f"seat[{index}]")
             continue
         model_info = resolve_model_info(model_key.strip())
         if model_info is None:
-            logger.warning("arena.panel_model_unresolved model=%s", model_key)
+            unresolved.append(model_key.strip())
             continue
         if model_info.id in seen:
             logger.info("arena.panel_model_deduplicated model=%s", model_info.id)
             continue
         seen.add(model_info.id)
         resolved.append(model_info)
+
+    if unresolved:
+        logger.error(
+            "arena.panel_manifest_unresolved unresolved=%s",
+            unresolved,
+        )
+        raise ValueError(
+            "Persisted Arena panel contains unresolved model seats: "
+            + ", ".join(unresolved)
+        )
     return resolved
+
+
+def _select_arena_execution_models(panel_config: dict | None):
+    """Select the exact stored panel, falling back only for legacy empty data."""
+    panel_models = _resolve_arena_models_from_panel(panel_config)
+    if panel_models:
+        return panel_models
+    return get_arena_models()
 
 
 @dataclass
@@ -326,9 +349,9 @@ async def run_arena(
         locale = config.get("locale")
         run_attempt = debate.run_attempt or 1
 
-    # The stored panel is the execution contract. Legacy runs without a
-    # resolvable panel retain the historical global Arena fallback.
-    arena_models = _resolve_arena_models_from_panel(panel_config) or get_arena_models()
+    # The stored panel is the execution contract. Only legacy runs without a
+    # non-empty panel retain the historical global Arena fallback.
+    arena_models = _select_arena_execution_models(panel_config)
     if not arena_models:
         raise ValueError("No arena models available. Configure at least one provider API key.")
 

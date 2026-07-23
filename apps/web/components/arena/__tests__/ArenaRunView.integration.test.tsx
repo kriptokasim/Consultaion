@@ -37,6 +37,9 @@ vi.mock("@/components/arena/ModelCard", () => ({
     <div data-testid="model-card">{resp.display_name}</div>
   ),
   StreamingModelCard: () => <div data-testid="streaming-card" />,
+  UnavailableModelCard: ({ displayName }: any) => (
+    <div data-testid="unavailable-card">{displayName} unavailable</div>
+  ),
   ModelLogo: () => null,
   SkeletonCard: ({ index }: any) => (
     <div data-testid={`skeleton-card-${index}`} className="skeleton" />

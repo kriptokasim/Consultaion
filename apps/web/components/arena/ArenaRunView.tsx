@@ -5,7 +5,7 @@ import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle,
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { getArenaSynthesisArtifacts } from "@/lib/arena/synthesisArtifacts";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
-import { ModelCard, StreamingModelCard, SkeletonCard } from "./ModelCard";
+import { ModelCard, StreamingModelCard, SkeletonCard, UnavailableModelCard } from "./ModelCard";
 import type { ModelResponse } from "./ModelCard";
 import type { StreamingModelBuffer } from "@/lib/streaming/types";
 import type { ResponsesState, TimelineState } from "@/hooks/useRunWorkspace";
@@ -136,9 +136,9 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
         }
     };
 
-    // FH121: Correct loading formula — terminal Runs never show skeletons
-    const showResponseSkeletons = !isTerminal && (responsesState === "idle" || responsesState === "loading");
-    const isLoading = showResponseSkeletons && modelResponses.length === 0 && !artifacts.hasSynthesisOutput;
+    // FH121/C2-BUGFIX-17: Terminal Runs expose missing responses explicitly;
+    // they must never leave an indefinite loading skeleton behind.
+    const runIsTerminal = Boolean(isTerminal || isTerminalRunStatus(debate.status));
     const [activeTab, setActiveTab] = useState<number>(0);
     const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
 
@@ -169,12 +169,15 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
         return arenaSlots.map(slot => ({
             type: slot.type === "persisted" ? "persisted" as const :
                    slot.type === "streaming" ? "stream" as const :
-                   "skeleton" as const,
+                   runIsTerminal ? "unavailable" as const : "skeleton" as const,
             resp: slot.persisted,
             streamBuf: slot.streaming,
             key: slot.key,
+            displayName: slot.displayName,
+            provider: slot.provider,
+            logoUrl: slot.logoUrl,
         }));
-    }, [debate, executionModels, persistedResponses, streamingBuffers]);
+    }, [debate, executionModels, persistedResponses, runIsTerminal, streamingBuffers]);
 
     const expectedModels =
         renderSlots.length ||
@@ -274,7 +277,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 className={`${mobileSectionClass("perspectives")} space-y-6`}
             >
               {/* FH121: Terminal empty/failed response states */}
-              {isTerminal && responsesState === "empty" && modelResponses.length === 0 && (
+              {runIsTerminal && responsesState === "empty" && modelResponses.length === 0 && (
                 <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-6 text-center">
                     <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
@@ -293,7 +296,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 </div>
               )}
 
-              {isTerminal && responsesState === "failed" && modelResponses.length === 0 && (
+              {runIsTerminal && responsesState === "failed" && modelResponses.length === 0 && (
                 <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6 text-center">
                     <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
                     <p className="text-sm font-medium text-red-800 dark:text-red-200">
@@ -345,6 +348,19 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                 return (
                                     <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
                                         <SkeletonCard index={i} />
+                                    </div>
+                                );
+                            }
+
+                            if (slot.type === "unavailable") {
+                                return (
+                                    <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
+                                        <UnavailableModelCard
+                                            displayName={slot.displayName}
+                                            provider={slot.provider}
+                                            logoUrl={slot.logoUrl}
+                                            className="min-h-[350px]"
+                                        />
                                     </div>
                                 );
                             }
@@ -411,6 +427,18 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     {renderSlots.map((slot, i) => {
                         if (slot.type === "skeleton") {
                             return <SkeletonCard key={slot.key} index={i} />;
+                        }
+
+                        if (slot.type === "unavailable") {
+                            return (
+                                <div key={slot.key} data-model-card tabIndex={0}>
+                                    <UnavailableModelCard
+                                        displayName={slot.displayName}
+                                        provider={slot.provider}
+                                        logoUrl={slot.logoUrl}
+                                    />
+                                </div>
+                            );
                         }
 
                         if (slot.type === "stream") {
