@@ -18,6 +18,9 @@ import { fetchWithAuth } from "@/lib/auth";
 import { useCardKeyboardNav } from "@/hooks/useCardKeyboardNav";
 import { buildArenaSlots } from "@/lib/arena/buildArenaSlots";
 import { isSuccessfulRunStatus, isTerminalRunStatus } from "@/lib/runStatus";
+import type { SynthesisStreamingState } from "@/lib/workspace/synthesisReducer";
+import { LiveSynthesisCard } from "./LiveSynthesisCard";
+import { useI18n } from "@/lib/i18n/client";
 
 /* ─── Main component ─── */
 interface ArenaRunViewProps {
@@ -25,6 +28,7 @@ interface ArenaRunViewProps {
     events: DebateEvent[];
     responses?: PersistedModelResponse[];
     streamingBuffers?: Map<string, StreamingModelBuffer>;
+    synthesisState?: SynthesisStreamingState;
     isTerminal?: boolean;
     responsesState?: ResponsesState;
     responsesError?: string | null;
@@ -35,7 +39,12 @@ interface ArenaRunViewProps {
     showDivergenceAnalysis?: boolean;
 }
 
-export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, isTerminal, responsesState, responsesError, timelineState, presentation = "historical", profile, onRefetch, showDivergenceAnalysis = true }: ArenaRunViewProps) {
+export default function ArenaRunView({ debate, events, responses: persistedResponses, streamingBuffers, synthesisState, isTerminal, responsesState, responsesError, timelineState, presentation = "historical", profile, onRefetch, showDivergenceAnalysis = true }: ArenaRunViewProps) {
+    const { t } = useI18n();
+    const translated = (key: string, fallback: string) => {
+        const value = t(key);
+        return value === key ? fallback : value;
+    };
     /* Parse arena events */
     const { modelResponses, synthesis } = useMemo(() => {
         const eventResponses: Array<ModelResponse> = [];
@@ -245,11 +254,11 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             </div>
 
             {/* Mobile Segment Switcher — FH110 */}
-            <div className="flex sm:hidden items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border" role="tablist" aria-label="Run sections">
+            <div className="flex sm:hidden items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border" role="tablist" aria-label={translated("arena.tabs.label", "Run sections")}>
                 {([
-                    { key: "perspectives", label: "Perspectives", icon: Eye },
-                    { key: "decision", label: "Decision", icon: MessageSquare },
-                    { key: "verification", label: "Verification", icon: Shield },
+                    { key: "perspectives", label: translated("arena.tabs.perspectives", "Perspectives"), icon: Eye },
+                    { key: "decision", label: translated("arena.tabs.decision", "Decision"), icon: MessageSquare },
+                    { key: "verification", label: translated("arena.tabs.verification", "Verification"), icon: Shield },
                 ] as const).map(({ key, label, icon: Icon }) => (
                     <button
                         key={key}
@@ -258,7 +267,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         aria-selected={mobileSegment === key}
                         aria-controls={`arena-panel-${key}`}
                         onClick={() => setMobileSegment(key)}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
+                        className={`flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
                             mobileSegment === key
                                 ? "bg-card text-foreground shadow-sm"
                                 : "text-muted-foreground hover:text-foreground"
@@ -266,6 +275,18 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     >
                         <Icon className="h-3.5 w-3.5" />
                         {label}
+                        {key === "decision"
+                            && synthesisState
+                            && synthesisState.status !== "idle"
+                            && mobileSegment !== "decision" && (
+                            <>
+                                <span className="sr-only">{translated("arena.tabs.decisionUpdate", "New decision update")}</span>
+                                <span
+                                    className="h-1.5 w-1.5 rounded-full bg-primary"
+                                    aria-hidden="true"
+                                />
+                            </>
+                        )}
                     </button>
                 ))}
             </div>
@@ -502,6 +523,9 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             >
               {presentation === "live" ? (
                 (() => {
+                    if (synthesisState && synthesisState.status !== "idle") {
+                        return <LiveSynthesisCard state={synthesisState} />;
+                    }
                     const hasReport = artifacts.hasStructuredReport && artifacts.synthesisReport;
                     const isSynthesizing = modelResponses.length > 0 && !artifacts.hasSynthesisOutput && !artifacts.hasStructuredReport;
                     const isSynthesisFailed = artifacts.synthesisStatus === "failed" ||

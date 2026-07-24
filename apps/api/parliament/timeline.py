@@ -54,6 +54,12 @@ def build_debate_timeline(session: Session, debate: Debate) -> List[TimelineEven
             evt_type = "seat_message"
         elif msg.role == "system":
             evt_type = "notice"
+        elif msg.role == "arena_response":
+            evt_type = "arena_response"
+        elif msg.role == "arena_synthesis_revision":
+            evt_type = "arena_synthesis_revision"
+        elif msg.role == "arena_synthesis":
+            evt_type = "arena_synthesis"
             
         payload = {
             "text": msg.content,
@@ -66,6 +72,17 @@ def build_debate_timeline(session: Session, debate: Debate) -> List[TimelineEven
         if evt_type == "seat_message":
             payload["seat_id"] = meta.get("seat_id")
             payload["seat_name"] = msg.persona
+        elif evt_type == "arena_response":
+            payload["content"] = msg.content
+            payload["display_name"] = msg.persona
+        elif evt_type in {"arena_synthesis_revision", "arena_synthesis"}:
+            payload["content"] = msg.content
+            payload["actor"] = "Synthesizer"
+            payload["report"] = meta.get("synthesis_report")
+            payload["status"] = meta.get(
+                "status",
+                "provisional" if evt_type == "arena_synthesis_revision" else "final",
+            )
         
         events.append(
             TimelineEvent(

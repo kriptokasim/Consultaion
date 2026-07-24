@@ -3,6 +3,10 @@ import { fetchWithAuth } from "@/lib/auth";
 import type { PanelConfigPayload } from "@/lib/panels";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import type { PersistedResponsesResponse, RequestOptions } from "@/lib/api/types";
+import {
+  formatArenaSchemaDiagnostic,
+  persistedResponsesSchema,
+} from "@/lib/api/arenaSchemas";
 
 const API = API_ORIGIN;
 
@@ -560,9 +564,15 @@ export async function getDebateResponses(
   debateId: string,
   options?: RequestOptions,
 ): Promise<PersistedResponsesResponse> {
-  return fetchJsonOrThrow<PersistedResponsesResponse>(
+  const raw = await fetchJsonOrThrow<unknown>(
     `/debates/${debateId}/responses`,
     options,
   );
+  const parsed = persistedResponsesSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid Arena responses contract: ${formatArenaSchemaDiagnostic(parsed.error)}`,
+    );
+  }
+  return parsed.data;
 }
-

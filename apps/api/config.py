@@ -199,6 +199,22 @@ class AppSettings(BaseSettings):
     ARENA_MODEL_TIMEOUT_SECONDS: int = Field(45, ge=5, le=300, description="Per-model timeout for Arena perspective calls")
     ARENA_MODEL_TOTAL_TIMEOUT_S: int = Field(60, ge=10, le=600, description="PS155.3: Total max execution time for an Arena model streaming run")
     ARENA_DELTA_FLUSH_MS: int = Field(150, ge=0, le=1000, description="PS155.2: SSE server-side delta coalescing flush interval in milliseconds")
+    ARENA_PROGRESSIVE_SYNTHESIS_ENABLED: bool = Field(
+        True,
+        description="Start a provisional Arena synthesis after a successful-response quorum.",
+    )
+    ARENA_SYNTHESIS_GRACE_MS: int = Field(
+        750,
+        ge=0,
+        le=10_000,
+        description="Grace period after the synthesis quorum before starting a provisional revision.",
+    )
+    ARENA_PROVISIONAL_MAX_TOKENS: int = Field(
+        600,
+        ge=100,
+        le=2_000,
+        description="Maximum tokens for a provisional Arena synthesis revision.",
+    )
     SYNTHESIS_MAX_CLAIMS_PER_MODEL: int = Field(12, ge=1, le=100)
     SYNTHESIS_MAX_TOTAL_CLAIMS: int = Field(60, ge=1, le=500)
     SYNTHESIS_SIMILARITY_CONCURRENCY: int = Field(16, ge=1, le=100)

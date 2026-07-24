@@ -8,6 +8,7 @@ import type { SSEStatus } from "@/lib/sse";
 import type { ResponsesState, TimelineState } from "@/hooks/useRunWorkspace";
 import type { WorkspaceStage } from "@/lib/workspace/types";
 import type { DebateSummary } from "@/lib/api/types";
+import type { SynthesisStreamingState } from "@/lib/workspace/synthesisReducer";
 import ArenaRunView from "./ArenaRunView";
 import { RecentRunsRail } from "./RecentRunsRail";
 
@@ -16,6 +17,7 @@ export interface ArenaRunContentProps {
   events: DebateEvent[];
   responses: PersistedModelResponse[];
   streamingBuffers: Map<string, StreamingModelBuffer>;
+  synthesisState?: SynthesisStreamingState;
   isTerminal: boolean;
   responsesState: ResponsesState;
   responsesError?: string | null;
@@ -47,6 +49,7 @@ export function ArenaRunContent({
   events,
   responses,
   streamingBuffers,
+  synthesisState,
   isTerminal,
   responsesState,
   responsesError,
@@ -137,6 +140,7 @@ export function ArenaRunContent({
             events={events}
             responses={responses}
             streamingBuffers={streamingBuffers}
+            synthesisState={synthesisState}
             isTerminal={isTerminal}
             responsesState={responsesState}
             responsesError={responsesError}

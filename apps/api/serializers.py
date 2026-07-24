@@ -179,6 +179,17 @@ class PublicDebateEventDTO(BaseModel):
     rationale: Optional[str] = None
     role: Optional[str] = None
     actor: Optional[str] = None
+    contract_version: Optional[int] = None
+    synthesis_id: Optional[str] = None
+    run_attempt: Optional[int] = None
+    revision: Optional[int] = None
+    status: Optional[str] = None
+    report: Optional[Dict[str, Any]] = None
+    input_hash: Optional[str] = None
+    response_ids: Optional[List[str]] = None
+    successful_count: Optional[int] = None
+    total_count: Optional[int] = None
+    provisional_promoted: Optional[bool] = None
 
     # Pairwise events
     candidate_a: Optional[str] = None

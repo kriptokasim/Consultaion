@@ -28,6 +28,7 @@ CRITICAL_NON_TERMINAL_EVENT_TYPES = frozenset(
         "debate_failed",
         "model_response_completed",
         "model_response_failed",
+        "arena_synthesis_finalized",
     }
 )
 
@@ -38,6 +39,8 @@ CRITICAL_EVENT_TYPES = TERMINAL_EVENT_TYPES | CRITICAL_NON_TERMINAL_EVENT_TYPES
 IMPORTANT_EVENT_TYPES = frozenset(
     {
         "arena_response",
+        "arena_synthesis_started",
+        "arena_synthesis_revision",
         "perspectives_ready",
         "stage_checkpoint",
         "lane_assigned",
@@ -48,7 +51,9 @@ IMPORTANT_EVENT_TYPES = frozenset(
 # Loss-tolerant events can be dropped or coalesced under pressure
 # (deltas, heartbeats, progress notices, repeated diagnostics)
 
-_DELTA_EVENT_TYPES = frozenset({"model_response_delta", "agent_progress_delta"})
+_DELTA_EVENT_TYPES = frozenset(
+    {"model_response_delta", "arena_synthesis_delta", "agent_progress_delta"}
+)
 
 
 def _event_priority(event: dict) -> int:

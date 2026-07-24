@@ -15,7 +15,7 @@ import { DecisionReportShell } from "./DecisionReportShell"
 import { FallbackResponseCard } from "./FallbackResponseCard"
 import { UnstructuredSynthesisCard } from "./UnstructuredSynthesisCard"
 
-interface DecisionReport {
+export interface DecisionReport {
   title?: string
   executive_summary?: string
   verdict?: {

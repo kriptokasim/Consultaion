@@ -13,6 +13,18 @@ import type { StreamingState } from "@/lib/workspace/streamReducer";
 import { connectionReducer, INITIAL_CONNECTION_STATE } from "@/lib/workspace/connectionReducer";
 import { isTerminalRunStatus } from "@/lib/runStatus";
 import type { ModelResponseDeltaPayload } from "@/lib/streaming/types";
+import {
+  formatArenaSchemaDiagnostic,
+  parseArenaBoundaryEvent,
+  type ArenaBoundaryEvent,
+} from "@/lib/api/arenaSchemas";
+import {
+  INITIAL_SYNTHESIS_STATE,
+  isValidSynthesisDeltaPayload,
+  synthesisReducer,
+  type SynthesisSnapshotPayload,
+  type SynthesisStreamingState,
+} from "@/lib/workspace/synthesisReducer";
 
 // ── FH116: Core load failure taxonomy ────────────────────────────────────
 
@@ -86,6 +98,85 @@ const MODEL_RESPONSE_STREAM_EVENT_TYPES = new Set([
   "model_response_completed",
   "model_response_failed",
 ]);
+
+type SynthesisBoundaryDispatch = {
+  action: "STARTED" | "REVISION" | "FINALIZED";
+  snapshot: SynthesisSnapshotPayload;
+};
+
+function synthesisBoundaryToSnapshot(
+  payload: ArenaBoundaryEvent,
+  debateId: string,
+): SynthesisBoundaryDispatch | null {
+  switch (payload.type) {
+    case "arena_synthesis_started":
+      return {
+        action: "STARTED",
+        snapshot: {
+          synthesis_id: payload.synthesis_id,
+          run_attempt: payload.run_attempt,
+          revision: payload.revision,
+          status: payload.status,
+          input_hash: payload.input_hash,
+          response_ids: payload.response_ids,
+          successful_count: payload.successful_count,
+          total_count: payload.total_count,
+        },
+      };
+    case "arena_synthesis_revision":
+      return {
+        action: "REVISION",
+        snapshot: {
+          synthesis_id: payload.synthesis_id,
+          run_attempt: payload.run_attempt,
+          revision: payload.revision,
+          status: payload.status,
+          content: payload.content,
+          report: payload.report,
+          input_hash: payload.input_hash,
+          response_ids: payload.response_ids,
+          successful_count: payload.successful_count,
+          total_count: payload.total_count,
+        },
+      };
+    case "arena_synthesis_finalized":
+      return {
+        action: "FINALIZED",
+        snapshot: {
+          synthesis_id: payload.synthesis_id,
+          run_attempt: payload.run_attempt,
+          revision: payload.revision,
+          status: payload.status,
+          content: payload.content,
+          report: payload.report,
+          input_hash: payload.input_hash,
+          response_ids: payload.response_ids,
+          successful_count: payload.successful_count,
+          total_count: payload.total_count,
+          provisional_promoted: payload.provisional_promoted,
+        },
+      };
+    case "arena_synthesis":
+      return {
+        action: "FINALIZED",
+        snapshot: {
+          synthesis_id: payload.synthesis_id || `synth-${debateId}-legacy`,
+          run_attempt: payload.run_attempt ?? 0,
+          revision: payload.revision ?? 1,
+          status: payload.status ?? "final",
+          content: payload.content || payload.text || "",
+          report: payload.report,
+          input_hash: payload.input_hash,
+          response_ids: payload.response_ids,
+          successful_count: payload.successful_count,
+          total_count: payload.total_count,
+          provisional_promoted: payload.provisional_promoted,
+        },
+      };
+    default:
+      return null;
+  }
+}
 
 function getStorageKey(debateId: string): string {
   return `${STORAGE_KEY_PREFIX}:${debateId}`;
@@ -239,6 +330,7 @@ export interface UseRunWorkspaceResult {
   responsesError: string | null;
   timelineState: TimelineState;
   streamingState: StreamingState;
+  synthesisState: SynthesisStreamingState;
   mergedStreamingResponses: ReturnType<typeof selectMergedResponses>;
   status: RunWorkspaceStatus;
   sseStatus: SSEStatus;
@@ -276,6 +368,10 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     
   // FH104: Streaming reducer
   const [streamingState, dispatchStreaming] = useReducer(streamingReducer, INITIAL_STREAMING_STATE);
+  const [synthesisState, dispatchSynthesis] = useReducer(
+    synthesisReducer,
+    INITIAL_SYNTHESIS_STATE,
+  );
   const pendingDeltasRef = useRef<ModelResponseDeltaPayload[]>([]);
   const deltaFrameRef = useRef<number | null>(null);
 
@@ -451,6 +547,16 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       if (isStale()) return;
 
       setEvents(result.events);
+      for (const event of result.events) {
+        const parsed = parseArenaBoundaryEvent({
+          ...event.payload,
+          type: event.type,
+        });
+        if (!parsed.success) continue;
+        const synthesis = synthesisBoundaryToSnapshot(parsed.data, id);
+        if (!synthesis) continue;
+        dispatchSynthesis({ type: synthesis.action, payload: synthesis.snapshot });
+      }
       dispatchConn({ type: "TIMELINE_LOADED", quality: result.quality, timelineError: result.timelineError, eventsError: result.eventsError });
 
 
@@ -529,6 +635,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     setResponses([]);
     discardPendingDeltas();
     dispatchStreaming({ type: "RESET" });
+    dispatchSynthesis({ type: "RESET" });
     dispatchConn({ type: "RESET_FOR_NEW_RUN" });
     setError(null);
     // Continuation intent (in-memory only; per-run localStorage intents are
@@ -650,9 +757,45 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         return;
       }
 
+      if (eventType === "arena_synthesis_delta") {
+        const payload = lastEvent.payload || lastEvent;
+        if (!isValidSynthesisDeltaPayload(payload)) {
+          console.warn("[arena-contract] Invalid synthesis delta dropped");
+          return;
+        }
+        dispatchSynthesis({ type: "DELTA", payload });
+        return;
+      }
+
+      const isSynthesisBoundary = [
+        "arena_synthesis_started",
+        "arena_synthesis_revision",
+        "arena_synthesis_finalized",
+        "arena_synthesis",
+      ].includes(eventType);
+      const needsArenaBoundaryValidation = (
+        isSynthesisBoundary
+        || eventType === "arena_started"
+        || (
+          MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType)
+          && eventType !== "model_response_delta"
+        )
+      );
+      let validatedBoundary: ArenaBoundaryEvent | undefined;
+      if (needsArenaBoundaryValidation) {
+        const parsed = parseArenaBoundaryEvent(lastEvent);
+        if (!parsed.success) {
+          console.warn(
+            `[arena-contract] ${eventType} dropped: ${formatArenaSchemaDiagnostic(parsed.error)}`,
+          );
+          return;
+        }
+        validatedBoundary = parsed.data;
+      }
+
       // FH104: Dispatch streaming reducer actions
       if (MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType)) {
-        const p = lastEvent.payload || lastEvent;
+        const p = validatedBoundary ?? lastEvent.payload ?? lastEvent;
         if (eventType === "model_response_delta") {
           firstDeltaMarkedRef.current || (performance.mark?.("sse_first_delta"), firstDeltaMarkedRef.current = true);
           queueDelta(p);
@@ -679,11 +822,25 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         return;
       }
 
-      const normalized = normalizeEvent(lastEvent);
+      if (isSynthesisBoundary && validatedBoundary) {
+        const synthesis = synthesisBoundaryToSnapshot(validatedBoundary, debateId);
+        if (synthesis?.action === "STARTED") {
+          dispatchSynthesis({ type: "STARTED", payload: synthesis.snapshot });
+        } else if (synthesis?.action === "REVISION") {
+          dispatchSynthesis({ type: "REVISION", payload: synthesis.snapshot });
+          performance.mark?.("sse_first_synthesis_visible");
+        } else if (synthesis?.action === "FINALIZED") {
+          dispatchSynthesis({ type: "FINALIZED", payload: synthesis.snapshot });
+          performance.mark?.("sse_report_visible");
+        }
+      }
+
+      const normalized = normalizeEvent(validatedBoundary ?? lastEvent);
+      const normalizedType = validatedBoundary?.type ?? eventType;
       const newEvent: TimelineEvent = {
         id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
         debate_id: debateId, ts: lastEvent.ts || new Date().toISOString(),
-        type: eventType, round: lastEvent.round || 0, seat: lastEvent.seat,
+        type: normalizedType, round: lastEvent.round || 0, seat: lastEvent.seat,
         payload: normalized as unknown as Record<string, unknown>,
       };
       appendEventOnce(newEvent);
@@ -955,6 +1112,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     responsesError,
     timelineState,
     streamingState,
+    synthesisState,
     mergedStreamingResponses,
     status,
     sseStatus,

@@ -220,6 +220,7 @@ def fetch_persisted_responses(
         expected = len(items)
 
     return {
+        "contract_version": 1,
         "items": items,
         "summary": {
             "expected": expected,

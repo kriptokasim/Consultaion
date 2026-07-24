@@ -90,6 +90,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
     responsesError,
     timelineState,
     streamingState,
+    synthesisState,
     mergedStreamingResponses,
     status: workspaceStatus,
     sseStatus,
@@ -532,6 +533,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             events={normalizedResultsEvents}
             responses={responses}
             streamingBuffers={streamingState.buffers}
+            synthesisState={synthesisState}
             isTerminal={true}
             responsesState={responsesState}
             responsesError={responsesError}
@@ -691,6 +693,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             events={normalizedResultsEvents}
             responses={responses}
             streamingBuffers={streamingState.buffers}
+            synthesisState={synthesisState}
             isTerminal={isCompleted}
             responsesState={responsesState}
             responsesError={responsesError}
@@ -810,6 +813,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
           events={liveEvents as any}
           responses={responses}
           streamingBuffers={streamingState.buffers}
+          synthesisState={synthesisState}
           isTerminal={isCompleted}
           responsesState={responsesState}
           responsesError={responsesError}

@@ -250,6 +250,18 @@ try:
         buckets=(50, 100, 250, 500, 1000, 2500, 5000),
         registry=REGISTRY,
     )
+    ARENA_QUORUM_TO_FIRST_SYNTHESIS_MS = Histogram(
+        "consultaion_arena_quorum_to_first_synthesis_ms",
+        "Time from successful-response quorum to the first visible provisional synthesis",
+        buckets=(50, 100, 250, 500, 1000, 2500, 5000, 10_000),
+        registry=REGISTRY,
+    )
+    ARENA_FINAL_CONVERGENCE_MS = Histogram(
+        "consultaion_arena_final_convergence_ms",
+        "Time from the final model terminal state to the final synthesis revision",
+        buckets=(50, 100, 250, 500, 1000, 2500, 5000, 10_000, 20_000),
+        registry=REGISTRY,
+    )
     ARENA_TOTAL_MS = Histogram(
         "consultaion_arena_total_ms",
         "End-to-end arena run duration",
@@ -503,6 +515,18 @@ def record_arena_synthesis_verification(ms: float) -> None:
     if not PROMETHEUS_AVAILABLE:
         return
     ARENA_SYNTHESIS_VERIFICATION_MS.observe(ms)
+
+
+def record_arena_quorum_to_first_synthesis(ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_QUORUM_TO_FIRST_SYNTHESIS_MS.observe(ms)
+
+
+def record_arena_final_convergence(ms: float) -> None:
+    if not PROMETHEUS_AVAILABLE:
+        return
+    ARENA_FINAL_CONVERGENCE_MS.observe(ms)
 
 
 def record_arena_total(mode: str, ms: float) -> None:

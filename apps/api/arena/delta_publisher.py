@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from typing import Awaitable, Callable, Optional, Union
+from typing import Any, Awaitable, Callable, Mapping, Optional, Union
 
 from model_gateway.types import ModelDelta
 
@@ -36,6 +36,8 @@ class ArenaDeltaPublisher:
         flush_interval_ms: int = 30,
         max_chars: int = 96,
         max_items: int = 256,
+        event_type: str = "model_response_delta",
+        extra_payload: Mapping[str, Any] | None = None,
     ) -> None:
         self._publish_fn = publish_fn
         self._response_id = response_id
@@ -43,6 +45,8 @@ class ArenaDeltaPublisher:
         self._flush_interval_ms = flush_interval_ms
         self._max_chars = max_chars
         self._max_items = max_items
+        self._event_type = event_type
+        self._extra_payload = dict(extra_payload or {})
         self._pending: list[ModelDelta] = []
         self._total_chars = 0
         self._first = True
@@ -110,13 +114,14 @@ class ArenaDeltaPublisher:
 
     async def _publish_one(self, delta: ModelDelta) -> None:
         event = {
-            "type": "model_response_delta",
+            "type": self._event_type,
             "_already_coalesced": True,
             "response_id": self._response_id,
             "model_id": self._model_id,
             "text": delta.text,
             "delta_sequence": delta.sequence,
             "accumulated_chars": delta.accumulated_chars,
+            **self._extra_payload,
         }
         try:
             result = self._publish_fn(event)

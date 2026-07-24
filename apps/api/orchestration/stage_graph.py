@@ -23,6 +23,7 @@ class StageKey(str, Enum):
     SYNTHESIS_DRAFT = "synthesis_draft"
     VERIFICATION = "verification"
     ARENA_PERSPECTIVES = "arena_perspectives"
+    ARENA_SYNTHESIS_PROVISIONAL = "arena_synthesis_provisional"
     ARENA_SYNTHESIS = "arena_synthesis"
 
 
@@ -53,8 +54,15 @@ STAGE_INVALIDATION_GRAPH: Dict[str, List[str]] = {
     StageKey.VERIFICATION: [StageKey.VERIFICATION, StageKey.SYNTHESIS, StageKey.ARENA_SYNTHESIS],
     StageKey.ARENA_PERSPECTIVES: [
         StageKey.ARENA_PERSPECTIVES,
+        StageKey.ARENA_SYNTHESIS_PROVISIONAL,
         StageKey.ARENA_SYNTHESIS,
         StageKey.DIVERGENCE_ANALYSIS,
+        StageKey.SYNTHESIS_DRAFT,
+        StageKey.VERIFICATION,
+    ],
+    StageKey.ARENA_SYNTHESIS_PROVISIONAL: [
+        StageKey.ARENA_SYNTHESIS_PROVISIONAL,
+        StageKey.ARENA_SYNTHESIS,
         StageKey.SYNTHESIS_DRAFT,
         StageKey.VERIFICATION,
     ],

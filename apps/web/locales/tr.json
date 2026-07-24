@@ -725,5 +725,17 @@
   "participation.recentActivity.subtitle": "Arenadaki eylemlerinizin denetim geçmişi",
   "participation.recentActivity.empty": "Henüz kayıtlı katkı bulunamadı. Etkinliği burada görmek için bir oturum başlatıp oy verin veya dal oluşturun.",
   "participation.actions.viewReplay": "Tekrarı İzle",
-  "participation.actions.backToArena": "Oturum Başlat"
+  "participation.actions.backToArena": "Oturum Başlat",
+  "arena.synthesis.title": "Canlı karar",
+  "arena.synthesis.drafting": "Taslak hazırlanıyor — {successful}/{total} cevap",
+  "arena.synthesis.draft": "Taslak — {successful}/{total} cevap",
+  "arena.synthesis.final": "Final — {successful}/{total} cevap",
+  "arena.synthesis.failed": "Sentez kullanılamıyor",
+  "arena.synthesis.preparing": "Mevcut cevaplardan ilk karar hazırlanıyor…",
+  "arena.synthesis.lateResponses": "Kalan modeller çalışmaya devam ediyor. Yeni başarılı cevaplar geldiğinde bu taslak deterministik biçimde güncellenecek.",
+  "arena.tabs.label": "Oturum bölümleri",
+  "arena.tabs.perspectives": "Cevaplar",
+  "arena.tabs.decision": "Karar",
+  "arena.tabs.verification": "Kontroller",
+  "arena.tabs.decisionUpdate": "Yeni karar güncellemesi"
 }

@@ -742,6 +742,20 @@ async def run_debate(
                         "type": "arena_synthesis",
                         "debate_id": debate_id,
                         "round": 0,
+                        "contract_version": result.final_meta.get("contract_version", 1),
+                        "synthesis_id": result.final_meta.get("synthesis_id"),
+                        "run_attempt": debate.run_attempt or 1,
+                        "revision": result.final_meta.get("synthesis_revision", 1),
+                        "status": "final" if result.status == "completed" else "failed",
+                        "content": result.final_answer,
+                        "report": result.final_meta.get("synthesis_report"),
+                        "input_hash": result.final_meta.get("synthesis_input_hash"),
+                        "response_ids": result.final_meta.get("synthesis_response_ids", []),
+                        "successful_count": result.final_meta.get("successful_count", 0),
+                        "total_count": result.final_meta.get("total_count", 0),
+                        "provisional_promoted": result.final_meta.get(
+                            "provisional_promoted", False
+                        ),
                         "payload": {
                             "content": result.final_answer,
                             "meta": result.final_meta,

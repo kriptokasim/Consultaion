@@ -522,9 +522,165 @@ async def test_stream_fallback_uses_remaining_monotonic_deadline():
     assert fallback_timeout <= 0.05
 
 
+@pytest.mark.anyio
+async def test_progressive_synthesis_starts_before_straggler_finishes():
+    """A successful quorum must make a draft visible while a slow model runs."""
+    from arena.engine import ArenaSynthesisRevision, run_arena
+
+    slow_finished = False
+    provisional_observation: dict[str, object] = {}
+
+    async def provider_call(*args, **kwargs):
+        nonlocal slow_finished
+        if "Model B" in kwargs.get("role", ""):
+            await asyncio.sleep(0.08)
+            slow_finished = True
+            return "late answer", _FakeUsage()
+        await asyncio.sleep(0.005)
+        return "fast answer", _FakeUsage()
+
+    async def provisional_call(**kwargs):
+        provisional_observation["slow_finished"] = slow_finished
+        provisional_observation["response_ids"] = tuple(
+            response.response_id for response in kwargs["responses"]
+        )
+        return ArenaSynthesisRevision(
+            synthesis_id="synth-test-debate-progressive-a2-r0",
+            content="provisional answer",
+            report={"title": "Draft"},
+            response_ids=tuple(provisional_observation["response_ids"]),
+            successful_count=1,
+            total_count=2,
+            input_hash="draft-hash",
+        )
+
+    report = MagicMock()
+    report.executive_summary = "final answer"
+    report.title = "Final"
+    report.divergence_breakdown = []
+    report.model_dump.return_value = {"title": "Final"}
+
+    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]), \
+         patch("arena.engine.call_llm_for_role", side_effect=provider_call), \
+         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
+         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
+         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
+         patch(
+             "arena.engine._generate_and_persist_provisional_synthesis",
+             new=AsyncMock(side_effect=provisional_call),
+         ) as provisional, \
+         patch("reporting.synthesizer.generate_decision_report", return_value=report) as final_synthesis, \
+         patch("config.settings") as mock_settings:
+        _configure_progressive_settings(mock_settings)
+
+        result = await run_arena("test-debate-progressive")
+
+    assert result.status == "completed"
+    assert provisional.await_count == 1
+    assert provisional_observation["slow_finished"] is False
+    assert len(provisional_observation["response_ids"]) == 1
+    assert final_synthesis.await_count == 1
+    assert result.final_meta["provisional_promoted"] is False
+    assert result.final_meta["synthesis_response_ids"] == [
+        "resp-test-debate-progressive-a2-g0-model-a",
+        "resp-test-debate-progressive-a2-g0-model-b",
+    ]
+
+
+@pytest.mark.anyio
+async def test_unchanged_provisional_snapshot_is_promoted_without_second_call():
+    """A failed straggler must not trigger an identical second synthesis call."""
+    from arena.engine import ArenaSynthesisRevision, run_arena
+
+    async def provider_call(*args, **kwargs):
+        if "Model B" in kwargs.get("role", ""):
+            await asyncio.sleep(0.05)
+            raise TimeoutError("slow model timed out")
+        await asyncio.sleep(0.005)
+        return "only successful answer", _FakeUsage()
+
+    async def provisional_call(**kwargs):
+        response_ids = tuple(
+            response.response_id for response in kwargs["responses"]
+        )
+        return ArenaSynthesisRevision(
+            synthesis_id="synth-test-debate-promote-a2-r0",
+            content="promoted answer",
+            report={"title": "Promoted"},
+            response_ids=response_ids,
+            successful_count=1,
+            total_count=2,
+            input_hash="promoted-hash",
+        )
+
+    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]), \
+         patch("arena.engine.call_llm_for_role", side_effect=provider_call), \
+         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
+         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
+         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
+         patch(
+             "arena.engine._generate_and_persist_provisional_synthesis",
+             new=AsyncMock(side_effect=provisional_call),
+         ) as provisional, \
+         patch("arena.engine._synthesize_verdict", new=AsyncMock()) as final_synthesis, \
+         patch("config.settings") as mock_settings:
+        _configure_progressive_settings(mock_settings)
+
+        result = await run_arena("test-debate-promote")
+
+    assert result.status == "completed"
+    assert provisional.await_count == 1
+    final_synthesis.assert_not_awaited()
+    assert result.final_answer == "promoted answer"
+    assert result.final_meta["provisional_promoted"] is True
+    assert result.final_meta["successful_count"] == 1
+    assert result.final_meta["total_count"] == 2
+
+
+@pytest.mark.anyio
+async def test_staged_pause_suppresses_progressive_synthesis():
+    """The pause boundary remains stable even when progressive mode is enabled."""
+    from arena.engine import run_arena
+
+    async def provider_call(*args, **kwargs):
+        if "Model B" in kwargs.get("role", ""):
+            await asyncio.sleep(0.02)
+        return "answer", _FakeUsage()
+
+    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]), \
+         patch("arena.engine.call_llm_for_role", side_effect=provider_call), \
+         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
+         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
+         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
+         patch(
+             "arena.engine._generate_and_persist_provisional_synthesis",
+             new=AsyncMock(),
+         ) as provisional, \
+         patch("config.settings") as mock_settings:
+        _configure_progressive_settings(mock_settings)
+        mock_settings.STAGED_DECISION_PIPELINE = True
+
+        result = await run_arena("test-debate-staged-progressive")
+
+    assert result.status == "perspectives_ready"
+    provisional.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _configure_progressive_settings(mock_settings):
+    mock_settings.FAST_DEBATE = False
+    mock_settings.STREAMING_RESPONSES_ENABLED = False
+    mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+    mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
+    mock_settings.ARENA_MAX_TOKENS = 1200
+    mock_settings.STAGED_DECISION_PIPELINE = False
+    mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
+    mock_settings.ARENA_PROGRESSIVE_SYNTHESIS_ENABLED = True
+    mock_settings.ARENA_SYNTHESIS_GRACE_MS = 0
+
 
 class _MockAsyncSession:
     """Minimal async session mock for persist_and_publish_arena_response."""

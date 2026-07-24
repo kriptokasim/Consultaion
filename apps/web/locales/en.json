@@ -725,5 +725,17 @@
   "participation.recentActivity.subtitle": "Audit trail of your actions in the arena",
   "participation.recentActivity.empty": "No contributions logged yet. Start a session and place a vote or fork a branch to see activity here.",
   "participation.actions.viewReplay": "View Replay",
-  "participation.actions.backToArena": "Start a session"
+  "participation.actions.backToArena": "Start a session",
+  "arena.synthesis.title": "Live decision",
+  "arena.synthesis.drafting": "Drafting — {successful}/{total} responses",
+  "arena.synthesis.draft": "Draft — {successful}/{total} responses",
+  "arena.synthesis.final": "Final — {successful}/{total} responses",
+  "arena.synthesis.failed": "Synthesis unavailable",
+  "arena.synthesis.preparing": "Preparing a first decision from the available responses…",
+  "arena.synthesis.lateResponses": "Remaining models are still running. This draft will update deterministically when new successful responses arrive.",
+  "arena.tabs.label": "Run sections",
+  "arena.tabs.perspectives": "Answers",
+  "arena.tabs.decision": "Decision",
+  "arena.tabs.verification": "Checks",
+  "arena.tabs.decisionUpdate": "New decision update"
 }

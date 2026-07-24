@@ -174,14 +174,47 @@ async def get_debate_events(
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }
             )
+        elif message.role == "arena_synthesis_revision":
+            meta = message.meta or {}
+            events.append(
+                {
+                    "type": "arena_synthesis_revision",
+                    "contract_version": meta.get("contract_version", 1),
+                    "synthesis_id": message.response_id,
+                    "run_attempt": meta.get("run_attempt", 1),
+                    "revision": meta.get("revision", 0),
+                    "status": meta.get("status", "provisional"),
+                    "content": message.content,
+                    "report": meta.get("synthesis_report"),
+                    "input_hash": meta.get("input_hash"),
+                    "response_ids": meta.get("response_ids", []),
+                    "successful_count": meta.get("successful_count", 0),
+                    "total_count": meta.get("total_count", 0),
+                    "mode": "arena",
+                    "at": message.created_at.isoformat() if message.created_at else None,
+                }
+            )
         elif message.role == "arena_synthesis":
+            meta = message.meta or {}
             events.append(
                 {
                     "type": "arena_synthesis",
+                    "contract_version": meta.get("contract_version", 1),
+                    "synthesis_id": message.response_id,
+                    "run_attempt": meta.get("run_attempt", 1),
+                    "revision": meta.get("revision", 1),
+                    "status": meta.get("status", "final"),
                     "round": message.round_index,
                     "actor": "Synthesizer",
                     "role": "synthesizer",
                     "text": message.content,
+                    "content": message.content,
+                    "report": meta.get("synthesis_report"),
+                    "input_hash": meta.get("input_hash"),
+                    "response_ids": meta.get("response_ids", []),
+                    "successful_count": meta.get("successful_count", 0),
+                    "total_count": meta.get("total_count", 0),
+                    "provisional_promoted": meta.get("provisional_promoted", False),
                     "mode": "arena",
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }

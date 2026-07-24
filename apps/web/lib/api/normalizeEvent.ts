@@ -138,6 +138,39 @@ export function normalizeEvent(raw: RawEvent): DebateEvent {
                 text: (flat.text as string) ?? (flat.content as string) ?? undefined,
                 content: (flat.content as string) ?? (flat.text as string) ?? undefined,
                 role: "synthesizer",
+                contract_version: (flat.contract_version as 1) ?? undefined,
+                synthesis_id: (flat.synthesis_id as string) ?? undefined,
+                run_attempt: (flat.run_attempt as number) ?? undefined,
+                revision: (flat.revision as number) ?? undefined,
+                status: (flat.status as "provisional" | "final" | "failed") ?? undefined,
+                report: flat.report,
+                input_hash: (flat.input_hash as string) ?? undefined,
+                response_ids: (flat.response_ids as string[]) ?? undefined,
+                successful_count: (flat.successful_count as number) ?? undefined,
+                total_count: (flat.total_count as number) ?? undefined,
+                provisional_promoted: (flat.provisional_promoted as boolean) ?? undefined,
+                at,
+            };
+
+        case "arena_synthesis_started":
+        case "arena_synthesis_revision":
+        case "arena_synthesis_finalized":
+            return {
+                type,
+                contract_version: (flat.contract_version as 1) ?? undefined,
+                debate_id: (flat.debate_id as string) ?? undefined,
+                synthesis_id: (flat.synthesis_id as string) ?? undefined,
+                run_attempt: (flat.run_attempt as number) ?? undefined,
+                revision: (flat.revision as number) ?? undefined,
+                status: (flat.status as "provisional" | "final" | "failed") ?? undefined,
+                content: (flat.content as string) ?? (flat.text as string) ?? undefined,
+                text: (flat.text as string) ?? (flat.content as string) ?? undefined,
+                report: flat.report,
+                input_hash: (flat.input_hash as string) ?? undefined,
+                response_ids: (flat.response_ids as string[]) ?? undefined,
+                successful_count: (flat.successful_count as number) ?? undefined,
+                total_count: (flat.total_count as number) ?? undefined,
+                provisional_promoted: (flat.provisional_promoted as boolean) ?? undefined,
                 at,
             };
 

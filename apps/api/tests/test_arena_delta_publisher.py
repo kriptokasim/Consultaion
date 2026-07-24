@@ -115,6 +115,43 @@ async def test_merge_maintains_single_model_id(publisher, collected):
 
 
 @pytest.mark.asyncio
+async def test_custom_synthesis_event_preserves_versioned_identity(collected):
+    pub = ArenaDeltaPublisher(
+        publish_fn=lambda event: collected.append(event),
+        response_id="synth-debate-a2-r0",
+        model_id="synthesizer",
+        event_type="arena_synthesis_delta",
+        extra_payload={
+            "contract_version": 1,
+            "run_attempt": 2,
+            "revision": 0,
+            "status": "provisional",
+            "response_ids": ["response-a"],
+        },
+    )
+
+    await pub.push(ModelDelta(text="Draft", sequence=1, accumulated_chars=5))
+    await pub.close()
+
+    assert collected == [
+        {
+            "type": "arena_synthesis_delta",
+            "_already_coalesced": True,
+            "response_id": "synth-debate-a2-r0",
+            "model_id": "synthesizer",
+            "text": "Draft",
+            "delta_sequence": 1,
+            "accumulated_chars": 5,
+            "contract_version": 1,
+            "run_attempt": 2,
+            "revision": 0,
+            "status": "provisional",
+            "response_ids": ["response-a"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_publish_failure_does_not_raise(publisher, collected):
     def failing(_):
         raise RuntimeError("publish failed")

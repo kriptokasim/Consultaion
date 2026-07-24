@@ -22,6 +22,8 @@ export function deriveWorkspaceStage(
     !!debate?.final_meta?.synthesis_report ||
     !!debate?.synthesis_report ||
     eventTypes.has("arena_synthesis") ||
+    eventTypes.has("arena_synthesis_revision") ||
+    eventTypes.has("arena_synthesis_finalized") ||
     eventTypes.has("synthesis");
   const hasDivergence =
     typeof debate?.final_meta?.divergence_score === "number" ||

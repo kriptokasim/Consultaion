@@ -171,6 +171,36 @@ export interface PairwiseEvent {
     at?: string;
 }
 
+export interface ArenaSynthesisEventBase {
+    contract_version?: 1;
+    debate_id?: string;
+    synthesis_id?: string;
+    run_attempt?: number;
+    revision?: number;
+    status?: "provisional" | "final" | "failed";
+    content?: string;
+    text?: string;
+    report?: unknown;
+    input_hash?: string;
+    response_ids?: string[];
+    successful_count?: number;
+    total_count?: number;
+    provisional_promoted?: boolean;
+    at?: string;
+}
+
+export interface ArenaSynthesisStartedEvent extends ArenaSynthesisEventBase {
+    type: "arena_synthesis_started";
+}
+
+export interface ArenaSynthesisRevisionEvent extends ArenaSynthesisEventBase {
+    type: "arena_synthesis_revision";
+}
+
+export interface ArenaSynthesisFinalizedEvent extends ArenaSynthesisEventBase {
+    type: "arena_synthesis_finalized";
+}
+
 export type DebateEvent =
     | {
         type: "message";
@@ -250,7 +280,21 @@ export type DebateEvent =
         content?: string;
         role?: Role;
         at?: string;
+        contract_version?: 1;
+        synthesis_id?: string;
+        run_attempt?: number;
+        revision?: number;
+        status?: "provisional" | "final" | "failed";
+        report?: unknown;
+        input_hash?: string;
+        response_ids?: string[];
+        successful_count?: number;
+        total_count?: number;
+        provisional_promoted?: boolean;
     }
+    | ArenaSynthesisStartedEvent
+    | ArenaSynthesisRevisionEvent
+    | ArenaSynthesisFinalizedEvent
     | {
         type: "arena_started";
         models?: Array<{
@@ -476,6 +520,7 @@ export interface PersistedResponsesSummary {
 }
 
 export interface PersistedResponsesResponse {
+  contract_version?: 1;
   items: PersistedModelResponse[];
   summary: PersistedResponsesSummary;
 }

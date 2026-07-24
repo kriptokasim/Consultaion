@@ -3,6 +3,8 @@ import { defineConfig } from "@playwright/test";
 const PORT = process.env.PORT || "3000";
 const API_PORT = process.env.API_PORT || "8000";
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${PORT}`;
+const chromiumExecutablePath =
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
 
 export default defineConfig({
   testDir: "./apps/web/e2e",
@@ -33,6 +35,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     chromiumSandbox: false,
     launchOptions: {
+      executablePath: chromiumExecutablePath,
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-seccomp-filter-sandbox"],
     },
   },
