@@ -2,10 +2,12 @@
 
 Ensures that individual model failures do not crash the entire arena run.
 """
+
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import List
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,6 +16,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Lightweight stubs (no DB required — these test engine logic in isolation)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class _FakeModelInfo:
@@ -28,6 +31,7 @@ class _FakeModelInfo:
 
 class _FakeUsage:
     """Minimal stand-in for the usage object returned by call_llm_for_role."""
+
     def __init__(self):
         self.prompt_tokens = 10
         self.completion_tokens = 40
@@ -55,6 +59,7 @@ _ARENA_MODELS: List[_FakeModelInfo] = [
 # ---------------------------------------------------------------------------
 # 1. classify_provider_exception returns ProviderCallFailure — verify .code.value
 # ---------------------------------------------------------------------------
+
 
 def test_classify_provider_exception_returns_provider_call_failure():
     """Regression: classify_provider_exception MUST return ProviderCallFailure,
@@ -104,6 +109,7 @@ def test_classify_provider_exception_unknown_error():
 # 2. One model raises TimeoutError — others succeed, run completes
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.anyio
 async def test_one_model_timeout_others_succeed():
     """When one model times out, the run must still complete with the
@@ -132,13 +138,15 @@ async def test_one_model_timeout_others_succeed():
     mock_stream_result.error_code = "model_timeout"
     mock_stream_result.content = ""
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS), \
-         patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS),
+        patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch("reporting.synthesizer.generate_decision_report", return_value=mock_report),
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
@@ -169,6 +177,7 @@ async def test_one_model_timeout_others_succeed():
 # 3. One model returns GatewayModelCallResult(success=False) — no crash
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.anyio
 async def test_gateway_failure_result_no_crash():
     """When route_llm_stream returns success=False, the arena must NOT
@@ -187,13 +196,15 @@ async def test_gateway_failure_result_no_crash():
     mock_report.divergence_breakdown = []
     mock_report.model_dump.return_value = {}
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS), \
-         patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS),
+        patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch("reporting.synthesizer.generate_decision_report", return_value=mock_report),
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
@@ -212,6 +223,7 @@ async def test_gateway_failure_result_no_crash():
 # 4. All models fail → ArenaResult(status="failed"), no unhandled exception
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.anyio
 async def test_all_models_fail_graceful():
     """When every model fails, the run must return ArenaResult(status='failed')
@@ -221,12 +233,14 @@ async def test_all_models_fail_graceful():
     async def always_fail(*args, **kwargs):
         raise RuntimeError("Provider is down")
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS), \
-         patch("arena.engine.call_llm_for_role", side_effect=always_fail), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS),
+        patch("arena.engine.call_llm_for_role", side_effect=always_fail),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
@@ -258,17 +272,19 @@ async def test_unpersisted_success_is_excluded_from_synthesis():
         return "This answer exists only in memory", _FakeUsage()
 
     backend = AsyncMock()
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]), \
-         patch("arena.engine.call_llm_for_role", side_effect=successful_provider), \
-         patch("arena.engine.get_sse_backend", return_value=backend), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch(
-             "arena.engine.persist_and_publish_arena_response",
-             new=AsyncMock(side_effect=RuntimeError("database unavailable")),
-         ), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch("reporting.synthesizer.generate_decision_report") as mock_synthesis, \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]),
+        patch("arena.engine.call_llm_for_role", side_effect=successful_provider),
+        patch("arena.engine.get_sse_backend", return_value=backend),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch(
+            "arena.engine.persist_and_publish_arena_response",
+            new=AsyncMock(side_effect=RuntimeError("database unavailable")),
+        ),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch("reporting.synthesizer.generate_decision_report") as mock_synthesis,
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
@@ -293,6 +309,7 @@ async def test_unpersisted_success_is_excluded_from_synthesis():
 # ---------------------------------------------------------------------------
 # 5. as_completed preserves immediate persist/publish
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_as_completed_immediate_publish():
@@ -325,13 +342,15 @@ async def test_as_completed_immediate_publish():
     mock_report.divergence_breakdown = []
     mock_report.model_dump.return_value = {}
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS), \
-         patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm), \
-         patch("arena.engine.get_sse_backend", return_value=mock_backend), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS),
+        patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm),
+        patch("arena.engine.get_sse_backend", return_value=mock_backend),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch("reporting.synthesizer.generate_decision_report", return_value=mock_report),
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
@@ -347,6 +366,7 @@ async def test_as_completed_immediate_publish():
 # ---------------------------------------------------------------------------
 # 6. final_meta.models order follows configured arena model order
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_final_meta_model_order():
@@ -372,13 +392,15 @@ async def test_final_meta_model_order():
     mock_report.divergence_breakdown = []
     mock_report.model_dump.return_value = {}
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS), \
-         patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS),
+        patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch("reporting.synthesizer.generate_decision_report", return_value=mock_report),
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
@@ -418,13 +440,15 @@ async def test_non_streaming_models_emit_symmetric_terminal_lifecycle():
     mock_report.divergence_breakdown = []
     mock_report.model_dump.return_value = {}
 
-    with patch("arena.engine.get_arena_models", return_value=models), \
-         patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm), \
-         patch("arena.engine.get_sse_backend", return_value=mock_backend), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=bypass_checkpoint), \
-         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=models),
+        patch("arena.engine.call_llm_for_role", side_effect=mock_call_llm),
+        patch("arena.engine.get_sse_backend", return_value=mock_backend),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=bypass_checkpoint),
+        patch("reporting.synthesizer.generate_decision_report", return_value=mock_report),
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = False
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
@@ -497,15 +521,17 @@ async def test_stream_fallback_uses_remaining_monotonic_deadline():
     mock_report.divergence_breakdown = []
     mock_report.model_dump.return_value = {}
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]), \
-         patch("arena.engine.call_llm_for_role", side_effect=fallback), \
-         patch("arena.engine.asyncio.wait_for", side_effect=tracking_wait_for), \
-         patch("model_gateway.route_llm_stream", side_effect=failed_stream), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=bypass_checkpoint), \
-         patch("reporting.synthesizer.generate_decision_report", return_value=mock_report), \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]),
+        patch("arena.engine.call_llm_for_role", side_effect=fallback),
+        patch("arena.engine.asyncio.wait_for", side_effect=tracking_wait_for),
+        patch("model_gateway.route_llm_stream", side_effect=failed_stream),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=bypass_checkpoint),
+        patch("reporting.synthesizer.generate_decision_report", return_value=mock_report),
+        patch("config.settings") as mock_settings,
+    ):
         mock_settings.FAST_DEBATE = False
         mock_settings.STREAMING_RESPONSES_ENABLED = True
         mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 0.06
@@ -554,23 +580,36 @@ async def test_progressive_synthesis_starts_before_straggler_finishes():
             input_hash="draft-hash",
         )
 
-    report = MagicMock()
-    report.executive_summary = "final answer"
-    report.title = "Final"
-    report.divergence_breakdown = []
-    report.model_dump.return_value = {"title": "Final"}
+    async def final_call(**kwargs):
+        response_ids = tuple(response.response_id for response in kwargs["responses"])
+        return ArenaSynthesisRevision(
+            synthesis_id="synth-test-debate-progressive-a2-r1-final",
+            content="final answer",
+            report={"title": "Final"},
+            response_ids=response_ids,
+            successful_count=2,
+            total_count=2,
+            input_hash="final-hash",
+            revision=1,
+            status="final",
+        )
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]), \
-         patch("arena.engine.call_llm_for_role", side_effect=provider_call), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch(
-             "arena.engine._generate_and_persist_provisional_synthesis",
-             new=AsyncMock(side_effect=provisional_call),
-         ) as provisional, \
-         patch("reporting.synthesizer.generate_decision_report", return_value=report) as final_synthesis, \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]),
+        patch("arena.engine.call_llm_for_role", side_effect=provider_call),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch(
+            "arena.engine._generate_and_persist_provisional_synthesis",
+            new=AsyncMock(side_effect=provisional_call),
+        ) as provisional,
+        patch(
+            "arena.engine._generate_and_persist_final_synthesis",
+            new=AsyncMock(side_effect=final_call),
+        ) as final_synthesis,
+        patch("config.settings") as mock_settings,
+    ):
         _configure_progressive_settings(mock_settings)
 
         result = await run_arena("test-debate-progressive")
@@ -600,9 +639,7 @@ async def test_unchanged_provisional_snapshot_is_promoted_without_second_call():
         return "only successful answer", _FakeUsage()
 
     async def provisional_call(**kwargs):
-        response_ids = tuple(
-            response.response_id for response in kwargs["responses"]
-        )
+        response_ids = tuple(response.response_id for response in kwargs["responses"])
         return ArenaSynthesisRevision(
             synthesis_id="synth-test-debate-promote-a2-r0",
             content="promoted answer",
@@ -613,17 +650,22 @@ async def test_unchanged_provisional_snapshot_is_promoted_without_second_call():
             input_hash="promoted-hash",
         )
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]), \
-         patch("arena.engine.call_llm_for_role", side_effect=provider_call), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch(
-             "arena.engine._generate_and_persist_provisional_synthesis",
-             new=AsyncMock(side_effect=provisional_call),
-         ) as provisional, \
-         patch("arena.engine._synthesize_verdict", new=AsyncMock()) as final_synthesis, \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]),
+        patch("arena.engine.call_llm_for_role", side_effect=provider_call),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch(
+            "arena.engine._generate_and_persist_provisional_synthesis",
+            new=AsyncMock(side_effect=provisional_call),
+        ) as provisional,
+        patch(
+            "arena.engine._generate_and_persist_final_synthesis",
+            new=AsyncMock(),
+        ) as final_synthesis,
+        patch("config.settings") as mock_settings,
+    ):
         _configure_progressive_settings(mock_settings)
 
         result = await run_arena("test-debate-promote")
@@ -638,6 +680,319 @@ async def test_unchanged_provisional_snapshot_is_promoted_without_second_call():
 
 
 @pytest.mark.anyio
+async def test_obsolete_provisional_is_cancelled_before_streamed_final():
+    """A changed terminal snapshot supersedes a slow draft without blocking final."""
+    from arena.engine import ArenaSynthesisRevision, run_arena
+
+    provisional_started = asyncio.Event()
+    provisional_cancelled = asyncio.Event()
+    final_started = asyncio.Event()
+
+    async def provider_call(*args, **kwargs):
+        if "Model B" in kwargs.get("role", ""):
+            await provisional_started.wait()
+            await asyncio.sleep(0.01)
+            return "late answer", _FakeUsage()
+        return "fast answer", _FakeUsage()
+
+    async def provisional_call(**kwargs):
+        provisional_started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            provisional_cancelled.set()
+            raise
+
+    async def final_call(**kwargs):
+        assert provisional_cancelled.is_set()
+        final_started.set()
+        response_ids = tuple(response.response_id for response in kwargs["responses"])
+        return ArenaSynthesisRevision(
+            synthesis_id="synth-test-debate-supersede-a2-r1-final",
+            content="streamed final",
+            report={"title": "Final"},
+            response_ids=response_ids,
+            successful_count=2,
+            total_count=2,
+            input_hash="final-hash",
+            revision=1,
+            status="final",
+        )
+
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]),
+        patch("arena.engine.call_llm_for_role", side_effect=provider_call),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch(
+            "arena.engine._generate_and_persist_provisional_synthesis",
+            new=AsyncMock(side_effect=provisional_call),
+        ) as provisional,
+        patch(
+            "arena.engine._generate_and_persist_final_synthesis",
+            new=AsyncMock(side_effect=final_call),
+        ) as final_synthesis,
+        patch("config.settings") as mock_settings,
+    ):
+        _configure_progressive_settings(mock_settings)
+
+        result = await run_arena("test-debate-supersede")
+
+    assert result.final_answer == "streamed final"
+    assert provisional.await_count == 1
+    assert final_synthesis.await_count == 1
+    assert final_started.is_set()
+
+
+@pytest.mark.anyio
+async def test_checkpoint_reused_model_usage_is_accounted_once():
+    """Takeover-loaded responses retain usage without repeating provider calls."""
+    from agents import UsageCall
+    from arena.engine import ArenaModelResponse, run_arena
+
+    persisted_usage = UsageCall(
+        prompt_tokens=10,
+        completion_tokens=40,
+        total_tokens=50,
+        cost_usd=0.25,
+        provider="mock",
+        model="model-a",
+    )
+    persisted_response = ArenaModelResponse(
+        model_id="model-a",
+        display_name="Model A",
+        provider="mock",
+        content="persisted answer",
+        success=True,
+        response_id="resp-test-debate-takeover-a2-g0-model-a",
+        run_attempt=2,
+        usage_call=persisted_usage,
+    )
+
+    async def checkpoint(
+        debate_id,
+        stage_name,
+        input_data,
+        run_fn,
+        load_fn,
+        **kwargs,
+    ):
+        if stage_name == "arena_perspectives":
+            return [persisted_response]
+        return await run_fn()
+
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]),
+        patch("arena.engine.call_llm_for_role", new=AsyncMock()) as provider,
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=checkpoint),
+        patch(
+            "arena.engine._synthesize_verdict",
+            new=AsyncMock(
+                return_value=(
+                    "final",
+                    None,
+                    {
+                        "synthesis_status": "succeeded",
+                        "synthesis_error": None,
+                    },
+                )
+            ),
+        ),
+        patch("config.settings") as mock_settings,
+    ):
+        _configure_progressive_settings(mock_settings)
+        mock_settings.ARENA_PROGRESSIVE_SYNTHESIS_ENABLED = False
+
+        result = await run_arena("test-debate-takeover")
+
+    provider.assert_not_awaited()
+    assert result.usage_tracker.total_tokens == 50
+    assert result.usage_tracker.cost_usd == 0.25
+    assert len(result.usage_tracker.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_takeover_reuses_durable_final_revision_without_provider_call():
+    """A durable snapshot-bound final is canonicalized without a third provider call."""
+    from agents import UsageCall
+    from arena.engine import (
+        ArenaModelResponse,
+        ArenaSynthesisRevision,
+        _synthesis_revision_id,
+        _synthesis_snapshot_hash,
+        run_arena,
+    )
+
+    model_usage = UsageCall(
+        prompt_tokens=10,
+        completion_tokens=20,
+        total_tokens=30,
+        cost_usd=0.1,
+        provider="mock",
+        model="model-a",
+    )
+    final_usage = UsageCall(
+        prompt_tokens=5,
+        completion_tokens=15,
+        total_tokens=20,
+        cost_usd=0.2,
+        provider="mock",
+        model="synthesizer",
+    )
+    persisted_response = ArenaModelResponse(
+        model_id="model-a",
+        display_name="Model A",
+        provider="mock",
+        content="persisted answer",
+        success=True,
+        response_id="resp-test-debate-final-takeover-a2-g0-model-a",
+        run_attempt=2,
+        usage_call=model_usage,
+    )
+    model_order = {"model-a": 0}
+    final_hash = _synthesis_snapshot_hash(
+        "test prompt",
+        [persisted_response],
+        model_order=model_order,
+    )
+    final_id = _synthesis_revision_id(
+        "test-debate-final-takeover",
+        2,
+        1,
+        final_hash,
+    )
+    durable_final = ArenaSynthesisRevision(
+        synthesis_id=final_id,
+        content="durable streamed final",
+        report={"title": "Final"},
+        response_ids=(persisted_response.response_id,),
+        successful_count=1,
+        total_count=1,
+        input_hash=final_hash,
+        revision=1,
+        status="final",
+        usage_call=final_usage,
+    )
+
+    async def checkpoint(
+        debate_id,
+        stage_name,
+        input_data,
+        run_fn,
+        load_fn,
+        **kwargs,
+    ):
+        if stage_name == "arena_perspectives":
+            return [persisted_response]
+        return await run_fn()
+
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:1]),
+        patch("arena.engine.call_llm_for_role", new=AsyncMock()) as model_provider,
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=checkpoint),
+        patch(
+            "arena.engine._load_synthesis_revision",
+            new=AsyncMock(return_value=durable_final),
+        ),
+        patch(
+            "arena.engine._generate_and_persist_final_synthesis",
+            new=AsyncMock(),
+        ) as final_provider,
+        patch("config.settings") as mock_settings,
+    ):
+        _configure_progressive_settings(mock_settings)
+
+        result = await run_arena("test-debate-final-takeover")
+
+    model_provider.assert_not_awaited()
+    final_provider.assert_not_awaited()
+    assert result.final_answer == "durable streamed final"
+    assert result.usage_tracker.total_tokens == 50
+    assert result.usage_tracker.cost_usd == pytest.approx(0.3)
+    assert len(result.usage_tracker.calls) == 2
+
+
+def test_usage_and_revision_identity_round_trip_is_snapshot_safe():
+    from agents import UsageCall
+    from arena.engine import (
+        ArenaSynthesisRevision,
+        _assert_revision_identity_matches,
+        _message_to_arena_response,
+        _synthesis_revision_id,
+        _usage_call_from_gateway_result,
+    )
+    from orchestration.checkpoints import CheckpointIntegrityError
+
+    usage_meta = {
+        "prompt_tokens": 11,
+        "completion_tokens": 22,
+        "total_tokens": 33,
+        "cost_usd": 0.5,
+        "provider": "mock",
+        "model": "model-a",
+    }
+    response = _message_to_arena_response(
+        SimpleNamespace(
+            meta={
+                "model_id": "model-a",
+                "provider": "mock",
+                "usage_call": usage_meta,
+            },
+            persona="Model A",
+            content="answer",
+            response_id="response-a",
+            id="message-a",
+        )
+    )
+    assert isinstance(response.usage_call, UsageCall)
+    assert response.usage_call.total_tokens == 33
+    assert response.usage_call.cost_usd == 0.5
+
+    gateway_usage = _usage_call_from_gateway_result(
+        SimpleNamespace(
+            prompt_tokens=7,
+            completion_tokens=8,
+            total_tokens=15,
+            cost_usd=0.1,
+            provider="mock",
+            model_used="model-b",
+        )
+    )
+    assert gateway_usage.total_tokens == 15
+    assert gateway_usage.model == "model-b"
+
+    first_id = _synthesis_revision_id("debate", 2, 0, "a" * 64)
+    second_id = _synthesis_revision_id("debate", 2, 0, "b" * 64)
+    assert first_id != second_id
+
+    existing = ArenaSynthesisRevision(
+        synthesis_id=first_id,
+        content="draft",
+        report=None,
+        response_ids=("response-a",),
+        successful_count=1,
+        total_count=2,
+        input_hash="a" * 64,
+    )
+    requested = ArenaSynthesisRevision(
+        synthesis_id=first_id,
+        content="other draft",
+        report=None,
+        response_ids=("response-b",),
+        successful_count=1,
+        total_count=2,
+        input_hash="b" * 64,
+    )
+    with pytest.raises(CheckpointIntegrityError):
+        _assert_revision_identity_matches(existing, requested)
+
+
+@pytest.mark.anyio
 async def test_staged_pause_suppresses_progressive_synthesis():
     """The pause boundary remains stable even when progressive mode is enabled."""
     from arena.engine import run_arena
@@ -647,16 +1002,18 @@ async def test_staged_pause_suppresses_progressive_synthesis():
             await asyncio.sleep(0.02)
         return "answer", _FakeUsage()
 
-    with patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]), \
-         patch("arena.engine.call_llm_for_role", side_effect=provider_call), \
-         patch("arena.engine.get_sse_backend", return_value=AsyncMock()), \
-         patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope), \
-         patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint), \
-         patch(
-             "arena.engine._generate_and_persist_provisional_synthesis",
-             new=AsyncMock(),
-         ) as provisional, \
-         patch("config.settings") as mock_settings:
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS[:2]),
+        patch("arena.engine.call_llm_for_role", side_effect=provider_call),
+        patch("arena.engine.get_sse_backend", return_value=AsyncMock()),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch(
+            "arena.engine._generate_and_persist_provisional_synthesis",
+            new=AsyncMock(),
+        ) as provisional,
+        patch("config.settings") as mock_settings,
+    ):
         _configure_progressive_settings(mock_settings)
         mock_settings.STAGED_DECISION_PIPELINE = True
 
@@ -669,6 +1026,7 @@ async def test_staged_pause_suppresses_progressive_synthesis():
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _configure_progressive_settings(mock_settings):
     mock_settings.FAST_DEBATE = False
@@ -688,6 +1046,7 @@ class _MockAsyncSession:
     async def execute(self, stmt):
         result = MagicMock()
         result.scalars.return_value.all.return_value = []
+        result.scalars.return_value.first.return_value = None
         return result
 
     def add(self, obj):
@@ -708,6 +1067,7 @@ class _MockAsyncSession:
 
 class _mock_session_scope:
     """Context manager returning a _MockAsyncSession."""
+
     async def __aenter__(self):
         return _MockAsyncSession()
 

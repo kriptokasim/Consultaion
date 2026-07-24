@@ -18,13 +18,13 @@ const synthesisSnapshotFields = {
 export const arenaSynthesisStartedSchema = z.object({
   type: z.literal("arena_synthesis_started"),
   ...synthesisSnapshotFields,
-  status: z.literal("provisional"),
+  status: z.enum(["provisional", "final"]),
 }).passthrough();
 
 export const arenaSynthesisRevisionSchema = z.object({
   type: z.literal("arena_synthesis_revision"),
   ...synthesisSnapshotFields,
-  status: z.literal("provisional"),
+  status: synthesisStatusSchema,
   content: z.string(),
   report: z.unknown().nullable().optional(),
 }).passthrough();

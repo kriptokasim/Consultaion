@@ -54,13 +54,10 @@ def _is_response_identity_conflict(exc: Exception) -> bool:
     if constraint == "uq_message_debate_response_id":
         return True
     message = str(orig or exc).lower()
-    return (
-        "uq_message_debate_response_id" in message
-        or (
-            "unique constraint failed" in message
-            and "message.debate_id" in message
-            and "message.response_id" in message
-        )
+    return "uq_message_debate_response_id" in message or (
+        "unique constraint failed" in message
+        and "message.debate_id" in message
+        and "message.response_id" in message
     )
 
 
@@ -140,8 +137,7 @@ def _resolve_arena_models_from_panel(panel_config: dict | None):
             unresolved,
         )
         raise ValueError(
-            "Persisted Arena panel contains unresolved model seats: "
-            + ", ".join(unresolved)
+            "Persisted Arena panel contains unresolved model seats: " + ", ".join(unresolved)
         )
     return resolved
 
@@ -157,6 +153,7 @@ def _select_arena_execution_models(panel_config: dict | None):
 @dataclass
 class ArenaModelResponse:
     """Individual model response in an arena run."""
+
     model_id: str
     display_name: str
     provider: str
@@ -170,6 +167,7 @@ class ArenaModelResponse:
     response_id: str | None = None
     run_attempt: int = 1
     retry_generation: int = 0
+    usage_call: UsageCall | None = None
 
 
 @dataclass
@@ -204,6 +202,7 @@ def _message_to_arena_response(message: Message) -> ArenaModelResponse:
         response_id=message.response_id or meta.get("response_id") or str(message.id),
         run_attempt=int(meta.get("run_attempt", 1) or 1),
         retry_generation=int(meta.get("retry_generation", 0) or 0),
+        usage_call=_usage_call_from_meta(meta.get("usage_call")),
     )
 
 
@@ -217,10 +216,7 @@ def _canonical_attempt_responses(
     by_model: dict[str, ArenaModelResponse] = {}
     for message in messages:
         response = _message_to_arena_response(message)
-        if (
-            response.run_attempt != run_attempt
-            or response.model_id not in allowed_model_ids
-        ):
+        if response.run_attempt != run_attempt or response.model_id not in allowed_model_ids:
             continue
         previous = by_model.get(response.model_id)
         if previous is None or response.retry_generation >= previous.retry_generation:
@@ -233,11 +229,7 @@ def _response_snapshot(
     *,
     model_order: dict[str, int],
 ) -> tuple[str, ...]:
-    successful = [
-        response
-        for response in responses
-        if response.success and response.response_id
-    ]
+    successful = [response for response in responses if response.success and response.response_id]
     successful.sort(key=lambda response: model_order.get(response.model_id, 999))
     return tuple(response.response_id for response in successful if response.response_id)
 
@@ -271,20 +263,20 @@ def _usage_call_to_meta(call: UsageCall | None) -> dict | None:
     if call is None:
         return None
     return {
-        "prompt_tokens": call.prompt_tokens,
-        "completion_tokens": call.completion_tokens,
-        "total_tokens": call.total_tokens,
-        "cost_usd": call.cost_usd,
-        "provider": call.provider,
-        "model": call.model,
-        "gateway": call.gateway,
-        "model_pool": call.model_pool,
-        "routing_policy": call.routing_policy,
-        "fallback_used": call.fallback_used,
-        "fallback_reason": call.fallback_reason,
-        "user_plan": call.user_plan,
-        "estimated_cost_usd": call.estimated_cost_usd,
-        "retry_count": call.retry_count,
+        "prompt_tokens": float(getattr(call, "prompt_tokens", 0) or 0),
+        "completion_tokens": float(getattr(call, "completion_tokens", 0) or 0),
+        "total_tokens": float(getattr(call, "total_tokens", 0) or 0),
+        "cost_usd": float(getattr(call, "cost_usd", 0) or 0),
+        "provider": getattr(call, "provider", None),
+        "model": getattr(call, "model", None),
+        "gateway": getattr(call, "gateway", None),
+        "model_pool": getattr(call, "model_pool", None),
+        "routing_policy": getattr(call, "routing_policy", None),
+        "fallback_used": bool(getattr(call, "fallback_used", False)),
+        "fallback_reason": getattr(call, "fallback_reason", None),
+        "user_plan": getattr(call, "user_plan", None),
+        "estimated_cost_usd": float(getattr(call, "estimated_cost_usd", 0) or 0),
+        "retry_count": int(getattr(call, "retry_count", 0) or 0),
     }
 
 
@@ -307,6 +299,36 @@ def _usage_call_from_meta(meta: dict | None) -> UsageCall | None:
         estimated_cost_usd=float(meta.get("estimated_cost_usd", 0) or 0),
         retry_count=int(meta.get("retry_count", 0) or 0),
     )
+
+
+def _usage_call_from_gateway_result(result) -> UsageCall:
+    """Normalize streaming gateway usage into the durable Arena contract."""
+    return UsageCall(
+        prompt_tokens=float(getattr(result, "prompt_tokens", 0) or 0),
+        completion_tokens=float(getattr(result, "completion_tokens", 0) or 0),
+        total_tokens=float(getattr(result, "total_tokens", 0) or 0),
+        cost_usd=float(getattr(result, "cost_usd", 0) or 0),
+        provider=getattr(result, "provider", None),
+        model=getattr(result, "model_used", None),
+        gateway=getattr(result, "gateway", None),
+        model_pool=getattr(result, "model_pool", None),
+        routing_policy=getattr(result, "routing_policy", None),
+        fallback_used=bool(getattr(result, "fallback_used", False)),
+        fallback_reason=getattr(result, "fallback_reason", None),
+        user_plan=getattr(result, "user_plan", None),
+        estimated_cost_usd=float(getattr(result, "estimated_cost_usd", 0) or 0),
+        retry_count=int(getattr(result, "retry_count", 0) or 0),
+    )
+
+
+def _synthesis_revision_id(
+    debate_id: str,
+    run_attempt: int,
+    revision: int,
+    input_hash: str,
+) -> str:
+    """Bind revision identity to the immutable response snapshot."""
+    return f"synth-{debate_id}-a{run_attempt}-r{revision}-" f"{input_hash[:16]}"
 
 
 def _message_to_synthesis_revision(message: Message) -> ArenaSynthesisRevision:
@@ -343,6 +365,76 @@ async def _load_synthesis_revision(
     return _message_to_synthesis_revision(message) if message else None
 
 
+async def _load_latest_synthesis_revision(
+    session,
+    debate_id: str,
+    *,
+    run_attempt: int,
+    revision: int,
+    status: str,
+) -> ArenaSynthesisRevision | None:
+    """Load the latest durable revision, including legacy fixed-ID rows."""
+    from sqlmodel import select
+
+    result = await session.execute(
+        select(Message)
+        .where(
+            Message.debate_id == debate_id,
+            Message.role == "arena_synthesis_revision",
+        )
+        .order_by(Message.created_at.desc())
+    )
+    for message in result.scalars().all():
+        meta = message.meta or {}
+        if (
+            int(meta.get("run_attempt", 1) or 1) == run_attempt
+            and int(meta.get("revision", 0) or 0) == revision
+            and str(meta.get("status") or "provisional") == status
+        ):
+            return _message_to_synthesis_revision(message)
+    return None
+
+
+def _assert_revision_identity_matches(
+    existing: ArenaSynthesisRevision,
+    requested: ArenaSynthesisRevision,
+) -> None:
+    """Fail closed if one durable ID is reused for a different snapshot."""
+    if (
+        existing.input_hash != requested.input_hash
+        or existing.revision != requested.revision
+        or existing.status != requested.status
+        or existing.response_ids != requested.response_ids
+    ):
+        from orchestration.checkpoints import CheckpointIntegrityError
+
+        raise CheckpointIntegrityError(
+            "Arena synthesis revision identity collision for " f"{requested.synthesis_id}"
+        )
+
+
+def _assert_final_revision_snapshot_matches(
+    existing: ArenaSynthesisRevision,
+    *,
+    synthesis_id: str,
+    input_hash: str,
+    response_ids: tuple[str, ...],
+) -> None:
+    """Validate a takeover-reused final revision before skipping its provider call."""
+    if (
+        existing.synthesis_id != synthesis_id
+        or existing.input_hash != input_hash
+        or existing.response_ids != response_ids
+        or existing.revision != 1
+        or existing.status not in {"final", "failed"}
+    ):
+        from orchestration.checkpoints import CheckpointIntegrityError
+
+        raise CheckpointIntegrityError(
+            "Arena final synthesis revision does not match the terminal response snapshot"
+        )
+
+
 async def _persist_synthesis_revision(
     *,
     debate_id: str,
@@ -359,16 +451,13 @@ async def _persist_synthesis_revision(
     from sqlmodel import select
 
     async with async_session_scope() as session:
-        write_lease = _lease_for_arena_write(
-            debate_id, run_attempt, owner_id, lease_epoch
-        )
+        write_lease = _lease_for_arena_write(debate_id, run_attempt, owner_id, lease_epoch)
         if write_lease is not None:
             await assert_execution_ownership(session, write_lease)
 
-        existing = await _load_synthesis_revision(
-            session, debate_id, revision.synthesis_id
-        )
+        existing = await _load_synthesis_revision(session, debate_id, revision.synthesis_id)
         if existing is not None:
+            _assert_revision_identity_matches(existing, revision)
             persisted = existing
         else:
             attempt_result = await session.execute(
@@ -410,11 +499,10 @@ async def _persist_synthesis_revision(
                 await session.rollback()
                 if not _is_response_identity_conflict(exc):
                     raise
-                existing = await _load_synthesis_revision(
-                    session, debate_id, revision.synthesis_id
-                )
+                existing = await _load_synthesis_revision(session, debate_id, revision.synthesis_id)
                 if existing is None:
                     raise
+                _assert_revision_identity_matches(existing, revision)
                 persisted = existing
 
     await _publish_lifecycle_best_effort(
@@ -492,7 +580,9 @@ async def persist_and_publish_arena_response(
         if ownership.first() is None:
             logger.warning(
                 "arena_response.fenced_rejected debate_id=%s owner=%s epoch=%s",
-                debate_id, owner_id, lease_epoch,
+                debate_id,
+                owner_id,
+                lease_epoch,
             )
             if lease:
                 lease.lease_lost_event.set()
@@ -503,10 +593,12 @@ async def persist_and_publish_arena_response(
 
     # Fast path: already durable under this response_id
     existing = await session.execute(
-        sa_select(Message.id).where(
+        sa_select(Message.id)
+        .where(
             Message.debate_id == debate_id,
             Message.response_id == response_id,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if existing.first() is not None:
         return False
@@ -532,6 +624,7 @@ async def persist_and_publish_arena_response(
             "success": response.success,
             "error": response.error or (None if response.success else "Model failed to respond"),
             "error_code": response.error_code,
+            "usage_call": _usage_call_to_meta(response.usage_call),
         },
         created_at=now,
     )
@@ -562,7 +655,8 @@ async def persist_and_publish_arena_response(
                 "persona_type": response.persona_type,
                 "persona_tagline": response.persona_tagline,
                 "success": response.success,
-                "error": response.error or (None if response.success else "Model failed to respond"),
+                "error": response.error
+                or (None if response.success else "Model failed to respond"),
                 "error_code": response.error_code,
                 "run_attempt": response.run_attempt,
                 "retry_generation": response.retry_generation,
@@ -571,9 +665,227 @@ async def persist_and_publish_arena_response(
     except Exception:
         logger.warning(
             "arena_response.sse_publish_failed debate_id=%s response_id=%s",
-            debate_id, response_id, exc_info=True,
+            debate_id,
+            response_id,
+            exc_info=True,
         )
     return True
+
+
+async def _generate_and_persist_streamed_synthesis_revision(
+    *,
+    debate_id: str,
+    run_attempt: int,
+    prompt: str,
+    responses: list[ArenaModelResponse],
+    total_count: int,
+    model_order: dict[str, int],
+    backend,
+    user_id: str | None,
+    model_id: str | None,
+    locale: str | None,
+    owner_id: str | None,
+    lease_epoch: int | None,
+    revision_number: int,
+    revision_status: str,
+    visibility_started_at: float | None = None,
+) -> ArenaSynthesisRevision:
+    """Stream and durably identify one synthesis response snapshot."""
+    from model_gateway import route_llm_stream
+    from parliament.model_registry import get_default_model
+    from reporting.report_builder import build_report_from_synthesis
+
+    from arena.delta_publisher import ArenaDeltaPublisher
+    from config import settings
+
+    ordered = sorted(
+        (response for response in responses if response.success),
+        key=lambda response: model_order.get(response.model_id, 999),
+    )
+    response_ids = _response_snapshot(ordered, model_order=model_order)
+    input_hash = _synthesis_snapshot_hash(prompt, ordered, model_order=model_order)
+    synthesis_id = _synthesis_revision_id(
+        debate_id,
+        run_attempt,
+        revision_number,
+        input_hash,
+    )
+    synthesis_model = resolve_model_info(model_id) if model_id else None
+    synthesis_model = synthesis_model or get_default_model()
+
+    await _publish_lifecycle_best_effort(
+        backend,
+        f"debate:{debate_id}",
+        {
+            "type": "arena_synthesis_started",
+            "contract_version": 1,
+            "debate_id": str(debate_id),
+            "synthesis_id": synthesis_id,
+            "run_attempt": run_attempt,
+            "revision": revision_number,
+            "status": revision_status,
+            "input_hash": input_hash,
+            "response_ids": list(response_ids),
+            "successful_count": len(ordered),
+            "total_count": total_count,
+        },
+    )
+
+    source_text = "\n\n".join(
+        f"### {response.display_name} ({response.provider})\n{response.content}"
+        for response in ordered
+    )
+    language_instruction = (
+        f" Write the synthesis in the '{locale}' language." if locale and locale != "en" else ""
+    )
+    if revision_status == "provisional":
+        system_content = (
+            "Create a concise provisional decision synthesis from the available "
+            "model responses. State the current recommendation, strongest evidence, "
+            "material disagreements, risks, and next actions. Do not claim that all "
+            "models have responded. Use clear Markdown."
+        )
+        response_label = "Available responses"
+        max_tokens = int(getattr(settings, "ARENA_PROVISIONAL_MAX_TOKENS", 600))
+    else:
+        system_content = (
+            "Create the definitive decision synthesis from all successful model "
+            "responses. State the recommendation, strongest evidence, material "
+            "disagreements, risks, confidence, and concrete next actions. "
+            "Use clear Markdown."
+        )
+        response_label = "Successful responses"
+        max_tokens = int(getattr(settings, "SYNTHESIS_MAX_TOKENS", 2000))
+    messages = [
+        {
+            "role": "system",
+            "content": system_content + language_instruction,
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Question:\n{prompt}\n\n"
+                f"{response_label} ({len(ordered)}/{total_count}):\n{source_text}"
+            ),
+        },
+    ]
+
+    async def _publish_delta(event: dict) -> None:
+        await backend.publish(f"debate:{debate_id}", event)
+
+    delta_publisher = ArenaDeltaPublisher(
+        publish_fn=_publish_delta,
+        response_id=synthesis_id,
+        model_id="synthesizer",
+        flush_interval_ms=int(getattr(settings, "ARENA_DELTA_FLUSH_MS", 150) or 30),
+        event_type="arena_synthesis_delta",
+        extra_payload={
+            "contract_version": 1,
+            "debate_id": str(debate_id),
+            "synthesis_id": synthesis_id,
+            "run_attempt": run_attempt,
+            "revision": revision_number,
+            "status": revision_status,
+            "input_hash": input_hash,
+            "response_ids": list(response_ids),
+            "successful_count": len(ordered),
+            "total_count": total_count,
+        },
+    )
+    await delta_publisher.start()
+    first_visible_recorded = False
+
+    def _record_first_visible() -> None:
+        nonlocal first_visible_recorded
+        if first_visible_recorded or visibility_started_at is None:
+            return
+        first_visible_recorded = True
+        try:
+            from observability.metrics import (
+                record_arena_quorum_to_first_synthesis,
+            )
+
+            record_arena_quorum_to_first_synthesis(
+                (time.monotonic() - visibility_started_at) * 1000
+            )
+        except Exception:
+            logger.debug(
+                "arena provisional synthesis metric failed",
+                exc_info=True,
+            )
+
+    async def _on_delta(delta) -> None:
+        await delta_publisher.push(delta)
+        _record_first_visible()
+
+    try:
+        result = await asyncio.wait_for(
+            route_llm_stream(
+                messages=messages,
+                model_id=synthesis_model.litellm_model,
+                temperature=0.2,
+                max_tokens=max_tokens,
+                on_delta=_on_delta,
+                debate_id=debate_id,
+                user_id=user_id,
+            ),
+            timeout=float(getattr(settings, "LLM_TIMEOUT_SECONDS", 30)),
+        )
+    finally:
+        await delta_publisher.flush()
+        await delta_publisher.close()
+
+    usage_call = _usage_call_from_gateway_result(result)
+    persisted_status = revision_status
+    if result.success and result.content.strip():
+        content = result.content
+        report = build_report_from_synthesis(
+            prompt,
+            content,
+            model_responses=[
+                {
+                    "model_id": response.model_id,
+                    "display_name": response.display_name,
+                    "provider": response.provider,
+                    "content": response.content,
+                    "success": response.success,
+                }
+                for response in ordered
+            ],
+        ).model_dump(mode="json")
+    elif revision_status == "provisional":
+        raise RuntimeError(result.error_message or "Provisional synthesis returned no content.")
+    else:
+        persisted_status = "failed"
+        top_response = ordered[0]
+        content = (
+            "⚠️ Final synthesis unavailable. Source responses remain available.\n\n"
+            f"**{top_response.display_name}:**\n{top_response.content}"
+        )
+        report = None
+
+    revision = ArenaSynthesisRevision(
+        synthesis_id=synthesis_id,
+        content=content,
+        report=report,
+        response_ids=response_ids,
+        successful_count=len(ordered),
+        total_count=total_count,
+        input_hash=input_hash,
+        revision=revision_number,
+        status=persisted_status,
+        usage_call=usage_call,
+    )
+    persisted = await _persist_synthesis_revision(
+        debate_id=debate_id,
+        run_attempt=run_attempt,
+        revision=revision,
+        backend=backend,
+        owner_id=owner_id,
+        lease_epoch=lease_epoch,
+    )
+    _record_first_visible()
+    return persisted
 
 
 async def _generate_and_persist_provisional_synthesis(
@@ -592,202 +904,62 @@ async def _generate_and_persist_provisional_synthesis(
     lease_epoch: int | None,
     quorum_reached_at: float,
 ) -> ArenaSynthesisRevision:
-    """Stream one bounded provisional synthesis for a durable response snapshot."""
-    from model_gateway import route_llm_stream
-    from parliament.model_registry import get_default_model
-    from reporting.report_builder import build_report_from_synthesis
-
-    from arena.delta_publisher import ArenaDeltaPublisher
-    from config import settings
-
-    ordered = sorted(
-        (response for response in responses if response.success),
-        key=lambda response: model_order.get(response.model_id, 999),
-    )
-    response_ids = _response_snapshot(ordered, model_order=model_order)
-    input_hash = _synthesis_snapshot_hash(
-        prompt, ordered, model_order=model_order
-    )
-    synthesis_id = f"synth-{debate_id}-a{run_attempt}-r0"
-    synthesis_model = resolve_model_info(model_id) if model_id else None
-    synthesis_model = synthesis_model or get_default_model()
-
-    await _publish_lifecycle_best_effort(
-        backend,
-        f"debate:{debate_id}",
-        {
-            "type": "arena_synthesis_started",
-            "contract_version": 1,
-            "debate_id": str(debate_id),
-            "synthesis_id": synthesis_id,
-            "run_attempt": run_attempt,
-            "revision": 0,
-            "status": "provisional",
-            "input_hash": input_hash,
-            "response_ids": list(response_ids),
-            "successful_count": len(ordered),
-            "total_count": total_count,
-        },
-    )
-
-    source_text = "\n\n".join(
-        f"### {response.display_name} ({response.provider})\n{response.content}"
-        for response in ordered
-    )
-    language_instruction = (
-        f" Write the synthesis in the '{locale}' language."
-        if locale and locale != "en"
-        else ""
-    )
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "Create a concise provisional decision synthesis from the available "
-                "model responses. State the current recommendation, strongest evidence, "
-                "material disagreements, risks, and next actions. Do not claim that all "
-                "models have responded. Use clear Markdown."
-                + language_instruction
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Question:\n{prompt}\n\n"
-                f"Available responses ({len(ordered)}/{total_count}):\n{source_text}"
-            ),
-        },
-    ]
-
-    async def _publish_delta(event: dict) -> None:
-        await backend.publish(f"debate:{debate_id}", event)
-
-    delta_publisher = ArenaDeltaPublisher(
-        publish_fn=_publish_delta,
-        response_id=synthesis_id,
-        model_id="synthesizer",
-        flush_interval_ms=int(
-            getattr(settings, "ARENA_DELTA_FLUSH_MS", 150) or 30
-        ),
-        event_type="arena_synthesis_delta",
-        extra_payload={
-            "contract_version": 1,
-            "debate_id": str(debate_id),
-            "synthesis_id": synthesis_id,
-            "run_attempt": run_attempt,
-            "revision": 0,
-            "status": "provisional",
-            "input_hash": input_hash,
-            "response_ids": list(response_ids),
-            "successful_count": len(ordered),
-            "total_count": total_count,
-        },
-    )
-    await delta_publisher.start()
-    first_visible_recorded = False
-
-    def _record_first_visible() -> None:
-        nonlocal first_visible_recorded
-        if first_visible_recorded:
-            return
-        first_visible_recorded = True
-        try:
-            from observability.metrics import (
-                record_arena_quorum_to_first_synthesis,
-            )
-
-            record_arena_quorum_to_first_synthesis(
-                (time.monotonic() - quorum_reached_at) * 1000
-            )
-        except Exception:
-            logger.debug(
-                "arena provisional synthesis metric failed",
-                exc_info=True,
-            )
-
-    async def _on_delta(delta) -> None:
-        await delta_publisher.push(delta)
-        _record_first_visible()
-
-    try:
-        result = await asyncio.wait_for(
-            route_llm_stream(
-                messages=messages,
-                model_id=synthesis_model.litellm_model,
-                temperature=0.2,
-                max_tokens=int(
-                    getattr(settings, "ARENA_PROVISIONAL_MAX_TOKENS", 600)
-                ),
-                on_delta=_on_delta,
-                debate_id=debate_id,
-                user_id=user_id,
-            ),
-            timeout=float(getattr(settings, "LLM_TIMEOUT_SECONDS", 30)),
-        )
-    finally:
-        await delta_publisher.flush()
-        await delta_publisher.close()
-
-    if not result.success or not result.content.strip():
-        raise RuntimeError(
-            result.error_message or "Provisional synthesis returned no content."
-        )
-
-    usage_call = UsageCall(
-        prompt_tokens=float(result.prompt_tokens),
-        completion_tokens=float(result.completion_tokens),
-        total_tokens=float(result.total_tokens),
-        cost_usd=float(result.cost_usd),
-        provider=result.provider,
-        model=result.model_used,
-        gateway=result.gateway,
-        model_pool=result.model_pool,
-        routing_policy=result.routing_policy,
-        fallback_used=result.fallback_used,
-        fallback_reason=result.fallback_reason,
-        user_plan=result.user_plan,
-        estimated_cost_usd=result.estimated_cost_usd,
-        retry_count=result.retry_count,
-    )
-    report = build_report_from_synthesis(
-        prompt,
-        result.content,
-        model_responses=[
-            {
-                "model_id": response.model_id,
-                "display_name": response.display_name,
-                "provider": response.provider,
-                "content": response.content,
-                "success": response.success,
-            }
-            for response in ordered
-        ],
-    )
-    revision = ArenaSynthesisRevision(
-        synthesis_id=synthesis_id,
-        content=result.content,
-        report=report.model_dump(mode="json"),
-        response_ids=response_ids,
-        successful_count=len(ordered),
-        total_count=total_count,
-        input_hash=input_hash,
-        usage_call=usage_call,
-    )
-    persisted = await _persist_synthesis_revision(
+    return await _generate_and_persist_streamed_synthesis_revision(
         debate_id=debate_id,
         run_attempt=run_attempt,
-        revision=revision,
+        prompt=prompt,
+        responses=responses,
+        total_count=total_count,
+        model_order=model_order,
         backend=backend,
+        user_id=user_id,
+        model_id=model_id,
+        locale=locale,
         owner_id=owner_id,
         lease_epoch=lease_epoch,
+        revision_number=0,
+        revision_status="provisional",
+        visibility_started_at=quorum_reached_at,
     )
-    _record_first_visible()
-    return persisted
+
+
+async def _generate_and_persist_final_synthesis(
+    *,
+    debate_id: str,
+    run_attempt: int,
+    prompt: str,
+    responses: list[ArenaModelResponse],
+    total_count: int,
+    model_order: dict[str, int],
+    backend,
+    user_id: str | None,
+    model_id: str | None,
+    locale: str | None,
+    owner_id: str | None,
+    lease_epoch: int | None,
+) -> ArenaSynthesisRevision:
+    return await _generate_and_persist_streamed_synthesis_revision(
+        debate_id=debate_id,
+        run_attempt=run_attempt,
+        prompt=prompt,
+        responses=responses,
+        total_count=total_count,
+        model_order=model_order,
+        backend=backend,
+        user_id=user_id,
+        model_id=model_id,
+        locale=locale,
+        owner_id=owner_id,
+        lease_epoch=lease_epoch,
+        revision_number=1,
+        revision_status="final",
+    )
 
 
 @dataclass
 class ArenaResult:
     """Result of an arena run."""
+
     final_answer: str
     final_meta: dict
     usage_tracker: UsageAccumulator
@@ -842,18 +1014,14 @@ async def run_arena(
             MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS,
         )
     )
-    progressive_enabled = (
-        getattr(settings, "ARENA_PROGRESSIVE_SYNTHESIS_ENABLED", False) is True
-        and not (settings.STAGED_DECISION_PIPELINE and not continue_pipeline)
-    )
+    progressive_enabled = getattr(
+        settings, "ARENA_PROGRESSIVE_SYNTHESIS_ENABLED", False
+    ) is True and not (settings.STAGED_DECISION_PIPELINE and not continue_pipeline)
     provisional_revision: ArenaSynthesisRevision | None = None
     all_models_terminal_at: float | None = None
 
     # Load responses with checkpoint safety
-    perspectives_input = {
-        "prompt": prompt,
-        "models": [m.id for m in arena_models]
-    }
+    perspectives_input = {"prompt": prompt, "models": [m.id for m in arena_models]}
 
     async def load_perspectives_fn(session):
         stmt = (
@@ -870,6 +1038,16 @@ async def run_arena(
 
     async def run_perspectives_fn():
         nonlocal provisional_revision, all_models_terminal_at
+
+        if progressive_enabled:
+            async with async_session_scope() as session:
+                provisional_revision = await _load_latest_synthesis_revision(
+                    session,
+                    debate_id,
+                    run_attempt=run_attempt,
+                    revision=0,
+                    status="provisional",
+                )
 
         # Notify start
         await _publish_lifecycle_best_effort(
@@ -898,7 +1076,9 @@ async def run_arena(
         if locale and locale != "en":
             _locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
 
-        async def _call_model(model_info, response_id: str, deadline: float, timing: dict | None = None):
+        async def _call_model(
+            model_info, response_id: str, deadline: float, timing: dict | None = None
+        ):
             """Call a single SOTA model and return its response.
 
             Uses streaming when available: publishes model_response_delta events
@@ -907,6 +1087,7 @@ async def run_arena(
             if timing is not None:
                 timing["start_ts"] = time.monotonic()
             from config import settings as _settings
+
             stream_enabled = getattr(_settings, "STREAMING_RESPONSES_ENABLED", True)
             timeout_seconds = getattr(_settings, "ARENA_MODEL_TIMEOUT_SECONDS", 45)
 
@@ -957,6 +1138,7 @@ async def run_arena(
 
                 try:
                     from model_gateway import route_llm_stream
+
                     arena_max = getattr(_settings, "ARENA_MAX_TOKENS", 1200)
 
                     # A3: Per-model timeout for streaming path
@@ -983,6 +1165,7 @@ async def run_arena(
                         await delta_pub.close()
 
                     if result.success:
+                        call_usage = _usage_call_from_gateway_result(result)
                         return ArenaModelResponse(
                             model_id=model_info.id,
                             display_name=model_info.display_name,
@@ -992,7 +1175,8 @@ async def run_arena(
                             logo_url=model_info.logo_url,
                             persona_type=model_info.persona_type,
                             persona_tagline=model_info.persona_tagline,
-                        ), None
+                            usage_call=call_usage,
+                        ), call_usage
                     else:
                         # Streaming returned failure — try non-streaming fallback
                         # within the same timeout window before giving up.
@@ -1033,6 +1217,7 @@ async def run_arena(
                             err_msg = result.error_message or str(fb_exc)
                             err_code = result.error_code or "stream_and_fallback_failed"
                             from llm_errors import classify_provider_exception
+
                             failure = classify_provider_exception(fb_exc)
                             return ArenaModelResponse(
                                 model_id=model_info.id,
@@ -1086,12 +1271,15 @@ async def run_arena(
                 logger.error(f"Arena model {model_info.id} failed: {e}")
 
                 from llm_errors import ProviderFailureCode, classify_provider_exception
+
                 failure = classify_provider_exception(e)
                 err_code = failure.code.value
                 friendly_message = failure.message
 
                 if err_code == ProviderFailureCode.INVALID_CREDENTIALS.value:
-                    friendly_message = "⚠️ This model provider configuration is invalid (invalid credentials)."
+                    friendly_message = (
+                        "⚠️ This model provider configuration is invalid (invalid credentials)."
+                    )
                 elif err_code == ProviderFailureCode.INSUFFICIENT_BALANCE.value:
                     friendly_message = "⚠️ This model provider has run out of credits."
                 elif err_code == ProviderFailureCode.RATE_LIMIT_EXCEEDED.value:
@@ -1127,10 +1315,7 @@ async def run_arena(
             _timing: dict = {}
             retry_generation = 0
             response_id = (
-                f"resp-{debate_id}-"
-                f"a{run_attempt}-"
-                f"g{retry_generation}-"
-                f"{model_info.id}"
+                f"resp-{debate_id}-" f"a{run_attempt}-" f"g{retry_generation}-" f"{model_info.id}"
             )
             lifecycle_payload = {
                 "contract_version": 1,
@@ -1142,6 +1327,7 @@ async def run_arena(
                 "retry_generation": retry_generation,
             }
             from config import settings as _settings
+
             total_timeout = float(getattr(_settings, "ARENA_MODEL_TOTAL_TIMEOUT_S", 60))
             deadline = asyncio.get_running_loop().time() + total_timeout
             for event_type in (
@@ -1163,12 +1349,15 @@ async def run_arena(
                 logger.error(f"Arena model task exception for {model_info.id}: {exc}")
 
                 from llm_errors import ProviderFailureCode, classify_provider_exception
+
                 failure = classify_provider_exception(exc)
                 err_code = failure.code.value
                 friendly_message = failure.message
 
                 if err_code == ProviderFailureCode.INVALID_CREDENTIALS.value:
-                    friendly_message = "⚠️ This model provider configuration is invalid (invalid credentials)."
+                    friendly_message = (
+                        "⚠️ This model provider configuration is invalid (invalid credentials)."
+                    )
                 elif err_code == ProviderFailureCode.INSUFFICIENT_BALANCE.value:
                     friendly_message = "⚠️ This model provider has run out of credits."
                 elif err_code == ProviderFailureCode.RATE_LIMIT_EXCEEDED.value:
@@ -1197,6 +1386,7 @@ async def run_arena(
             response.response_id = response_id
             response.run_attempt = run_attempt
             response.retry_generation = retry_generation
+            response.usage_call = call_usage
 
             await _publish_lifecycle_best_effort(
                 backend,
@@ -1209,7 +1399,10 @@ async def run_arena(
             try:
                 async with async_session_scope() as session:
                     await persist_and_publish_arena_response(
-                        session, backend, debate_id, response,
+                        session,
+                        backend,
+                        debate_id,
+                        response,
                         owner_id=execution_owner_id,
                         lease_epoch=lease_epoch,
                     )
@@ -1217,11 +1410,14 @@ async def run_arena(
                 # P2 #10: Even persistence failures must not escape — the parent
                 # loop should see every model task complete normally.
                 from orchestration.execution_lease import ExecutionSupersededError
+
                 if isinstance(persist_exc, ExecutionSupersededError):
                     raise
                 logger.error(
                     "Arena response persistence failed for %s: %s",
-                    model_info.id, persist_exc, exc_info=True,
+                    model_info.id,
+                    persist_exc,
+                    exc_info=True,
                 )
                 # Publish a storage failure event so the frontend doesn't hang.
                 await _publish_lifecycle_best_effort(
@@ -1270,9 +1466,7 @@ async def run_arena(
             # Only emit terminal event if response was actually persisted (or already existed)
             # to prevent frontend from seeing "completed" for a response that isn't in DB.
             # persisted=False means duplicate already in DB — still safe to emit terminal.
-            await _publish_lifecycle_best_effort(
-                backend, f"debate:{debate_id}", terminal_payload
-            )
+            await _publish_lifecycle_best_effort(backend, f"debate:{debate_id}", terminal_payload)
 
             if PROMETHEUS_AVAILABLE and _timing.get("start_ts"):
                 _provider = model_info.provider
@@ -1287,7 +1481,9 @@ async def run_arena(
                     record_connect_latency(_provider, _family, _ttft_sec)
                     _stream_dur = _now - _first
                     _dps = _timing.get("delta_count", 0) / _stream_dur if _stream_dur > 0 else 0
-                    record_stream_duration(_provider, "success" if response.success else "failure", _stream_dur)
+                    record_stream_duration(
+                        _provider, "success" if response.success else "failure", _stream_dur
+                    )
                     record_stream_dps(_provider, _dps)
 
             return response, call_usage
@@ -1306,7 +1502,10 @@ async def run_arena(
             if model.id not in completed_models
         ]
         provisional_task: asyncio.Task[ArenaSynthesisRevision | None] | None = None
-        provisional_state = {"started": False}
+        provisional_state: dict[str, object] = {
+            "started": False,
+            "response_ids": (),
+        }
         quorum_reached_at: float | None = None
 
         async def _run_provisional_after_grace(
@@ -1325,32 +1524,42 @@ async def run_arena(
                 return None
             provisional_state["started"] = True
             snapshot_ids = _response_snapshot(snapshot, model_order=model_order)
-            snapshot_hash = _synthesis_snapshot_hash(
-                prompt, snapshot, model_order=model_order
+            provisional_state["response_ids"] = snapshot_ids
+            snapshot_hash = _synthesis_snapshot_hash(prompt, snapshot, model_order=model_order)
+            synthesis_id = _synthesis_revision_id(
+                debate_id,
+                run_attempt,
+                0,
+                snapshot_hash,
             )
-            synthesis_id = f"synth-{debate_id}-a{run_attempt}-r0"
 
             async def _load_revision(session):
-                return await _load_synthesis_revision(
-                    session, debate_id, synthesis_id
-                )
+                return await _load_synthesis_revision(session, debate_id, synthesis_id)
 
             async def _run_revision():
-                return await _generate_and_persist_provisional_synthesis(
-                    debate_id=debate_id,
-                    run_attempt=run_attempt,
-                    prompt=prompt,
-                    responses=snapshot,
-                    total_count=len(arena_models),
-                    model_order=model_order,
-                    backend=backend,
-                    user_id=user_id,
-                    model_id=model_id,
-                    locale=locale,
-                    owner_id=execution_owner_id,
-                    lease_epoch=lease_epoch,
-                    quorum_reached_at=reached_at,
-                )
+                try:
+                    return await _generate_and_persist_provisional_synthesis(
+                        debate_id=debate_id,
+                        run_attempt=run_attempt,
+                        prompt=prompt,
+                        responses=snapshot,
+                        total_count=len(arena_models),
+                        model_order=model_order,
+                        backend=backend,
+                        user_id=user_id,
+                        model_id=model_id,
+                        locale=locale,
+                        owner_id=execution_owner_id,
+                        lease_epoch=lease_epoch,
+                        quorum_reached_at=reached_at,
+                    )
+                except asyncio.CancelledError:
+                    logger.info(
+                        "arena.provisional_synthesis_superseded " "debate_id=%s input_hash=%s",
+                        debate_id,
+                        snapshot_hash,
+                    )
+                    return None
 
             return await run_with_checkpoint(
                 debate_id,
@@ -1370,7 +1579,11 @@ async def run_arena(
 
         def _maybe_schedule_provisional() -> None:
             nonlocal provisional_task, quorum_reached_at
-            if not progressive_enabled or provisional_task is not None:
+            if (
+                not progressive_enabled
+                or provisional_revision is not None
+                or provisional_task is not None
+            ):
                 return
             successful_count = sum(1 for response in responses if response.success)
             if successful_count < min_required:
@@ -1378,18 +1591,28 @@ async def run_arena(
             if not any(not task.done() for task in tasks):
                 return
             quorum_reached_at = time.monotonic()
-            provisional_task = asyncio.create_task(
-                _run_provisional_after_grace(quorum_reached_at)
-            )
+            provisional_task = asyncio.create_task(_run_provisional_after_grace(quorum_reached_at))
 
         _maybe_schedule_provisional()
         try:
             for task in asyncio.as_completed(tasks):
                 try:
-                    response, call_usage = await task
+                    response, _call_usage = await task
                 except Exception as exc:
+                    from orchestration.checkpoints import (
+                        CheckpointIntegrityError,
+                        CheckpointOwnershipLostError,
+                    )
                     from orchestration.execution_lease import ExecutionSupersededError
-                    if isinstance(exc, ExecutionSupersededError):
+
+                    if isinstance(
+                        exc,
+                        (
+                            ExecutionSupersededError,
+                            CheckpointOwnershipLostError,
+                            CheckpointIntegrityError,
+                        ),
+                    ):
                         raise
                     logger.error(
                         "Arena model task failed outside provider boundary: %s",
@@ -1398,22 +1621,41 @@ async def run_arena(
                     )
                     continue
                 responses.append(response)
-                if call_usage:
-                    usage.add_call(call_usage)
                 _maybe_schedule_provisional()
             all_models_terminal_at = time.monotonic()
 
             if provisional_task is not None:
-                if not provisional_state["started"] and not provisional_task.done():
+                final_snapshot_ids = _response_snapshot(
+                    responses,
+                    model_order=model_order,
+                )
+                provisional_is_obsolete = (
+                    bool(provisional_state["started"])
+                    and provisional_state["response_ids"] != final_snapshot_ids
+                )
+                if not provisional_task.done() and (
+                    not provisional_state["started"] or provisional_is_obsolete
+                ):
                     provisional_task.cancel()
                 try:
                     provisional_revision = await provisional_task
                 except asyncio.CancelledError:
                     provisional_revision = None
                 except Exception as exc:
+                    from orchestration.checkpoints import (
+                        CheckpointIntegrityError,
+                        CheckpointOwnershipLostError,
+                    )
                     from orchestration.execution_lease import ExecutionSupersededError
 
-                    if isinstance(exc, ExecutionSupersededError):
+                    if isinstance(
+                        exc,
+                        (
+                            ExecutionSupersededError,
+                            CheckpointOwnershipLostError,
+                            CheckpointIntegrityError,
+                        ),
+                    ):
                         raise
                     logger.warning(
                         "arena.provisional_synthesis_failed debate_id=%s error=%s",
@@ -1422,11 +1664,6 @@ async def run_arena(
                         exc_info=True,
                     )
                     provisional_revision = None
-                if (
-                    provisional_revision is not None
-                    and provisional_revision.usage_call is not None
-                ):
-                    usage.add_call(provisional_revision.usage_call)
         finally:
             for task in tasks:
                 if not task.done():
@@ -1441,6 +1678,7 @@ async def run_arena(
         return responses
 
     from orchestration.checkpoints import run_with_checkpoint
+
     model_responses = await run_with_checkpoint(
         debate_id,
         "arena_perspectives",
@@ -1450,6 +1688,9 @@ async def run_arena(
         owner_id=execution_owner_id,
         lease_epoch=lease_epoch,
     )
+    for response in model_responses:
+        if response.usage_call is not None:
+            usage.add_call(response.usage_call)
 
     # Check if we have enough successful responses for synthesis
     successful = [r for r in model_responses if r.success]
@@ -1492,6 +1733,7 @@ async def run_arena(
         # Update debate status to perspectives_ready in DB
         async with async_session_scope() as session:
             from orchestration.fencing import fenced_debate_update
+
             write_lease = _lease_for_arena_write(
                 debate_id, run_attempt, execution_owner_id, lease_epoch
             )
@@ -1544,22 +1786,19 @@ async def run_arena(
 
     if provisional_revision is None:
         async with async_session_scope() as session:
-            provisional_revision = await _load_synthesis_revision(
+            provisional_revision = await _load_latest_synthesis_revision(
                 session,
                 debate_id,
-                f"synth-{debate_id}-a{run_attempt}-r0",
+                run_attempt=run_attempt,
+                revision=0,
+                status="provisional",
             )
-        if (
-            provisional_revision is not None
-            and provisional_revision.usage_call is not None
-        ):
-            usage.add_call(provisional_revision.usage_call)
+    if provisional_revision is not None and provisional_revision.usage_call is not None:
+        usage.add_call(provisional_revision.usage_call)
 
     # Synthesize final verdict
     final_response_ids = _response_snapshot(successful, model_order=model_order)
-    final_input_hash = _synthesis_snapshot_hash(
-        prompt, successful, model_order=model_order
-    )
+    final_input_hash = _synthesis_snapshot_hash(prompt, successful, model_order=model_order)
     promote_provisional = (
         provisional_revision is not None
         and provisional_revision.status == "provisional"
@@ -1585,7 +1824,9 @@ async def run_arena(
         if msg:
             sreport = msg.meta.get("synthesis_report") if msg.meta else None
             meta = {
-                "synthesis_status": "succeeded" if msg.meta and msg.meta.get("synthesis_success") else "failed",
+                "synthesis_status": "succeeded"
+                if msg.meta and msg.meta.get("synthesis_success")
+                else "failed",
                 "synthesis_error": msg.meta.get("synthesis_error") if msg.meta else None,
                 "fallback_model": msg.meta.get("fallback_model") if msg.meta else None,
                 "fallback_reason": msg.meta.get("fallback_reason") if msg.meta else None,
@@ -1597,12 +1838,16 @@ async def run_arena(
                 "synthesis_revision": msg.meta.get("revision", 1) if msg.meta else 1,
                 "synthesis_response_ids": msg.meta.get("response_ids", []) if msg.meta else [],
                 "synthesis_input_hash": msg.meta.get("input_hash") if msg.meta else None,
-                "provisional_promoted": msg.meta.get("provisional_promoted", False) if msg.meta else False,
+                "provisional_promoted": msg.meta.get("provisional_promoted", False)
+                if msg.meta
+                else False,
+                "synthesis_usage_call": msg.meta.get("usage_call") if msg.meta else None,
             }
             return msg.content, sreport, meta
         return "Synthesis unavailable.", None, {}
 
     async def run_synthesis_fn():
+        synthesis_usage_call: UsageCall | None = None
         if promote_provisional and provisional_revision is not None:
             scontent = provisional_revision.content
             sreport = provisional_revision.report
@@ -1616,6 +1861,125 @@ async def run_arena(
                 "synthesis_input_hash": final_input_hash,
                 "provisional_promoted": True,
             }
+        elif progressive_enabled:
+            try:
+                final_revision_id = _synthesis_revision_id(
+                    debate_id,
+                    run_attempt,
+                    1,
+                    final_input_hash,
+                )
+                async with async_session_scope() as session:
+                    final_revision = await _load_synthesis_revision(
+                        session,
+                        debate_id,
+                        final_revision_id,
+                    )
+                if final_revision is not None:
+                    _assert_final_revision_snapshot_matches(
+                        final_revision,
+                        synthesis_id=final_revision_id,
+                        input_hash=final_input_hash,
+                        response_ids=final_response_ids,
+                    )
+                else:
+                    final_revision = await _generate_and_persist_final_synthesis(
+                        debate_id=debate_id,
+                        run_attempt=run_attempt,
+                        prompt=prompt,
+                        responses=successful,
+                        total_count=len(model_responses),
+                        model_order=model_order,
+                        backend=backend,
+                        user_id=user_id,
+                        model_id=model_id,
+                        locale=locale,
+                        owner_id=execution_owner_id,
+                        lease_epoch=lease_epoch,
+                    )
+                scontent = final_revision.content
+                sreport = final_revision.report
+                synthesis_usage_call = final_revision.usage_call
+                synthesis_succeeded = final_revision.status == "final"
+                meta = {
+                    "synthesis_status": ("succeeded" if synthesis_succeeded else "failed"),
+                    "synthesis_error": (
+                        None if synthesis_succeeded else "Final synthesis returned no content."
+                    ),
+                    "fallback_model": (None if synthesis_succeeded else successful[0].display_name),
+                    "fallback_reason": (
+                        None
+                        if synthesis_succeeded
+                        else "Top model response shown because final synthesis failed"
+                    ),
+                    "fallback_response": (
+                        None
+                        if synthesis_succeeded
+                        else {
+                            "model": successful[0].display_name,
+                            "content": scontent,
+                        }
+                    ),
+                    "semantic_analysis": (
+                        sreport.get("divergence_breakdown") if isinstance(sreport, dict) else None
+                    ),
+                    "divergence_breakdown": (
+                        sreport.get("divergence_breakdown") if isinstance(sreport, dict) else None
+                    ),
+                    "contract_version": 1,
+                    "synthesis_id": f"synth-{debate_id}-a{run_attempt}",
+                    "synthesis_revision": 1,
+                    "synthesis_response_ids": list(final_response_ids),
+                    "synthesis_input_hash": final_input_hash,
+                    "provisional_promoted": False,
+                }
+            except Exception as exc:
+                from orchestration.checkpoints import (
+                    CheckpointIntegrityError,
+                    CheckpointOwnershipLostError,
+                )
+                from orchestration.execution_lease import ExecutionSupersededError
+
+                if isinstance(
+                    exc,
+                    (
+                        ExecutionSupersededError,
+                        CheckpointOwnershipLostError,
+                        CheckpointIntegrityError,
+                    ),
+                ):
+                    raise
+                logger.error(
+                    "arena.final_streaming_synthesis_failed debate_id=%s error=%s",
+                    debate_id,
+                    exc,
+                    exc_info=True,
+                )
+                top_response = successful[0]
+                scontent = (
+                    "⚠️ Final synthesis unavailable. Source responses remain "
+                    "available.\n\n"
+                    f"**{top_response.display_name}:**\n{top_response.content}"
+                )
+                sreport = None
+                meta = {
+                    "synthesis_status": "failed",
+                    "synthesis_error": sanitize_synthesis_error(str(exc)),
+                    "fallback_model": top_response.display_name,
+                    "fallback_reason": ("Top model response shown because final synthesis failed"),
+                    "fallback_response": {
+                        "model": top_response.display_name,
+                        "content": scontent,
+                    },
+                    "semantic_analysis": None,
+                    "divergence_breakdown": None,
+                    "contract_version": 1,
+                    "synthesis_id": f"synth-{debate_id}-a{run_attempt}",
+                    "synthesis_revision": 1,
+                    "synthesis_response_ids": list(final_response_ids),
+                    "synthesis_input_hash": final_input_hash,
+                    "provisional_promoted": False,
+                }
         else:
             scontent, sreport, meta = await _synthesize_verdict(
                 debate_id=debate_id,
@@ -1636,6 +2000,7 @@ async def run_arena(
                 "synthesis_input_hash": final_input_hash,
                 "provisional_promoted": False,
             }
+        meta["synthesis_usage_call"] = _usage_call_to_meta(synthesis_usage_call)
         ssuccess = meta.get("synthesis_status") == "succeeded"
 
         # Persist synthesis
@@ -1675,10 +2040,15 @@ async def run_arena(
                         "response_ids": list(final_response_ids),
                         "successful_count": len(successful),
                         "total_count": len(model_responses),
-                        "provisional_promoted": promote_provisional,
+                        "provisional_promoted": bool(meta.get("provisional_promoted", False)),
                         "synthesis_success": ssuccess,
                         "synthesis_report": sreport,
-                        **meta
+                        "usage_call": meta.get("synthesis_usage_call"),
+                        **{
+                            key: value
+                            for key, value in meta.items()
+                            if key != "synthesis_usage_call"
+                        },
                     },
                 )
             )
@@ -1703,12 +2073,15 @@ async def run_arena(
                     logger.info(
                         "arena_synthesis.conflict_resolved_using_canonical: "
                         "debate_id=%s response_id=%s",
-                        debate_id, f"synth-{debate_id}-a{run_attempt}",
+                        debate_id,
+                        f"synth-{debate_id}-a{run_attempt}",
                     )
                     existing_meta = existing_msg.meta or {}
                     existing_report = existing_meta.get("synthesis_report")
                     existing_meta_updates = {
-                        "synthesis_status": "succeeded" if existing_meta.get("synthesis_success") else "failed",
+                        "synthesis_status": "succeeded"
+                        if existing_meta.get("synthesis_success")
+                        else "failed",
                         "synthesis_error": existing_meta.get("synthesis_error"),
                         "fallback_model": existing_meta.get("fallback_model"),
                         "fallback_reason": existing_meta.get("fallback_reason"),
@@ -1721,6 +2094,7 @@ async def run_arena(
                         "synthesis_response_ids": existing_meta.get("response_ids", []),
                         "synthesis_input_hash": existing_meta.get("input_hash"),
                         "provisional_promoted": existing_meta.get("provisional_promoted", False),
+                        "synthesis_usage_call": existing_meta.get("usage_call"),
                     }
                     return existing_msg.content, existing_report, existing_meta_updates
                 # No existing row found (unexpected) — fall through with new content.
@@ -1735,6 +2109,9 @@ async def run_arena(
         owner_id=execution_owner_id,
         lease_epoch=lease_epoch,
     )
+    synthesis_usage_call = _usage_call_from_meta(meta_updates.pop("synthesis_usage_call", None))
+    if synthesis_usage_call is not None:
+        usage.add_call(synthesis_usage_call)
     synthesis_success = meta_updates.get("synthesis_status") == "succeeded"
     await _publish_lifecycle_best_effort(
         backend,
@@ -1753,18 +2130,14 @@ async def run_arena(
             "response_ids": list(final_response_ids),
             "successful_count": len(successful),
             "total_count": len(model_responses),
-            "provisional_promoted": bool(
-                meta_updates.get("provisional_promoted", False)
-            ),
+            "provisional_promoted": bool(meta_updates.get("provisional_promoted", False)),
         },
     )
     if all_models_terminal_at is not None:
         try:
             from observability.metrics import record_arena_final_convergence
 
-            record_arena_final_convergence(
-                (time.monotonic() - all_models_terminal_at) * 1000
-            )
+            record_arena_final_convergence((time.monotonic() - all_models_terminal_at) * 1000)
         except Exception:
             logger.debug("arena final convergence metric failed", exc_info=True)
 
@@ -1803,9 +2176,7 @@ async def run_arena(
         "synthesis_revision": 1,
         "synthesis_response_ids": list(final_response_ids),
         "synthesis_input_hash": final_input_hash,
-        "provisional_promoted": bool(
-            meta_updates.get("provisional_promoted", False)
-        ),
+        "provisional_promoted": bool(meta_updates.get("provisional_promoted", False)),
         "model_warnings": model_warnings,
         "usage": usage.snapshot(),
         **meta_updates,
@@ -1820,33 +2191,67 @@ async def run_arena(
     )
 
 
-
 def sanitize_synthesis_error(error_msg: str) -> str:
     """Sanitize synthesis errors to avoid exposing sensitive details, stack traces, API keys, or provider internals."""
     if not error_msg:
         return "An unknown error occurred during synthesis."
-    
+
     # Redact common key/token patterns
     error_msg = re.sub(r"sk-[a-zA-Z0-9\-_]{12,}", "[REDACTED_API_KEY]", error_msg)
-    error_msg = re.sub(r"Bearer\s+[a-zA-Z0-9\-_.]+", "Bearer [REDACTED]", error_msg, flags=re.IGNORECASE)
-    
+    error_msg = re.sub(
+        r"Bearer\s+[a-zA-Z0-9\-_.]+", "Bearer [REDACTED]", error_msg, flags=re.IGNORECASE
+    )
+
     sensitive_words = [
-        "litellm", "openai", "anthropic", "gemini", "google", "cohere", "groq", 
-        "together", "ollama", "api_key", "api-key", "credential", "secret", "token",
-        "auth", "unauthorized", "forbidden", "rate_limit", "rate-limit", "quota", 
-        "billing", "invalid_request", "bad_request", "json.decoder", "json_parse", 
-        "parse_error", "traceback", "stack_trace", "line ", "file ", "exception", 
-        "connection", "timeout", "status_code", "400", "401", "403", "429", "500"
+        "litellm",
+        "openai",
+        "anthropic",
+        "gemini",
+        "google",
+        "cohere",
+        "groq",
+        "together",
+        "ollama",
+        "api_key",
+        "api-key",
+        "credential",
+        "secret",
+        "token",
+        "auth",
+        "unauthorized",
+        "forbidden",
+        "rate_limit",
+        "rate-limit",
+        "quota",
+        "billing",
+        "invalid_request",
+        "bad_request",
+        "json.decoder",
+        "json_parse",
+        "parse_error",
+        "traceback",
+        "stack_trace",
+        "line ",
+        "file ",
+        "exception",
+        "connection",
+        "timeout",
+        "status_code",
+        "400",
+        "401",
+        "403",
+        "429",
+        "500",
     ]
-    
+
     msg_lower = error_msg.lower()
     for word in sensitive_words:
         if word in msg_lower:
             return "The structured synthesis service encountered a validation or parsing error. Raw model responses have been preserved."
-            
+
     if len(error_msg) > 120 or "\n" in error_msg:
         return "The structured synthesis service encountered a validation or parsing error. Raw model responses have been preserved."
-        
+
     return error_msg
 
 
@@ -1864,13 +2269,7 @@ async def _synthesize_verdict(
     """Produce the final synthesized verdict and structured decision report from all model responses."""
     from reporting.synthesizer import StructuredSynthesisError, generate_decision_report
 
-    responses_list = [
-        {
-            "persona": r.display_name,
-            "content": r.content
-        }
-        for r in model_responses
-    ]
+    responses_list = [{"persona": r.display_name, "content": r.content} for r in model_responses]
 
     try:
         report = await generate_decision_report(

@@ -38,7 +38,7 @@ export interface SynthesisDeltaPayload {
   response_id?: string;
   run_attempt: number;
   revision: number;
-  status: "provisional";
+  status: "provisional" | "final";
   text: string;
   delta_sequence: number;
   input_hash?: string;
@@ -88,7 +88,7 @@ export function isValidSynthesisDeltaPayload(
     (typeof value.synthesis_id === "string" || typeof value.response_id === "string")
     && typeof value.run_attempt === "number"
     && typeof value.revision === "number"
-    && value.status === "provisional"
+    && (value.status === "provisional" || value.status === "final")
     && typeof value.text === "string"
     && typeof value.delta_sequence === "number"
   );
@@ -161,7 +161,9 @@ export function synthesisReducer(
       return fromSnapshot(
         state,
         action.payload,
-        action.payload.status === "failed" ? "failed" : "provisional",
+        action.payload.status === "failed"
+          ? "failed"
+          : action.payload.status,
       );
     case "FINALIZED":
       return fromSnapshot(

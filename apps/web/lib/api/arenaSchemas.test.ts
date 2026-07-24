@@ -55,6 +55,35 @@ describe("Arena boundary schemas", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts streamed final lifecycle boundaries", () => {
+    const started = parseArenaBoundaryEvent({
+      type: "arena_synthesis_started",
+      contract_version: 1,
+      synthesis_id: "synth-final",
+      run_attempt: 2,
+      revision: 1,
+      status: "final",
+      response_ids: ["response-1", "response-2"],
+      successful_count: 2,
+      total_count: 2,
+    });
+    const revision = parseArenaBoundaryEvent({
+      type: "arena_synthesis_revision",
+      contract_version: 1,
+      synthesis_id: "synth-final",
+      run_attempt: 2,
+      revision: 1,
+      status: "final",
+      response_ids: ["response-1", "response-2"],
+      successful_count: 2,
+      total_count: 2,
+      content: "Final decision",
+    });
+
+    expect(started.success).toBe(true);
+    expect(revision.success).toBe(true);
+  });
+
   it("accepts the versioned persisted response boundary", () => {
     const result = persistedResponsesSchema.safeParse({
       contract_version: 1,

@@ -109,4 +109,64 @@ describe("synthesisReducer", () => {
     expect(final.responseIds).toEqual(["response-a", "response-b"]);
     expect(stale).toBe(final);
   });
+
+  it("streams a final revision and rejects late provisional deltas", () => {
+    const provisional = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "DELTA",
+      payload: {
+        ...started,
+        text: "Draft",
+        delta_sequence: 1,
+      },
+    });
+    const finalStarted = synthesisReducer(provisional, {
+      type: "STARTED",
+      payload: {
+        ...started,
+        synthesis_id: "synth-final",
+        revision: 1,
+        status: "final",
+        response_ids: ["response-a", "response-b"],
+        successful_count: 2,
+      },
+    });
+    const finalDelta = synthesisReducer(finalStarted, {
+      type: "DELTA",
+      payload: {
+        ...started,
+        synthesis_id: "synth-final",
+        revision: 1,
+        status: "final",
+        response_ids: ["response-a", "response-b"],
+        successful_count: 2,
+        text: "Definitive",
+        delta_sequence: 1,
+      },
+    });
+    const staleDraft = synthesisReducer(finalDelta, {
+      type: "DELTA",
+      payload: {
+        ...started,
+        text: " late draft",
+        delta_sequence: 2,
+      },
+    });
+    const durableFinal = synthesisReducer(finalDelta, {
+      type: "REVISION",
+      payload: {
+        ...started,
+        synthesis_id: "synth-final",
+        revision: 1,
+        status: "final",
+        content: "Definitive decision",
+        response_ids: ["response-a", "response-b"],
+        successful_count: 2,
+      },
+    });
+
+    expect(finalDelta.text).toBe("Definitive");
+    expect(staleDraft).toBe(finalDelta);
+    expect(durableFinal.status).toBe("final");
+    expect(durableFinal.text).toBe("Definitive decision");
+  });
 });
