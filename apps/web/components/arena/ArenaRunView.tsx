@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle, RefreshCw, ChevronRight } from "lucide-react";
+import { Sparkles, Bot, CheckCircle2, Eye, MessageSquare, Shield, AlertTriangle, RefreshCw } from "lucide-react";
 import type { DebateDetail, DebateEvent, PersistedModelResponse } from "@/lib/api/types";
 import { getArenaSynthesisArtifacts } from "@/lib/arena/synthesisArtifacts";
 import { ShareRunButton } from "@/components/debate/ShareRunButton";
@@ -343,99 +343,97 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     Model Responses
                 </h2>
 
-                {/* Mobile: full-width card with peek swipe */}
+                {/* Mobile: chip selector + single visible panel */}
                 <div className="flex sm:hidden flex-col gap-3">
-                    {activeTab === 0 && renderSlots.length > 1 && (
-                        <div className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground animate-fade-in">
-                            <span>Swipe to compare</span>
-                            <ChevronRight className="h-3 w-3" />
-                        </div>
-                    )}
                     <div
-                        className="flex overflow-x-auto snap-x snap-mandatory gap-3 px-4 pb-2 -mx-4"
+                        className="flex overflow-x-auto gap-2 px-1 pb-1"
                         style={{ scrollbarWidth: "none" }}
-                        onScroll={(e) => {
-                            const el = e.currentTarget;
-                            const maxCards = Math.max(renderSlots.length, 1);
-                            const cardWidth = el.scrollWidth / maxCards;
-                            if (cardWidth > 0) {
-                                const idx = Math.round(el.scrollLeft / cardWidth);
-                                setActiveTab(idx);
-                            }
-                        }}
+                        role="tablist"
+                        aria-label="Select model response to view"
                     >
                         {renderSlots.map((slot, i) => {
+                            const selected = activeTab === i;
+                            const label = slot.displayName || slot.resp?.display_name || slot.streamBuf?.displayName || `Model ${i + 1}`;
+                            const firstLetter = label.charAt(0).toUpperCase();
+                            const providerColor: Record<string, string> = {
+                                openai: "bg-emerald-500",
+                                anthropic: "bg-orange-500",
+                                google: "bg-blue-500",
+                                mistral: "bg-violet-500",
+                            };
+                            const chipColor = providerColor[(slot.provider || slot.resp?.provider || "").toLowerCase().split("/")[0]] || "bg-primary";
+                            const isUnavailable = slot.type === "unavailable";
+                            const isSkeleton = slot.type === "skeleton";
+                            return (
+                                <button
+                                    key={slot.key}
+                                    role="tab"
+                                    aria-selected={selected}
+                                    aria-label={`${label} response`}
+                                    onClick={() => setActiveTab(i)}
+                                    className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all min-h-[36px] ${
+                                        selected
+                                            ? "bg-card text-foreground shadow-sm border border-border"
+                                            : "bg-muted/50 text-muted-foreground border border-transparent hover:border-border"
+                                    } ${isUnavailable ? "opacity-50" : ""} ${isSkeleton ? "animate-pulse" : ""}`}
+                                    disabled={isSkeleton && !selected}
+                                >
+                                    {!isSkeleton && !isUnavailable && (
+                                        <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${chipColor}`}>
+                                            {firstLetter}
+                                        </span>
+                                    )}
+                                    <span className="truncate max-w-20">{label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {/* Single visible panel */}
+                    <div className="min-h-[300px]">
+                        {renderSlots.map((slot, i) => {
+                            if (i !== activeTab) return null;
                             if (slot.type === "skeleton") {
-                                return (
-                                    <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
-                                        <SkeletonCard index={i} />
-                                    </div>
-                                );
+                                return <SkeletonCard key={slot.key} index={i} />;
                             }
-
                             if (slot.type === "unavailable") {
                                 return (
-                                    <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
-                                        <UnavailableModelCard
-                                            displayName={slot.displayName}
-                                            provider={slot.provider}
-                                            logoUrl={slot.logoUrl}
-                                            className="min-h-[350px]"
-                                        />
-                                    </div>
+                                    <UnavailableModelCard
+                                        key={slot.key}
+                                        displayName={slot.displayName}
+                                        provider={slot.provider}
+                                        logoUrl={slot.logoUrl}
+                                        className="min-h-[300px]"
+                                    />
                                 );
                             }
-
                             if (slot.type === "stream") {
                                 const streamBuf = slot.streamBuf!;
                                 return (
-                                    <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
-                                        <StreamingModelCard
-                                            displayName={streamBuf.displayName ?? "Model"}
-                                            provider={streamBuf.provider}
-                                            logoUrl={undefined}
-                                            state={streamBuf.state}
-                                            accumulatedText={streamBuf.accumulatedText}
-                                            errorCode={streamBuf.errorCode}
-                                            errorMessage={streamBuf.errorMessage}
-                                            className="min-h-[350px]"
-                                            onRetry={handleRetryAgent}
-                                        />
-                                    </div>
-                                );
-                            }
-
-                            const resp = slot.resp!;
-                            return (
-                                <div key={slot.key} className="snap-start shrink-0 w-[calc(100vw-4rem)] max-w-sm">
-                                    <ModelCard
-                                        resp={resp}
-                                        className="min-h-[350px]"
+                                    <StreamingModelCard
+                                        key={slot.key}
+                                        displayName={streamBuf.displayName ?? "Model"}
+                                        provider={streamBuf.provider}
+                                        logoUrl={undefined}
+                                        state={streamBuf.state}
+                                        accumulatedText={streamBuf.accumulatedText}
+                                        errorCode={streamBuf.errorCode}
+                                        errorMessage={streamBuf.errorMessage}
+                                        className="min-h-[300px]"
                                         onRetry={handleRetryAgent}
                                     />
-                                </div>
+                                );
+                            }
+                            const resp = slot.resp!;
+                            return (
+                                <ModelCard
+                                    key={slot.key}
+                                    resp={resp}
+                                    className="min-h-[300px]"
+                                    onRetry={handleRetryAgent}
+                                />
                             );
                         })}
-                        {/* Right-edge peek spacer */}
-                        <div className="shrink-0 w-8" aria-hidden />
                     </div>
-                    {/* Dot indicators */}
-                    {renderSlots.length > 1 && (
-                        <div className="flex justify-center gap-1.5">
-                            {Array.from({ length: renderSlots.length }).map((_, i) => (
-                                <div
-                                    key={i}
-                                    className={`h-1.5 rounded-full transition-all ${
-                                        i === activeTab
-                                            ? "w-4 bg-primary"
-                                            : renderSlots[i]?.type !== "skeleton"
-                                                ? "w-1.5 bg-primary/40"
-                                                : "w-1.5 bg-muted-foreground/20"
-                                    }`}
-                                />
-                            ))}
-                        </div>
-                    )}
                 </div>
 
                 {/* Desktop View: Render grid of all cards with keyboard navigation */}

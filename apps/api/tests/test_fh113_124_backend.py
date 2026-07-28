@@ -2,7 +2,7 @@ import uuid
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from models import Debate, User
+from models import Debate, Message, User
 from sqlmodel import select
 
 
@@ -175,3 +175,30 @@ def test_build_sha_metadata(authenticated_client):
     assert "git_sha" in data
     assert isinstance(data["git_sha"], str)
     assert data["status"] == "ok"
+
+
+def test_fetch_responses_view_current(authenticated_client, db_session):
+    """PS170: GET /debates/{id}/responses?view=current returns only latest per model."""
+    from services.debate_responses import fetch_persisted_responses, RESPONSE_ROLES
+
+    user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
+    debate_id = str(uuid.uuid4())
+    debate = Debate(id=debate_id, prompt="View=current test", user_id=user.id, status="completed")
+    db_session.add(debate)
+    db_session.flush()
+
+    msg1 = Message(debate_id=debate_id, role="arena_response", persona="model-a", content="Response 0", round_index=1)
+    msg2 = Message(debate_id=debate_id, role="arena_response", persona="model-b", content="Response 1", round_index=1)
+    msg3 = Message(debate_id=debate_id, role="arena_response", persona="model-a", content="Latest response", round_index=2)
+    for m in [msg1, msg2, msg3]:
+        db_session.add(m)
+    db_session.commit()
+
+    result_all = fetch_persisted_responses(db_session, debate, is_public=False, view="all")
+    assert result_all["summary"]["persisted"] == 3
+
+    result_current = fetch_persisted_responses(db_session, debate, is_public=False, view="current")
+    assert result_current["summary"]["persisted"] == 2
+    model_a_entries = [it for it in result_current["items"] if it["model_id"] == "model-a"]
+    assert len(model_a_entries) == 1
+    assert model_a_entries[0]["content"] == "Latest response"

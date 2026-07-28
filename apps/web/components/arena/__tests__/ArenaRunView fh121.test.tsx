@@ -153,7 +153,8 @@ describe("ArenaRunView — FH121 regression tests", () => {
     );
 
     expect(screen.queryAllByTestId(/^skeleton-card-/)).toHaveLength(0);
-    expect(screen.getAllByTestId("unavailable-card")).toHaveLength(4);
+    // Desktop grid + mobile active panel (chip selector shows 1 card at a time)
+    expect(screen.getAllByTestId("unavailable-card")).toHaveLength(3);
   });
 
   it("renders a partial terminal response beside an explicit unavailable state", () => {
@@ -192,7 +193,8 @@ describe("ArenaRunView — FH121 regression tests", () => {
 
     expect(screen.queryAllByTestId(/^skeleton-card-/)).toHaveLength(0);
     expect(screen.getAllByTestId("model-card")).toHaveLength(2);
-    expect(screen.getAllByTestId("unavailable-card")).toHaveLength(2);
+    // Desktop grid: 1 unavailable; mobile active tab shows the persisted card (0 unavailable)
+    expect(screen.getAllByTestId("unavailable-card")).toHaveLength(1);
   });
 
   it("test_terminal_failed_shows_error_state", () => {
@@ -298,7 +300,8 @@ describe("ArenaRunView — FH121 regression tests", () => {
     );
 
     expect(screen.queryByTestId("skeleton-card-0")).not.toBeInTheDocument();
-    expect(screen.getAllByText("GPT-4o")).toHaveLength(2);
+    // Chip button + mobile panel + desktop grid
+    expect(screen.getAllByText("GPT-4o")).toHaveLength(3);
   });
 
   it("mobile segment tabs control which Run section is visible", () => {

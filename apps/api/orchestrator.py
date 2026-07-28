@@ -736,6 +736,11 @@ async def run_debate(
                     tokens_total=float(result.usage_tracker.total_tokens),
                 )
 
+                orchestration_report = result.final_meta.get("synthesis_report") or {}
+                orch_verification_status = "unavailable"
+                if isinstance(orchestration_report, dict):
+                    orch_qm = orchestration_report.get("quality_meta") or {}
+                    orch_verification_status = orch_qm.get("verification_status", "unavailable")
                 await backend.publish(
                     channel_id,
                     {
@@ -748,7 +753,7 @@ async def run_debate(
                         "revision": result.final_meta.get("synthesis_revision", 1),
                         "status": "final" if result.status == "completed" else "failed",
                         "content": result.final_answer,
-                        "report": result.final_meta.get("synthesis_report"),
+                        "report": orchestration_report,
                         "input_hash": result.final_meta.get("synthesis_input_hash"),
                         "response_ids": result.final_meta.get("synthesis_response_ids", []),
                         "successful_count": result.final_meta.get("successful_count", 0),
@@ -756,6 +761,10 @@ async def run_debate(
                         "provisional_promoted": result.final_meta.get(
                             "provisional_promoted", False
                         ),
+                        "verification_status": orch_verification_status,
+                        "is_verified": orch_verification_status == "verified",
+                        "pipeline_type": "legacy",
+                        "report_version": 1,
                         "payload": {
                             "content": result.final_answer,
                             "meta": result.final_meta,

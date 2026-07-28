@@ -505,6 +505,10 @@ async def _persist_synthesis_revision(
                 _assert_revision_identity_matches(existing, revision)
                 persisted = existing
 
+    rev_verification_status = "unavailable"
+    if isinstance(persisted.report, dict):
+        rev_qm = persisted.report.get("quality_meta") or {}
+        rev_verification_status = rev_qm.get("verification_status", "unavailable")
     await _publish_lifecycle_best_effort(
         backend,
         f"debate:{debate_id}",
@@ -522,6 +526,10 @@ async def _persist_synthesis_revision(
             "response_ids": list(persisted.response_ids),
             "successful_count": persisted.successful_count,
             "total_count": persisted.total_count,
+            "verification_status": rev_verification_status,
+            "is_verified": rev_verification_status == "verified",
+            "pipeline_type": "structured",
+            "report_version": 1,
         },
     )
     return persisted
@@ -728,6 +736,8 @@ async def _generate_and_persist_streamed_synthesis_revision(
             "response_ids": list(response_ids),
             "successful_count": len(ordered),
             "total_count": total_count,
+            "pipeline_type": "structured",
+            "report_version": 1,
         },
     )
 
@@ -2113,6 +2123,13 @@ async def run_arena(
     if synthesis_usage_call is not None:
         usage.add_call(synthesis_usage_call)
     synthesis_success = meta_updates.get("synthesis_status") == "succeeded"
+    verification_status = "unavailable"
+    if isinstance(synthesis_report, dict):
+        qm = synthesis_report.get("quality_meta") or {}
+        verification_status = qm.get("verification_status", "unavailable")
+    elif meta_updates.get("verification_status"):
+        verification_status = meta_updates["verification_status"]
+    is_verified = verification_status == "verified"
     await _publish_lifecycle_best_effort(
         backend,
         f"debate:{debate_id}",
@@ -2131,6 +2148,10 @@ async def run_arena(
             "successful_count": len(successful),
             "total_count": len(model_responses),
             "provisional_promoted": bool(meta_updates.get("provisional_promoted", False)),
+            "verification_status": verification_status,
+            "is_verified": is_verified,
+            "pipeline_type": "structured",
+            "report_version": 1,
         },
     )
     if all_models_terminal_at is not None:

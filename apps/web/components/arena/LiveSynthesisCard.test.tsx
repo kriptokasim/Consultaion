@@ -31,6 +31,10 @@ const baseState: SynthesisStreamingState = {
   totalCount: 2,
   lastDeltaSequence: 0,
   provisionalPromoted: false,
+  verificationStatus: "unavailable",
+  isVerified: false,
+  pipelineType: "structured",
+  reportVersion: 1,
 };
 
 describe("LiveSynthesisCard", () => {

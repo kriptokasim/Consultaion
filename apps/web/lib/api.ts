@@ -563,9 +563,14 @@ export async function fetchJsonOrThrow<T>(
 export async function getDebateResponses(
   debateId: string,
   options?: RequestOptions,
+  view?: "current" | "history" | "all",
 ): Promise<PersistedResponsesResponse> {
+  let path = `/debates/${debateId}/responses`;
+  if (view && view !== "all") {
+    path += `?view=${view}`;
+  }
   const raw = await fetchJsonOrThrow<unknown>(
-    `/debates/${debateId}/responses`,
+    path,
     options,
   );
   const parsed = persistedResponsesSchema.safeParse(raw);

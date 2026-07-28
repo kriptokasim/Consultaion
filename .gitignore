@@ -76,3 +76,4 @@ scratch_user_request_prev.md
 graphify-out/
 *.tsbuildinfo
 refactor.cjs
+llama.cpp/

@@ -121,6 +121,10 @@ function synthesisBoundaryToSnapshot(
           response_ids: payload.response_ids,
           successful_count: payload.successful_count,
           total_count: payload.total_count,
+          verification_status: payload.verification_status,
+          is_verified: payload.is_verified,
+          pipeline_type: payload.pipeline_type,
+          report_version: payload.report_version,
         },
       };
     case "arena_synthesis_revision":
@@ -137,6 +141,10 @@ function synthesisBoundaryToSnapshot(
           response_ids: payload.response_ids,
           successful_count: payload.successful_count,
           total_count: payload.total_count,
+          verification_status: payload.verification_status,
+          is_verified: payload.is_verified,
+          pipeline_type: payload.pipeline_type,
+          report_version: payload.report_version,
         },
       };
     case "arena_synthesis_finalized":
@@ -154,6 +162,10 @@ function synthesisBoundaryToSnapshot(
           successful_count: payload.successful_count,
           total_count: payload.total_count,
           provisional_promoted: payload.provisional_promoted,
+          verification_status: payload.verification_status,
+          is_verified: payload.is_verified,
+          pipeline_type: payload.pipeline_type,
+          report_version: payload.report_version,
         },
       };
     case "arena_synthesis":
@@ -171,6 +183,10 @@ function synthesisBoundaryToSnapshot(
           successful_count: payload.successful_count,
           total_count: payload.total_count,
           provisional_promoted: payload.provisional_promoted,
+          verification_status: payload.verification_status,
+          is_verified: payload.is_verified,
+          pipeline_type: payload.pipeline_type,
+          report_version: payload.report_version,
         },
       };
     default:
@@ -423,6 +439,8 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const responsesGenerationRef = useRef(0);
   const timelineGenerationRef = useRef(0);
   const responseRefreshFlightRef = useRef<ResponseRefreshFlight | null>(null);
+  const lastRefreshTimeRef = useRef<number>(0);
+  const MIN_REFRESH_INTERVAL_MS = 2000;
   const activeDebateIdRef = useRef(debateId);
   activeDebateIdRef.current = debateId;
 
@@ -513,7 +531,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     dispatchConn({ type: "RESPONSES_LOADING" });
 
     try {
-      const responsesData = await getDebateResponses(id, { signal, timeoutMs: RESPONSES_TIMEOUT_MS });
+      const responsesData = await getDebateResponses(id, { signal, timeoutMs: RESPONSES_TIMEOUT_MS }, "current");
       if (isStale()) return;
 
       setResponses(responsesData.items);
@@ -676,6 +694,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   }, []);
 
   const refreshPersistedResponses = useCallback((id: string, generation: number) => {
+    const now = Date.now();
+    if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL_MS) {
+      const elapsed = now - lastRefreshTimeRef.current;
+      if (elapsed < MIN_REFRESH_INTERVAL_MS / 2) {
+        return Promise.resolve();
+      }
+    }
+
     const current = responseRefreshFlightRef.current;
     if (current && current.debateId === id && current.generation === generation) {
       current.queued = true;
@@ -692,7 +718,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       try {
         do {
           flight.queued = false;
-          const data = await getDebateResponses(id);
+          const data = await getDebateResponses(id, undefined, "current");
           if (
             activeDebateIdRef.current !== id
             || requestGenerationRef.current !== generation
@@ -701,6 +727,7 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
           setResponses(data.items);
           dispatchConn({ type: "RESPONSES_LOADED", count: data.items.length });
           dispatchStreaming({ type: "MERGE_PERSISTED", payloads: data.items });
+          lastRefreshTimeRef.current = Date.now();
         } while (flight.queued);
       } catch (err: unknown) {
         if (activeDebateIdRef.current === id) {

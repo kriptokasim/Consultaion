@@ -186,6 +186,10 @@ export interface ArenaSynthesisEventBase {
     successful_count?: number;
     total_count?: number;
     provisional_promoted?: boolean;
+    verification_status?: "verified" | "unverified" | "failed" | "unavailable";
+    is_verified?: boolean;
+    pipeline_type?: "structured" | "legacy";
+    report_version?: number;
     at?: string;
 }
 
@@ -291,6 +295,10 @@ export type DebateEvent =
         successful_count?: number;
         total_count?: number;
         provisional_promoted?: boolean;
+        verification_status?: "verified" | "unverified" | "failed" | "unavailable";
+        is_verified?: boolean;
+        pipeline_type?: "structured" | "legacy";
+        report_version?: number;
     }
     | ArenaSynthesisStartedEvent
     | ArenaSynthesisRevisionEvent

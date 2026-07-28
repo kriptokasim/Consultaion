@@ -176,6 +176,11 @@ async def get_debate_events(
             )
         elif message.role == "arena_synthesis_revision":
             meta = message.meta or {}
+            rev_sreport = meta.get("synthesis_report") or {}
+            rev_vs = "unavailable"
+            if isinstance(rev_sreport, dict):
+                rev_qm = rev_sreport.get("quality_meta") or {}
+                rev_vs = rev_qm.get("verification_status", "unavailable")
             events.append(
                 {
                     "type": "arena_synthesis_revision",
@@ -185,17 +190,26 @@ async def get_debate_events(
                     "revision": meta.get("revision", 0),
                     "status": meta.get("status", "provisional"),
                     "content": message.content,
-                    "report": meta.get("synthesis_report"),
+                    "report": rev_sreport,
                     "input_hash": meta.get("input_hash"),
                     "response_ids": meta.get("response_ids", []),
                     "successful_count": meta.get("successful_count", 0),
                     "total_count": meta.get("total_count", 0),
+                    "verification_status": rev_vs,
+                    "is_verified": rev_vs == "verified",
+                    "pipeline_type": "structured",
+                    "report_version": 1,
                     "mode": "arena",
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }
             )
         elif message.role == "arena_synthesis":
             meta = message.meta or {}
+            synth_report = meta.get("synthesis_report") or {}
+            synth_vs = "unavailable"
+            if isinstance(synth_report, dict):
+                synth_qm = synth_report.get("quality_meta") or {}
+                synth_vs = synth_qm.get("verification_status", "unavailable")
             events.append(
                 {
                     "type": "arena_synthesis",
@@ -209,12 +223,16 @@ async def get_debate_events(
                     "role": "synthesizer",
                     "text": message.content,
                     "content": message.content,
-                    "report": meta.get("synthesis_report"),
+                    "report": synth_report,
                     "input_hash": meta.get("input_hash"),
                     "response_ids": meta.get("response_ids", []),
                     "successful_count": meta.get("successful_count", 0),
                     "total_count": meta.get("total_count", 0),
                     "provisional_promoted": meta.get("provisional_promoted", False),
+                    "verification_status": synth_vs,
+                    "is_verified": synth_vs == "verified",
+                    "pipeline_type": "legacy" if meta.get("contract_version") != 1 else "structured",
+                    "report_version": 1,
                     "mode": "arena",
                     "at": message.created_at.isoformat() if message.created_at else None,
                 }
@@ -296,12 +314,18 @@ async def get_debate_responses(
     debate_id: str,
     session: Session = Depends(get_session),
     current_user: Optional[User] = Depends(get_optional_user),
+    view: str = Query("all", description="'current' — latest per model | 'history' — all rows | 'all' — all rows (default)"),
 ):
-    """Canonical persisted model responses (PR-FH89).
+    """Canonical persisted model responses (PR-FH89, PS170).
 
     Independent of timeline / events / scores. Returns the persisted
     Message rows for a debate normalized into a single DTO. A database
     failure becomes a non-2xx response — never a successful empty list.
+
+    Query parameters:
+      - view: 'current' returns only the latest response per model_id.
+              'history' or 'all' returns every persisted row.
+              Default is 'all' for backward compatibility.
     """
     from services.debate_responses import (
         ResponsesQueryError,
@@ -311,8 +335,12 @@ async def get_debate_responses(
     debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     public_view = (not current_user) and is_debate_public(debate)
 
+    resolved_view = view if view in ("current", "history", "all") else "all"
+    if resolved_view == "history":
+        resolved_view = "all"
+
     try:
-        payload = fetch_persisted_responses(session, debate, is_public=public_view)
+        payload = fetch_persisted_responses(session, debate, is_public=public_view, view=resolved_view)
     except ResponsesQueryError as exc:
         logger.error("persisted_responses_query_failed debate_id=%s error=%s", debate_id, exc)
         raise AppError(

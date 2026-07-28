@@ -18,8 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from models import Debate, Message
-from sqlalchemy import select
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
@@ -116,18 +115,34 @@ def _expected_model_count(debate: Debate) -> int:
     return 0
 
 
+def _safe_column(obj: Any, name: str, default: Any = None) -> Any:
+    """Access a SQLAlchemy model column safely, returning default on missing column."""
+    try:
+        return getattr(obj, name)
+    except (AttributeError, KeyError):
+        return default
+
+
 def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
     """Convert a Message ORM row into the canonical DTO dict."""
-    meta = msg.meta if isinstance(msg.meta, dict) else {}
+    meta_raw = _safe_column(msg, "meta")
+    meta = meta_raw if isinstance(meta_raw, dict) else {}
 
-    model_id = _getattr_safely(meta, "model_id", default=msg.persona) or msg.persona or "unknown"
+    persona = _safe_column(msg, "persona")
+    role = _safe_column(msg, "role") or "arena_response"
+    content = _safe_column(msg, "content") or _getattr_safely(meta, "content") or _getattr_safely(meta, "text") or ""
+    round_index = _safe_column(msg, "round_index") or 0
+    debate_id = _safe_column(msg, "debate_id") or ""
+    msg_id = _safe_column(msg, "id")
+    created_at = _safe_column(msg, "created_at")
+
+    model_id = _getattr_safely(meta, "model_id", default=persona) or persona or "unknown"
     display_name = (
         _getattr_safely(meta, "display_name")
         or _getattr_safely(meta, "model_display_name")
         or model_id
     )
     provider = _getattr_safely(meta, "provider") or "ai"
-    role = msg.role or "arena_response"
     response_type = role if role in RESPONSE_ROLES else "arena_response"
 
     success_flag = _coerce_bool(_getattr_safely(meta, "success", default=True))
@@ -136,17 +151,17 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
     retryable = _coerce_bool(_getattr_safely(meta, "retryable", default=False))
     _error_http_status = _getattr_safely(meta, "error_http_status")
 
-    content = msg.content or _getattr_safely(meta, "content") or _getattr_safely(meta, "text") or ""
+    response_id = _safe_column(msg, "response_id")
 
     item: Dict[str, Any] = {
-        "id": msg.id,
-        "response_id": getattr(msg, "response_id", None)
+        "id": msg_id,
+        "response_id": response_id
         or _getattr_safely(meta, "response_id")
-        or msg.id,
-        "debate_id": msg.debate_id,
+        or msg_id,
+        "debate_id": debate_id,
         "response_type": response_type,
         "role": role,
-        "round": int(msg.round_index or 0),
+        "round": int(round_index),
         "model_id": model_id,
         "display_name": display_name,
         "provider": provider,
@@ -155,7 +170,7 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
         "error_code": error_code,
         "error_message": error_message,
         "retryable": retryable,
-        "created_at": msg.created_at.isoformat() if msg.created_at else None,
+        "created_at": created_at.isoformat() if created_at else None,
         "metadata": {
             "logo_url": _getattr_safely(meta, "logo_url"),
             "persona_type": _getattr_safely(meta, "persona_type"),
@@ -191,8 +206,14 @@ def fetch_persisted_responses(
     debate: Debate,
     *,
     is_public: bool,
+    view: str = "all",
 ) -> Dict[str, Any]:
     """Query persisted Message rows and return the canonical contract.
+
+    Args:
+        view: "all" — every persisted row (default, backward-compatible)
+              "current" — only the latest response per model_id
+              "history" — all rows (alias for "all" with explicit intent)
 
     Raises ResponsesQueryError on database failure so the route handler can
     return a non-2xx response. Never coerces failures into `items: []`.
@@ -212,6 +233,18 @@ def fetch_persisted_responses(
         raise ResponsesQueryError(str(exc)) from exc
 
     items = [_normalize_message(m, is_public=is_public) for m in messages]
+
+    # PS170: Filter to latest-per-model when view=current
+    if view == "current" and items:
+        seen: dict[str, Dict[str, Any]] = {}
+        for it in items:
+            mid = it["model_id"]
+            existing = seen.get(mid)
+            if existing is None or (it["created_at"] or "") >= (existing["created_at"] or ""):
+                seen[mid] = it
+        items = list(seen.values())
+        # Restore chronological order
+        items.sort(key=lambda x: x.get("created_at") or "")
 
     successful = sum(1 for it in items if it["success"])
     failed = len(items) - successful

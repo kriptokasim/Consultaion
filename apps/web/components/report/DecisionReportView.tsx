@@ -366,7 +366,7 @@ export function DecisionReportView({
 
         {/* Verdict */}
         {activeReport.verdict && (
-          <ReportSection id="report-verdict" title="Verdict">
+          <ReportSection id="report-verdict" title="Verdict" collapsible defaultOpen>
             <VerdictCard
               recommendation={activeReport.verdict.recommendation || ""}
               confidence={activeReport.verdict.confidence || 0.5}
@@ -378,14 +378,14 @@ export function DecisionReportView({
 
         {/* Key Findings */}
         {activeReport.key_findings && activeReport.key_findings.length > 0 && (
-          <ReportSection id="report-findings" title="Key Findings">
+          <ReportSection id="report-findings" title="Key Findings" collapsible>
             <KeyFindingsGrid findings={activeReport.key_findings as any} />
           </ReportSection>
         )}
 
         {/* Model Positions */}
         {activeReport.model_positions && activeReport.model_positions.length > 0 && (
-          <ReportSection id="report-positions" title="Model Positions">
+          <ReportSection id="report-positions" title="Model Positions" collapsible>
             <ModelPositionsTable positions={activeReport.model_positions as any} />
           </ReportSection>
         )}
@@ -397,21 +397,21 @@ export function DecisionReportView({
 
         {/* Risks & Assumptions */}
         {activeReport.risks_and_assumptions && activeReport.risks_and_assumptions.length > 0 && (
-          <ReportSection id="report-risks" title="Risks & Assumptions">
+          <ReportSection id="report-risks" title="Risks & Assumptions" collapsible>
             <RiskMatrix risks={activeReport.risks_and_assumptions as any} />
           </ReportSection>
         )}
 
         {/* Next Actions */}
         {activeReport.next_actions && activeReport.next_actions.length > 0 && (
-          <ReportSection id="report-actions" title="Next Actions">
+          <ReportSection id="report-actions" title="Next Actions" collapsible>
             <NextActionsList actions={activeReport.next_actions as any} />
           </ReportSection>
         )}
 
         {/* Caveats */}
         {activeReport.caveats && activeReport.caveats.length > 0 && (
-          <ReportSection id="report-caveats" title="Caveats">
+          <ReportSection id="report-caveats" title="Caveats" collapsible>
             <ul className="space-y-1">
               {activeReport.caveats.map((caveat, i) => (
                 <li key={i} className="text-sm text-slate-600 dark:text-slate-400 flex items-start gap-2">

@@ -110,6 +110,67 @@ describe("synthesisReducer", () => {
     expect(stale).toBe(final);
   });
 
+  it("carries verification_status and is_verified through the pipeline", () => {
+    const startedState = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "STARTED",
+      payload: { ...started, verification_status: "unverified", is_verified: false, pipeline_type: "structured", report_version: 1 },
+    });
+    expect(startedState.status).toBe("streaming");
+    expect(startedState.verificationStatus).toBe("unverified");
+    expect(startedState.isVerified).toBe(false);
+    expect(startedState.pipelineType).toBe("structured");
+    expect(startedState.reportVersion).toBe(1);
+
+    const finalizedState = synthesisReducer(startedState, {
+      type: "FINALIZED",
+      payload: {
+        ...started,
+        revision: 1,
+        status: "final",
+        content: "Verified final",
+        successful_count: 2,
+        verification_status: "verified",
+        is_verified: true,
+        pipeline_type: "structured",
+        report_version: 1,
+      },
+    });
+    expect(finalizedState.status).toBe("final");
+    expect(finalizedState.verificationStatus).toBe("verified");
+    expect(finalizedState.isVerified).toBe(true);
+    expect(finalizedState.pipelineType).toBe("structured");
+    expect(finalizedState.reportVersion).toBe(1);
+  });
+
+  it("clears text and report on failed final synthesis", () => {
+    const provisional = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "REVISION",
+      payload: {
+        ...started,
+        content: "Provisional text",
+        report: { title: "Provisional" },
+        verification_status: "unverified",
+      },
+    });
+    expect(provisional.text).toBe("Provisional text");
+    expect(provisional.report).toEqual({ title: "Provisional" });
+
+    const failed = synthesisReducer(provisional, {
+      type: "FINALIZED",
+      payload: {
+        ...started,
+        revision: 1,
+        status: "failed",
+        content: "Should not appear",
+        report: null,
+        verification_status: "failed",
+      },
+    });
+    expect(failed.status).toBe("failed");
+    expect(failed.text).toBe("");
+    expect(failed.report).toBeNull();
+  });
+
   it("streams a final revision and rejects late provisional deltas", () => {
     const provisional = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
       type: "DELTA",

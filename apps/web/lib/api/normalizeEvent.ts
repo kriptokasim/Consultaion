@@ -149,6 +149,10 @@ export function normalizeEvent(raw: RawEvent): DebateEvent {
                 successful_count: (flat.successful_count as number) ?? undefined,
                 total_count: (flat.total_count as number) ?? undefined,
                 provisional_promoted: (flat.provisional_promoted as boolean) ?? undefined,
+                verification_status: (flat.verification_status as "verified" | "unverified" | "failed" | "unavailable") ?? undefined,
+                is_verified: (flat.is_verified as boolean) ?? undefined,
+                pipeline_type: (flat.pipeline_type as "structured" | "legacy") ?? undefined,
+                report_version: (flat.report_version as number) ?? undefined,
                 at,
             };
 
@@ -171,6 +175,10 @@ export function normalizeEvent(raw: RawEvent): DebateEvent {
                 successful_count: (flat.successful_count as number) ?? undefined,
                 total_count: (flat.total_count as number) ?? undefined,
                 provisional_promoted: (flat.provisional_promoted as boolean) ?? undefined,
+                verification_status: (flat.verification_status as "verified" | "unverified" | "failed" | "unavailable") ?? undefined,
+                is_verified: (flat.is_verified as boolean) ?? undefined,
+                pipeline_type: (flat.pipeline_type as "structured" | "legacy") ?? undefined,
+                report_version: (flat.report_version as number) ?? undefined,
                 at,
             };
 
@@ -238,13 +246,20 @@ export function normalizeTimelineItems(items: unknown[], debateId: string): Time
         // Stable deduplication key
         let dedupKey = raw.id;
         if (!dedupKey && raw.payload?.id) dedupKey = raw.payload.id;
+        if (!dedupKey && raw.synthesis_id) dedupKey = raw.synthesis_id;
+        if (!dedupKey && raw.payload?.synthesis_id) dedupKey = raw.payload?.synthesis_id;
         if (!dedupKey && type === "arena_response") {
             const modelId = raw.model_id || raw.payload?.model_id || "unknown_model";
             dedupKey = `${type}-${modelId}-${ts}`;
         }
-        // Fallback for types without obvious stable IDs
+        // Fallback: use first 8 chars of the type + timestamp + first 64 chars of payload content hash
         if (!dedupKey) {
-            dedupKey = `${type}-${ts}-${Math.random().toString(36).substring(7)}`;
+            const contentFingerprint = typeof raw.content === "string"
+                ? raw.content.slice(0, 64)
+                : typeof raw.payload?.content === "string"
+                    ? raw.payload.content.slice(0, 64)
+                    : "";
+            dedupKey = `${type}-${ts}-${contentFingerprint}`;
         }
 
         if (seenKeys.has(dedupKey)) continue;

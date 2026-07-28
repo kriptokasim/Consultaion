@@ -91,11 +91,33 @@ def _heuristic_extract(
     )
 
 
+_LOCALE_ALIASES: dict[str, list[str]] = {
+    "summary": ["summary", "executive summary", "overview", "conclusion", "özet", "yönetici özeti", "genel bakış", "sonuç"],
+    "verdict": ["verdict", "recommendation", "conclusion", "decision", "karar", "tavsiye", "hüküm", "öneri"],
+    "findings": ["findings", "key findings", "insights", "analysis", "results", "bulgular", "analiz", "sonuçlar", "temel bulgular"],
+    "risks": ["risks", "risks and assumptions", "concerns", "challenges", "riskler", "varsayımlar", "endişeler", "zorluklar"],
+    "next_actions": ["next steps", "next actions", "actions", "recommendations", "what to do", "sonraki adımlar", "eylemler", "öneriler"],
+}
+
+
+def _match_section_key(sections: dict[str, str], normals: list[str]) -> str | None:
+    low_keys = list(sections.keys())
+    for n in normals:
+        for lk in low_keys:
+            if lk.strip() == n:
+                return lk
+    for n in normals:
+        for lk in low_keys:
+            if n in lk or lk in n:
+                return lk
+    return None
+
+
 def _split_sections(text: str) -> dict[str, str]:
-    """Split markdown text into sections by headers."""
-    sections = {}
+    """Split markdown text into sections by headers. Language-independent."""
+    sections: dict[str, str] = {}
     current_key = "intro"
-    current_lines = []
+    current_lines: list[str] = []
 
     for line in text.split("\n"):
         header_match = re.match(r"^#{1,3}\s+(.*)", line)
@@ -115,9 +137,9 @@ def _split_sections(text: str) -> dict[str, str]:
 
 def _extract_summary(text: str, sections: dict[str, str]) -> str:
     """Extract executive summary from text."""
-    for key in ["summary", "executive summary", "overview", "conclusion"]:
-        if key in sections:
-            return sections[key][:500]
+    match = _match_section_key(sections, _LOCALE_ALIASES["summary"])
+    if match:
+        return sections[match][:500]
 
     # Use first paragraph if no named section found
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip() and not p.strip().startswith("#")]
@@ -130,10 +152,9 @@ def _extract_summary(text: str, sections: dict[str, str]) -> str:
 def _extract_verdict(text: str, sections: dict[str, str]) -> Verdict:
     """Extract verdict from text."""
     verdict_text = ""
-    for key in ["verdict", "recommendation", "conclusion", "decision"]:
-        if key in sections:
-            verdict_text = sections[key]
-            break
+    match = _match_section_key(sections, _LOCALE_ALIASES["verdict"])
+    if match:
+        verdict_text = sections[match]
 
     if not verdict_text:
         verdict_text = text[-500:] if len(text) > 500 else text
@@ -166,32 +187,27 @@ def _extract_verdict(text: str, sections: dict[str, str]) -> Verdict:
 def _extract_key_findings(sections: dict[str, str]) -> list[KeyFinding]:
     """Extract key findings from sections."""
     findings = []
-    finding_keys = ["findings", "key findings", "insights", "analysis", "results"]
+    match = _match_section_key(sections, _LOCALE_ALIASES["findings"])
 
-    for key in finding_keys:
-        if key in sections:
-            content = sections[key]
-            # Split by numbered items or bullet points
-            items = re.split(r"\n(?:\d+[\.\)]\s+|\-\s+|\*\s+)", content)
-            for item in items:
-                item = item.strip()
-                if len(item) > 10:
-                    # Determine importance
-                    importance = "medium"
-                    lower = item.lower()
-                    if any(w in lower for w in ["critical", "essential", "key", "important"]):
-                        importance = "high"
-                    elif any(w in lower for w in ["minor", "low", "secondary"]):
-                        importance = "low"
+    if match:
+        content = sections[match]
+        items = re.split(r"\n(?:\d+[\.\)]\s+|\-\s+|\*\s+)", content)
+        for item in items:
+            item = item.strip()
+            if len(item) > 10:
+                importance = "medium"
+                lower = item.lower()
+                if any(w in lower for w in ["critical", "essential", "key", "important"]):
+                    importance = "high"
+                elif any(w in lower for w in ["minor", "low", "secondary"]):
+                    importance = "low"
 
-                    findings.append(KeyFinding(
-                        title=item[:80],
-                        summary=item[:300],
-                        importance=importance,
-                    ))
-            break
+                findings.append(KeyFinding(
+                    title=item[:80],
+                    summary=item[:300],
+                    importance=importance,
+                ))
 
-    # Limit to 6 findings
     return findings[:6]
 
 
@@ -204,7 +220,13 @@ def _build_model_positions(
 
     if model_responses:
         for resp in model_responses:
-            model_name = resp.get("model", resp.get("persona", "Unknown"))
+            model_name = (
+                resp.get("model")
+                or resp.get("display_name")
+                or resp.get("persona")
+                or resp.get("model_id")
+                or "Unknown"
+            )
             content = resp.get("content", resp.get("text", ""))
             stance = "supportive"
             lower = content.lower()
@@ -235,34 +257,32 @@ def _build_model_positions(
 def _extract_risks(sections: dict[str, str]) -> list[RiskAssumption]:
     """Extract risks and assumptions from sections."""
     risks = []
-    risk_keys = ["risks", "risks and assumptions", "concerns", "challenges"]
+    match = _match_section_key(sections, _LOCALE_ALIASES["risks"])
 
-    for key in risk_keys:
-        if key in sections:
-            content = sections[key]
-            items = re.split(r"\n(?:\d+[\.\)]\s+|\-\s+|\*\s+)", content)
-            for item in items:
-                item = item.strip()
-                if len(item) > 10:
-                    severity = "medium"
-                    lower = item.lower()
-                    if any(w in lower for w in ["critical", "severe", "major"]):
-                        severity = "critical"
-                    elif any(w in lower for w in ["high", "significant"]):
-                        severity = "high"
-                    elif any(w in lower for w in ["low", "minor"]):
-                        severity = "low"
+    if match:
+        content = sections[match]
+        items = re.split(r"\n(?:\d+[\.\)]\s+|\-\s+|\*\s+)", content)
+        for item in items:
+            item = item.strip()
+            if len(item) > 10:
+                severity = "medium"
+                lower = item.lower()
+                if any(w in lower for w in ["critical", "severe", "major"]):
+                    severity = "critical"
+                elif any(w in lower for w in ["high", "significant"]):
+                    severity = "high"
+                elif any(w in lower for w in ["low", "minor"]):
+                    severity = "low"
 
-                    risk_type = "risk"
-                    if any(w in lower for w in ["assume", "assuming", "assumption"]):
-                        risk_type = "assumption"
+                risk_type = "risk"
+                if any(w in lower for w in ["assume", "assuming", "assumption"]):
+                    risk_type = "assumption"
 
-                    risks.append(RiskAssumption(
-                        item=item[:200],
-                        type=risk_type,
-                        severity=severity,
-                    ))
-            break
+                risks.append(RiskAssumption(
+                    item=item[:200],
+                    type=risk_type,
+                    severity=severity,
+                ))
 
     return risks[:10]
 
@@ -270,21 +290,19 @@ def _extract_risks(sections: dict[str, str]) -> list[RiskAssumption]:
 def _extract_next_actions(sections: dict[str, str]) -> list[NextAction]:
     """Extract next actions from sections."""
     actions = []
-    action_keys = ["next steps", "next actions", "actions", "recommendations", "what to do"]
+    match = _match_section_key(sections, _LOCALE_ALIASES["next_actions"])
 
-    for key in action_keys:
-        if key in sections:
-            content = sections[key]
-            items = re.split(r"\n(?:\d+[\.\)]\s+|\-\s+|\*\s+)", content)
-            for i, item in enumerate(items):
-                item = item.strip()
-                if len(item) > 5:
-                    priority = "now" if i < 2 else "next" if i < 4 else "later"
-                    actions.append(NextAction(
-                        action=item[:200],
-                        priority=priority,
-                    ))
-            break
+    if match:
+        content = sections[match]
+        items = re.split(r"\n(?:\d+[\.\)]\s+|\-\s+|\*\s+)", content)
+        for i, item in enumerate(items):
+            item = item.strip()
+            if len(item) > 5:
+                priority = "now" if i < 2 else "next" if i < 4 else "later"
+                actions.append(NextAction(
+                    action=item[:200],
+                    priority=priority,
+                ))
 
     return actions[:6]
 

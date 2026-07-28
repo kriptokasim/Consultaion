@@ -18,6 +18,10 @@ export interface SynthesisStreamingState {
   totalCount: number;
   lastDeltaSequence: number;
   provisionalPromoted: boolean;
+  verificationStatus: "verified" | "unverified" | "failed" | "unavailable";
+  isVerified: boolean;
+  pipelineType: "structured" | "legacy";
+  reportVersion: number;
 }
 export const INITIAL_SYNTHESIS_STATE: SynthesisStreamingState = {
   synthesisId: null,
@@ -31,6 +35,10 @@ export const INITIAL_SYNTHESIS_STATE: SynthesisStreamingState = {
   totalCount: 0,
   lastDeltaSequence: 0,
   provisionalPromoted: false,
+  verificationStatus: "unavailable",
+  isVerified: false,
+  pipelineType: "structured",
+  reportVersion: 1,
 };
 
 export interface SynthesisDeltaPayload {
@@ -59,6 +67,10 @@ export interface SynthesisSnapshotPayload {
   successful_count?: number;
   total_count?: number;
   provisional_promoted?: boolean;
+  verification_status?: "verified" | "unverified" | "failed" | "unavailable";
+  is_verified?: boolean;
+  pipeline_type?: "structured" | "legacy";
+  report_version?: number;
 }
 
 export type SynthesisAction =
@@ -113,6 +125,10 @@ function fromSnapshot(
     totalCount: payload.total_count ?? 0,
     lastDeltaSequence: status === "streaming" ? state.lastDeltaSequence : 0,
     provisionalPromoted: Boolean(payload.provisional_promoted),
+    verificationStatus: payload.verification_status ?? state.verificationStatus,
+    isVerified: payload.is_verified ?? state.isVerified,
+    pipelineType: payload.pipeline_type ?? state.pipelineType,
+    reportVersion: payload.report_version ?? state.reportVersion,
   };
 }
 
@@ -155,6 +171,10 @@ export function synthesisReducer(
         totalCount: payload.total_count ?? state.totalCount,
         lastDeltaSequence: payload.delta_sequence,
         provisionalPromoted: false,
+        verificationStatus: state.verificationStatus,
+        isVerified: state.isVerified,
+        pipelineType: state.pipelineType,
+        reportVersion: state.reportVersion,
       };
     }
     case "REVISION":
@@ -165,12 +185,18 @@ export function synthesisReducer(
           ? "failed"
           : action.payload.status,
       );
-    case "FINALIZED":
-      return fromSnapshot(
+    case "FINALIZED": {
+      const failed = action.payload.status === "failed";
+      const base = fromSnapshot(
         state,
         action.payload,
-        action.payload.status === "failed" ? "failed" : "final",
+        failed ? "failed" : "final",
       );
+      if (failed) {
+        return { ...base, text: "", report: null };
+      }
+      return base;
+    }
     case "RESET":
       return INITIAL_SYNTHESIS_STATE;
     default:

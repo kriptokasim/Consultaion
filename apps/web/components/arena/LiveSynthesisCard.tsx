@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, ShieldCheck, ShieldAlert, ShieldQuestion, Sparkles } from "lucide-react";
 import SafeMarkdown from "@/components/content/SafeMarkdown";
 import {
   DecisionReportView,
@@ -12,6 +12,13 @@ import type { SynthesisStreamingState } from "@/lib/workspace/synthesisReducer";
 interface LiveSynthesisCardProps {
   state: SynthesisStreamingState;
 }
+
+const verificationBadge: Record<string, { label: string; icon: typeof ShieldCheck; className: string }> = {
+  verified: { label: "Verified", icon: ShieldCheck, className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  unverified: { label: "Unverified", icon: ShieldQuestion, className: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+  failed: { label: "Failed", icon: ShieldAlert, className: "bg-destructive/10 text-destructive" },
+  unavailable: { label: "Not checked", icon: ShieldQuestion, className: "bg-muted text-muted-foreground" },
+};
 
 export function LiveSynthesisCard({ state }: LiveSynthesisCardProps) {
   const { t } = useI18n();
@@ -34,6 +41,8 @@ export function LiveSynthesisCard({ state }: LiveSynthesisCardProps) {
       : isStreaming
         ? t("arena.synthesis.drafting", countParams)
         : t("arena.synthesis.draft", countParams);
+  const vs = state.verificationStatus || "unavailable";
+  const VB = verificationBadge[vs] || verificationBadge.unavailable;
 
   return (
     <article
@@ -48,27 +57,38 @@ export function LiveSynthesisCard({ state }: LiveSynthesisCardProps) {
             {t("arena.synthesis.title")}
           </h3>
         </div>
-        <span
-          className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-            isFinal
-              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-              : isFailed
-                ? "bg-destructive/10 text-destructive"
-                : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
-          }`}
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          {isStreaming ? (
-            <Loader2
-              className="h-3.5 w-3.5 motion-safe:animate-spin"
-              aria-hidden="true"
-            />
-          ) : isFinal ? (
-            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : null}
-          {statusLabel}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {isFinal && state.verificationStatus && (
+            <span
+              className={`inline-flex min-h-6 items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${VB.className}`}
+              title={`Verification: ${VB.label}`}
+            >
+              <VB.icon className="h-3 w-3" aria-hidden="true" />
+              {VB.label}
+            </span>
+          )}
+          <span
+            className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+              isFinal
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : isFailed
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+            }`}
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {isStreaming ? (
+              <Loader2
+                className="h-3.5 w-3.5 motion-safe:animate-spin"
+                aria-hidden="true"
+              />
+            ) : isFinal ? (
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : null}
+            {statusLabel}
+          </span>
+        </div>
       </header>
 
       <div className="min-w-0 p-4 sm:p-5">

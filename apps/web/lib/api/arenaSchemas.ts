@@ -3,6 +3,9 @@ import { z } from "zod";
 const nullableString = z.string().nullable().optional();
 const synthesisStatusSchema = z.enum(["provisional", "final", "failed"]);
 
+const verificationStatusSchema = z.enum(["verified", "unverified", "failed", "unavailable"]).optional();
+const pipelineTypeSchema = z.enum(["structured", "legacy"]).optional();
+
 const synthesisSnapshotFields = {
   contract_version: z.literal(1).optional(),
   debate_id: z.string().optional(),
@@ -13,6 +16,10 @@ const synthesisSnapshotFields = {
   response_ids: z.array(z.string()).default([]),
   successful_count: z.number().int().nonnegative(),
   total_count: z.number().int().nonnegative(),
+  verification_status: verificationStatusSchema,
+  is_verified: z.boolean().optional(),
+  pipeline_type: pipelineTypeSchema,
+  report_version: z.number().int().positive().optional(),
 };
 
 export const arenaSynthesisStartedSchema = z.object({
@@ -56,6 +63,10 @@ export const legacyArenaSynthesisSchema = z.object({
   successful_count: z.number().int().nonnegative().optional(),
   total_count: z.number().int().nonnegative().optional(),
   provisional_promoted: z.boolean().optional(),
+  verification_status: verificationStatusSchema,
+  is_verified: z.boolean().optional(),
+  pipeline_type: pipelineTypeSchema,
+  report_version: z.number().int().positive().optional(),
 }).passthrough();
 
 export const modelLifecycleSchema = z.object({
