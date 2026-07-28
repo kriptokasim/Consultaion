@@ -179,7 +179,7 @@ def test_build_sha_metadata(authenticated_client):
 
 def test_fetch_responses_view_current(authenticated_client, db_session):
     """PS170: GET /debates/{id}/responses?view=current returns only latest per model."""
-    from services.debate_responses import fetch_persisted_responses, RESPONSE_ROLES
+    from services.debate_responses import fetch_persisted_responses
 
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
     debate_id = str(uuid.uuid4())

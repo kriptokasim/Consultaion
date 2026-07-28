@@ -1,4 +1,3 @@
-import bcrypt
 import hashlib
 import hmac
 import logging
@@ -6,6 +5,7 @@ import secrets
 import time
 from typing import Any, Dict, Optional
 
+import bcrypt
 import jwt
 from deps import get_session
 from fastapi import Depends, HTTPException, Request, Response, status

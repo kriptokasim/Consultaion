@@ -77,3 +77,4 @@ graphify-out/
 *.tsbuildinfo
 refactor.cjs
 llama.cpp/
+.opencode/.github-token

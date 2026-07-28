@@ -3059,7 +3059,7 @@
           "debates"
         ],
         "summary": "Get Debate Responses",
-        "description": "Canonical persisted model responses (PR-FH89).\n\nIndependent of timeline / events / scores. Returns the persisted\nMessage rows for a debate normalized into a single DTO. A database\nfailure becomes a non-2xx response \u2014 never a successful empty list.",
+        "description": "Canonical persisted model responses (PR-FH89, PS170).\n\nIndependent of timeline / events / scores. Returns the persisted\nMessage rows for a debate normalized into a single DTO. A database\nfailure becomes a non-2xx response \u2014 never a successful empty list.\n\nQuery parameters:\n  - view: 'current' returns only the latest response per model_id.\n          'history' or 'all' returns every persisted row.\n          Default is 'all' for backward compatibility.",
         "operationId": "get_debate_responses_debates__debate_id__responses_get",
         "parameters": [
           {
@@ -3070,6 +3070,18 @@
               "type": "string",
               "title": "Debate Id"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "'current' \u2014 latest per model | 'history' \u2014 all rows | 'all' \u2014 all rows (default)",
+              "default": "all",
+              "title": "View"
+            },
+            "description": "'current' \u2014 latest per model | 'history' \u2014 all rows | 'all' \u2014 all rows (default)"
           }
         ],
         "responses": {
@@ -4327,7 +4339,7 @@
           "debates"
         ],
         "summary": "Get Debate Responses",
-        "description": "Canonical persisted model responses (PR-FH89).\n\nIndependent of timeline / events / scores. Returns the persisted\nMessage rows for a debate normalized into a single DTO. A database\nfailure becomes a non-2xx response \u2014 never a successful empty list.",
+        "description": "Canonical persisted model responses (PR-FH89, PS170).\n\nIndependent of timeline / events / scores. Returns the persisted\nMessage rows for a debate normalized into a single DTO. A database\nfailure becomes a non-2xx response \u2014 never a successful empty list.\n\nQuery parameters:\n  - view: 'current' returns only the latest response per model_id.\n          'history' or 'all' returns every persisted row.\n          Default is 'all' for backward compatibility.",
         "operationId": "get_debate_responses_api_v1_debates__debate_id__responses_get",
         "parameters": [
           {
@@ -4338,6 +4350,18 @@
               "type": "string",
               "title": "Debate Id"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "'current' \u2014 latest per model | 'history' \u2014 all rows | 'all' \u2014 all rows (default)",
+              "default": "all",
+              "title": "View"
+            },
+            "description": "'current' \u2014 latest per model | 'history' \u2014 all rows | 'all' \u2014 all rows (default)"
           }
         ],
         "responses": {
@@ -12326,13 +12350,6 @@
           "type": {
             "type": "string",
             "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
           }
         },
         "type": "object",

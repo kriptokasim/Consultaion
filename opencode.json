@@ -7,6 +7,17 @@
 
   "share": "disabled",
 
+  "mcp": {
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "enabled": true,
+      "env": {
+        "GITHUB_TOKEN": "{file:.opencode/.github-token}"
+      }
+    }
+  },
+
   "permission": {
     "*": "ask",
 
