@@ -50,6 +50,7 @@ def build_report_from_synthesis(
 def _try_parse_json_report(text: str) -> Optional[DecisionReport]:
     """Attempt to parse a DecisionReport from JSON in the text."""
     from utils.json_utils import extract_and_parse_json
+
     data = extract_and_parse_json(text)
     if data and isinstance(data, dict):
         try:
@@ -92,11 +93,57 @@ def _heuristic_extract(
 
 
 _LOCALE_ALIASES: dict[str, list[str]] = {
-    "summary": ["summary", "executive summary", "overview", "conclusion", "özet", "yönetici özeti", "genel bakış", "sonuç"],
-    "verdict": ["verdict", "recommendation", "conclusion", "decision", "karar", "tavsiye", "hüküm", "öneri"],
-    "findings": ["findings", "key findings", "insights", "analysis", "results", "bulgular", "analiz", "sonuçlar", "temel bulgular"],
-    "risks": ["risks", "risks and assumptions", "concerns", "challenges", "riskler", "varsayımlar", "endişeler", "zorluklar"],
-    "next_actions": ["next steps", "next actions", "actions", "recommendations", "what to do", "sonraki adımlar", "eylemler", "öneriler"],
+    "summary": [
+        "summary",
+        "executive summary",
+        "overview",
+        "conclusion",
+        "özet",
+        "yönetici özeti",
+        "genel bakış",
+        "sonuç",
+    ],
+    "verdict": [
+        "verdict",
+        "recommendation",
+        "conclusion",
+        "decision",
+        "karar",
+        "tavsiye",
+        "hüküm",
+        "öneri",
+    ],
+    "findings": [
+        "findings",
+        "key findings",
+        "insights",
+        "analysis",
+        "results",
+        "bulgular",
+        "analiz",
+        "sonuçlar",
+        "temel bulgular",
+    ],
+    "risks": [
+        "risks",
+        "risks and assumptions",
+        "concerns",
+        "challenges",
+        "riskler",
+        "varsayımlar",
+        "endişeler",
+        "zorluklar",
+    ],
+    "next_actions": [
+        "next steps",
+        "next actions",
+        "actions",
+        "recommendations",
+        "what to do",
+        "sonraki adımlar",
+        "eylemler",
+        "öneriler",
+    ],
 }
 
 
@@ -108,7 +155,8 @@ def _match_section_key(sections: dict[str, str], normals: list[str]) -> str | No
                 return lk
     for n in normals:
         for lk in low_keys:
-            if n in lk or lk in n:
+            pattern = re.compile(rf"\b{re.escape(n)}\b", re.IGNORECASE)
+            if pattern.search(lk):
                 return lk
     return None
 
@@ -142,7 +190,9 @@ def _extract_summary(text: str, sections: dict[str, str]) -> str:
         return sections[match][:500]
 
     # Use first paragraph if no named section found
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip() and not p.strip().startswith("#")]
+    paragraphs = [
+        p.strip() for p in text.split("\n\n") if p.strip() and not p.strip().startswith("#")
+    ]
     if paragraphs:
         return paragraphs[0][:500]
 
@@ -202,11 +252,13 @@ def _extract_key_findings(sections: dict[str, str]) -> list[KeyFinding]:
                 elif any(w in lower for w in ["minor", "low", "secondary"]):
                     importance = "low"
 
-                findings.append(KeyFinding(
-                    title=item[:80],
-                    summary=item[:300],
-                    importance=importance,
-                ))
+                findings.append(
+                    KeyFinding(
+                        title=item[:80],
+                        summary=item[:300],
+                        importance=importance,
+                    )
+                )
 
     return findings[:6]
 
@@ -235,21 +287,29 @@ def _build_model_positions(
             elif any(w in lower for w in ["neutral", "depends", "mixed"]):
                 stance = "neutral"
 
-            positions.append(ModelPosition(
-                model=model_name,
-                stance=stance,
-                strongest_point=content[:200] if content else "No response captured",
-                concern="See full response for details",
-            ))
+            positions.append(
+                ModelPosition(
+                    model=model_name,
+                    stance=stance,
+                    strongest_point=content[:200] if content else "No response captured",
+                    concern="See full response for details",
+                )
+            )
 
     if not positions and scores:
         for model, score in scores.items():
-            positions.append(ModelPosition(
-                model=model,
-                stance="supportive" if score >= 0.7 else "neutral" if score >= 0.4 else "concerned",
-                strongest_point=f"Scored {score:.1f}/1.0",
-                concern="Low score may indicate concerns",
-            ))
+            positions.append(
+                ModelPosition(
+                    model=model,
+                    stance="supportive"
+                    if score >= 0.7
+                    else "neutral"
+                    if score >= 0.4
+                    else "concerned",
+                    strongest_point=f"Scored {score:.1f}/1.0",
+                    concern="Low score may indicate concerns",
+                )
+            )
 
     return positions
 
@@ -278,11 +338,13 @@ def _extract_risks(sections: dict[str, str]) -> list[RiskAssumption]:
                 if any(w in lower for w in ["assume", "assuming", "assumption"]):
                     risk_type = "assumption"
 
-                risks.append(RiskAssumption(
-                    item=item[:200],
-                    type=risk_type,
-                    severity=severity,
-                ))
+                risks.append(
+                    RiskAssumption(
+                        item=item[:200],
+                        type=risk_type,
+                        severity=severity,
+                    )
+                )
 
     return risks[:10]
 
@@ -299,10 +361,12 @@ def _extract_next_actions(sections: dict[str, str]) -> list[NextAction]:
             item = item.strip()
             if len(item) > 5:
                 priority = "now" if i < 2 else "next" if i < 4 else "later"
-                actions.append(NextAction(
-                    action=item[:200],
-                    priority=priority,
-                ))
+                actions.append(
+                    NextAction(
+                        action=item[:200],
+                        priority=priority,
+                    )
+                )
 
     return actions[:6]
 

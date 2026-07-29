@@ -1,6 +1,13 @@
 "use client";
 
-import { CheckCircle2, Loader2, ShieldCheck, ShieldAlert, ShieldQuestion, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldQuestion,
+  Sparkles,
+} from "lucide-react";
 import SafeMarkdown from "@/components/content/SafeMarkdown";
 import {
   DecisionReportView,
@@ -13,11 +20,30 @@ interface LiveSynthesisCardProps {
   state: SynthesisStreamingState;
 }
 
-const verificationBadge: Record<string, { label: string; icon: typeof ShieldCheck; className: string }> = {
-  verified: { label: "Verified", icon: ShieldCheck, className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-  unverified: { label: "Unverified", icon: ShieldQuestion, className: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
-  failed: { label: "Failed", icon: ShieldAlert, className: "bg-destructive/10 text-destructive" },
-  unavailable: { label: "Not checked", icon: ShieldQuestion, className: "bg-muted text-muted-foreground" },
+const verificationBadge: Record<
+  string,
+  { label: string; icon: typeof ShieldCheck; className: string }
+> = {
+  verified: {
+    label: "Verified",
+    icon: ShieldCheck,
+    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  unverified: {
+    label: "Unverified",
+    icon: ShieldQuestion,
+    className: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  failed: {
+    label: "Failed",
+    icon: ShieldAlert,
+    className: "bg-destructive/10 text-destructive",
+  },
+  unavailable: {
+    label: "Not checked",
+    icon: ShieldQuestion,
+    className: "bg-muted text-muted-foreground",
+  },
 };
 
 export function LiveSynthesisCard({ state }: LiveSynthesisCardProps) {
@@ -25,10 +51,11 @@ export function LiveSynthesisCard({ state }: LiveSynthesisCardProps) {
   const isFinal = state.status === "final";
   const isFailed = state.status === "failed";
   const isStreaming = state.status === "streaming";
-  const report = state.report
-    && typeof state.report === "object"
-    && !Array.isArray(state.report)
-      ? state.report as DecisionReport
+  const report =
+    state.report &&
+    typeof state.report === "object" &&
+    !Array.isArray(state.report)
+      ? (state.report as DecisionReport)
       : null;
   const countParams = {
     successful: state.successfulCount,
@@ -52,13 +79,16 @@ export function LiveSynthesisCard({ state }: LiveSynthesisCardProps) {
     >
       <header className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-border bg-primary/[0.04] px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <Sparkles
+            className="h-4 w-4 shrink-0 text-primary"
+            aria-hidden="true"
+          />
           <h3 className="truncate text-sm font-semibold">
             {t("arena.synthesis.title")}
           </h3>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {isFinal && state.verificationStatus && (
+          {state.verificationStatus && (
             <span
               className={`inline-flex min-h-6 items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${VB.className}`}
               title={`Verification: ${VB.label}`}
@@ -109,7 +139,10 @@ export function LiveSynthesisCard({ state }: LiveSynthesisCardProps) {
             {t("arena.synthesis.failed")}
           </p>
         ) : (
-          <div className="space-y-3" aria-label={t("arena.synthesis.preparing")}>
+          <div
+            className="space-y-3"
+            aria-label={t("arena.synthesis.preparing")}
+          >
             <p className="text-sm text-muted-foreground">
               {t("arena.synthesis.preparing")}
             </p>

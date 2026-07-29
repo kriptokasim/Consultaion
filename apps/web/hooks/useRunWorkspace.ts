@@ -1,16 +1,43 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useReducer,
+  useState,
+} from "react";
 import { fetchWithAuth } from "@/lib/auth";
-import { getDebate, getDebateResponses, continueDebate, retryDebate, resolveContinuationByKey, requestWithTimeout, extractEventItems, TimeoutError, ApiError } from "@/lib/api";
+import {
+  getDebate,
+  getDebateResponses,
+  continueDebate,
+  retryDebate,
+  resolveContinuationByKey,
+  requestWithTimeout,
+  extractEventItems,
+  TimeoutError,
+  ApiError,
+} from "@/lib/api";
 import { API_ORIGIN } from "@/lib/config/runtime";
 import { useEventSource, type SSEStatus } from "@/lib/sse";
-import { normalizeEvent, normalizeTimelineItems } from "@/lib/api/normalizeEvent";
+import {
+  normalizeEvent,
+  normalizeTimelineItems,
+} from "@/lib/api/normalizeEvent";
 import type { TimelineEvent } from "@/lib/timeline/types";
 import type { PersistedModelResponse, DebateDetail } from "@/lib/api/types";
-import { streamingReducer, INITIAL_STREAMING_STATE, selectMergedResponses } from "@/lib/workspace/streamReducer";
+import {
+  streamingReducer,
+  INITIAL_STREAMING_STATE,
+  selectMergedResponses,
+} from "@/lib/workspace/streamReducer";
 import type { StreamingState } from "@/lib/workspace/streamReducer";
-import { connectionReducer, INITIAL_CONNECTION_STATE } from "@/lib/workspace/connectionReducer";
+import {
+  connectionReducer,
+  INITIAL_CONNECTION_STATE,
+} from "@/lib/workspace/connectionReducer";
 import { isTerminalRunStatus } from "@/lib/runStatus";
 import type { ModelResponseDeltaPayload } from "@/lib/streaming/types";
 import {
@@ -42,14 +69,10 @@ export type CoreLoadFailure =
 export type CoreState = "idle" | "loading" | "ready" | "failed";
 
 export type ResponsesState =
-  | "idle"
-  | "loading"
-  | "ready"
-  | "empty"
-  | "failed"
-  | "deployment_mismatch";
+  "idle" | "loading" | "ready" | "empty" | "failed" | "deployment_mismatch";
 
-export type TimelineState = "idle" | "loading" | "ready" | "degraded" | "failed";
+export type TimelineState =
+  "idle" | "loading" | "ready" | "degraded" | "failed";
 
 export type RunWorkspaceStatus =
   | "idle"
@@ -61,10 +84,7 @@ export type RunWorkspaceStatus =
   | "error";
 
 export type RunHydrationQuality =
-  | "complete"
-  | "events_fallback"
-  | "debate_only"
-  | "failed";
+  "complete" | "events_fallback" | "debate_only" | "failed";
 
 // ── Continuation intent persistence ──────────────────────────────────────
 
@@ -75,11 +95,7 @@ export interface PersistedContinuationIntent {
   target?: string;
   createdAt: string;
   updatedAt: string;
-  phase:
-    | "intent_created"
-    | "request_sent"
-    | "server_acknowledged"
-    | "tracking";
+  phase: "intent_created" | "request_sent" | "server_acknowledged" | "tracking";
   expiresAt: string;
 }
 
@@ -202,7 +218,10 @@ function isIntentExpired(intent: PersistedContinuationIntent): boolean {
   return Date.now() > new Date(intent.expiresAt).getTime();
 }
 
-function persistIntent(debateId: string, intent: PersistedContinuationIntent): void {
+function persistIntent(
+  debateId: string,
+  intent: PersistedContinuationIntent,
+): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(getStorageKey(debateId), JSON.stringify(intent));
@@ -234,7 +253,10 @@ function clearIntent(debateId: string): void {
 
 // ── FH116: Classify errors into CoreLoadFailure ──────────────────────────
 
-function classifyCoreError(err: unknown): { code: CoreLoadFailure; httpStatus: number | null } {
+function classifyCoreError(err: unknown): {
+  code: CoreLoadFailure;
+  httpStatus: number | null;
+} {
   if (err instanceof TimeoutError) {
     return { code: "timeout", httpStatus: null };
   }
@@ -245,16 +267,22 @@ function classifyCoreError(err: unknown): { code: CoreLoadFailure; httpStatus: n
   if (err instanceof ApiError) {
     const status = err.status ?? 0;
     switch (status) {
-      case 401: return { code: "unauthorized", httpStatus: 401 };
-      case 403: return { code: "forbidden", httpStatus: 403 };
-      case 404: return { code: "not_found", httpStatus: 404 };
+      case 401:
+        return { code: "unauthorized", httpStatus: 401 };
+      case 403:
+        return { code: "forbidden", httpStatus: 403 };
+      case 404:
+        return { code: "not_found", httpStatus: 404 };
       default:
         if (status >= 500) return { code: "server_error", httpStatus: status };
         return { code: "network_error", httpStatus: status };
     }
   }
   const fallbackMessage = err instanceof Error ? err.message : String(err);
-  if (fallbackMessage.includes("Failed to fetch") || fallbackMessage.includes("NetworkError")) {
+  if (
+    fallbackMessage.includes("Failed to fetch") ||
+    fallbackMessage.includes("NetworkError")
+  ) {
     return { code: "network_error", httpStatus: null };
   }
   return { code: "network_error", httpStatus: null };
@@ -262,13 +290,20 @@ function classifyCoreError(err: unknown): { code: CoreLoadFailure; httpStatus: n
 
 function coreFailureMessage(code: CoreLoadFailure): string {
   switch (code) {
-    case "timeout": return "The Run detail request timed out.";
-    case "not_found": return "Run not found.";
-    case "unauthorized": return "Sign-in required to view this Run.";
-    case "forbidden": return "You do not have access to this Run.";
-    case "server_error": return "The server could not load this Run.";
-    case "network_error": return "The API could not be reached.";
-    case "cancelled": return "Request was cancelled.";
+    case "timeout":
+      return "The Run detail request timed out.";
+    case "not_found":
+      return "Run not found.";
+    case "unauthorized":
+      return "Sign-in required to view this Run.";
+    case "forbidden":
+      return "You do not have access to this Run.";
+    case "server_error":
+      return "The server could not load this Run.";
+    case "network_error":
+      return "The API could not be reached.";
+    case "cancelled":
+      return "Request was cancelled.";
   }
 }
 
@@ -288,25 +323,31 @@ type ResponseRefreshFlight = {
   promise: Promise<void>;
 };
 
-async function loadTimelineWithFallback(id: string, signal?: AbortSignal): Promise<TimelineHydrationResult> {
+async function loadTimelineWithFallback(
+  id: string,
+  signal?: AbortSignal,
+): Promise<TimelineHydrationResult> {
   let timelineEvents: unknown[] | null = null;
 
   try {
     const data = await requestWithTimeout<unknown>(
       `/debates/${id}/timeline`,
       TIMELINE_TIMEOUT_MS,
-      { signal }
+      { signal },
     );
     timelineEvents = extractEventItems(data);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn("[useRunWorkspace] Timeline failed, falling back to /events:", msg);
+    console.warn(
+      "[useRunWorkspace] Timeline failed, falling back to /events:",
+      msg,
+    );
 
     try {
       const eventsData = await requestWithTimeout<unknown>(
         `/debates/${id}/events`,
         EVENTS_TIMEOUT_MS,
-        { signal }
+        { signal },
       );
       timelineEvents = extractEventItems(eventsData);
       const fallbackEvents = normalizeTimelineItems(timelineEvents, id);
@@ -329,10 +370,23 @@ async function loadTimelineWithFallback(id: string, signal?: AbortSignal): Promi
   }
 
   if (timelineEvents && timelineEvents.length > 0) {
-    const normalized: TimelineEvent[] = normalizeTimelineItems(timelineEvents, id);
-    return { events: normalized, quality: "complete", timelineError: null, eventsError: null };
+    const normalized: TimelineEvent[] = normalizeTimelineItems(
+      timelineEvents,
+      id,
+    );
+    return {
+      events: normalized,
+      quality: "complete",
+      timelineError: null,
+      eventsError: null,
+    };
   }
-  return { events: [], quality: "complete", timelineError: null, eventsError: null };
+  return {
+    events: [],
+    quality: "complete",
+    timelineError: null,
+    eventsError: null,
+  };
 }
 
 // ── Hook return type ─────────────────────────────────────────────────────
@@ -368,22 +422,43 @@ export interface UseRunWorkspaceResult {
 
 // ── Main hook ────────────────────────────────────────────────────────────
 
-export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult {
+let sseEventIdCounter = 0;
+
+export function useRunWorkspace(
+  debateId: string | null,
+): UseRunWorkspaceResult {
   const [debate, setDebate] = useState<DebateDetail | null>(null);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [connState, dispatchConn] = useReducer(connectionReducer, INITIAL_CONNECTION_STATE);
-  const { coreState, responsesState, responsesError, timelineState, coreErrorCode, coreHttpStatus, hydrationQuality, timelineError, eventsError, isPollingFallback } = connState;
-    const [isContinuing, setIsContinuing] = useState(false);
+  const [connState, dispatchConn] = useReducer(
+    connectionReducer,
+    INITIAL_CONNECTION_STATE,
+  );
+  const {
+    coreState,
+    responsesState,
+    responsesError,
+    timelineState,
+    coreErrorCode,
+    coreHttpStatus,
+    hydrationQuality,
+    timelineError,
+    eventsError,
+    isPollingFallback,
+  } = connState;
+  const [isContinuing, setIsContinuing] = useState(false);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
-        const [responses, setResponses] = useState<PersistedModelResponse[]>([]);
+  const [responses, setResponses] = useState<PersistedModelResponse[]>([]);
 
   // FH117: Decoupled states
-        
+
   // FH116: Core error classification
-    
+
   // FH104: Streaming reducer
-  const [streamingState, dispatchStreaming] = useReducer(streamingReducer, INITIAL_STREAMING_STATE);
+  const [streamingState, dispatchStreaming] = useReducer(
+    streamingReducer,
+    INITIAL_STREAMING_STATE,
+  );
   const [synthesisState, dispatchSynthesis] = useReducer(
     synthesisReducer,
     INITIAL_SYNTHESIS_STATE,
@@ -403,12 +478,15 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     dispatchStreaming({ type: "RESPONSE_DELTA_BATCH", payloads });
   }, []);
 
-  const queueDelta = useCallback((payload: ModelResponseDeltaPayload) => {
-    pendingDeltasRef.current.push(payload);
-    if (deltaFrameRef.current === null) {
-      deltaFrameRef.current = requestAnimationFrame(flushPendingDeltas);
-    }
-  }, [flushPendingDeltas]);
+  const queueDelta = useCallback(
+    (payload: ModelResponseDeltaPayload) => {
+      pendingDeltasRef.current.push(payload);
+      if (deltaFrameRef.current === null) {
+        deltaFrameRef.current = requestAnimationFrame(flushPendingDeltas);
+      }
+    },
+    [flushPendingDeltas],
+  );
 
   const discardPendingDeltas = useCallback(() => {
     if (deltaFrameRef.current !== null) {
@@ -457,12 +535,14 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   const [isSilent, setIsSilent] = useState(false);
 
   // Configurable silence timeout (default 10s)
-  const SSE_SILENCE_TIMEOUT_MS = typeof window !== "undefined"
-    ? parseInt(process.env.NEXT_PUBLIC_SSE_SILENCE_TIMEOUT_MS || "10000", 10)
-    : 10000;
-  const SSE_FALLBACK_POLL_MS = typeof window !== "undefined"
-    ? parseInt(process.env.NEXT_PUBLIC_SSE_FALLBACK_POLL_MS || "3000", 10)
-    : 3000;
+  const SSE_SILENCE_TIMEOUT_MS =
+    typeof window !== "undefined"
+      ? parseInt(process.env.NEXT_PUBLIC_SSE_SILENCE_TIMEOUT_MS || "10000", 10)
+      : 10000;
+  const SSE_FALLBACK_POLL_MS =
+    typeof window !== "undefined"
+      ? parseInt(process.env.NEXT_PUBLIC_SSE_FALLBACK_POLL_MS || "3000", 10)
+      : 3000;
 
   const isTerminal = isTerminalRunStatus(debate?.status);
   const isPaused = debate?.status === "perspectives_ready";
@@ -474,7 +554,12 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
 
   // ── FH117: Abort all controllers ───────────────────────────────────────
   const abortAll = useCallback((reason?: string) => {
-    [coreAbortRef, responsesAbortRef, timelineAbortRef, enrichmentAbortRef].forEach((ref) => {
+    [
+      coreAbortRef,
+      responsesAbortRef,
+      timelineAbortRef,
+      enrichmentAbortRef,
+    ].forEach((ref) => {
       if (ref.current) {
         ref.current.abort(reason || "navigated");
         ref.current = null;
@@ -483,148 +568,188 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   }, []);
 
   // ── FH116+FH117: Fetch core debate with timeout and error classification ──
-  const fetchCoreDebate = useCallback(async (id: string, signal?: AbortSignal) => {
-    const gen = coreGenerationRef.current;
-    // PS157 Track B: a resolution is stale if the run changed OR a newer
-    // request superseded this one. Check both at every completion point.
-    const isStale = () => gen !== coreGenerationRef.current || activeDebateIdRef.current !== id;
-    dispatchConn({ type: "HYDRATION_START" });
+  const fetchCoreDebate = useCallback(
+    async (id: string, signal?: AbortSignal) => {
+      const gen = coreGenerationRef.current;
+      // PS157 Track B: a resolution is stale if the run changed OR a newer
+      // request superseded this one. Check both at every completion point.
+      const isStale = () =>
+        gen !== coreGenerationRef.current || activeDebateIdRef.current !== id;
+      dispatchConn({ type: "HYDRATION_START" });
 
-    try {
-      const debateData = await getDebate(id, { signal, timeoutMs: DEBATE_TIMEOUT_MS });
-      if (isStale()) return null;
+      try {
+        const debateData = await getDebate(id, {
+          signal,
+          timeoutMs: DEBATE_TIMEOUT_MS,
+        });
+        if (isStale()) return null;
 
-      const isDebateTerminal = isTerminalRunStatus(debateData?.status);
+        const isDebateTerminal = isTerminalRunStatus(debateData?.status);
 
-      setDebate(debateData);
-      debateSetOnceRef.current = true;
-      setError(null);
-      dispatchConn({ type: "CORE_LOADED", isTerminal: isDebateTerminal });
-      return debateData;
-    } catch (err: unknown) {
-      if (isStale()) return null;
+        setDebate(debateData);
+        debateSetOnceRef.current = true;
+        setError(null);
+        dispatchConn({ type: "CORE_LOADED", isTerminal: isDebateTerminal });
+        return debateData;
+      } catch (err: unknown) {
+        if (isStale()) return null;
 
-      const errorObj = err instanceof Error ? err : null;
-      if (errorObj?.name === "AbortError" && coreAbortRef.current?.signal?.aborted) {
-        dispatchConn({ type: "HYDRATION_START" });
+        const errorObj = err instanceof Error ? err : null;
+        if (
+          errorObj?.name === "AbortError" &&
+          coreAbortRef.current?.signal?.aborted
+        ) {
+          dispatchConn({ type: "HYDRATION_START" });
+          return null;
+        }
+
+        const { code, httpStatus } = classifyCoreError(err);
+        const message = errorObj?.message || String(err);
+        dispatchConn({ type: "CORE_FAILED", code, httpStatus, error: message });
+        /* replaced */
+        setError(coreFailureMessage(code));
+        // handled by CORE_FAILED
+
+        if (!debateSetOnceRef.current) {
+          dispatchConn({ type: "TIMELINE_FAILED" });
+        }
         return null;
       }
-
-      const { code, httpStatus } = classifyCoreError(err);
-      const message = errorObj?.message || String(err);
-      dispatchConn({ type: "CORE_FAILED", code, httpStatus, error: message });
-      /* replaced */
-      setError(coreFailureMessage(code));
-      // handled by CORE_FAILED
-
-      if (!debateSetOnceRef.current) {
-        dispatchConn({ type: "TIMELINE_FAILED" });
-      }
-      return null;
-    }
-  }, []);
+    },
+    [],
+  );
 
   // ── FH117: Fetch responses independently ───────────────────────────────
-  const fetchResponses = useCallback(async (id: string, signal?: AbortSignal) => {
-    const gen = responsesGenerationRef.current;
-    const isStale = () => gen !== responsesGenerationRef.current || activeDebateIdRef.current !== id;
-    dispatchConn({ type: "RESPONSES_LOADING" });
+  const fetchResponses = useCallback(
+    async (id: string, signal?: AbortSignal) => {
+      const gen = responsesGenerationRef.current;
+      const isStale = () =>
+        gen !== responsesGenerationRef.current ||
+        activeDebateIdRef.current !== id;
+      dispatchConn({ type: "RESPONSES_LOADING" });
 
-    try {
-      const responsesData = await getDebateResponses(id, { signal, timeoutMs: RESPONSES_TIMEOUT_MS }, "current");
-      if (isStale()) return;
+      try {
+        const responsesData = await getDebateResponses(
+          id,
+          { signal, timeoutMs: RESPONSES_TIMEOUT_MS },
+          "current",
+        );
+        if (isStale()) return;
 
-      setResponses(responsesData.items);
-      dispatchConn({ type: "RESPONSES_LOADED", count: responsesData.items.length });
-      dispatchStreaming({ type: "MERGE_PERSISTED", payloads: responsesData.items });
+        setResponses(responsesData.items);
+        dispatchConn({
+          type: "RESPONSES_LOADED",
+          count: responsesData.items.length,
+        });
+        dispatchStreaming({
+          type: "MERGE_PERSISTED",
+          payloads: responsesData.items,
+        });
+      } catch (err: unknown) {
+        if (isStale()) return;
 
-    } catch (err: unknown) {
-      if (isStale()) return;
-
-      // FH119: Distinguish 404 (deployment mismatch) from other failures
-      if (err instanceof ApiError && err.status === 404) {
-        dispatchConn({ type: "RESPONSES_FAILED", isMismatch: true, error: "Backend contract mismatch — /responses endpoint unavailable" });
-        
-      } else {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn("[useRunWorkspace] /responses fetch failed:", message);
-        dispatchConn({ type: "RESPONSES_FAILED", isMismatch: false, error: message });
-        
+        // FH119: Distinguish 404 (deployment mismatch) from other failures
+        if (err instanceof ApiError && err.status === 404) {
+          dispatchConn({
+            type: "RESPONSES_FAILED",
+            isMismatch: true,
+            error:
+              "Backend contract mismatch — /responses endpoint unavailable",
+          });
+        } else {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn("[useRunWorkspace] /responses fetch failed:", message);
+          dispatchConn({
+            type: "RESPONSES_FAILED",
+            isMismatch: false,
+            error: message,
+          });
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   // ── FH117: Fetch timeline independently ────────────────────────────────
-  const fetchTimeline = useCallback(async (id: string, signal?: AbortSignal) => {
-    const gen = timelineGenerationRef.current;
-    const isStale = () => gen !== timelineGenerationRef.current || activeDebateIdRef.current !== id;
-    dispatchConn({ type: "TIMELINE_LOADING" });
+  const fetchTimeline = useCallback(
+    async (id: string, signal?: AbortSignal) => {
+      const gen = timelineGenerationRef.current;
+      const isStale = () =>
+        gen !== timelineGenerationRef.current ||
+        activeDebateIdRef.current !== id;
+      dispatchConn({ type: "TIMELINE_LOADING" });
 
-    try {
-      const result = await loadTimelineWithFallback(id, signal);
-      if (isStale()) return;
+      try {
+        const result = await loadTimelineWithFallback(id, signal);
+        if (isStale()) return;
 
-      setEvents(result.events);
-      for (const event of result.events) {
-        const parsed = parseArenaBoundaryEvent({
-          ...event.payload,
-          type: event.type,
+        setEvents(result.events);
+        for (const event of result.events) {
+          const parsed = parseArenaBoundaryEvent({
+            ...event.payload,
+            type: event.type,
+          });
+          if (!parsed.success) continue;
+          const synthesis = synthesisBoundaryToSnapshot(parsed.data, id);
+          if (!synthesis) continue;
+          dispatchSynthesis({
+            type: synthesis.action,
+            payload: synthesis.snapshot,
+          });
+        }
+        dispatchConn({
+          type: "TIMELINE_LOADED",
+          quality: result.quality,
+          timelineError: result.timelineError,
+          eventsError: result.eventsError,
         });
-        if (!parsed.success) continue;
-        const synthesis = synthesisBoundaryToSnapshot(parsed.data, id);
-        if (!synthesis) continue;
-        dispatchSynthesis({ type: synthesis.action, payload: synthesis.snapshot });
+      } catch (err: unknown) {
+        if (isStale()) return;
+        console.error("[useRunWorkspace] Timeline fetch error:", err);
+        dispatchConn({ type: "TIMELINE_FAILED" });
       }
-      dispatchConn({ type: "TIMELINE_LOADED", quality: result.quality, timelineError: result.timelineError, eventsError: result.eventsError });
-
-
-
-
-    } catch (err: unknown) {
-      if (isStale()) return;
-      console.error("[useRunWorkspace] Timeline fetch error:", err);
-      dispatchConn({ type: "TIMELINE_FAILED" });
-    }
-  }, []);
+    },
+    [],
+  );
 
   // ── FH117: Full hydration — core first, then concurrent enrichment ─────
-  const hydrate = useCallback(async (id: string) => {
-    const gen = ++requestGenerationRef.current;
-    const coreGen = ++coreGenerationRef.current;
-    const responsesGen = ++responsesGenerationRef.current;
-    const timelineGen = ++timelineGenerationRef.current;
+  const hydrate = useCallback(
+    async (id: string) => {
+      const gen = ++requestGenerationRef.current;
+      const coreGen = ++coreGenerationRef.current;
+      const responsesGen = ++responsesGenerationRef.current;
+      const timelineGen = ++timelineGenerationRef.current;
 
-    // Reset all states
-    setError(null);
-    
-    
-    
-    
-    
-    
-    
-    
-    debateSetOnceRef.current = false;
+      // Reset all states
+      setError(null);
 
-    // Abort any in-flight requests
-    abortAll("new_hydration");
+      debateSetOnceRef.current = false;
 
-    // Step 1: Fetch core debate with timeout
-    coreAbortRef.current = new AbortController();
-    const coreData = await fetchCoreDebate(id, coreAbortRef.current.signal);
+      // Abort any in-flight requests
+      abortAll("new_hydration");
 
-    // Patchset 132 Track E + PS157 Track B: Capture generation locally, check
-    // both generation and active run after each await.
-    if (coreGen !== coreGenerationRef.current || activeDebateIdRef.current !== id) return;
-    if (!coreData) return; // Failed or aborted
+      // Step 1: Fetch core debate with timeout
+      coreAbortRef.current = new AbortController();
+      const coreData = await fetchCoreDebate(id, coreAbortRef.current.signal);
 
-    // Step 2: Fire responses and timeline concurrently (don't await each other)
-    responsesAbortRef.current = new AbortController();
-    timelineAbortRef.current = new AbortController();
+      // Patchset 132 Track E + PS157 Track B: Capture generation locally, check
+      // both generation and active run after each await.
+      if (
+        coreGen !== coreGenerationRef.current ||
+        activeDebateIdRef.current !== id
+      )
+        return;
+      if (!coreData) return; // Failed or aborted
 
-    void fetchResponses(id, responsesAbortRef.current.signal);
-    void fetchTimeline(id, timelineAbortRef.current.signal);
-  }, [fetchCoreDebate, fetchResponses, fetchTimeline, abortAll]);
+      // Step 2: Fire responses and timeline concurrently (don't await each other)
+      responsesAbortRef.current = new AbortController();
+      timelineAbortRef.current = new AbortController();
+
+      void fetchResponses(id, responsesAbortRef.current.signal);
+      void fetchTimeline(id, timelineAbortRef.current.signal);
+    },
+    [fetchCoreDebate, fetchResponses, fetchTimeline, abortAll],
+  );
 
   // ── Retry responses independently ──────────────────────────────────────
   const retryResponses = useCallback(async () => {
@@ -693,55 +818,69 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     setEvents((prev) => [...prev, event]);
   }, []);
 
-  const refreshPersistedResponses = useCallback((id: string, generation: number) => {
-    const now = Date.now();
-    if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL_MS) {
-      const elapsed = now - lastRefreshTimeRef.current;
-      if (elapsed < MIN_REFRESH_INTERVAL_MS / 2) {
+  const refreshPersistedResponses = useCallback(
+    (id: string, generation: number) => {
+      const now = Date.now();
+      if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL_MS) {
         return Promise.resolve();
       }
-    }
 
-    const current = responseRefreshFlightRef.current;
-    if (current && current.debateId === id && current.generation === generation) {
-      current.queued = true;
-      return current.promise;
-    }
-
-    const flight: ResponseRefreshFlight = {
-      debateId: id,
-      generation,
-      queued: false,
-      promise: Promise.resolve(),
-    };
-    flight.promise = (async () => {
-      try {
-        do {
-          flight.queued = false;
-          const data = await getDebateResponses(id, undefined, "current");
-          if (
-            activeDebateIdRef.current !== id
-            || requestGenerationRef.current !== generation
-          ) return;
-
-          setResponses(data.items);
-          dispatchConn({ type: "RESPONSES_LOADED", count: data.items.length });
-          dispatchStreaming({ type: "MERGE_PERSISTED", payloads: data.items });
-          lastRefreshTimeRef.current = Date.now();
-        } while (flight.queued);
-      } catch (err: unknown) {
-        if (activeDebateIdRef.current === id) {
-          console.warn("[useRunWorkspace] Persisted response refresh failed:", err instanceof Error ? err.message : String(err));
-        }
-      } finally {
-        if (responseRefreshFlightRef.current === flight) {
-          responseRefreshFlightRef.current = null;
-        }
+      const current = responseRefreshFlightRef.current;
+      if (
+        current &&
+        current.debateId === id &&
+        current.generation === generation
+      ) {
+        current.queued = true;
+        return current.promise;
       }
-    })();
-    responseRefreshFlightRef.current = flight;
-    return flight.promise;
-  }, []);
+
+      const flight: ResponseRefreshFlight = {
+        debateId: id,
+        generation,
+        queued: false,
+        promise: Promise.resolve(),
+      };
+      flight.promise = (async () => {
+        try {
+          do {
+            flight.queued = false;
+            const data = await getDebateResponses(id, undefined, "current");
+            if (
+              activeDebateIdRef.current !== id ||
+              requestGenerationRef.current !== generation
+            )
+              return;
+
+            setResponses(data.items);
+            dispatchConn({
+              type: "RESPONSES_LOADED",
+              count: data.items.length,
+            });
+            dispatchStreaming({
+              type: "MERGE_PERSISTED",
+              payloads: data.items,
+            });
+            lastRefreshTimeRef.current = Date.now();
+          } while (flight.queued);
+        } catch (err: unknown) {
+          if (activeDebateIdRef.current === id) {
+            console.warn(
+              "[useRunWorkspace] Persisted response refresh failed:",
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        } finally {
+          if (responseRefreshFlightRef.current === flight) {
+            responseRefreshFlightRef.current = null;
+          }
+        }
+      })();
+      responseRefreshFlightRef.current = flight;
+      return flight.promise;
+    },
+    [],
+  );
 
   // ── Cleanup on unmount ─────────────────────────────────────────────────
   useEffect(() => {
@@ -757,151 +896,217 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     };
   }, [abortAll, discardPendingDeltas]);
 
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    pollInFlightRef.current = false;
+    dispatchConn({ type: "STOP_POLLING" });
+  }, []);
+
   // ── SSE stream ─────────────────────────────────────────────────────────
-  const streamUrl = debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
+  const streamUrl =
+    debateId && !isTerminal ? `${API_ORIGIN}/debates/${debateId}/stream` : null;
 
-  const handleStreamEvent = useCallback((lastEvent: any) => {
-    if (
-      !lastEvent
-      || !debateId
-      || activeDebateIdRef.current !== debateId
-      || isTerminalRef.current
-    ) return;
-    try {
-      const eventType = lastEvent.type;
-      const payloadDebateId = lastEvent.debate_id || lastEvent.payload?.debate_id;
-      if (payloadDebateId && payloadDebateId !== debateId) return;
-      const eventGeneration = requestGenerationRef.current;
-
-      // Patchset 132 Track D: Update last event timestamp for silence detection
-      lastEventTimestampRef.current = Date.now();
-      setIsSilent(false);
-      stopPolling();
-
-      // Skip heartbeat events — they only reset the silence timer
-      const payloadType = lastEvent.payload?.type;
-      if (eventType === "heartbeat" || payloadType === "heartbeat") {
+  const handleStreamEvent = useCallback(
+    (lastEvent: any) => {
+      if (
+        !lastEvent ||
+        !debateId ||
+        activeDebateIdRef.current !== debateId ||
+        isTerminalRef.current
+      )
         return;
-      }
+      try {
+        const eventType = lastEvent.type;
+        const payloadDebateId =
+          lastEvent.debate_id || lastEvent.payload?.debate_id;
+        if (payloadDebateId && payloadDebateId !== debateId) return;
+        const eventGeneration = requestGenerationRef.current;
 
-      if (eventType === "arena_synthesis_delta") {
-        const payload = lastEvent.payload || lastEvent;
-        if (!isValidSynthesisDeltaPayload(payload)) {
-          console.warn("[arena-contract] Invalid synthesis delta dropped");
+        // Patchset 132 Track D: Update last event timestamp for silence detection
+        lastEventTimestampRef.current = Date.now();
+        setIsSilent(false);
+        stopPolling();
+
+        // Skip heartbeat events — they only reset the silence timer
+        const payloadType = lastEvent.payload?.type;
+        if (eventType === "heartbeat" || payloadType === "heartbeat") {
           return;
         }
-        dispatchSynthesis({ type: "DELTA", payload });
-        return;
-      }
 
-      const isSynthesisBoundary = [
-        "arena_synthesis_started",
-        "arena_synthesis_revision",
-        "arena_synthesis_finalized",
-        "arena_synthesis",
-      ].includes(eventType);
-      const needsArenaBoundaryValidation = (
-        isSynthesisBoundary
-        || eventType === "arena_started"
-        || (
-          MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType)
-          && eventType !== "model_response_delta"
-        )
-      );
-      let validatedBoundary: ArenaBoundaryEvent | undefined;
-      if (needsArenaBoundaryValidation) {
-        const parsed = parseArenaBoundaryEvent(lastEvent);
-        if (!parsed.success) {
-          console.warn(
-            `[arena-contract] ${eventType} dropped: ${formatArenaSchemaDiagnostic(parsed.error)}`,
+        if (eventType === "arena_synthesis_delta") {
+          const payload = lastEvent.payload || lastEvent;
+          if (!isValidSynthesisDeltaPayload(payload)) {
+            console.warn("[arena-contract] Invalid synthesis delta dropped");
+            return;
+          }
+          dispatchSynthesis({ type: "DELTA", payload });
+          return;
+        }
+
+        const isSynthesisBoundary = [
+          "arena_synthesis_started",
+          "arena_synthesis_revision",
+          "arena_synthesis_finalized",
+          "arena_synthesis",
+        ].includes(eventType);
+        const needsArenaBoundaryValidation =
+          isSynthesisBoundary ||
+          eventType === "arena_started" ||
+          (MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType) &&
+            eventType !== "model_response_delta");
+        let validatedBoundary: ArenaBoundaryEvent | undefined;
+        if (needsArenaBoundaryValidation) {
+          const parsed = parseArenaBoundaryEvent(lastEvent);
+          if (!parsed.success) {
+            console.warn(
+              `[arena-contract] ${eventType} dropped: ${formatArenaSchemaDiagnostic(parsed.error)}`,
+            );
+            return;
+          }
+          validatedBoundary = parsed.data;
+        }
+
+        // FH104: Dispatch streaming reducer actions
+        if (MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType)) {
+          const p = validatedBoundary ?? lastEvent.payload ?? lastEvent;
+          if (eventType === "model_response_delta") {
+            firstDeltaMarkedRef.current ||
+              (performance.mark?.("sse_first_delta"),
+              (firstDeltaMarkedRef.current = true));
+            queueDelta(p);
+            return;
+          }
+
+          // Preserve transport ordering when a lifecycle transition arrives in
+          // the same frame as its final content chunks.
+          flushPendingDeltas();
+          switch (eventType) {
+            case "model_response_queued":
+              dispatchStreaming({ type: "RESPONSE_QUEUED", payload: p });
+              break;
+            case "model_response_connecting":
+              dispatchStreaming({ type: "RESPONSE_CONNECTING", payload: p });
+              break;
+            case "model_response_started":
+              dispatchStreaming({ type: "RESPONSE_STARTED", payload: p });
+              break;
+            case "model_response_persisting":
+              dispatchStreaming({ type: "RESPONSE_PERSISTING", payload: p });
+              break;
+            case "model_response_completed":
+              firstCompletedMarkedRef.current ||
+                (performance.mark?.("sse_first_completion"),
+                (firstCompletedMarkedRef.current = true));
+              dispatchStreaming({ type: "RESPONSE_COMPLETED", payload: p });
+              break;
+            case "model_response_failed":
+              dispatchStreaming({ type: "RESPONSE_FAILED", payload: p });
+              break;
+          }
+          if (
+            eventType === "model_response_completed" ||
+            eventType === "model_response_failed"
+          ) {
+            void refreshPersistedResponses(debateId, eventGeneration);
+          }
+          return;
+        }
+
+        if (isSynthesisBoundary && validatedBoundary) {
+          const synthesis = synthesisBoundaryToSnapshot(
+            validatedBoundary,
+            debateId,
           );
-          return;
+          if (synthesis?.action === "STARTED") {
+            dispatchSynthesis({ type: "STARTED", payload: synthesis.snapshot });
+          } else if (synthesis?.action === "REVISION") {
+            dispatchSynthesis({
+              type: "REVISION",
+              payload: synthesis.snapshot,
+            });
+            performance.mark?.("sse_first_synthesis_visible");
+          } else if (synthesis?.action === "FINALIZED") {
+            dispatchSynthesis({
+              type: "FINALIZED",
+              payload: synthesis.snapshot,
+            });
+            performance.mark?.("sse_report_visible");
+          }
         }
-        validatedBoundary = parsed.data;
-      }
 
-      // FH104: Dispatch streaming reducer actions
-      if (MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType)) {
-        const p = validatedBoundary ?? lastEvent.payload ?? lastEvent;
-        if (eventType === "model_response_delta") {
-          firstDeltaMarkedRef.current || (performance.mark?.("sse_first_delta"), firstDeltaMarkedRef.current = true);
-          queueDelta(p);
-          return;
+        const normalized = normalizeEvent(validatedBoundary ?? lastEvent);
+        const normalizedType = validatedBoundary?.type ?? eventType;
+        const newEvent: TimelineEvent = {
+          id: lastEvent.id || `sse-${Date.now()}-${sseEventIdCounter++}`,
+          debate_id: debateId,
+          ts: lastEvent.ts || new Date().toISOString(),
+          type: normalizedType,
+          round: lastEvent.round || 0,
+          seat: lastEvent.seat,
+          payload: normalized as unknown as Record<string, unknown>,
+        };
+        appendEventOnce(newEvent);
+
+        // B3: Refetch debate only on low-frequency structural events (not deltas/streaming)
+        if (
+          [
+            "arena_synthesis_finalized",
+            "arena_synthesis",
+            "debate_failed",
+            "perspectives_ready",
+            "debate_completed",
+            "stage_checkpoint",
+          ].includes(eventType)
+        ) {
+          if (
+            eventType === "arena_synthesis" ||
+            eventType === "arena_synthesis_finalized"
+          ) {
+            performance.mark?.("sse_report_visible");
+          }
+          getDebate(debateId)
+            .then((updated) => {
+              if (
+                activeDebateIdRef.current === debateId &&
+                requestGenerationRef.current === eventGeneration
+              ) {
+                setDebate(updated);
+              }
+            })
+            .catch(() => {});
         }
 
-        // Preserve transport ordering when a lifecycle transition arrives in
-        // the same frame as its final content chunks.
-        flushPendingDeltas();
-        switch (eventType) {
-          case "model_response_queued": dispatchStreaming({ type: "RESPONSE_QUEUED", payload: p }); break;
-          case "model_response_connecting": dispatchStreaming({ type: "RESPONSE_CONNECTING", payload: p }); break;
-          case "model_response_started": dispatchStreaming({ type: "RESPONSE_STARTED", payload: p }); break;
-          case "model_response_persisting": dispatchStreaming({ type: "RESPONSE_PERSISTING", payload: p }); break;
-          case "model_response_completed":
-            firstCompletedMarkedRef.current || (performance.mark?.("sse_first_completion"), firstCompletedMarkedRef.current = true);
-            dispatchStreaming({ type: "RESPONSE_COMPLETED", payload: p });
-            break;
-          case "model_response_failed": dispatchStreaming({ type: "RESPONSE_FAILED", payload: p }); break;
-        }
-        if (eventType === "model_response_completed" || eventType === "model_response_failed") {
+        // Sync persisted responses on terminal events
+        const isLegacyArenaResponse =
+          eventType === "arena_response" &&
+          !(lastEvent.payload || lastEvent).response_id;
+        if (
+          [
+            "arena_synthesis_finalized",
+            "arena_synthesis",
+            "debate_completed",
+            "debate_failed",
+          ].includes(eventType) ||
+          isLegacyArenaResponse
+        ) {
           void refreshPersistedResponses(debateId, eventGeneration);
         }
-        return;
+      } catch (err) {
+        console.error("[useRunWorkspace] Error processing stream event:", err);
       }
-
-      if (isSynthesisBoundary && validatedBoundary) {
-        const synthesis = synthesisBoundaryToSnapshot(validatedBoundary, debateId);
-        if (synthesis?.action === "STARTED") {
-          dispatchSynthesis({ type: "STARTED", payload: synthesis.snapshot });
-        } else if (synthesis?.action === "REVISION") {
-          dispatchSynthesis({ type: "REVISION", payload: synthesis.snapshot });
-          performance.mark?.("sse_first_synthesis_visible");
-        } else if (synthesis?.action === "FINALIZED") {
-          dispatchSynthesis({ type: "FINALIZED", payload: synthesis.snapshot });
-          performance.mark?.("sse_report_visible");
-        }
-      }
-
-      const normalized = normalizeEvent(validatedBoundary ?? lastEvent);
-      const normalizedType = validatedBoundary?.type ?? eventType;
-      const newEvent: TimelineEvent = {
-        id: lastEvent.id || `sse-${Date.now()}-${Math.random()}`,
-        debate_id: debateId, ts: lastEvent.ts || new Date().toISOString(),
-        type: normalizedType, round: lastEvent.round || 0, seat: lastEvent.seat,
-        payload: normalized as unknown as Record<string, unknown>,
-      };
-      appendEventOnce(newEvent);
-
-      // B3: Refetch debate only on low-frequency structural events (not deltas/streaming)
-      if (["arena_synthesis", "debate_failed", "perspectives_ready", "debate_completed", "stage_checkpoint"].includes(eventType)) {
-        if (eventType === "arena_synthesis") {
-          performance.mark?.("sse_report_visible");
-        }
-        getDebate(debateId)
-          .then((updated) => {
-            if (
-              activeDebateIdRef.current === debateId
-              && requestGenerationRef.current === eventGeneration
-            ) {
-              setDebate(updated);
-            }
-          })
-          .catch(() => {});
-      }
-
-      // Sync persisted responses on terminal events
-      const isLegacyArenaResponse = eventType === "arena_response"
-        && !(lastEvent.payload || lastEvent).response_id;
-      if (
-        ["arena_synthesis", "debate_completed", "debate_failed"].includes(eventType)
-        || isLegacyArenaResponse
-      ) {
-        void refreshPersistedResponses(debateId, eventGeneration);
-      }
-    } catch (err) {
-      console.error("[useRunWorkspace] Error processing stream event:", err);
-    }
-  }, [debateId, flushPendingDeltas, queueDelta, refreshPersistedResponses]);
+    },
+    [
+      debateId,
+      flushPendingDeltas,
+      queueDelta,
+      refreshPersistedResponses,
+      appendEventOnce,
+      stopPolling,
+    ],
+  );
 
   const { status: sseStatus } = useEventSource<any>(streamUrl, {
     enabled: !!debateId && !isTerminal,
@@ -911,43 +1116,46 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   });
 
   // ── Polling fallback ───────────────────────────────────────────────────
-  const startPolling = useCallback((id: string) => {
-    if (pollTimerRef.current) return;
-    dispatchConn({ type: "START_POLLING" });
-    const tick = async () => {
-      // PS157 Track B: never run or reschedule a poll for a stale run. The
-      // debate-change effect clears pollTimerRef, but a queued/in-flight tick
-      // can still fire afterwards — bail before touching shared state.
-      if (activeDebateIdRef.current !== id) return;
-      if (pollInFlightRef.current) {
-        pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
-        return;
-      }
-      pollInFlightRef.current = true;
-      try {
-        await hydrate(id);
-      } catch (err) {
-        console.error("[useRunWorkspace] Polling fetch error:", err);
-      } finally {
-        pollInFlightRef.current = false;
-        // Only the run that started this poll may continue the loop; if the
-        // user switched runs, the new run owns pollTimerRef now.
-        if (activeDebateIdRef.current === id) {
-          pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
+  const startPolling = useCallback(
+    (id: string) => {
+      if (pollTimerRef.current) return;
+      dispatchConn({ type: "START_POLLING" });
+      const tick = async () => {
+        // PS157 Track B: never run or reschedule a poll for a stale run. The
+        // debate-change effect clears pollTimerRef, but a queued/in-flight tick
+        // can still fire afterwards — bail before touching shared state.
+        if (activeDebateIdRef.current !== id) return;
+        if (pollInFlightRef.current) {
+          pollTimerRef.current = setTimeout(
+            tick,
+            SSE_FALLBACK_POLL_MS,
+          ) as unknown as NodeJS.Timeout;
+          return;
         }
-      }
-    };
-    pollTimerRef.current = setTimeout(tick, SSE_FALLBACK_POLL_MS) as unknown as NodeJS.Timeout;
-  }, [hydrate, SSE_FALLBACK_POLL_MS]);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearTimeout(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-    pollInFlightRef.current = false;
-    dispatchConn({ type: "STOP_POLLING" });
-  }, []);
+        pollInFlightRef.current = true;
+        try {
+          await hydrate(id);
+        } catch (err) {
+          console.error("[useRunWorkspace] Polling fetch error:", err);
+        } finally {
+          pollInFlightRef.current = false;
+          // Only the run that started this poll may continue the loop; if the
+          // user switched runs, the new run owns pollTimerRef now.
+          if (activeDebateIdRef.current === id) {
+            pollTimerRef.current = setTimeout(
+              tick,
+              SSE_FALLBACK_POLL_MS,
+            ) as unknown as NodeJS.Timeout;
+          }
+        }
+      };
+      pollTimerRef.current = setTimeout(
+        tick,
+        SSE_FALLBACK_POLL_MS,
+      ) as unknown as NodeJS.Timeout;
+    },
+    [hydrate, SSE_FALLBACK_POLL_MS],
+  );
 
   // Patchset 132 Track D: Silence detection — elapsed-time watchdog
   const resetSilenceTimer = useCallback(() => {
@@ -992,12 +1200,20 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     return () => {
       resetSilenceTimer();
     };
-  }, [sseStatus, debateId, isTerminal, startPolling, stopPolling, resetSilenceTimer, SSE_SILENCE_TIMEOUT_MS]);
+  }, [
+    sseStatus,
+    debateId,
+    isTerminal,
+    startPolling,
+    stopPolling,
+    resetSilenceTimer,
+    SSE_SILENCE_TIMEOUT_MS,
+  ]);
 
   useEffect(() => {
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
     };
   }, []);
 
@@ -1010,10 +1226,15 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
       // resolutions cannot mutate refs/state or hydrate a previous run.
       const recoveryGeneration = requestGenerationRef.current;
       const isStale = () =>
-        activeDebateIdRef.current !== debateId || requestGenerationRef.current !== recoveryGeneration;
+        activeDebateIdRef.current !== debateId ||
+        requestGenerationRef.current !== recoveryGeneration;
       intentRef.current = persisted;
       idempotencyKeyRef.current = persisted.idempotencyKey;
-      if (persisted.phase === "server_acknowledged" || persisted.phase === "tracking" || persisted.phase === "request_sent") {
+      if (
+        persisted.phase === "server_acknowledged" ||
+        persisted.phase === "tracking" ||
+        persisted.phase === "request_sent"
+      ) {
         setOutcomeUnknown(true);
         setIsContinuing(true);
       } else {
@@ -1023,29 +1244,54 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
         try {
           let statusData = null;
           if (persisted.continuationId) {
-            const res = await fetchWithAuth(`/debates/${debateId}/continuations/${persisted.continuationId}`);
+            const res = await fetchWithAuth(
+              `/debates/${debateId}/continuations/${persisted.continuationId}`,
+            );
             if (isStale()) return;
             if (res.ok) statusData = await res.json();
           }
           if (!statusData && persisted.idempotencyKey) {
-            try { statusData = await resolveContinuationByKey(debateId, persisted.idempotencyKey); } catch {}
+            try {
+              statusData = await resolveContinuationByKey(
+                debateId,
+                persisted.idempotencyKey,
+              );
+            } catch {}
           }
           if (isStale()) return;
           if (statusData) {
-            if (statusData.status === "failed" || statusData.status === "cancelled") {
-              clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
-              setIsContinuing(false); setOutcomeUnknown(false);
+            if (
+              statusData.status === "failed" ||
+              statusData.status === "cancelled"
+            ) {
+              clearIntent(debateId);
+              intentRef.current = null;
+              idempotencyKeyRef.current = null;
+              setIsContinuing(false);
+              setOutcomeUnknown(false);
             } else {
-              const updatedIntent: PersistedContinuationIntent = { ...persisted, phase: "tracking", continuationId: statusData.continuation_id || statusData.id, updatedAt: new Date().toISOString() };
-              persistIntent(debateId, updatedIntent); intentRef.current = updatedIntent;
-              setIsContinuing(true); setOutcomeUnknown(false);
+              const updatedIntent: PersistedContinuationIntent = {
+                ...persisted,
+                phase: "tracking",
+                continuationId: statusData.continuation_id || statusData.id,
+                updatedAt: new Date().toISOString(),
+              };
+              persistIntent(debateId, updatedIntent);
+              intentRef.current = updatedIntent;
+              setIsContinuing(true);
+              setOutcomeUnknown(false);
               await hydrate(debateId);
             }
           } else {
-            clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
-            setIsContinuing(false); setOutcomeUnknown(false);
+            clearIntent(debateId);
+            intentRef.current = null;
+            idempotencyKeyRef.current = null;
+            setIsContinuing(false);
+            setOutcomeUnknown(false);
           }
-        } catch (err) { console.error("Continuation recovery failed:", err); }
+        } catch (err) {
+          console.error("Continuation recovery failed:", err);
+        }
       };
       recover();
     }
@@ -1054,11 +1300,17 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
   useEffect(() => {
     if (debateId) {
       if (isTerminal) {
-        clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
-        setIsContinuing(false); setOutcomeUnknown(false);
+        clearIntent(debateId);
+        intentRef.current = null;
+        idempotencyKeyRef.current = null;
+        setIsContinuing(false);
+        setOutcomeUnknown(false);
       } else if (isPaused && intentRef.current?.phase === "tracking") {
-        clearIntent(debateId); intentRef.current = null; idempotencyKeyRef.current = null;
-        setIsContinuing(false); setOutcomeUnknown(false);
+        clearIntent(debateId);
+        intentRef.current = null;
+        idempotencyKeyRef.current = null;
+        setIsContinuing(false);
+        setOutcomeUnknown(false);
       }
     }
   }, [isTerminal, isPaused, debateId]);
@@ -1069,30 +1321,71 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     // PS157 Track B: user may navigate away mid-flight — guard completions.
     const continueGeneration = requestGenerationRef.current;
     const isStale = () =>
-      activeDebateIdRef.current !== debateId || requestGenerationRef.current !== continueGeneration;
+      activeDebateIdRef.current !== debateId ||
+      requestGenerationRef.current !== continueGeneration;
     try {
-      setError(null); setIsContinuing(true); setOutcomeUnknown(false);
-      if (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") {
+      setError(null);
+      setIsContinuing(true);
+      setOutcomeUnknown(false);
+      if (
+        debate?.continuation_status === "failed" ||
+        debate?.continuation_status === "cancelled"
+      ) {
         idempotencyKeyRef.current = null;
       }
-      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
+      if (!idempotencyKeyRef.current)
+        idempotencyKeyRef.current = crypto.randomUUID();
       const now = new Date().toISOString();
-      const expiresAt = new Date(Date.now() + CONTINUATION_TTL_MS).toISOString();
-      const intent: PersistedContinuationIntent = { debateId, idempotencyKey: idempotencyKeyRef.current, createdAt: now, updatedAt: now, phase: "intent_created", expiresAt };
-      persistIntent(debateId, intent); intentRef.current = intent;
-      const sentIntent = { ...intent, phase: "request_sent" as const, updatedAt: new Date().toISOString() };
-      persistIntent(debateId, sentIntent); intentRef.current = sentIntent;
-      const retryOfId = (debate?.continuation_status === "failed" || debate?.continuation_status === "cancelled") ? debate.continuation_id : undefined;
-      const response = await continueDebate(debateId, idempotencyKeyRef.current, retryOfId);
+      const expiresAt = new Date(
+        Date.now() + CONTINUATION_TTL_MS,
+      ).toISOString();
+      const intent: PersistedContinuationIntent = {
+        debateId,
+        idempotencyKey: idempotencyKeyRef.current,
+        createdAt: now,
+        updatedAt: now,
+        phase: "intent_created",
+        expiresAt,
+      };
+      persistIntent(debateId, intent);
+      intentRef.current = intent;
+      const sentIntent = {
+        ...intent,
+        phase: "request_sent" as const,
+        updatedAt: new Date().toISOString(),
+      };
+      persistIntent(debateId, sentIntent);
+      intentRef.current = sentIntent;
+      const retryOfId =
+        debate?.continuation_status === "failed" ||
+        debate?.continuation_status === "cancelled"
+          ? debate.continuation_id
+          : undefined;
+      const response = await continueDebate(
+        debateId,
+        idempotencyKeyRef.current,
+        retryOfId,
+      );
       if (isStale()) return;
-      const ackIntent = { ...sentIntent, phase: "server_acknowledged" as const, continuationId: response?.continuation_id, updatedAt: new Date().toISOString() };
-      persistIntent(debateId, ackIntent); intentRef.current = ackIntent;
+      const ackIntent = {
+        ...sentIntent,
+        phase: "server_acknowledged" as const,
+        continuationId: response?.continuation_id,
+        updatedAt: new Date().toISOString(),
+      };
+      persistIntent(debateId, ackIntent);
+      intentRef.current = ackIntent;
       await hydrate(debateId);
       // hydrate() legitimately bumps the request generation — only the
       // active-run check is meaningful past this point.
       if (activeDebateIdRef.current !== debateId) return;
-      const trackIntent = { ...ackIntent, phase: "tracking" as const, updatedAt: new Date().toISOString() };
-      persistIntent(debateId, trackIntent); intentRef.current = trackIntent;
+      const trackIntent = {
+        ...ackIntent,
+        phase: "tracking" as const,
+        updatedAt: new Date().toISOString(),
+      };
+      persistIntent(debateId, trackIntent);
+      intentRef.current = trackIntent;
     } catch (err: unknown) {
       if (activeDebateIdRef.current !== debateId) return;
       const message = err instanceof Error ? err.message : String(err);
@@ -1103,24 +1396,28 @@ export function useRunWorkspace(debateId: string | null): UseRunWorkspaceResult 
     }
   }, [debateId, debate?.continuation_status, debate?.continuation_id, hydrate]);
 
-  const handleRetry = useCallback(async (stageKey?: string) => {
-    if (!debateId) return;
-    // PS157 Track B: user may navigate away mid-flight — guard completions.
-    const retryGeneration = requestGenerationRef.current;
-    const isStale = () =>
-      activeDebateIdRef.current !== debateId || requestGenerationRef.current !== retryGeneration;
-    try {
-      setError(null);
-      await retryDebate(debateId, stageKey);
-      if (isStale()) return;
-      await hydrate(debateId);
-    } catch (err: unknown) {
-      if (activeDebateIdRef.current !== debateId) return;
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("[useRunWorkspace] Retry failed:", message);
-      setError(message);
-    }
-  }, [debateId, hydrate]);
+  const handleRetry = useCallback(
+    async (stageKey?: string) => {
+      if (!debateId) return;
+      // PS157 Track B: user may navigate away mid-flight — guard completions.
+      const retryGeneration = requestGenerationRef.current;
+      const isStale = () =>
+        activeDebateIdRef.current !== debateId ||
+        requestGenerationRef.current !== retryGeneration;
+      try {
+        setError(null);
+        await retryDebate(debateId, stageKey);
+        if (isStale()) return;
+        await hydrate(debateId);
+      } catch (err: unknown) {
+        if (activeDebateIdRef.current !== debateId) return;
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[useRunWorkspace] Retry failed:", message);
+        setError(message);
+      }
+    },
+    [debateId, hydrate],
+  );
 
   const handleRefetch = useCallback(async () => {
     if (!debateId) return;

@@ -119,7 +119,7 @@ def _safe_column(obj: Any, name: str, default: Any = None) -> Any:
     """Access a SQLAlchemy model column safely, returning default on missing column."""
     try:
         return getattr(obj, name)
-    except (AttributeError, KeyError):
+    except AttributeError:
         return default
 
 
@@ -130,7 +130,12 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
 
     persona = _safe_column(msg, "persona")
     role = _safe_column(msg, "role") or "arena_response"
-    content = _safe_column(msg, "content") or _getattr_safely(meta, "content") or _getattr_safely(meta, "text") or ""
+    raw_content = _safe_column(msg, "content")
+    content = (
+        raw_content
+        if raw_content is not None
+        else (_getattr_safely(meta, "content") or _getattr_safely(meta, "text") or "")
+    )
     round_index = _safe_column(msg, "round_index") or 0
     debate_id = _safe_column(msg, "debate_id") or ""
     msg_id = _safe_column(msg, "id")
@@ -155,9 +160,7 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
 
     item: Dict[str, Any] = {
         "id": msg_id,
-        "response_id": response_id
-        or _getattr_safely(meta, "response_id")
-        or msg_id,
+        "response_id": response_id or _getattr_safely(meta, "response_id") or msg_id,
         "debate_id": debate_id,
         "response_type": response_type,
         "role": role,
@@ -177,9 +180,7 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
             "persona_tagline": _getattr_safely(meta, "persona_tagline"),
             "attempt_count": _extract_attempt_count(meta),
             "run_attempt": int(_getattr_safely(meta, "run_attempt", default=1) or 1),
-            "retry_generation": int(
-                _getattr_safely(meta, "retry_generation", default=0) or 0
-            ),
+            "retry_generation": int(_getattr_safely(meta, "retry_generation", default=0) or 0),
         },
     }
 
@@ -194,7 +195,8 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
             safe = "This model could not respond."
             item["content"] = safe
         item["metadata"] = {
-            k: v for k, v in item["metadata"].items()
+            k: v
+            for k, v in item["metadata"].items()
             if k in {"logo_url", "persona_type", "persona_tagline"}
         }
 
@@ -227,9 +229,7 @@ def fetch_persisted_responses(
         )
         messages: List[Message] = list(session.exec(stmt).all())
     except Exception as exc:  # noqa: BLE001
-        logger.exception(
-            "Failed to query persisted responses for debate %s", debate.id
-        )
+        logger.exception("Failed to query persisted responses for debate %s", debate.id)
         raise ResponsesQueryError(str(exc)) from exc
 
     items = [_normalize_message(m, is_public=is_public) for m in messages]
