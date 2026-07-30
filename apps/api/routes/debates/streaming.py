@@ -584,8 +584,10 @@ async def stream_events(
                     id_prefix = f"id: {seq}\n" if seq is not None and not is_heartbeat else ""
                     yield f"{id_prefix}data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
-                    # Check either top-level or payload type
-                    if evt_type == "final" or payload_type == "final":
+                    # Check for any terminal event type — close SSE stream so
+                    # the frontend can transition to its completion state.
+                    terminal_types = {"final", "debate_completed", "debate_failed", "arena_synthesis_finalized"}
+                    if evt_type in terminal_types or payload_type in terminal_types:
                         break
             finally:
                 from observability.metrics import record_sse_stream_closed
