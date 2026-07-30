@@ -31,7 +31,7 @@ from arena.prompts import (
 
 logger = logging.getLogger(__name__)
 
-MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
+MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 2
 
 
 async def _publish_lifecycle_best_effort(backend, channel: str, event: dict) -> None:
@@ -839,7 +839,7 @@ async def _generate_and_persist_streamed_synthesis_revision(
                 debate_id=debate_id,
                 user_id=user_id,
             ),
-            timeout=float(getattr(settings, "LLM_TIMEOUT_SECONDS", 30)),
+            timeout=float(getattr(settings, "ARENA_SYNTHESIS_TIMEOUT_SECONDS", 90)),
         )
     finally:
         await delta_publisher.flush()

@@ -50,6 +50,7 @@ class AppSettings(BaseSettings):
     # LLM Provider Timeouts
     LLM_TIMEOUT_SECONDS: int = 30  # Timeout for individual model calls
     LLM_MAX_RETRIES: int = 1  # Max retries on transient failures
+    ARENA_SYNTHESIS_TIMEOUT_SECONDS: int = 90  # Timeout for arena synthesis generation
     
     # Patchset 58.0: Data retention settings (days, None = indefinite)
     # These are configuration knobs, not final legal obligations

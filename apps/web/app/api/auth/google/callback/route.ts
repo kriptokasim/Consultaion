@@ -77,6 +77,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Use the backend's expires_in if provided, otherwise fall back to
+    // parsing the JWT exp claim; never exceed the JWT lifetime with the
+    // cookie. The backend defaults JWT_TTL_SECONDS to 86400 (1 day).
+    const tokenExpiresIn = data.expires_in ?? 86400;
+    const cookieMaxAge = Math.max(Math.min(tokenExpiresIn, 86400 * 30), 0);
+
     // 5. Set HttpOnly/Secure/SameSite cookie
     const nextPath = sanitizeInternalPath(
       request.cookies.get("oauth_next")?.value,
@@ -92,7 +98,7 @@ export async function GET(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: cookieMaxAge,
     });
     // Double-submit CSRF token. This one must remain readable by the browser
     // client so it can mirror the value in X-CSRF-Token on mutations.
@@ -101,7 +107,7 @@ export async function GET(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: cookieMaxAge,
     });
 
     // Clear the OAuth state and next cookies

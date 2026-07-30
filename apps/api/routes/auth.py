@@ -553,9 +553,13 @@ async def google_callback_post(
     # Vercel server-to-server callback owns the browser cookie.
     # Return the JWT in JSON so the Next.js route can set HttpOnly consultaion_token.
     # Do not Set-Cookie here — it would land on the Vercel server fetch, not the browser.
+    from auth import decode_access_token
+    decoded = decode_access_token(token)
+    expires_in = (decoded.get("exp", 0) - int(time.time())) if decoded else 0
     return {
         "access_token": token,
         "token_type": "bearer",
+        "expires_in": max(expires_in, 0),
         "user": {
             "id": user.id,
             "email": user.email,
