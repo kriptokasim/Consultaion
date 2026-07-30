@@ -317,8 +317,19 @@ export function ModelCard({ resp, className = "", onRetry }: ModelCardProps) {
         e.preventDefault();
         e.stopPropagation();
         if (resp.content) {
-            navigator.clipboard.writeText(resp.content);
-            setCopied(true);
+            navigator.clipboard.writeText(resp.content)
+                .then(() => setCopied(true))
+                .catch(() => {
+                    const ta = document.createElement("textarea");
+                    ta.value = resp.content;
+                    ta.style.position = "fixed";
+                    ta.style.opacity = "0";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                    setCopied(true);
+                });
             setTimeout(() => setCopied(false), 2000);
         }
     }, [resp.content]);
@@ -425,8 +436,19 @@ export function StreamingModelCard({
         e.preventDefault();
         e.stopPropagation();
         if (accumulatedText) {
-            navigator.clipboard.writeText(accumulatedText);
-            setCopied(true);
+            navigator.clipboard.writeText(accumulatedText)
+                .then(() => setCopied(true))
+                .catch(() => {
+                    const ta = document.createElement("textarea");
+                    ta.value = accumulatedText;
+                    ta.style.position = "fixed";
+                    ta.style.opacity = "0";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                    setCopied(true);
+                });
             setTimeout(() => setCopied(false), 2000);
         }
     }, [accumulatedText]);

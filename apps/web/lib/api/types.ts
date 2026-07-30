@@ -119,7 +119,8 @@ export interface DebateDetail extends DebateSummary {
         model_id: string;
         display_name: string;
         provider: string;
-        error: string;
+        message: string;
+        error_code?: string;
     }>;
 }
 

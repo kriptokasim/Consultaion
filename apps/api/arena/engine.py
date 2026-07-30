@@ -2169,7 +2169,8 @@ async def run_arena(
             "model_id": r.model_id,
             "display_name": r.display_name,
             "provider": r.provider,
-            "error": r.error or "Unknown error",
+            "message": r.content or "This model did not return a response.",
+            "error_code": r.error_code,
         }
         for r in failed_models
     ]

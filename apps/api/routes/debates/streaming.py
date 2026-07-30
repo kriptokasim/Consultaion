@@ -95,6 +95,7 @@ async def get_debate_events(
     messages: list[Message] = []
     scores: list[Score] = []
     pairwise_votes: list[PairwiseVote] = []
+    failed_sources: list[str] = []
 
     if caps.has_message_table:
         try:
@@ -102,7 +103,8 @@ async def get_debate_events(
                 select(Message).where(Message.debate_id == debate_id).order_by(sa.asc(Message.created_at))
             ).all()
         except Exception as exc:
-            logger.warning("events_messages_failed debate_id=%s error=%s", debate_id, exc)
+            logger.error("events_messages_failed debate_id=%s error=%s", debate_id, exc)
+            raise
 
     if caps.has_score_table:
         try:
@@ -111,6 +113,7 @@ async def get_debate_events(
             ).all()
         except Exception as exc:
             logger.warning("events_scores_failed debate_id=%s error=%s", debate_id, exc)
+            failed_sources.append("scores")
 
     if caps.has_pairwise_vote_table:
         try:
@@ -121,6 +124,7 @@ async def get_debate_events(
             ).all()
         except Exception as exc:
             logger.warning("events_pairwise_failed debate_id=%s error=%s", debate_id, exc)
+            failed_sources.append("pairwise_votes")
 
     events: list[dict[str, Any]] = []
     for message in messages:
@@ -302,11 +306,17 @@ async def get_debate_events(
         logger.warning(f"timeline_fetch_slow: debate_id={debate_id} elapsed_ms={elapsed_ms:.1f} events={len(events)}")
 
     # Filter events for unauthenticated public users — strip internal metadata
+    result: dict[str, Any] = {"items": events}
+    if failed_sources:
+        result["quality"] = "degraded"
+        result["failed_sources"] = failed_sources
+
     if not current_user and is_debate_public(debate):
         from serializers import serialize_events_public
-        return {"items": serialize_events_public(events)}
+        result["items"] = serialize_events_public(events)
+        return result
 
-    return {"items": events}
+    return result
 
 
 @router.get("/debates/{debate_id}/responses")

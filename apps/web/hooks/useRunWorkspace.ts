@@ -518,6 +518,8 @@ export function useRunWorkspace(
   const timelineGenerationRef = useRef(0);
   const responseRefreshFlightRef = useRef<ResponseRefreshFlight | null>(null);
   const lastRefreshTimeRef = useRef<number>(0);
+  const pendingRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRefreshArgsRef = useRef<{ id: string; generation: number } | null>(null);
   const MIN_REFRESH_INTERVAL_MS = 2000;
   const activeDebateIdRef = useRef(debateId);
   activeDebateIdRef.current = debateId;
@@ -820,9 +822,28 @@ export function useRunWorkspace(
 
   const refreshPersistedResponses = useCallback(
     (id: string, generation: number) => {
+      // Cancel any deferred refresh — we'll either run now or re-schedule
+      if (pendingRefreshTimerRef.current) {
+        clearTimeout(pendingRefreshTimerRef.current);
+        pendingRefreshTimerRef.current = null;
+      }
+      pendingRefreshArgsRef.current = null;
+
       const now = Date.now();
-      if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL_MS) {
-        return Promise.resolve();
+      const elapsed = now - lastRefreshTimeRef.current;
+
+      // Inside throttle window → schedule a trailing refresh at expiry.
+      if (elapsed < MIN_REFRESH_INTERVAL_MS) {
+        const remaining = MIN_REFRESH_INTERVAL_MS - elapsed;
+        const deferred = new Promise<void>((resolve) => {
+          pendingRefreshArgsRef.current = { id, generation };
+          pendingRefreshTimerRef.current = setTimeout(() => {
+            pendingRefreshTimerRef.current = null;
+            pendingRefreshArgsRef.current = null;
+            resolve(refreshPersistedResponses(id, generation));
+          }, remaining);
+        });
+        return deferred;
       }
 
       const current = responseRefreshFlightRef.current;
@@ -874,6 +895,13 @@ export function useRunWorkspace(
           if (responseRefreshFlightRef.current === flight) {
             responseRefreshFlightRef.current = null;
           }
+          // After fetch completes, run deferred refresh if one was queued
+          // while we were fetching (via the timer path above).
+          if (pendingRefreshArgsRef.current) {
+            const { id: pendingId, generation: pendingGen } = pendingRefreshArgsRef.current;
+            pendingRefreshArgsRef.current = null;
+            return refreshPersistedResponses(pendingId, pendingGen);
+          }
         }
       })();
       responseRefreshFlightRef.current = flight;
@@ -891,6 +919,11 @@ export function useRunWorkspace(
       coreGenerationRef.current += 1;
       responsesGenerationRef.current += 1;
       timelineGenerationRef.current += 1;
+      if (pendingRefreshTimerRef.current) {
+        clearTimeout(pendingRefreshTimerRef.current);
+        pendingRefreshTimerRef.current = null;
+      }
+      pendingRefreshArgsRef.current = null;
       discardPendingDeltas();
       abortAll("unmount");
     };

@@ -148,7 +148,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
     // FH121/C2-BUGFIX-17: Terminal Runs expose missing responses explicitly;
     // they must never leave an indefinite loading skeleton behind.
     const runIsTerminal = Boolean(isTerminal || isTerminalRunStatus(debate.status));
-    const [activeTab, setActiveTab] = useState<number>(0);
+    const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
     const [mobileSegment, setMobileSegment] = useState<"perspectives" | "decision" | "verification">("perspectives");
 
     const executionModels = useMemo(() => {
@@ -196,6 +196,11 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
         (debate?.config as any)?.models?.length ||
         (debate as any)?.models?.length ||
         2;
+    const activeTab = useMemo(() => {
+        if (activeTabKey === null) return 0;
+        const idx = renderSlots.findIndex(s => s.key === activeTabKey);
+        return idx >= 0 ? idx : 0;
+    }, [activeTabKey, renderSlots]);
     const { containerRef: cardContainerRef } = useCardKeyboardNav(expectedModels);
     const mobileSectionClass = (section: typeof mobileSegment) =>
         mobileSegment === section ? "block" : "hidden sm:block";
@@ -246,7 +251,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     <div className="mt-2 space-y-1">
                         {debate.final_meta.model_warnings.map((warn: any, i: number) => (
                             <p key={i} className="text-xs text-amber-600 dark:text-amber-400">
-                                ⚠ {warn.display_name} ({warn.provider}): {warn.error}
+                                ⚠ {warn.display_name} ({warn.provider}): {warn.message}
                             </p>
                         ))}
                     </div>
@@ -370,8 +375,8 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                     role="tab"
                                     aria-selected={selected}
                                     aria-label={`${label} response`}
-                                    onClick={() => setActiveTab(i)}
-                                    className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all min-h-[36px] ${
+                                    onClick={() => setActiveTabKey(slot.key)}
+                                    className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all min-h-[44px] ${
                                         selected
                                             ? "bg-card text-foreground shadow-sm border border-border"
                                             : "bg-muted/50 text-muted-foreground border border-transparent hover:border-border"
