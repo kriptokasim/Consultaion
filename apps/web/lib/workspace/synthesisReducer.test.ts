@@ -231,3 +231,41 @@ describe("synthesisReducer", () => {
     expect(durableFinal.text).toBe("Definitive decision");
   });
 });
+
+
+describe("synthesisReducer replay ordering", () => {
+  test("duplicate STARTED does not erase visible text", () => {
+    const started = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "STARTED",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 0,
+        status: "provisional",
+      },
+    });
+    const streamed = synthesisReducer(started, {
+      type: "DELTA",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 0,
+        status: "provisional",
+        text: "visible",
+        delta_sequence: 1,
+      },
+    });
+    const replayed = synthesisReducer(streamed, {
+      type: "STARTED",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 0,
+        status: "provisional",
+      },
+    });
+
+    expect(replayed.text).toBe("visible");
+    expect(replayed.status).toBe("streaming");
+  });
+});

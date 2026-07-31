@@ -73,8 +73,9 @@ export function extractFriendlyError(raw: string): { friendly: string; technical
     if (lower.includes("error") || lower.includes("exception") || lower.includes("traceback") || lower.includes("failed"))
         return { friendly: "This model encountered an error while processing your request.", technical: raw };
 
-    // Content looks normal — not an error
-    return { friendly: "", technical: null };
+    // A failed response may intentionally carry a user-facing terminal
+    // explanation (for example quorum finalization). Preserve it.
+    return { friendly: raw, technical: null };
 }
 
 /* ─── Model response type ─── */
@@ -582,6 +583,11 @@ export function StreamingModelCard({
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin" />
                             <span>Waiting for model...</span>
+                        </div>
+                    ) : state === "started" || state === "streaming" ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Model is reasoning…</span>
                         </div>
                     ) : (
                         <span className="italic text-muted-foreground">No response received.</span>
