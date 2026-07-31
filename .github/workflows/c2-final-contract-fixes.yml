@@ -1,4 +1,4 @@
-# Registered workflow; this follow-up commit triggers the branch push job.
+# Same-repository PR verification with bot recursion guard.
 name: C2 Final Contract Fixes
 
 on:
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   patch-and-verify:
-    if: github.event_name == 'push'
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     services:
       postgres:
