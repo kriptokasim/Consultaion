@@ -6,7 +6,7 @@ import uuid
 from typing import Any, Optional
 
 import sqlalchemy as sa
-from auth import get_current_user, get_current_user_flexible, get_optional_user
+from auth import get_current_user_flexible, get_optional_user
 from channels import debate_channel_id
 from deps import get_session, get_sse_backend
 from exceptions import (
