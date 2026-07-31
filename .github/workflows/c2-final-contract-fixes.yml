@@ -109,6 +109,7 @@ jobs:
           PROVIDER_KEY_ENCRYPTION_KEYS: '{"1":"dGVzdC1rZXktZm9yLWNpLXRlc3Rpbmctb25seS0zMnY="}'
           PROVIDER_KEY_ACTIVE_VERSION: '1'
         run: |
+          ruff check --fix tests/test_parliament_failure_tolerance.py
           ruff check arena/engine.py parliament/engine.py config.py tests/test_arena_failure_resilience.py tests/test_parliament_failure_tolerance.py
           mypy arena/engine.py parliament/engine.py --ignore-missing-imports
           pytest -q --no-cov \
