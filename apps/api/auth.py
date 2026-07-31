@@ -387,16 +387,24 @@ def get_user_flexible(
 ) -> Optional[User]:
     """
     Get user from either cookie (JWT) or API key.
-    
+
     Tries API key first, then falls back to cookie auth.
     """
     # Try API key first
     user = get_user_from_api_key(request, session)
     if user:
         return user
-    
+
     # Fall back to cookie auth
     return get_optional_user(request, session)
+
+
+def get_optional_user_flexible(
+    request: Request,
+    session: Session = Depends(get_session),
+) -> Optional[User]:
+    """Optional variant of get_user_flexible. Returns None for unauthenticated requests."""
+    return get_user_flexible(request, session)
 
 
 def get_current_user_flexible(

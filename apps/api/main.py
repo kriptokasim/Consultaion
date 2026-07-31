@@ -431,7 +431,8 @@ if settings.ENV != "test":
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Idempotency-Key", "X-Requested-With"],
+        expose_headers=["X-Request-ID", "X-Trace-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Idempotency-Key", "X-Requested-With", "X-API-Key", "X-Request-ID", "X-Trace-ID"],
     )
 
 from exception_handlers import (

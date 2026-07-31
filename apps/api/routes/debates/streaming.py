@@ -6,7 +6,7 @@ import uuid
 from typing import Any, Optional
 
 import sqlalchemy as sa
-from auth import get_current_user, get_optional_user
+from auth import get_current_user, get_current_user_flexible, get_optional_user
 from channels import debate_channel_id
 from deps import get_session, get_sse_backend
 from exceptions import (
@@ -381,7 +381,7 @@ async def get_debate_judges(
 async def export_scores_csv(
     debate_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     _debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
     
@@ -425,7 +425,7 @@ async def replay_events(
     debate_id: str,
     from_sequence: Optional[int] = Query(default=None, description="Start sequence offset (non-inclusive)"),
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     """Retrieve cached real-time events from the memory/Redis event log."""
