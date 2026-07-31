@@ -1,0 +1,58 @@
+name: C2 Ruff Cleanup
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: c2-ruff-cleanup-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    if: github.head_ref == 'agent/c2-bugfix-21'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/c2-bugfix-21
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Remove stale provider-health imports
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/api/agents.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'from model_gateway.provider_health import is_circuit_open, record_failure, record_success'
+          new = 'from model_gateway.provider_health import is_circuit_open'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one import to replace, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          rm .github/workflows/c2-ruff-fix.yml
+
+      - name: Validate Ruff cleanup
+        run: |
+          pip install ruff==0.8.0
+          ruff check apps/api/agents.py apps/api/tests/test_c2_bugfix_21_contracts.py
+          git diff --check
+
+      - name: Commit and push
+        run: |
+          git config user.name 'consultaion-fix-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: remove stale provider health imports'
+          git fetch origin agent/c2-bugfix-21
+          git rebase origin/agent/c2-bugfix-21
+          git push origin HEAD:agent/c2-bugfix-21
