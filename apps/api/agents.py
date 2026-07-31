@@ -10,7 +10,7 @@ from integrations.langfuse import current_trace_id, log_model_observation
 from litellm import RateLimitError
 from llm_errors import TransientLLMError
 from model_gateway.model_target import resolve_model_target
-from model_gateway.provider_health import is_circuit_open, record_failure, record_success
+from model_gateway.provider_health import is_circuit_open
 from safety.pii import scrub_messages
 from schemas import AgentConfig, JudgeConfig
 
