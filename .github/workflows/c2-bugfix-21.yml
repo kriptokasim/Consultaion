@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - agent/c2-bugfix-21
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   patch-test-commit:
+    if: github.event_name == 'push' || github.head_ref == 'agent/c2-bugfix-21'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -92,5 +96,3 @@ jobs:
           git add -A
           git commit -m "fix: harden realtime model lifecycle and mobile UX"
           git push origin HEAD:agent/c2-bugfix-21
-
-# trigger: 2
