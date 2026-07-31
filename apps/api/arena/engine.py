@@ -1087,7 +1087,7 @@ async def run_arena(
             _locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
 
         async def _call_model(
-            model_info, response_id: str, deadline: float, timing: dict | None = None
+            model_info, response_id: str, deadline: float, timing: dict | None = None, lifecycle_payload: dict | None = None
         ):
             """Call a single SOTA model and return its response.
 
@@ -1139,11 +1139,22 @@ async def run_arena(
                 )
                 await delta_pub.start()
 
+                _started_emitted = False
+                _lifecycle = lifecycle_payload or {}
+
                 async def on_delta(delta):
+                    nonlocal _started_emitted
                     if timing is not None and timing.get("first_delta_ts") is None:
                         timing["first_delta_ts"] = time.monotonic()
                     if timing is not None:
                         timing["delta_count"] = timing.get("delta_count", 0) + 1
+                    if not _started_emitted:
+                        _started_emitted = True
+                        await _publish_lifecycle_best_effort(
+                            backend,
+                            f"debate:{debate_id}",
+                            {"type": "model_response_started", **_lifecycle},
+                        )
                     await delta_pub.push(delta)
 
                 try:
@@ -1343,7 +1354,6 @@ async def run_arena(
             for event_type in (
                 "model_response_queued",
                 "model_response_connecting",
-                "model_response_started",
             ):
                 await _publish_lifecycle_best_effort(
                     backend,
@@ -1353,7 +1363,7 @@ async def run_arena(
 
             try:
                 async with asyncio.timeout_at(deadline):
-                    result = await _call_model(model_info, response_id, deadline, _timing)
+                    result = await _call_model(model_info, response_id, deadline, _timing, lifecycle_payload)
                 response, call_usage = result
             except Exception as exc:
                 logger.error(f"Arena model task exception for {model_info.id}: {exc}")

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp, Loader2, Wifi, WifiOff, Save, Copy } from "lucide-react";
+import { Activity, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp, Loader2, Wifi, WifiOff, Save, Copy } from "lucide-react";
 import Image from "next/image";
 
 import { sanitizeMarkdown } from "@/lib/sanitize";
@@ -277,6 +277,12 @@ function StreamingStateBadge({ state }: { state: ModelState }) {
                     <Wifi className="h-2.5 w-2.5 animate-pulse" /> Connecting
                 </span>
             );
+        case "started":
+            return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
+                    <Activity className="h-2.5 w-2.5" /> Connected
+                </span>
+            );
         case "streaming":
             return (
                 <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
@@ -501,7 +507,7 @@ export function StreamingModelCard({
                         <StreamingStateBadge state={state} />
                     </div>
                 </div>
-                {(state === "completed" || state === "streaming") && accumulatedText && (
+                {(state === "completed" || state === "streaming" || state === "started") && accumulatedText && (
                     <button 
                         onClick={handleCopy} 
                         className="shrink-0 p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-md transition-colors group"

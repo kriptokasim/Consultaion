@@ -184,13 +184,13 @@ export function streamingReducer(
           modelId: model_id || "",
           displayName: display_name || "",
           provider: provider || "",
-          state: "streaming",
+          state: "started",
           accumulatedText: "",
           lastSequence: 0,
         };
       }
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      next.set(response_id, { ...buf, state: "streaming" });
+      next.set(response_id, { ...buf, state: "started" });
       return { ...state, buffers: next };
     }
 

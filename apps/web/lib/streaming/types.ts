@@ -87,6 +87,7 @@ export interface PipelineStagePayload {
 export type ModelState =
   | "queued"
   | "connecting"
+  | "started"
   | "streaming"
   | "persisting"
   | "completed"
