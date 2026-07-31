@@ -6,6 +6,7 @@ import Image from "next/image";
 
 import { sanitizeMarkdown } from "@/lib/sanitize";
 import type { ModelState } from "@/lib/streaming/types";
+import { useI18n } from "@/lib/i18n/client";
 
 /* ─── provider accent colours ─── */
 const PROVIDER_COLORS: Record<string, { bg: string; border: string; text: string; accent: string; glow: string }> = {
@@ -264,41 +265,46 @@ export function UnavailableModelCard({
 
 /* ─── Streaming state badge ─── */
 function StreamingStateBadge({ state }: { state: ModelState }) {
+    const { t } = useI18n();
+    const translated = (key: string, fallback: string) => {
+        const value = t(key);
+        return value === key ? fallback : value;
+    };
     switch (state) {
         case "queued":
             return (
                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-400">
-                    <Loader2 className="h-2.5 w-2.5 animate-spin" /> Queued
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" /> {translated("arena.state.queued", "Queued")}
                 </span>
             );
         case "connecting":
             return (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
-                    <Wifi className="h-2.5 w-2.5 animate-pulse" /> Connecting
+                    <Wifi className="h-2.5 w-2.5 animate-pulse" /> {translated("arena.state.connecting", "Connecting")}
                 </span>
             );
         case "started":
             return (
                 <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
-                    <Activity className="h-2.5 w-2.5" /> Connected
+                    <Activity className="h-2.5 w-2.5" /> {translated("arena.state.connected", "Connected")}
                 </span>
             );
         case "streaming":
             return (
                 <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300">
-                    <Loader2 className="h-2.5 w-2.5 animate-spin" /> Streaming
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" /> {translated("arena.state.streaming", "Streaming")}
                 </span>
             );
         case "persisting":
             return (
                 <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-300">
-                    <Save className="h-2.5 w-2.5" /> Saving
+                    <Save className="h-2.5 w-2.5" /> {translated("arena.state.saving", "Saving")}
                 </span>
             );
         case "failed":
             return (
                 <span className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[10px] font-medium text-red-600 dark:text-red-400">
-                    <WifiOff className="h-2.5 w-2.5" /> Failed
+                    <WifiOff className="h-2.5 w-2.5" /> {translated("arena.state.failed", "Failed")}
                 </span>
             );
         default:
@@ -390,7 +396,7 @@ export function ModelCard({ resp, className = "", onRetry }: ModelCardProps) {
                     onRetry={onRetry ? () => onRetry(resp.display_name) : undefined}
                 />
             ) : (
-                <div className="p-5 flex-1 overflow-y-auto max-h-[400px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
+                <div className="p-5 flex-1 sm:overflow-y-auto sm:max-h-[400px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar">
                     {resp.content ? (
                         <div
                             className="text-sm leading-relaxed text-foreground/90"
@@ -556,7 +562,7 @@ export function StreamingModelCard({
             ) : (
                 <div
                     ref={bodyRef}
-                    className="p-5 flex-1 overflow-y-auto max-h-[400px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar"
+                    className="p-5 flex-1 sm:overflow-y-auto sm:max-h-[400px] prose prose-sm dark:prose-invert max-w-none custom-scrollbar"
                 >
                     {displayedText ? (
                         isTerminal ? (

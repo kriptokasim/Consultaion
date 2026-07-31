@@ -737,5 +737,20 @@
   "arena.tabs.perspectives": "Cevaplar",
   "arena.tabs.decision": "Karar",
   "arena.tabs.verification": "Kontroller",
-  "arena.tabs.decisionUpdate": "Yeni karar güncellemesi"
+  "arena.tabs.decisionUpdate": "Yeni karar güncellemesi",
+  "arena.yourQuestion": "Sorunuz",
+  "arena.noPersistedResponses": "Bu oturum son duruma ulaştı ancak kaydedilmiş model cevabı bulunamadı.",
+  "arena.supportDetails": "Destek detayları",
+  "arena.retryResponseLoading": "Cevap yüklemeyi yeniden dene",
+  "arena.responsesRetrievalFailed": "Oturum yüklendi ancak saklanan model cevapları alınamadı.",
+  "arena.retryLoadingResponses": "Cevapları yeniden yükle",
+  "arena.modelResponses": "Model Cevapları",
+  "arena.verificationUnavailable": "Bu oturum için doğrulama analizi kullanılamıyor.",
+  "arena.decisionReport": "Karar Raporu",
+  "arena.state.queued": "Sırada",
+  "arena.state.connecting": "Bağlanıyor",
+  "arena.state.connected": "Bağlandı",
+  "arena.state.streaming": "Akış",
+  "arena.state.saving": "Kaydediliyor",
+  "arena.state.failed": "Başarısız"
 }

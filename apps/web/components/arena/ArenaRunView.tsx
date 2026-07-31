@@ -213,7 +213,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         </div>
                         <div className="min-w-0">
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                Your Question
+                                {translated("arena.yourQuestion", "Your Question")}
                             </p>
                             <p className="text-lg font-medium text-foreground leading-relaxed whitespace-pre-wrap">
                                 {debate.prompt}
@@ -300,17 +300,20 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-6 text-center">
                     <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                        This Run reached a terminal state, but no persisted model responses were found.
+                        {translated("arena.noPersistedResponses", "This Run reached a terminal state, but no persisted model responses were found.")}
                     </p>
                     <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                        Run ID: {debate.id} · Status: {debate.status}
+                        <details className="cursor-pointer">
+                            <summary className="inline">{translated("arena.supportDetails", "Support details")}</summary>
+                            <span className="block mt-1 font-mono">Run ID: {debate.id} · Status: {debate.status}</span>
+                        </details>
                     </p>
                     <button
                         onClick={() => onRefetch?.()}
                         className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-800/50 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-700/50 transition-colors"
                     >
                         <RefreshCw className="h-3 w-3" />
-                        Retry response loading
+                        {translated("arena.retryResponseLoading", "Retry response loading")}
                     </button>
                 </div>
               )}
@@ -319,7 +322,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                 <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6 text-center">
                     <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
                     <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                        The Run loaded, but its stored model responses could not be retrieved.
+                        {translated("arena.responsesRetrievalFailed", "The Run loaded, but its stored model responses could not be retrieved.")}
                     </p>
                     {responsesError && (
                         <p className="text-xs text-red-600 dark:text-red-400 mt-1 font-mono">{responsesError}</p>
@@ -329,7 +332,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-800/50 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors"
                     >
                         <RefreshCw className="h-3 w-3" />
-                        Retry loading responses
+                        {translated("arena.retryLoadingResponses", "Retry loading responses")}
                     </button>
                 </div>
               )}
@@ -338,7 +341,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
                     <Bot className="h-4 w-4" />
-                    Model Responses
+                    {translated("arena.modelResponses", "Model Responses")}
                 </h2>
 
                 {/* Mobile: chip selector + single visible panel */}
@@ -505,7 +508,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     />
                 ) : (
                     <p className="text-sm text-muted-foreground">
-                        Verification analysis is unavailable for this Run.
+                        {translated("arena.verificationUnavailable", "Verification analysis is unavailable for this Run.")}
                     </p>
                 )}
             </section>
@@ -531,7 +534,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     return (
                         <div className="rounded-2xl border border-border bg-card/60 p-6 shadow-sm">
                             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-                                Decision Report
+                                {translated("arena.decisionReport", "Decision Report")}
                             </h3>
 
                             {hasReport ? (

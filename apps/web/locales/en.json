@@ -737,5 +737,20 @@
   "arena.tabs.perspectives": "Answers",
   "arena.tabs.decision": "Decision",
   "arena.tabs.verification": "Checks",
-  "arena.tabs.decisionUpdate": "New decision update"
+  "arena.tabs.decisionUpdate": "New decision update",
+  "arena.yourQuestion": "Your Question",
+  "arena.noPersistedResponses": "This Run reached a terminal state, but no persisted model responses were found.",
+  "arena.supportDetails": "Support details",
+  "arena.retryResponseLoading": "Retry response loading",
+  "arena.responsesRetrievalFailed": "The Run loaded, but its stored model responses could not be retrieved.",
+  "arena.retryLoadingResponses": "Retry loading responses",
+  "arena.modelResponses": "Model Responses",
+  "arena.verificationUnavailable": "Verification analysis is unavailable for this Run.",
+  "arena.decisionReport": "Decision Report",
+  "arena.state.queued": "Queued",
+  "arena.state.connecting": "Connecting",
+  "arena.state.connected": "Connected",
+  "arena.state.streaming": "Streaming",
+  "arena.state.saving": "Saving",
+  "arena.state.failed": "Failed"
 }
