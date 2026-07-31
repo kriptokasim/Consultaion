@@ -155,14 +155,14 @@ function ArenaPageContent() {
   // Track F: SSE is owned exclusively by RunDetailClient/useRunWorkspace.
   // No local EventSource is created here.
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setEvents([])
     setActivePersona(undefined)
     setSpeakerTime(0)
     setEventsLoading(false)
     setLatestScores([])
     manualStartAttemptedRef.current = false
-  }
+  }, [])
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) {
@@ -313,7 +313,7 @@ function ArenaPageContent() {
       url.searchParams.delete('resume')
       window.history.replaceState({}, '', url.toString())
     }
-  }, [resumeParam, authStatus, gatewayPolicy, router, stopStream])
+  }, [resumeParam, authStatus, gatewayPolicy, router, stopStream, reset])
 
   const handlePanelChange = useCallback(
     (seats: PanelSeatConfig[]) => {

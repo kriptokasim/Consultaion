@@ -387,7 +387,7 @@ async def create_debate(
                     debate_id=debate_id,
                     run_attempt=1,
                 )
-                has_hosted_credits = credit_reservation_id is not None or True
+                has_hosted_credits = credit_reservation_id is not None
             except ValidationError as exc:
                 if exc.code == "hosted_credits.exhausted" and body.model_id is not None:
                     raise ValidationError(
