@@ -1,0 +1,94 @@
+name: C2-BUGFIX-21 Patch Runner
+
+on:
+  push:
+    branches:
+      - agent/c2-bugfix-21
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/c2-bugfix-21
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Apply C2-BUGFIX-21
+        run: python scripts/apply_c2_bugfix_21.py
+
+      - name: Remove temporary patch infrastructure
+        run: |
+          rm scripts/apply_c2_bugfix_21.py
+          rm .github/workflows/c2-bugfix-21.yml
+
+      - name: Python syntax validation
+        run: |
+          python -m py_compile \
+            apps/api/model_gateway/provider_health.py \
+            apps/api/model_gateway/__init__.py \
+            apps/api/model_gateway/agent_bridge.py \
+            apps/api/agents.py \
+            apps/api/model_gateway/adapters.py \
+            apps/api/arena/engine.py \
+            apps/api/parliament/engine.py
+
+      - name: Install backend test dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run focused backend tests
+        working-directory: apps/api
+        env:
+          ENV: test
+          USE_MOCK: "1"
+          REQUIRE_REAL_LLM: "0"
+          STRIPE_WEBHOOK_VERIFY: "0"
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
+          DATABASE_URL: "sqlite:///./c2_bugfix_21.db"
+          PROVIDER_KEY_ENCRYPTION_KEYS: '{"1":"dGVzdC1rZXktZm9yLWNpLXRlc3Rpbmctb25seS0zMnY="}'
+          PROVIDER_KEY_ACTIVE_VERSION: "1"
+        run: pytest -q --no-cov tests/test_arena_pipeline_hardening.py tests/test_model_target_resolver.py
+
+      - name: Install frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Frontend typecheck
+        working-directory: apps/web
+        run: npx tsc --noEmit
+
+      - name: Focused frontend tests
+        working-directory: apps/web
+        run: npm run test -- --run lib/workspace/streamReducer.test.ts lib/workspace/synthesisReducer.test.ts
+
+      - name: Validate patch
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Commit and push fixes
+        run: |
+          git config user.name "consultaion-fix-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: harden realtime model lifecycle and mobile UX"
+          git push origin HEAD:agent/c2-bugfix-21
