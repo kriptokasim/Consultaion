@@ -1614,34 +1614,75 @@ async def run_arena(
             provisional_task = asyncio.create_task(_run_provisional_after_grace(quorum_reached_at))
 
         _maybe_schedule_provisional()
-        try:
-            for task in asyncio.as_completed(tasks):
-                try:
-                    response, _call_usage = await task
-                except Exception as exc:
-                    from orchestration.checkpoints import (
-                        CheckpointIntegrityError,
-                        CheckpointOwnershipLostError,
-                    )
-                    from orchestration.execution_lease import ExecutionSupersededError
+        fast_finalization = getattr(settings, "ARENA_FAST_FINALIZATION_ENABLED", True) is True
+        convergence_grace_s = int(getattr(settings, "ARENA_FINAL_CONVERGENCE_GRACE_MS", 8000)) / 1000.0
+        quorum_reached_ts: float | None = None
 
-                    if isinstance(
-                        exc,
-                        (
-                            ExecutionSupersededError,
-                            CheckpointOwnershipLostError,
-                            CheckpointIntegrityError,
-                        ),
-                    ):
-                        raise
-                    logger.error(
-                        "Arena model task failed outside provider boundary: %s",
-                        exc,
-                        exc_info=True,
+        try:
+            pending_set = set(tasks)
+            while pending_set:
+                timeout_for_next: float | None = None
+                if fast_finalization and quorum_reached_ts is not None:
+                    elapsed = time.monotonic() - quorum_reached_ts
+                    remaining = convergence_grace_s - elapsed
+                    if remaining <= 0:
+                        logger.info(
+                            "Arena bounded quorum convergence limit reached (%.1fs). Proceeding with %d responses.",
+                            convergence_grace_s,
+                            sum(1 for r in responses if r.success),
+                        )
+                        break
+                    timeout_for_next = remaining
+
+                try:
+                    done_set, pending_set = await asyncio.wait(
+                        pending_set,
+                        timeout=timeout_for_next,
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
-                    continue
-                responses.append(response)
-                _maybe_schedule_provisional()
+                except Exception as wait_exc:
+                    logger.error("Error waiting for arena model tasks: %s", wait_exc)
+                    break
+
+                if not done_set and timeout_for_next is not None:
+                    logger.info(
+                        "Arena bounded quorum grace period expired. Finalizing synthesis with %d responses.",
+                        sum(1 for r in responses if r.success),
+                    )
+                    break
+
+                for completed_task in done_set:
+                    try:
+                        response, _call_usage = completed_task.result()
+                    except Exception as exc:
+                        from orchestration.checkpoints import (
+                            CheckpointIntegrityError,
+                            CheckpointOwnershipLostError,
+                        )
+                        from orchestration.execution_lease import ExecutionSupersededError
+
+                        if isinstance(
+                            exc,
+                            (
+                                ExecutionSupersededError,
+                                CheckpointOwnershipLostError,
+                                CheckpointIntegrityError,
+                            ),
+                        ):
+                            raise
+                        logger.error(
+                            "Arena model task failed outside provider boundary: %s",
+                            exc,
+                            exc_info=True,
+                        )
+                        continue
+                    responses.append(response)
+                    _maybe_schedule_provisional()
+
+                    if fast_finalization and quorum_reached_ts is None:
+                        if sum(1 for r in responses if r.success) >= min_required:
+                            quorum_reached_ts = time.monotonic()
+
             all_models_terminal_at = time.monotonic()
 
             if provisional_task is not None:

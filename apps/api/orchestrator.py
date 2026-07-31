@@ -806,7 +806,7 @@ async def run_debate(
                             "synthesis_id": result.final_meta.get("synthesis_id", f"synth-{debate_id}"),
                             "run_attempt": debate.run_attempt or 1,
                             "revision": result.final_meta.get("synthesis_revision", 1),
-                            "status": "final" if result.status == "completed" else "failed",
+                            "status": "final" if result.status in {"completed", "completed_with_warnings"} else "failed",
                             "content": result.final_answer,
                             "report": orchestration_report,
                             "input_hash": result.final_meta.get("synthesis_input_hash"),
@@ -833,7 +833,7 @@ async def run_debate(
                             "synthesis_id": result.final_meta.get("synthesis_id"),
                             "run_attempt": debate.run_attempt or 1,
                             "revision": result.final_meta.get("synthesis_revision", 1),
-                            "status": "final" if result.status == "completed" else "failed",
+                            "status": "final" if result.status in {"completed", "completed_with_warnings"} else "failed",
                             "content": result.final_answer,
                             "report": orchestration_report,
                             "input_hash": result.final_meta.get("synthesis_input_hash"),
@@ -854,7 +854,7 @@ async def run_debate(
                         },
                     )
 
-                if result.status == "completed":
+                if result.status in {"completed", "completed_with_warnings"}:
                     from services.terminal_transition import (
                         TRANSITION_SUMMARY_EMAIL,
                         claim_transition_async,
@@ -978,7 +978,7 @@ async def run_debate(
                 panel_result = await run_parliament_debate(debate_id, model_id=model_id)
                 final_meta = panel_result.final_meta
                 final_status = panel_result.status or "completed"
-                if panel_result.status != "completed" or panel_result.error_reason:
+                if panel_result.status not in {"completed", "completed_with_warnings"} or panel_result.error_reason:
                     final_status = "failed"
                 final_content = (
                     panel_result.final_answer

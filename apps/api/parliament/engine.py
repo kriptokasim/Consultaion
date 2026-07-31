@@ -353,24 +353,37 @@ async def run_parliament_debate(
                 error_reason=outcome.reason or "seat_failure_threshold_exceeded",
             )
 
-    final_text, final_usage = await _synthesize_verdict(
-        debate_id=debate_id,
-        prompt=prompt,
-        transcript_summary=transcript_to_text(transcript_buffer, limit=24),
-        panel=panel,
-        model_id=model_id,
-    )
-    usage.add_call(final_usage)
-    seat_usage.append(
-        {
-            "seat_id": "chair",
-            "seat_name": "Chair",
-            "role_profile": "chair",
-            "provider": final_usage.provider,
-            "model": final_usage.model,
-            "tokens": final_usage.total_tokens,
-        }
-    )
+    status = "completed"
+    try:
+        final_text, final_usage = await _synthesize_verdict(
+            debate_id=debate_id,
+            prompt=prompt,
+            transcript_summary=transcript_to_text(transcript_buffer, limit=24),
+            panel=panel,
+            model_id=model_id,
+        )
+        usage.add_call(final_usage)
+        seat_usage.append(
+            {
+                "seat_id": "chair",
+                "seat_name": "Chair",
+                "role_profile": "chair",
+                "provider": final_usage.provider,
+                "model": final_usage.model,
+                "tokens": final_usage.total_tokens,
+            }
+        )
+    except Exception as chair_exc:
+        logger.warning(
+            "Chair verdict synthesis failed for debate %s: %s. Falling back to transcript summary.",
+            debate_id,
+            chair_exc,
+        )
+        status = "completed_with_warnings"
+        fallback_text = transcript_to_text(transcript_buffer, limit=10)
+        final_text = (
+            "⚠️ Chair synthesis unavailable. Summary of participant turns:\n\n" + fallback_text
+        )
 
     # Patchset Rating: Perform Judging
     # Load separate judge config if available, otherwise default
@@ -422,7 +435,7 @@ async def run_parliament_debate(
         "scores": scores,
         "usage": usage.snapshot(),
     }
-    return ParliamentResult(final_answer=final_text, final_meta=final_meta, usage_tracker=usage)
+    return ParliamentResult(final_answer=final_text, final_meta=final_meta, usage_tracker=usage, status=status)
 
 
 async def _execute_round(

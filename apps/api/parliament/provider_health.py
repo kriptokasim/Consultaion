@@ -1,10 +1,7 @@
 """
+Deprecated. Use model_gateway.provider_health instead.
+
 Provider health tracking and circuit breaker implementation.
-
-Tracks error rates for LLM providers and implements circuit breaker pattern
-to prevent cascading failures when providers are unhealthy.
-
-Patchset 28.0
 """
 
 from __future__ import annotations

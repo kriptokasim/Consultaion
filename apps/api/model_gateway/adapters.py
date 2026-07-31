@@ -81,6 +81,11 @@ class DirectProviderAdapter(BaseAdapter):
         seq = 0
         ttft_ms: float | None = None
 
+        from config import settings
+        first_token_timeout_s = getattr(settings, "ARENA_FIRST_TOKEN_TIMEOUT_MS", 15000) / 1000.0
+        active_stream_timeout_s = getattr(settings, "ARENA_ACTIVE_STREAM_TIMEOUT_MS", 30000) / 1000.0
+        total_timeout_s = getattr(settings, "ARENA_STREAM_TOTAL_TIMEOUT_MS", 60000) / 1000.0
+
         try:
             llm_kwargs: dict[str, Any] = {}
             if api_key:
@@ -93,12 +98,37 @@ class DirectProviderAdapter(BaseAdapter):
                 stream=True,
                 **llm_kwargs,
             )
-            async for chunk in response:
+            response_aiter = response.__aiter__()
+            while True:
+                now = time.monotonic()
+                total_elapsed = now - start_ts
+                if total_elapsed >= total_timeout_s:
+                    raise asyncio.TimeoutError("stream_total_timeout")
+
+                if ttft_ms is None:
+                    timeout_for_chunk = min(first_token_timeout_s, total_timeout_s - total_elapsed)
+                else:
+                    timeout_for_chunk = min(active_stream_timeout_s, total_timeout_s - total_elapsed)
+
+                if timeout_for_chunk <= 0:
+                    raise asyncio.TimeoutError("stream_total_timeout")
+
+                try:
+                    chunk = await asyncio.wait_for(response_aiter.__anext__(), timeout=timeout_for_chunk)
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    if ttft_ms is None:
+                        raise asyncio.TimeoutError("stream_first_token_timeout")
+                    else:
+                        raise asyncio.TimeoutError("stream_active_stall")
+
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""
                 if text:
+                    now = time.monotonic()
                     if ttft_ms is None:
-                        ttft_ms = (time.monotonic() - start_ts) * 1000
+                        ttft_ms = (now - start_ts) * 1000
                     accumulated += text
                     seq += 1
                     await on_delta(ModelDelta(text=text, sequence=seq, accumulated_chars=len(accumulated)))
@@ -110,6 +140,21 @@ class DirectProviderAdapter(BaseAdapter):
                 api_key=api_key,
             )
             return result
+        except asyncio.TimeoutError as e:
+            latency_ms = (time.monotonic() - start_ts) * 1000
+            err_code = str(e) if str(e) in ("stream_first_token_timeout", "stream_active_stall", "stream_total_timeout") else "stream_total_timeout"
+            return GatewayModelCallResult(
+                content=accumulated,
+                model_used=target_model,
+                provider=provider_name,
+                latency_ms=latency_ms,
+                ttft_ms=ttft_ms,
+                success=False,
+                error_message=f"Streaming timeout ({err_code})",
+                error_code=err_code,
+                model_pool=model_pool,
+                routing_policy=routing_policy,
+            )
         except Exception as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             failure = classify_provider_exception(e)
@@ -304,6 +349,11 @@ class OpenRouterAdapter(BaseAdapter):
         seq = 0
         ttft_ms: float | None = None
 
+        from config import settings
+        first_token_timeout_s = getattr(settings, "ARENA_FIRST_TOKEN_TIMEOUT_MS", 15000) / 1000.0
+        active_stream_timeout_s = getattr(settings, "ARENA_ACTIVE_STREAM_TIMEOUT_MS", 30000) / 1000.0
+        total_timeout_s = getattr(settings, "ARENA_STREAM_TOTAL_TIMEOUT_MS", 60000) / 1000.0
+
         try:
             llm_kwargs = {}
             if api_key:
@@ -316,12 +366,37 @@ class OpenRouterAdapter(BaseAdapter):
                 stream=True,
                 **llm_kwargs
             )
-            async for chunk in response:
+            response_aiter = response.__aiter__()
+            while True:
+                now = time.monotonic()
+                total_elapsed = now - start_ts
+                if total_elapsed >= total_timeout_s:
+                    raise asyncio.TimeoutError("stream_total_timeout")
+
+                if ttft_ms is None:
+                    timeout_for_chunk = min(first_token_timeout_s, total_timeout_s - total_elapsed)
+                else:
+                    timeout_for_chunk = min(active_stream_timeout_s, total_timeout_s - total_elapsed)
+
+                if timeout_for_chunk <= 0:
+                    raise asyncio.TimeoutError("stream_total_timeout")
+
+                try:
+                    chunk = await asyncio.wait_for(response_aiter.__anext__(), timeout=timeout_for_chunk)
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    if ttft_ms is None:
+                        raise asyncio.TimeoutError("stream_first_token_timeout")
+                    else:
+                        raise asyncio.TimeoutError("stream_active_stall")
+
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""
                 if text:
+                    now = time.monotonic()
                     if ttft_ms is None:
-                        ttft_ms = (time.monotonic() - start_ts) * 1000
+                        ttft_ms = (now - start_ts) * 1000
                     accumulated += text
                     seq += 1
                     await on_delta(ModelDelta(text=text, sequence=seq, accumulated_chars=len(accumulated)))
@@ -332,6 +407,21 @@ class OpenRouterAdapter(BaseAdapter):
                 api_key=api_key,
             )
             return result
+        except asyncio.TimeoutError as e:
+            latency_ms = (time.monotonic() - start_ts) * 1000
+            err_code = str(e) if str(e) in ("stream_first_token_timeout", "stream_active_stall", "stream_total_timeout") else "stream_total_timeout"
+            return GatewayModelCallResult(
+                content=accumulated,
+                model_used=target_model,
+                provider="openrouter",
+                latency_ms=latency_ms,
+                ttft_ms=ttft_ms,
+                success=False,
+                error_message=f"Streaming timeout ({err_code})",
+                error_code=err_code,
+                model_pool=model_pool,
+                routing_policy=routing_policy,
+            )
         except Exception as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             failure = classify_provider_exception(e)

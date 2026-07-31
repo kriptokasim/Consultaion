@@ -191,7 +191,16 @@ class AppSettings(BaseSettings):
     DEBATE_MAX_SEAT_FAIL_RATIO: float = Field(0.4, ge=0.0, le=1.0)
     DEBATE_MIN_REQUIRED_SEATS: int = Field(1, ge=0)
     DEBATE_FAIL_FAST: bool = Field(True, description="Abort debates when too many seats fail.")
-    MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS: int = Field(1, ge=1, description="Minimum successful model responses required to proceed with synthesis.")
+    MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS: int = Field(2, ge=1, description="Minimum successful model responses required to proceed with synthesis.")
+
+    # Staged streaming deadlines (PS184)
+    ARENA_FIRST_TOKEN_TIMEOUT_MS: int = Field(15000, ge=1000, le=60000, description="Timeout for initial token arrival in streaming")
+    ARENA_ACTIVE_STREAM_TIMEOUT_MS: int = Field(30000, ge=1000, le=120000, description="Max allowed gap between streaming tokens")
+    ARENA_STREAM_TOTAL_TIMEOUT_MS: int = Field(60000, ge=1000, le=300000, description="Total timeout for streaming call")
+
+    # Bounded Quorum Convergence (PS185)
+    ARENA_FAST_FINALIZATION_ENABLED: bool = Field(True, description="Enable fast synthesis finalization when min responses reached")
+    ARENA_FINAL_CONVERGENCE_GRACE_MS: int = Field(8000, ge=0, le=30000, description="Grace period after quorum before hard finalization")
 
     # Stage-specific max_tokens limits
     ARENA_MAX_TOKENS: int = Field(1200, ge=100, description="Max tokens per arena model response")

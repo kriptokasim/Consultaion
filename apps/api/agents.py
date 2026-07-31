@@ -10,7 +10,8 @@ from exceptions import ProviderCircuitOpenError
 from integrations.langfuse import current_trace_id, log_model_observation
 from litellm import RateLimitError
 from llm_errors import TransientLLMError
-from parliament.provider_health import get_health_state, record_call_result
+from model_gateway.model_target import resolve_model_target
+from model_gateway.provider_health import is_circuit_open, record_failure, record_success
 from safety.pii import scrub_messages
 from schemas import AgentConfig, JudgeConfig
 
@@ -305,29 +306,27 @@ async def _raw_llm_call(
     from sqlmodel import Session
 
     try:
-        model_cfg = get_model(model_id) if model_id else get_default_model()
+        target = resolve_model_target(model_id or model_override)
+        provider_name = target.provider
+        canonical_model_id = target.canonical_id
+        target_model = target.litellm_model
     except Exception:
-        model_cfg = get_default_model()
-    target_model = model_override or model_cfg.litellm_model
-    
-    # Extract provider name for health tracking
-    provider_name = getattr(model_cfg.provider, "value", str(model_cfg.provider)) if hasattr(model_cfg, "provider") else "unknown"
-    
-    # Patchset 28.0: Check circuit breaker
-    now = datetime.now(timezone.utc)
-    health_state = get_health_state(provider_name, target_model)
-    if health_state.is_open(now):
+        try:
+            model_cfg = get_model(model_id) if model_id else get_default_model()
+        except Exception:
+            model_cfg = get_default_model()
+        target_model = model_override or model_cfg.litellm_model
+        provider_name = getattr(model_cfg.provider, "value", str(model_cfg.provider)) if hasattr(model_cfg, "provider") else "unknown"
+        canonical_model_id = getattr(model_cfg, "id", None)
+
+    if is_circuit_open(provider_name, canonical_model_id=canonical_model_id):
         if not settings.IS_LOCAL_ENV:
-            # Production: block the call
             raise ProviderCircuitOpenError(
-                f"Circuit breaker open for {provider_name}/{target_model} "
-                f"(error_rate={health_state.error_calls/max(1, health_state.total_calls):.2%})"
+                f"Circuit breaker open for provider {provider_name} (model={canonical_model_id})"
             )
         else:
-            # Local: log warning but allow call
             logger.warning(
-                f"Circuit breaker open for {provider_name}/{target_model} "
-                f"(allowing in local env)"
+                f"Circuit breaker open for provider {provider_name} (model={canonical_model_id}) - allowing in local env"
             )
     
     # Patchset 29.0: Scrub PII from messages
@@ -410,12 +409,12 @@ async def _raw_llm_call(
         )
         
         # Record successful call
-        record_call_result(provider_name, target_model, success=True, now=now)
+        record_success(provider_name, canonical_model_id=canonical_model_id)
 
         # Log observation
         log_model_observation(
             trace_id=current_trace_id.get(),
-            model_name=model_cfg.id,
+            model_name=canonical_model_id or target_model,
             input_tokens=int(token_counts["prompt"]),
             output_tokens=int(token_counts["completion"]),
             latency_ms=latency_ms,
@@ -449,10 +448,10 @@ async def _raw_llm_call(
     except TimeoutError:
         # Patchset 57.0: Handle timeout specifically
         latency_ms = (time.monotonic() - start_ts) * 1000
-        record_call_result(provider_name, target_model, success=False, now=now)
+        record_failure(provider_name, "timeout", "LLM call timed out", canonical_model_id=canonical_model_id)
         log_model_observation(
             trace_id=current_trace_id.get(),
-            model_name=model_cfg.id,
+            model_name=canonical_model_id or target_model,
             latency_ms=latency_ms,
             success=False,
             error_message=f"Timeout after {settings.LLM_TIMEOUT_SECONDS}s",
@@ -467,13 +466,12 @@ async def _raw_llm_call(
         raise TransientLLMError(f"LLM call timed out after {settings.LLM_TIMEOUT_SECONDS}s", cause=None)
     except Exception as exc:  # pragma: no cover - handled by retry/fallback
         latency_ms = (time.monotonic() - start_ts) * 1000
-        # Patchset 28.0: Record failed call
-        record_call_result(provider_name, target_model, success=False, now=now)
+        record_failure(provider_name, "unknown", str(exc), canonical_model_id=canonical_model_id)
         
         # Patchset 41.0: Log failure observation
         log_model_observation(
             trace_id=current_trace_id.get(),
-            model_name=model_cfg.id,
+            model_name=canonical_model_id or target_model,
             latency_ms=latency_ms,
             success=False,
             error_message=str(exc),

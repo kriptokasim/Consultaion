@@ -399,29 +399,40 @@ async def route_llm_stream(
     Simpler than route_llm_call — no quota checks, no fallback chains.
     Used by the arena streaming path (FH101/FH102).
     """
+    from model_gateway.model_target import UnknownModelError, resolve_model_target
     from model_gateway.provider_health import is_circuit_open, record_failure, record_success
 
-    adapter_cls: type = DirectProviderAdapter
-    provider = "direct"
-
-    # Use policy._model_uses_openrouter — it checks the parliament registry
-    # in addition to MODEL_MAP, so free-tier models (llama-3-free, mimo-v2-free)
-    # that live in the registry but not MODEL_MAP are correctly detected.
-    from model_gateway.model_map import MODEL_MAP
-    from model_gateway.policy import _model_uses_openrouter
-    if _model_uses_openrouter(model_id) or model_id.startswith("openrouter/"):
-        adapter_cls = OpenRouterAdapter
-        provider = "openrouter"
-    elif model_id in MODEL_MAP:
-        provider = MODEL_MAP[model_id]["provider"]
-
-    if is_circuit_open(provider):
+    try:
+        target = resolve_model_target(model_id)
+    except UnknownModelError as exc:
         return GatewayModelCallResult(
             content="",
             model_used=model_id,
+            provider="unknown",
+            success=False,
+            error_message=str(exc),
+            error_code="unknown_model",
+            model_pool="default",
+            routing_policy="stream",
+        )
+
+    provider = target.provider
+    canonical_model_id = target.canonical_id
+    adapter_cls: type = OpenRouterAdapter if target.uses_openrouter else DirectProviderAdapter
+
+    # Security assertion & guard: Forbidden provider values
+    if provider in {"direct", "unknown", "gateway"}:
+        err_msg = f"Invalid resolved provider target '{provider}' for model '{model_id}'"
+        logger.error(err_msg)
+        raise ValueError(err_msg)
+
+    if is_circuit_open(provider, canonical_model_id=canonical_model_id):
+        return GatewayModelCallResult(
+            content="",
+            model_used=target.litellm_model,
             provider=provider,
             success=False,
-            error_message=f"Provider {provider} circuit is open.",
+            error_message=f"Provider {provider} (model={canonical_model_id}) circuit is open.",
             error_code="no_healthy_provider_route",
             model_pool="default",
             routing_policy="stream",
@@ -441,7 +452,7 @@ async def route_llm_stream(
     adapter = adapter_cls()
     result = await adapter.stream_llm(
         messages=messages,
-        model_id=model_id,
+        model_id=canonical_model_id,
         temperature=temperature,
         max_tokens=max_tokens,
         gateway_policy="auto",
@@ -453,9 +464,14 @@ async def route_llm_stream(
     )
 
     if result.success:
-        record_success(provider)
+        record_success(provider, canonical_model_id=canonical_model_id)
     else:
-        record_failure(provider, result.error_code or "unknown", result.error_message or "")
+        record_failure(
+            provider,
+            result.error_code or "unknown",
+            result.error_message or "",
+            canonical_model_id=canonical_model_id,
+        )
 
     return result
 
