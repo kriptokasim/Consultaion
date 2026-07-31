@@ -324,9 +324,12 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                     <p className="text-sm font-medium text-red-800 dark:text-red-200">
                         {translated("arena.responsesRetrievalFailed", "The Run loaded, but its stored model responses could not be retrieved.")}
                     </p>
-                    {responsesError && (
-                        <p className="text-xs text-red-600 dark:text-red-400 mt-1 font-mono">{responsesError}</p>
-                    )}
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        <details className="cursor-pointer">
+                            <summary className="inline">{translated("arena.supportDetails", "Support details")}</summary>
+                            <span className="block mt-1 font-mono">Run ID: {debate.id} · Status: {debate.status}{responsesError ? ` · ${responsesError}` : ""}</span>
+                        </details>
+                    </p>
                     <button
                         onClick={() => onRefetch?.()}
                         className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-800/50 text-xs font-medium text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors"

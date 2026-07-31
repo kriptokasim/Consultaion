@@ -3,7 +3,10 @@ import uuid
 from typing import Optional
 
 import sqlalchemy as sa
-from auth import get_current_user, get_optional_user
+from auth import (
+    get_current_user_flexible,
+    get_optional_user_flexible,
+)
 from channels import debate_channel_id
 from debate_dispatch import dispatch_debate_run
 from deps import get_session, get_sse_backend
@@ -61,7 +64,7 @@ router = APIRouter()
 async def get_debate_timeline(
     debate_id: str,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: Optional[User] = Depends(get_optional_user_flexible),
 ):
     import time
     start_time = time.time()
@@ -90,7 +93,7 @@ async def create_debate(
     background_tasks: BackgroundTasks,
     request: Request,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     require_schema_current(session)
@@ -142,11 +145,23 @@ async def create_debate(
         ) from exc
 
     # 4. Hourly / Monthly Plan run limits check
+    slot_reserved = False
     try:
         reserve_run_slot(session, current_user.id)
+        slot_reserved = True
         from billing.service import increment_debate_usage
         increment_debate_usage(session, current_user.id)
     except RateLimitError as exc:
+        if slot_reserved:
+            try:
+                from usage_limits import _get_or_reset_counter
+                counter = _get_or_reset_counter(session, current_user.id, "hour")
+                if counter.runs_used > 0:
+                    counter.runs_used -= 1
+                    session.add(counter)
+                    session.commit()
+            except Exception as refund_err:
+                logger.error(f"Failed to refund reserved slot on rate limit block: {refund_err}")
         payload = {
             "code": "rate_limit",
             "reason": exc.code,
@@ -565,7 +580,7 @@ async def list_debates(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0, le=10000),
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
     q: Optional[str] = Query(default=None, max_length=200),
 ):
     filters = []
@@ -658,7 +673,7 @@ async def get_debate(
     debate_id: str,
     request: Request = None,
     session: Session = Depends(get_session),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: Optional[User] = Depends(get_optional_user_flexible),
 ):
     from observability.tracing import traced_span
     with traced_span("debate.read", {"debate_id": debate_id, "mode": "api"}):
@@ -701,7 +716,7 @@ async def get_debate(
 async def get_debate_report(
     debate_id: str,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     from services.reporting import build_report
     data = build_report(session, debate_id, current_user)
@@ -723,7 +738,7 @@ async def update_debate(
     debate_id: str,
     body: DebateUpdate,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     debate = require_debate_mutation_access(session.get(Debate, debate_id), current_user, session)
 

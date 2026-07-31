@@ -187,15 +187,11 @@ export function synthesisReducer(
       );
     case "FINALIZED": {
       const failed = action.payload.status === "failed";
-      const base = fromSnapshot(
+      return fromSnapshot(
         state,
         action.payload,
         failed ? "failed" : "final",
       );
-      if (failed) {
-        return { ...base, text: "", report: null };
-      }
-      return base;
     }
     case "RESET":
       return INITIAL_SYNTHESIS_STATE;

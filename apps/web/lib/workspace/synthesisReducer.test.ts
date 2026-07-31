@@ -142,7 +142,7 @@ describe("synthesisReducer", () => {
     expect(finalizedState.reportVersion).toBe(1);
   });
 
-  it("clears text and report on failed final synthesis", () => {
+  it("preserves fallback text and report on failed final synthesis", () => {
     const provisional = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
       type: "REVISION",
       payload: {
@@ -161,14 +161,14 @@ describe("synthesisReducer", () => {
         ...started,
         revision: 1,
         status: "failed",
-        content: "Should not appear",
-        report: null,
+        content: "Degraded fallback synthesis content",
+        report: { title: "Fallback Report" },
         verification_status: "failed",
       },
     });
     expect(failed.status).toBe("failed");
-    expect(failed.text).toBe("");
-    expect(failed.report).toBeNull();
+    expect(failed.text).toBe("Degraded fallback synthesis content");
+    expect(failed.report).toEqual({ title: "Fallback Report" });
   });
 
   it("streams a final revision and rejects late provisional deltas", () => {

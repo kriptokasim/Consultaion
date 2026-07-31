@@ -152,7 +152,6 @@ def debate_visibility_clause(session: Session, user: Optional[User]):
         return sa.true()
 
     clauses = [
-        Debate.user_id.is_(None),
         Debate.config["is_public"].as_boolean().is_(True),
     ]
     if user:
@@ -164,18 +163,15 @@ def debate_visibility_clause(session: Session, user: Optional[User]):
 
 
 def can_access_debate(debate: Debate, user: Optional[User], session: Session) -> bool:
-    if debate.user_id is None:
-        return True
-    
     # Allow public access if debate is explicitly shared
-    if debate.config and debate.config.get("is_public") is True:
+    if is_debate_public(debate):
         return True
 
     if not user:
         return False
     if user.role == "admin":
         return True
-    if debate.user_id == user.id:
+    if debate.user_id is not None and debate.user_id == user.id:
         return True
     if debate.team_id:
         return user_is_team_member(session, user, debate.team_id)

@@ -67,7 +67,7 @@ const nextConfig: NextConfig = {
       "font-src 'self' data: https://fonts.gstatic.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      `connect-src 'self' ${apiOrigin} ${posthogHost} https: wss:`,
+      `connect-src 'self' ${apiOrigin} ${posthogHost} ws: wss:`,
       "form-action 'self'",
       "upgrade-insecure-requests",
     ].join("; ");
@@ -81,7 +81,7 @@ const nextConfig: NextConfig = {
       "font-src 'self' data: https://fonts.gstatic.com",
       "style-src 'self' https://fonts.googleapis.com",
       "script-src 'self'",
-      `connect-src 'self' ${apiOrigin} ${posthogHost} https: wss:`,
+      `connect-src 'self' ${apiOrigin} ${posthogHost} ws: wss:`,
       "form-action 'self'",
       "upgrade-insecure-requests",
     ].join("; ");
