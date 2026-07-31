@@ -28,6 +28,11 @@ def test_deterministic_gateway_errors_are_not_retryable() -> None:
     }.issubset(NON_RETRYABLE_LLM_ERROR_CODES)
 
 
+def test_transient_gateway_errors_remain_retryable() -> None:
+    assert "rate_limit_exceeded" not in NON_RETRYABLE_LLM_ERROR_CODES
+    assert "model_timeout" not in NON_RETRYABLE_LLM_ERROR_CODES
+
+
 def test_user_byok_health_events_do_not_touch_shared_redis_state() -> None:
     with patch("model_gateway.provider_health.get_redis") as get_redis:
         redis = MagicMock()
