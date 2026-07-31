@@ -188,14 +188,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
         }));
     }, [debate, executionModels, persistedResponses, runIsTerminal, streamingBuffers]);
 
-    const expectedModels =
-        renderSlots.length ||
-        debate?.models_expected ||
-        debate?.panel_config?.seats?.length ||
-        debate?.final_meta?.models?.length ||
-        (debate?.config as any)?.models?.length ||
-        (debate as any)?.models?.length ||
-        2;
+    const expectedModels = debate?.models_expected ?? debate?.panel_config?.seats?.length ?? debate?.final_meta?.models?.length ?? 2;
     const activeTab = useMemo(() => {
         if (activeTabKey === null) return 0;
         const idx = renderSlots.findIndex(s => s.key === activeTabKey);
