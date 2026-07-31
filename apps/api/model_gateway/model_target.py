@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 from model_gateway.model_map import MODEL_ALIASES, MODEL_MAP, ModelKeyError
 

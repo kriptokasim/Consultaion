@@ -119,9 +119,9 @@ class DirectProviderAdapter(BaseAdapter):
                     break
                 except asyncio.TimeoutError:
                     if ttft_ms is None:
-                        raise asyncio.TimeoutError("stream_first_token_timeout")
+                        raise asyncio.TimeoutError("stream_first_token_timeout") from None
                     else:
-                        raise asyncio.TimeoutError("stream_active_stall")
+                        raise asyncio.TimeoutError("stream_active_stall") from None
 
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""
@@ -387,9 +387,9 @@ class OpenRouterAdapter(BaseAdapter):
                     break
                 except asyncio.TimeoutError:
                     if ttft_ms is None:
-                        raise asyncio.TimeoutError("stream_first_token_timeout")
+                        raise asyncio.TimeoutError("stream_first_token_timeout") from None
                     else:
-                        raise asyncio.TimeoutError("stream_active_stall")
+                        raise asyncio.TimeoutError("stream_active_stall") from None
 
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""

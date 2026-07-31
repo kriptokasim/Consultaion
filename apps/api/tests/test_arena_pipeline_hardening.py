@@ -1,13 +1,13 @@
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from model_gateway.model_target import resolve_model_target, ResolvedModelTarget, UnknownModelError
+import pytest
+from model_gateway.model_target import UnknownModelError, resolve_model_target
 from model_gateway.provider_health import (
     CIRCUIT_FAILURE_THRESHOLD,
     is_circuit_open,
     record_failure,
-    record_success,
 )
+
 from config import settings
 
 
