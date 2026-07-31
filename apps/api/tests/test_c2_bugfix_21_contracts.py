@@ -2,11 +2,10 @@ from importlib.metadata import version
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from packaging.version import Version
-
 from agents import NON_RETRYABLE_LLM_ERROR_CODES
 from model_gateway.adapters import _has_hidden_reasoning_activity
 from model_gateway.provider_health import record_failure, record_success
+from packaging.version import Version
 
 
 def test_reasoning_activity_is_detected_without_exposing_content() -> None:
