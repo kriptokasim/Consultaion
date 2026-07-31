@@ -155,12 +155,13 @@ async def test_compare_run_integration(db_session, monkeypatch):
         mock_backend = AsyncMock()
         mock_get_backend.return_value = mock_backend
 
-        # Execute compare run
+        # Execute compare run. The selected models are read from the persisted
+        # Debate.config; strict DebateConfig rejects the legacy top-level field.
         await run_debate(
             debate_id=debate_id,
             prompt=prompt,
             channel_id=f"debate:{debate_id}",
-            config_data={"compare_models": ["gpt4o-mini", "claude-haiku"]}
+            config_data={}
         )
 
         db_session.expire_all()
