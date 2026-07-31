@@ -148,7 +148,7 @@ def _validate_api_key(token: str) -> Optional[str]:
         with Session(engine) as session:
             stmt = select(APIKey).where(
                 APIKey.prefix == prefix,
-                APIKey.revoked is False
+                APIKey.revoked.is_(False),
             )
             record = session.exec(stmt).first()
             if record:

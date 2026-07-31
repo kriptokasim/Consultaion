@@ -24,7 +24,7 @@ from routes.common import require_debate_access
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/votes", tags=["votes"])
+router = APIRouter(prefix="/votes", tags=["votes"])
 
 
 # -----------------------------------------------------------------------------
