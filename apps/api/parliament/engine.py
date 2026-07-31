@@ -251,6 +251,7 @@ async def run_parliament_debate(
     transcript_buffer: list[dict[str, str]] = []
     round_history: list[dict[str, Any]] = []
     seat_usage: list[dict[str, Any]] = []
+    degraded_rounds: list[int] = []
 
     for round_info in DEFAULT_ROUNDS:
         await backend.publish(
@@ -323,6 +324,20 @@ async def run_parliament_debate(
                 ],
             }
         )
+        if outcome.status == "degraded":
+            degraded_rounds.append(outcome.round_index)
+            await backend.publish(
+                f"debate:{debate_id}",
+                {
+                    "type": "notice",
+                    "debate_id": str(debate_id),
+                    "round": outcome.round_index,
+                    "payload": {
+                        "message": "Round continued with partial model participation.",
+                        "note": "degraded",
+                    },
+                },
+            )
         if outcome.status == "failed":
             await backend.publish(
                 f"debate:{debate_id}",
@@ -353,7 +368,7 @@ async def run_parliament_debate(
                 error_reason=outcome.reason or "seat_failure_threshold_exceeded",
             )
 
-    status = "completed"
+    status = "completed_with_warnings" if degraded_rounds else "completed"
     try:
         final_text, final_usage = await _synthesize_verdict(
             debate_id=debate_id,
@@ -433,6 +448,7 @@ async def run_parliament_debate(
         "seat_usage": seat_usage,
         "ranking": ranking,
         "scores": scores,
+        "degraded_rounds": degraded_rounds,
         "usage": usage.snapshot(),
     }
     return ParliamentResult(final_answer=final_text, final_meta=final_meta, usage_tracker=usage, status=status)
@@ -547,9 +563,15 @@ async def _execute_round(
     fail_ratio = (failure_count / total_seats) if total_seats else 1.0
     outcome_status = "ok"
     outcome_reason: Optional[str] = None
-    if fail_fast and (fail_ratio > fail_ratio_limit or success_count < min_required):
+    if fail_fast and success_count < min_required:
         outcome_status = "failed"
+        outcome_reason = "minimum_successful_seats_not_met"
+    elif fail_ratio > fail_ratio_limit:
         outcome_reason = "seat_failure_threshold_exceeded"
+        if fail_fast and getattr(settings, "DEBATE_STRICT_FAIL_RATIO", False):
+            outcome_status = "failed"
+        else:
+            outcome_status = "degraded"
 
     return RoundOutcome(
         status=outcome_status,

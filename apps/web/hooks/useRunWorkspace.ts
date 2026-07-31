@@ -43,11 +43,12 @@ import type { ModelResponseDeltaPayload } from "@/lib/streaming/types";
 import {
   formatArenaSchemaDiagnostic,
   parseArenaBoundaryEvent,
+  parseModelResponseDelta,
+  parseSynthesisDelta,
   type ArenaBoundaryEvent,
 } from "@/lib/api/arenaSchemas";
 import {
   INITIAL_SYNTHESIS_STATE,
-  isValidSynthesisDeltaPayload,
   synthesisReducer,
   type SynthesisSnapshotPayload,
   type SynthesisStreamingState,
@@ -815,9 +816,10 @@ export function useRunWorkspace(
 
   // Patchset 148 B1: O(1) append helper
   const appendEventOnce = useCallback((event: TimelineEvent) => {
-    if (seenEventIdsRef.current.has(event.id)) return;
-    seenEventIdsRef.current.add(event.id);
-    setEvents((prev) => [...prev, event]);
+    setEvents((prev) => {
+      if (prev.some(item => item.id === event.id)) return prev;
+      return [...prev, event];
+    });
   }, []);
 
   const refreshPersistedResponses = useCallback(
@@ -969,13 +971,18 @@ export function useRunWorkspace(
           return;
         }
 
+        if (lastEvent.id && seenEventIdsRef.current.has(lastEvent.id)) return;
+        if (lastEvent.id) seenEventIdsRef.current.add(lastEvent.id);
+
         if (eventType === "arena_synthesis_delta") {
-          const payload = lastEvent.payload || lastEvent;
-          if (!isValidSynthesisDeltaPayload(payload)) {
-            console.warn("[arena-contract] Invalid synthesis delta dropped");
+          const parsed = parseSynthesisDelta(lastEvent);
+          if (!parsed.success) {
+            console.warn(
+              `[arena-contract] Invalid synthesis delta dropped: ${formatArenaSchemaDiagnostic(parsed.error)}`,
+            );
             return;
           }
-          dispatchSynthesis({ type: "DELTA", payload });
+          dispatchSynthesis({ type: "DELTA", payload: parsed.data });
           return;
         }
 
@@ -1004,8 +1011,16 @@ export function useRunWorkspace(
 
         // FH104: Dispatch streaming reducer actions
         if (MODEL_RESPONSE_STREAM_EVENT_TYPES.has(eventType)) {
-          const p = validatedBoundary ?? lastEvent.payload ?? lastEvent;
+          let p = validatedBoundary ?? lastEvent.payload ?? lastEvent;
           if (eventType === "model_response_delta") {
+            const parsed = parseModelResponseDelta(lastEvent);
+            if (!parsed.success) {
+              console.warn(
+                `[arena-contract] Invalid model delta dropped: ${formatArenaSchemaDiagnostic(parsed.error)}`,
+              );
+              return;
+            }
+            p = parsed.data;
             firstDeltaMarkedRef.current ||
               (performance.mark?.("sse_first_delta"),
               (firstDeltaMarkedRef.current = true));

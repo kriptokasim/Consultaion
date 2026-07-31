@@ -17,8 +17,20 @@ import models  # noqa: F401  # Register every SQLModel table before comparison.
 from billing import models as billing_models  # noqa: F401
 from config import AppSettings
 
+# Tables deliberately owned by Alembic rather than the runtime ORM. These are
+# retained migration/audit artifacts and must not be interpreted as tables the
+# application metadata intends to drop.
+MIGRATION_ONLY_TABLES = frozenset({"team_member_dedup_audit"})
 
-def main():
+
+def _is_expected_migration_only_diff(item: tuple) -> bool:
+    if item[0] != "remove_table" or len(item) < 2:
+        return False
+    table = item[1]
+    return getattr(table, "name", None) in MIGRATION_ONLY_TABLES
+
+
+def main() -> None:
     print("Checking for real schema drift (metadata vs migrations)...")
     # Change working directory to apps/api to resolve relative sqlite path correctly
     os.chdir(os.path.join(SCRIPT_DIR, "../apps/api"))
@@ -29,19 +41,19 @@ def main():
     engine = create_engine(url)
     with engine.connect() as conn:
         context = MigrationContext.configure(conn)
-        
+
         assert SQLModel.metadata.tables, "SQLModel.metadata is empty! Ensure models are imported."
-        
+
         diff = compare_metadata(context, SQLModel.metadata)
 
-    # Filter out common SQLite-specific false positives if necessary, or check for critical drifts
-    # (e.g. missing columns/tables).
+    # Filter out common backend-specific rendering differences while preserving
+    # blocking checks for data-bearing tables and columns.
     real_drifts = []
     for item in diff:
-        # SQLite doesn't support alter table / modify type or remove constraint changes well,
-        # but we definitely care about new/missing tables, columns, or indexes.
         action = item[0]
-        if action in ("add_table", "remove_table", "add_column", "remove_column"):
+        if _is_expected_migration_only_diff(item):
+            print(f"INFO: Migration-only audit table retained outside ORM metadata: {item[1].name}")
+        elif action in ("add_table", "remove_table", "add_column", "remove_column"):
             real_drifts.append(item)
         else:
             # Constraint, index, and type rendering differs between SQLite and
@@ -53,9 +65,10 @@ def main():
         for item in real_drifts:
             print(f"  {item}")
         sys.exit(1)
-    else:
-        print("OK: SQLModel metadata matches Alembic migrations. No drift.")
-        sys.exit(0)
+
+    print("OK: SQLModel metadata matches Alembic migrations. No drift.")
+    sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

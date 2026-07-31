@@ -52,6 +52,7 @@ export default defineConfig({
     {
       name: 'mobile-chrome',
       use: {
+        browserName: 'chromium',
         viewport: { width: 390, height: 844 },
         isMobile: true,
         hasTouch: true,
@@ -62,7 +63,30 @@ export default defineConfig({
     {
       name: 'mobile-safari',
       use: {
+        browserName: 'webkit',
         viewport: { width: 375, height: 667 },
+        isMobile: true,
+        hasTouch: true,
+        storageState: 'apps/web/.playwright/.auth/user.json',
+      },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'mobile-small',
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 320, height: 568 },
+        isMobile: true,
+        hasTouch: true,
+        storageState: 'apps/web/.playwright/.auth/user.json',
+      },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'mobile-large',
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 430, height: 932 },
         isMobile: true,
         hasTouch: true,
         storageState: 'apps/web/.playwright/.auth/user.json',

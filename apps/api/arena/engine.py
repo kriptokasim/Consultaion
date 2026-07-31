@@ -1150,6 +1150,8 @@ async def run_arena(
                         timing["delta_count"] = timing.get("delta_count", 0) + 1
                     if not _started_emitted:
                         _started_emitted = True
+                        if timing is not None:
+                            timing["lifecycle_started"] = True
                         await _publish_lifecycle_best_effort(
                             backend,
                             f"debate:{debate_id}",
@@ -1199,8 +1201,28 @@ async def run_arena(
                             usage_call=call_usage,
                         ), call_usage
                     else:
-                        # Streaming returned failure — try non-streaming fallback
-                        # within the same timeout window before giving up.
+                        non_retryable_stream_errors = {
+                            "invalid_credentials",
+                            "insufficient_balance",
+                            "model_key_unresolved",
+                            "unknown_model",
+                        }
+                        if result.error_code in non_retryable_stream_errors:
+                            return ArenaModelResponse(
+                                model_id=model_info.id,
+                                display_name=model_info.display_name,
+                                provider=model_info.provider,
+                                content=f"⚠️ This model failed to respond: {result.error_message}",
+                                success=False,
+                                logo_url=model_info.logo_url,
+                                persona_type=model_info.persona_type,
+                                persona_tagline=model_info.persona_tagline,
+                                error=result.error_message,
+                                error_code=result.error_code,
+                            ), None
+
+                        # Transient streaming failures may use the non-streaming
+                        # route once within the same total deadline.
                         logger.warning(
                             f"Streaming failed for {model_info.display_name}: "
                             f"{result.error_message}. Attempting non-streaming fallback."
@@ -1403,6 +1425,16 @@ async def run_arena(
                 )
                 call_usage = None
 
+            # Non-streaming calls and failures without visible deltas still
+            # enter the same monotonic lifecycle as streaming responses.
+            if not _timing.get("lifecycle_started"):
+                await _publish_lifecycle_best_effort(
+                    backend,
+                    f"debate:{debate_id}",
+                    {"type": "model_response_started", **lifecycle_payload},
+                )
+                _timing["lifecycle_started"] = True
+
             response.response_id = response_id
             response.run_attempt = run_attempt
             response.retry_generation = retry_generation
@@ -1516,11 +1548,14 @@ async def run_arena(
         completed_models = {response.model_id for response in responses}
 
         # Fan-out: call only missing models, collect as each completes.
-        tasks = [
-            asyncio.create_task(_call_and_persist(model))
-            for model in arena_models
-            if model.id not in completed_models
-        ]
+        tasks: list[asyncio.Task] = []
+        task_models: dict[asyncio.Task, object] = {}
+        for model in arena_models:
+            if model.id in completed_models:
+                continue
+            task = asyncio.create_task(_call_and_persist(model))
+            tasks.append(task)
+            task_models[task] = model
         provisional_task: asyncio.Task[ArenaSynthesisRevision | None] | None = None
         provisional_state: dict[str, object] = {
             "started": False,
@@ -1682,6 +1717,82 @@ async def run_arena(
                     if fast_finalization and quorum_reached_ts is None:
                         if sum(1 for r in responses if r.success) >= min_required:
                             quorum_reached_ts = time.monotonic()
+
+            if pending_set:
+                skipped_tasks = tuple(pending_set)
+                for pending_task in skipped_tasks:
+                    pending_task.cancel()
+                await asyncio.gather(*skipped_tasks, return_exceptions=True)
+
+                for pending_task in skipped_tasks:
+                    model_info = task_models[pending_task]
+                    retry_generation = 0
+                    response_id = (
+                        f"resp-{debate_id}-"
+                        f"a{run_attempt}-"
+                        f"g{retry_generation}-"
+                        f"{model_info.id}"
+                    )
+                    lifecycle_payload = {
+                        "contract_version": 1,
+                        "response_id": response_id,
+                        "model_id": model_info.id,
+                        "display_name": model_info.display_name,
+                        "provider": model_info.provider,
+                        "run_attempt": run_attempt,
+                        "retry_generation": retry_generation,
+                    }
+                    skipped_response = ArenaModelResponse(
+                        model_id=model_info.id,
+                        display_name=model_info.display_name,
+                        provider=model_info.provider,
+                        content=(
+                            "This model was still running when the response quorum "
+                            "finalized the decision."
+                        ),
+                        success=False,
+                        logo_url=model_info.logo_url,
+                        persona_type=model_info.persona_type,
+                        persona_tagline=model_info.persona_tagline,
+                        error="Finalized after quorum before this model completed.",
+                        error_code="quorum_finalized",
+                        response_id=response_id,
+                        run_attempt=run_attempt,
+                        retry_generation=retry_generation,
+                    )
+                    await _publish_lifecycle_best_effort(
+                        backend,
+                        f"debate:{debate_id}",
+                        {"type": "model_response_persisting", **lifecycle_payload},
+                    )
+                    try:
+                        async with async_session_scope() as session:
+                            await persist_and_publish_arena_response(
+                                session,
+                                backend,
+                                debate_id,
+                                skipped_response,
+                                owner_id=execution_owner_id,
+                                lease_epoch=lease_epoch,
+                            )
+                    except Exception as persist_exc:
+                        logger.warning(
+                            "Failed to persist quorum-finalized model %s: %s",
+                            model_info.id,
+                            persist_exc,
+                        )
+                    await _publish_lifecycle_best_effort(
+                        backend,
+                        f"debate:{debate_id}",
+                        {
+                            "type": "model_response_failed",
+                            **lifecycle_payload,
+                            "error": skipped_response.error,
+                            "error_code": skipped_response.error_code,
+                        },
+                    )
+                    responses.append(skipped_response)
+                pending_set.clear()
 
             all_models_terminal_at = time.monotonic()
 

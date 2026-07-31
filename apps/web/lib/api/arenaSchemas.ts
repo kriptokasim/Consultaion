@@ -69,6 +69,37 @@ export const legacyArenaSynthesisSchema = z.object({
   report_version: z.number().int().positive().optional(),
 }).passthrough();
 
+export const modelResponseDeltaSchema = z.object({
+  type: z.literal("model_response_delta"),
+  response_id: z.string().min(1),
+  model_id: z.string().default(""),
+  display_name: z.string().optional(),
+  provider: z.string().optional(),
+  text: z.string(),
+  delta_sequence: z.number().int().nonnegative(),
+  accumulated_chars: z.number().int().nonnegative().optional(),
+  run_attempt: z.number().int().nonnegative().optional(),
+  retry_generation: z.number().int().nonnegative().optional(),
+}).passthrough();
+
+export const synthesisDeltaSchema = z.object({
+  type: z.literal("arena_synthesis_delta").optional(),
+  synthesis_id: z.string().min(1).optional(),
+  response_id: z.string().min(1).optional(),
+  run_attempt: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative(),
+  status: z.enum(["provisional", "final"]),
+  text: z.string(),
+  delta_sequence: z.number().int().nonnegative(),
+  input_hash: z.string().optional(),
+  response_ids: z.array(z.string()).optional(),
+  successful_count: z.number().int().nonnegative().optional(),
+  total_count: z.number().int().nonnegative().optional(),
+}).refine(
+  value => Boolean(value.synthesis_id || value.response_id),
+  { message: "synthesis_id or response_id is required" },
+);
+
 export const modelLifecycleSchema = z.object({
   type: z.enum([
     "model_response_queued",
@@ -173,6 +204,14 @@ function flattenEnvelope(raw: unknown): unknown {
 
 export function parseArenaBoundaryEvent(raw: unknown) {
   return arenaBoundaryEventSchema.safeParse(flattenEnvelope(raw));
+}
+
+export function parseModelResponseDelta(raw: unknown) {
+  return modelResponseDeltaSchema.safeParse(flattenEnvelope(raw));
+}
+
+export function parseSynthesisDelta(raw: unknown) {
+  return synthesisDeltaSchema.safeParse(flattenEnvelope(raw));
 }
 
 export function formatArenaSchemaDiagnostic(error: z.ZodError): string {

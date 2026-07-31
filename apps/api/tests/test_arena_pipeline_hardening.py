@@ -101,3 +101,50 @@ async def test_staged_streaming_config_defaults():
     assert settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS == 2
     assert settings.ARENA_FAST_FINALIZATION_ENABLED is True
     assert settings.ARENA_FINAL_CONVERGENCE_GRACE_MS == 8000
+
+
+def test_user_scoped_failures_do_not_mutate_shared_circuit():
+    from model_gateway.provider_health import record_failure, record_success
+
+    with patch("model_gateway.provider_health.get_redis") as mock_get_redis:
+        redis = MagicMock()
+        mock_get_redis.return_value = redis
+
+        record_failure(
+            "openai",
+            "invalid_credentials",
+            "bad user key",
+            canonical_model_id="openai_fast",
+            credential_scope="user",
+        )
+        record_success(
+            "openai",
+            canonical_model_id="openai_fast",
+            credential_scope="user",
+        )
+
+        redis.set.assert_not_called()
+        redis.incr.assert_not_called()
+        redis.pipeline.assert_not_called()
+
+
+def test_server_scoped_invalid_credentials_still_trip_global_circuit():
+    from model_gateway.provider_health import get_global_status_key, record_failure
+
+    with patch("model_gateway.provider_health.get_redis") as mock_get_redis:
+        redis = MagicMock()
+        mock_get_redis.return_value = redis
+
+        record_failure(
+            "openai",
+            "invalid_credentials",
+            "bad hosted key",
+            canonical_model_id="openai_fast",
+            credential_scope="server",
+        )
+
+        redis.set.assert_called_once_with(
+            get_global_status_key("openai"),
+            "open",
+            ex=3600,
+        )
