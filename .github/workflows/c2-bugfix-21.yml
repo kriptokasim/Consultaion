@@ -34,11 +34,14 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
 
       - name: Apply C2-BUGFIX-21
-        run: python scripts/apply_c2_bugfix_21.py
+        run: |
+          python scripts/repair_c2_bugfix_21_runner.py
+          python scripts/apply_c2_bugfix_21.py
 
       - name: Remove temporary patch infrastructure
         run: |
           rm scripts/apply_c2_bugfix_21.py
+          rm scripts/repair_c2_bugfix_21_runner.py
           rm .github/workflows/c2-bugfix-21.yml
 
       - name: Python syntax validation
