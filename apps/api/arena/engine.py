@@ -1150,6 +1150,8 @@ async def run_arena(
                         timing["delta_count"] = timing.get("delta_count", 0) + 1
                     if not _started_emitted:
                         _started_emitted = True
+                        if timing is not None:
+                            timing["lifecycle_started"] = True
                         await _publish_lifecycle_best_effort(
                             backend,
                             f"debate:{debate_id}",
@@ -1422,6 +1424,16 @@ async def run_arena(
                     error_code=err_code,
                 )
                 call_usage = None
+
+            # Non-streaming calls and failures without visible deltas still
+            # enter the same monotonic lifecycle as streaming responses.
+            if not _timing.get("lifecycle_started"):
+                await _publish_lifecycle_best_effort(
+                    backend,
+                    f"debate:{debate_id}",
+                    {"type": "model_response_started", **lifecycle_payload},
+                )
+                _timing["lifecycle_started"] = True
 
             response.response_id = response_id
             response.run_attempt = run_attempt

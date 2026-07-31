@@ -567,8 +567,11 @@ async def _execute_round(
         outcome_status = "failed"
         outcome_reason = "minimum_successful_seats_not_met"
     elif fail_ratio > fail_ratio_limit:
-        outcome_status = "degraded"
         outcome_reason = "seat_failure_threshold_exceeded"
+        if fail_fast and getattr(settings, "DEBATE_STRICT_FAIL_RATIO", False):
+            outcome_status = "failed"
+        else:
+            outcome_status = "degraded"
 
     return RoundOutcome(
         status=outcome_status,

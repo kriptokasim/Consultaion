@@ -9,6 +9,8 @@ from schemas import PanelSeat, default_panel_config
 from sqlmodel import Session
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests
 
+from config import settings
+
 
 class _FlakyLLM:
     def __init__(self, fail_on_calls):
@@ -82,6 +84,7 @@ async def test_parliament_tolerance_aborts_when_threshold_exceeded(db_session: S
     await backend.create_channel(f"debate:{debate_id}")
 
     flaky = _FlakyLLM(fail_on_calls={1, 2, 3})
+    monkeypatch.setattr(settings, "DEBATE_STRICT_FAIL_RATIO", True)
     monkeypatch.setattr(agents, "call_llm_for_role", flaky)
     monkeypatch.setattr("parliament.engine.call_llm_for_role", flaky)
     result: ParliamentResult = await run_parliament_debate(debate.id, model_id=None)
