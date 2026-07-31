@@ -115,7 +115,7 @@ export function ModelLogo({ logoUrl, displayName, size = 28 }: { logoUrl?: strin
 export function SkeletonCard({ index, className = "" }: { index: number; className?: string }) {
     const delays = ["", "animation-delay-150", "animation-delay-300", "animation-delay-500"];
     return (
-        <div className={`flex flex-col rounded-2xl border border-border bg-card shadow-sm overflow-hidden opacity-60 min-h-[350px] sm:min-h-[400px] ${delays[index] || ""} ${className}`}>
+        <div className={`flex flex-col rounded-2xl border border-border bg-card shadow-sm overflow-hidden opacity-60 min-h-[80px] sm:min-h-[100px] ${delays[index] || ""} ${className}`}>
             <div className="p-4 border-b border-border flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
                 <div className="flex-1 space-y-1.5">
@@ -236,7 +236,7 @@ export function UnavailableModelCard({
 
     return (
         <article
-            className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm overflow-hidden min-h-[350px] sm:min-h-[400px] ${className}`}
+            className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm overflow-hidden min-h-[80px] sm:min-h-[100px] ${className}`}
             aria-label={`Response unavailable from ${displayName}`}
             data-response-state="unavailable"
         >
@@ -484,6 +484,24 @@ export function StreamingModelCard({
         }
     }, [displayedText]);
 
+    // Announce lifecycle transitions to assistive technology only.
+    const [announcement, setAnnouncement] = useState("");
+    const prevStateRef = useRef(state);
+    useEffect(() => {
+        const prev = prevStateRef.current;
+        if (prev === state) return;
+        prevStateRef.current = state;
+        const labels: Record<string, string> = {
+            connecting: `${displayName} is connecting to the model.`,
+            started: `${displayName} has started responding.`,
+            streaming: `${displayName} is streaming a response.`,
+            completed: `${displayName} response complete.`,
+            failed: `${displayName} response failed.`,
+        };
+        const msg = labels[state];
+        if (msg) setAnnouncement(msg);
+    }, [state, displayName]);
+
     const isTerminal = state === "completed" || state === "failed";
     const isError = state === "failed";
 
@@ -491,9 +509,13 @@ export function StreamingModelCard({
         <article
             className={`flex flex-col rounded-2xl border ${colors.border} ${colors.bg} shadow-sm hover:shadow-md ${colors.glow} transition-all duration-200 overflow-hidden min-h-[350px] sm:min-h-[400px] ${className}`}
             aria-label={`Response from ${displayName}`}
-            aria-live="polite"
-            aria-atomic="false"
         >
+            {/* Screen-reader-only lifecycle announcements — not the token stream */}
+            {announcement && (
+                <div className="sr-only" role="status" aria-live="polite">
+                    {announcement}
+                </div>
+            )}
             {/* Card Header */}
             <div className={`p-4 border-b ${colors.border} flex items-center gap-3`}>
                 <div className={`shrink-0 rounded-xl ${colors.accent} p-2`}>

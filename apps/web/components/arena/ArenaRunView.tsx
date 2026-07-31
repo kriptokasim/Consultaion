@@ -394,7 +394,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         })}
                     </div>
                     {/* Single visible panel */}
-                    <div className="min-h-[300px]">
+                    <div className="min-h-[160px]">
                         {renderSlots.map((slot, i) => {
                             if (i !== activeTab) return null;
                             if (slot.type === "skeleton") {
