@@ -1,3 +1,4 @@
+# Registered workflow; this follow-up commit triggers the branch push job.
 name: C2 Final Contract Fixes
 
 on:
