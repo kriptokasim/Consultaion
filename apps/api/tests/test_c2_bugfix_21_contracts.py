@@ -1,5 +1,8 @@
+from importlib.metadata import version
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+from packaging.version import Version
 
 from agents import NON_RETRYABLE_LLM_ERROR_CODES
 from model_gateway.adapters import _has_hidden_reasoning_activity
@@ -31,6 +34,12 @@ def test_deterministic_gateway_errors_are_not_retryable() -> None:
 def test_transient_gateway_errors_remain_retryable() -> None:
     assert "rate_limit_exceeded" not in NON_RETRYABLE_LLM_ERROR_CODES
     assert "model_timeout" not in NON_RETRYABLE_LLM_ERROR_CODES
+
+
+def test_security_dependency_floors_are_installed() -> None:
+    assert Version(version("python-dotenv")) >= Version("1.2.2")
+    assert Version(version("PyJWT")) >= Version("2.13.0")
+    assert Version(version("cryptography")) >= Version("48.0.1")
 
 
 def test_user_byok_health_events_do_not_touch_shared_redis_state() -> None:
