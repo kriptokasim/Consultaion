@@ -7,7 +7,7 @@ import time
 from typing import Any
 
 from auth import get_current_admin, get_current_user
-from checks import check_db_readiness, check_sse_readiness
+from checks import check_db_readiness, check_model_registry_readiness, check_sse_readiness
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from litellm import acompletion
@@ -59,7 +59,8 @@ async def readyz(response: Response) -> dict[str, Any]:
     """
     db_ok, db_info = check_db_readiness()
     sse_ok, sse_info = await check_sse_readiness()
-    
+    registry_ok, registry_info = check_model_registry_readiness()
+
     schema_info = {"status": "unknown"}
     if settings.ENV == "test":
         schema_info["status"] = "test_bypass"
@@ -82,11 +83,11 @@ async def readyz(response: Response) -> dict[str, Any]:
             schema_info["status"] = "error"
             schema_info["error"] = str(exc)
             db_ok = False
-    
+
     status_code = status.HTTP_200_OK
-    if not db_ok or not sse_ok:
+    if not db_ok or not sse_ok or not registry_ok:
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    
+
     response.status_code = status_code
     return {
         "status": "ready" if status_code == 200 else "not_ready",
@@ -94,6 +95,7 @@ async def readyz(response: Response) -> dict[str, Any]:
             "db": db_info,
             "sse": sse_info,
             "schema": schema_info,
+            "models": registry_info,
         },
         "meta": {
             "env": settings.ENV,

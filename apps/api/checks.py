@@ -96,5 +96,31 @@ async def check_sse_readiness() -> tuple[bool, dict[str, Any]]:
     except Exception as e:
         result["error"] = str(e)
         logger.error(f"Readiness SSE check failed: {e}")
-        
+
+    return result["ok"], result
+
+
+def check_model_registry_readiness() -> tuple[bool, dict[str, Any]]:
+    """
+    Check whether the model registry initialized and has enabled models.
+
+    Returns:
+        (ok, details_dict)
+    """
+    result = {"ok": False, "registry_initialized": False, "enabled_count": 0}
+    try:
+        from parliament.model_registry import list_enabled_models
+
+        models = list_enabled_models()
+        result["registry_initialized"] = True
+        result["enabled_count"] = len(models)
+        result["models"] = [m.id for m in models]
+        result["ok"] = len(models) > 0
+        if not models:
+            result["error"] = "No models enabled; configure provider API keys."
+    except Exception as exc:
+        result["error"] = str(exc)
+        result["registry_initialized"] = False
+        logger.error("Readiness model registry check failed: %s", exc)
+
     return result["ok"], result
