@@ -27,5 +27,8 @@ opentelemetry-exporter-otlp==1.33.0
 cyclonedx-bom==7.3.0
 # FH125: Stripe billing + provider key encryption
 stripe==11.1.1
-cryptography==50.0.0
+# 50.0.0 is the upstream fix for GHSA-g6cj-pr64-35w5/PYSEC-2026-3552
+# but is not yet released on PyPI. Keep the latest released version; CI carries
+# a narrowly-scoped temporary advisory suppression until a fixed release exists.
+cryptography==49.0.0
 lxml==6.1.0
