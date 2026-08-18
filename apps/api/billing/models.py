@@ -73,6 +73,33 @@ class BillingSubscription(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
+class ReferralAttribution(SQLModel, table=True):
+    """Privacy-preserving public-share attribution.
+
+    Raw referral tokens are never stored. Only a SHA-256 token hash is persisted,
+    which allows unique visit/claim attribution without retaining visitor IPs.
+    """
+
+    __tablename__ = "referral_attributions"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_referral_attributions_token_hash"),
+        {"extend_existing": True},
+    )
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
+    token_hash: str = Field(nullable=False, index=True, max_length=64)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    created_by_user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    view_count: int = Field(default=0, nullable=False)
+    visited_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    last_visited_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    claimed_by_user_id: Optional[str] = Field(default=None, foreign_key="user.id", index=True)
+    claimed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
 class BillingUsage(SQLModel, table=True):
     __tablename__ = "billing_usage"
     __table_args__ = (
