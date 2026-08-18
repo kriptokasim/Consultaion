@@ -38,7 +38,9 @@ def csrf_exempt(func):
 def _emit_post_commit_events(payload: dict) -> None:
     """Emit billing events only after the webhook transaction has committed.
 
-    FH125: Side effects must not occur if the DB commit fails.
+    FH125: Side effects must not occur if the DB commit fails. Checkout Session
+    completion establishes an association but does not prove active entitlement;
+    activation is emitted only from a canonical subscription status event.
     """
     from integrations.events import emit_event
 
@@ -46,13 +48,19 @@ def _emit_post_commit_events(payload: dict) -> None:
     data = (payload.get("data") or {}).get("object") or {}
     metadata = data.get("metadata") or {}
 
-    if event_type == "checkout.session.completed":
+    if event_type in ("customer.subscription.created", "customer.subscription.updated"):
+        status_value = data.get("status")
         user_id = metadata.get("user_id")
         plan_slug = metadata.get("plan_slug")
-        if user_id and plan_slug:
+        if status_value in ("active", "trialing") and user_id and plan_slug:
             emit_event(
                 "subscription_activated",
-                {"user_id": user_id, "plan_slug": plan_slug, "provider": "stripe"},
+                {
+                    "user_id": user_id,
+                    "plan_slug": plan_slug,
+                    "provider": "stripe",
+                    "status": status_value,
+                },
             )
     elif event_type == "customer.subscription.deleted":
         subscription_id = data.get("id")
