@@ -21,21 +21,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Align released cryptography and documented audit exception
-        run: |
-          sed -i 's/cryptography==48\.0\.1/cryptography==49.0.0/' apps/api/requirements.txt
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('.github/workflows/ci.yml')
-          text = path.read_text()
-          old = 'pip-audit -r apps/api/requirements.txt'
-          new = ('# PYSEC-2026-3552 currently lists 50.0.0 as its fix, but pyca/cryptography 50.0.0 is not released yet.\n'
-                 '          # Keep the released 49.0.0 fixes and ignore only this upstream-unreleased advisory until 50.0.0 ships.\n'
-                 '          pip-audit -r apps/api/requirements.txt --ignore-vuln PYSEC-2026-3552')
-          if old not in text:
-              raise SystemExit('pip-audit command not found')
-          path.write_text(text.replace(old, new, 1))
-          PY
+      - name: Align released cryptography dependency
+        run: sed -i 's/cryptography==48\.0\.1/cryptography==49.0.0/' apps/api/requirements.txt
 
       - name: Install backend dependencies and Ruff
         run: |
@@ -59,7 +46,7 @@ jobs:
         run: |
           git config user.name 'consultaion-ci-fix'
           git config user.email 'info@consultaion.com'
-          git add apps/api docs/openapi.json .github/workflows/ci.yml
+          git add apps/api docs/openapi.json
           if git diff --cached --quiet; then
             echo 'No deterministic changes to commit.'
             exit 0
