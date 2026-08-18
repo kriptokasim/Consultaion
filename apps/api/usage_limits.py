@@ -141,9 +141,31 @@ def _get_or_reset_counter(session: Session, user_id: str, period: str, *, commit
 
 
 def _ensure_daily_token_headroom(session: Session, user_id: str) -> None:
-    quota = _get_or_create_quota(session, user_id, "day")
+    """Validate run-slot token headroom against canonical plan entitlement.
+
+    ``UsageQuota.max_tokens`` is a legacy global default (150k in current
+    config), not a paid-plan entitlement. Using it here silently capped Pro
+    users at the global default after the earlier canonical preflight had
+    already allowed them. Resolve the same plan-aware daily policy used by
+    ``check_quota`` instead.
+    """
+    from billing.service import get_active_plan
+    from plan_config import get_plan_limits
+
+    # Keep the legacy quota row initialized for compatibility/admin tooling, but
+    # never use its global max_tokens as the authorization authority.
+    _get_or_create_quota(session, user_id, "day")
     counter = _get_or_reset_counter(session, user_id, "day")
-    if quota.max_tokens is not None and counter.tokens_used >= quota.max_tokens:
+    plan = get_active_plan(session, user_id)
+    configured_limit = (plan.limits or {}).get("max_tokens_per_day")
+    try:
+        limit = int(configured_limit) if configured_limit is not None else None
+    except (TypeError, ValueError):
+        limit = None
+    if limit is None:
+        limit = get_plan_limits(plan.slug).daily_token_limit
+
+    if limit >= 0 and counter.tokens_used >= limit:
         raise RateLimitError(
             code="tokens_per_day",
             detail="Daily token quota exceeded",
