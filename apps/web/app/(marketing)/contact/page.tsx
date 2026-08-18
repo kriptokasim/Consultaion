@@ -36,10 +36,10 @@ export default async function ContactPage() {
                             </h3>
                             <ul className="space-y-2 text-slate-600 dark:text-slate-400">
                                 <li>
-                                    <strong>Email:</strong> contact@consultaion.com
+                                    <strong>Email:</strong> <a href="mailto:info@consultaion.com" className="text-amber-700 underline">info@consultaion.com</a>
                                 </li>
                                 <li>
-                                    <strong>Support:</strong> support@consultaion.com
+                                    <strong>Support:</strong> <a href="mailto:info@consultaion.com" className="text-amber-700 underline">info@consultaion.com</a>
                                 </li>
                             </ul>
                         </div>
