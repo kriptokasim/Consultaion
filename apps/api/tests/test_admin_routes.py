@@ -175,9 +175,13 @@ def test_admin_metrics():
                 currency="USD",
                 is_default_free=False,
             )
-            session.add(pro_plan)
-            session.commit()
-            session.refresh(pro_plan)
+        # Keep this test deterministic even if another test/fixture seeded Pro.
+        pro_plan.price_monthly = 15.00
+        pro_plan.currency = "USD"
+        pro_plan.is_default_free = False
+        session.add(pro_plan)
+        session.commit()
+        session.refresh(pro_plan)
 
         member = session.get(User, member_id)
         member.plan = "pro"
@@ -190,10 +194,24 @@ def test_admin_metrics():
             provider="stripe",
             provider_subscription_id=f"sub_metrics_{uuid.uuid4().hex[:6]}",
             provider_customer_id=f"cus_metrics_{uuid.uuid4().hex[:6]}",
-            current_period_start=datetime.now(timezone.utc),
+            current_period_start=datetime.now(timezone.utc) - timedelta(minutes=1),
             current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
         )
         session.add(sub)
+
+        # A stale row can remain status=active if provider reconciliation/webhook
+        # delivery lags. It must not inflate current MRR after its period ended.
+        expired_sub = BillingSubscription(
+            user_id=member_id,
+            plan_id=pro_plan.id,
+            status="active",
+            provider="stripe",
+            provider_subscription_id=f"sub_expired_{uuid.uuid4().hex[:6]}",
+            provider_customer_id=f"cus_expired_{uuid.uuid4().hex[:6]}",
+            current_period_start=datetime.now(timezone.utc) - timedelta(days=60),
+            current_period_end=datetime.now(timezone.utc) - timedelta(days=30),
+        )
+        session.add(expired_sub)
 
         # 2. Seed a completed public decision artifact in the weekly cohort.
         pub_debate = Debate(
@@ -308,12 +326,12 @@ def test_admin_metrics():
     assert res["plg_sharing"]["conversion_rate_30d"] > 0.0
     assert res["plg_sharing"]["attribution_method"] == "ip_7d_proxy"
 
-    # Billing: the active Free subscription seeded above must not be counted as
-    # paid MRR. Only the Pro subscription contributes $15 USD.
+    # Billing: Free and expired-active subscriptions must not be counted as paid
+    # MRR. Only the currently active $15 Pro subscription contributes.
     assert res["billing_conversion"]["pro_users"] >= 1
     assert res["billing_conversion"]["active_paid_users"] == 1
     assert res["billing_conversion"]["active_paid_subscriptions"] == 1
-    assert res["billing_conversion"]["subscription_statuses"].get("active", 0) >= 2
+    assert res["billing_conversion"]["subscription_statuses"].get("active", 0) >= 3
     assert res["economics"]["estimated_mrr"] == pytest.approx(15.00)
     assert res["economics"]["estimated_mrr_usd"] == pytest.approx(15.00)
     assert res["economics"]["mrr_by_currency"]["USD"] == pytest.approx(15.00)
