@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from sqlmodel import Session, select
 
 from auth import hash_password
+from billing.models import BillingSubscription
 from models import (
     APIKey,
     AdminEvent,
@@ -168,6 +169,21 @@ def erase_user_account(
     session.execute(sa.delete(UsageLedgerEntry).where(UsageLedgerEntry.user_id == user_id))
     session.execute(sa.delete(ConversationVote).where(ConversationVote.user_id == user_id))
     session.execute(sa.delete(DebateError).where(DebateError.user_id == user_id))
+
+    # Manual grants are non-revenue support/trial records and may contain a
+    # free-form entitlement_reason. Delete target-user grants rather than
+    # retaining avoidable PII. If the deleted user was the granting admin, keep
+    # other users' entitlement facts but detach the granting-admin identifier.
+    session.execute(
+        sa.delete(BillingSubscription)
+        .where(BillingSubscription.user_id == user_id)
+        .where(BillingSubscription.provider == "manual")
+    )
+    session.execute(
+        sa.update(BillingSubscription)
+        .where(BillingSubscription.granted_by_user_id == user_id)
+        .values(granted_by_user_id=None)
+    )
 
     # Coding-agent artifacts can contain user prompts, source diffs, and model output.
     coding_run_ids = sa.select(CodingRun.id).where(CodingRun.user_id == user_id)
