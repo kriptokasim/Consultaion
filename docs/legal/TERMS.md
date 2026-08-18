@@ -42,4 +42,4 @@ You agree not to use the Service to:
 We reserve the right to suspend or terminate your account and access to the Service at our sole discretion, without notice, for conduct that violates these Terms or is harmful to other users or the platform.
 
 ## 9. Contact
-If you have any questions about these Terms, please contact us at support@consultaion.com.
+If you have any questions about these Terms, please contact us at info@consultaion.com.
