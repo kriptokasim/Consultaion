@@ -19,11 +19,16 @@ _REFERRAL_ATTRIBUTION_WINDOW = timedelta(days=7)
 
 
 def _distinct_active_users(session: Session, since: datetime) -> int:
+    """Count users who created a decision run in the requested window.
+
+    Debate rows are durable product facts and are therefore a safer investor KPI
+    source than best-effort audit events, which can be intentionally sparse.
+    """
     return int(
         session.exec(
-            select(func.count(func.distinct(AuditLog.user_id)))
-            .where(AuditLog.created_at >= since)
-            .where(AuditLog.user_id.is_not(None))
+            select(func.count(func.distinct(Debate.user_id)))
+            .where(Debate.created_at >= since)
+            .where(Debate.user_id.is_not(None))
         ).one()
         or 0
     )
@@ -48,9 +53,7 @@ def admin_metrics(
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
-    # 1. Activation / retention proxies.
-    # AuditLog is the current cross-product activity source. COUNT(DISTINCT)
-    # ignores NULLs, but keep an explicit SQL NULL predicate for correctness.
+    # 1. Activation / retention proxies based on durable decision-run creation.
     dau = _distinct_active_users(session, day_ago)
     wau = _distinct_active_users(session, week_ago)
     mau = _distinct_active_users(session, month_ago)
@@ -176,8 +179,8 @@ def admin_metrics(
         status: int(count) for status, count in status_counts
     }
 
-    # Never multiply every active subscription by a single Pro price. Resolve
-    # the actual plan for every active subscription and keep currencies separate.
+    # Resolve the actual plan for each paid subscription. Status alone is not
+    # sufficient: stale webhook state can leave an expired row marked active.
     active_subscription_rows = session.exec(
         select(
             BillingSubscription.user_id,
@@ -187,6 +190,8 @@ def admin_metrics(
         )
         .join(BillingPlan, BillingSubscription.plan_id == BillingPlan.id)
         .where(BillingSubscription.status == "active")
+        .where(BillingSubscription.current_period_start <= now)
+        .where(BillingSubscription.current_period_end > now)
     ).all()
 
     mrr_by_currency: dict[str, float] = defaultdict(float)
@@ -371,12 +376,12 @@ def admin_metrics(
             "total_tokens_30d": total_tokens_30d,
         },
         "definitions": {
-            "activity_source": "audit_log_distinct_authenticated_users",
+            "activity_source": "distinct users creating debate/decision runs",
             "north_star": "weekly completed decision runs that are currently public/shareable",
             "share_rate_window_days": 7,
             "referral_attribution_window_days": 7,
             "referral_attribution_note": "IP-based proxy; replace with explicit referral/session identifiers before external reporting.",
-            "mrr_note": "Currencies are not FX-converted. estimated_mrr is USD-only; use mrr_by_currency for the canonical breakdown.",
+            "mrr_note": "Only positive-priced subscriptions whose active billing period contains now are counted. Currencies are not FX-converted; estimated_mrr is USD-only.",
             "unit_economics_window_days": 30,
         },
     }
