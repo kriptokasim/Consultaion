@@ -27,14 +27,17 @@ def _current_period() -> str:
 
 
 def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
+    """Resolve the canonical plan entitlement for a user.
+
+    Owner override wins first. Otherwise a subscription is entitled only while
+    its billing period contains `now`. Stripe `trialing` is an entitled state,
+    matching webhook behavior; future-dated or expired rows are never active.
+    """
     uid = _normalize_user_id(user_id)
-    
-    # Check owner override
+
     from models import User
     from security.owner import is_owner
 
-    from config import settings
-    
     user = db.get(User, uid)
     if is_owner(user):
         owner_slug = settings.OWNER_PLAN
@@ -47,8 +50,9 @@ def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
         select(BillingSubscription)
         .where(
             BillingSubscription.user_id == uid,
-            BillingSubscription.status == "active",
-            BillingSubscription.current_period_end >= now,
+            BillingSubscription.status.in_(["active", "trialing"]),
+            BillingSubscription.current_period_start <= now,
+            BillingSubscription.current_period_end > now,
         )
         .order_by(BillingSubscription.current_period_end.desc())
     )
@@ -84,11 +88,7 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
     # Owner override
     from models import User
     from security.owner import is_owner
-    
-    # We need to fetch the user to check ownership. 
-    # This adds a DB query but is necessary for the check.
-    # Optimization: could cache owner status or use ID allowlist if we didn't want DB hit, 
-    # but email allowlist requires user object.
+
     user = db.get(User, _normalize_user_id(user_id))
     if is_owner(user) and settings.OWNER_UNLIMITED:
         import logging
@@ -185,11 +185,11 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
     """
     Check if user can export (daily quota check) BEFORE generating export.
     Raises RateLimitError if quota exceeded.
-    
+
     Patchset 65.B1
     """
     from exceptions import RateLimitError
-    
+
     if settings.ENV == "test":
         return
 
@@ -204,10 +204,10 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
             extra={"user_id": str(user_id), "email": getattr(user, "email", None), "override_type": "export_quota_bypass"}
         )
         return
-        
+
     plan = get_active_plan(db, user_id)
     limits: Dict[str, object] = plan.limits or {}
-    
+
     # Check if exports are enabled
     exports_flag = limits.get("exports_enabled", True)
     exports_allowed = exports_flag not in {False, "false", "False", "0"}
@@ -218,7 +218,7 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
             code="quota.exports_disabled",
             details={"reason": "disabled", "plan": plan.slug},
         )
-    
+
     # Check daily export limit
     max_exports_per_day = limits.get("max_exports_per_day")
     if max_exports_per_day is not None:
@@ -229,7 +229,7 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
                 limit = None
         else:
             limit = None
-            
+
         if limit is not None:
             usage = get_or_create_usage(db, user_id)
             if usage.exports_count >= limit:
