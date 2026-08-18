@@ -73,6 +73,10 @@ class StripeBillingProvider(BillingProvider):
             existing = db_session.get(BillingWebhookEvent, event_id)
             if existing:
                 logger.info("Stripe webhook event=%s already processed, ignoring", event_id)
+                # The route still executes its post-commit hook after this method
+                # returns. Carry duplicate state on the in-memory payload so the
+                # external automation side effect is skipped too.
+                payload["_consultaion_duplicate"] = True
                 return
 
         if event_type == "checkout.session.completed" and db_session:
@@ -134,6 +138,7 @@ class StripeBillingProvider(BillingProvider):
                     BillingSubscription.provider_subscription_id == subscription_id
                 )
             ).first()
+            previous_status = sub.status if sub else None
 
             if sub:
                 user_id = user_id or sub.user_id
@@ -165,13 +170,13 @@ class StripeBillingProvider(BillingProvider):
                     f"Resolved subscription {subscription_id} is missing user or plan context"
                 )
 
-            # Enrich the in-memory payload so post-commit side effects can use
-            # the canonical DB-resolved context for legacy Stripe objects whose
-            # subscription metadata was empty. This does not alter Stripe data.
             resolved_metadata = dict(metadata)
             resolved_metadata.setdefault("user_id", user_id)
             resolved_metadata.setdefault("plan_slug", plan_slug)
             data["metadata"] = resolved_metadata
+            # Internal-only transition context for post-commit automation. Never
+            # persisted or sent back to Stripe.
+            payload["_consultaion_previous_subscription_status"] = previous_status
 
             start_ts = data.get("current_period_start")
             end_ts = data.get("current_period_end")
@@ -205,6 +210,7 @@ class StripeBillingProvider(BillingProvider):
             ).first()
 
             if sub:
+                payload["_consultaion_previous_subscription_status"] = sub.status
                 sub.status = "canceled"
                 sub.updated_at = datetime.now(timezone.utc)
                 db_session.add(sub)
