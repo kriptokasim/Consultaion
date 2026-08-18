@@ -159,10 +159,13 @@ def admin_quota_usage(
     from plan_config import get_plan_limits
     from usage_limits import get_today_usage
     
-    query = select(User)
+    query = select(User).order_by(User.created_at.desc())
     if email:
         query = query.where(User.email.contains(email))
-    users = session.exec(query.limit(limit)).all()
+    # Canonical plan is derived from subscription state, so applying SQL LIMIT
+    # before resolving `plan` could drop matching users. Resolve first, then cap
+    # the filtered response below.
+    users = session.exec(query).all()
     
     results = []
     for user in users:
@@ -201,5 +204,7 @@ def admin_quota_usage(
             ),
             "created_at": user.created_at.isoformat() if user.created_at else None,
         })
+        if len(results) >= limit:
+            break
     
     return {"users": results, "total": len(results)}
