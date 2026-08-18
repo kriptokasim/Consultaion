@@ -24,6 +24,7 @@ from routes.admin.providers import (
     admin_test_provider,
     router as providers_router,
 )
+from routes.admin.referrals import admin_referral_metrics, router as referrals_router
 from routes.admin.usage import admin_quota_usage, admin_usage_overview, router as usage_router
 from routes.admin.users import (
     UpdateUserStatusRequest,
@@ -50,6 +51,7 @@ router.include_router(leases_router)
 router.include_router(logs_router)
 router.include_router(providers_router)
 router.include_router(metrics_router)
+router.include_router(referrals_router)
 router.include_router(alerts_router)
 
 admin_router = router
@@ -63,6 +65,7 @@ __all__ = [
     "admin_leases",
     "admin_logs",
     "admin_metrics",
+    "admin_referral_metrics",
     "admin_models",
     "admin_ops_summary",
     "admin_purge_old_data",
