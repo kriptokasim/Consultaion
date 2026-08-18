@@ -12,8 +12,14 @@ from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from models import (
+    AdminEvent,
     AuditLog,
+    ChallengeRound,
+    ChallengeSession,
+    ConversationVote,
     Debate,
+    DebateAttempt,
+    DebateCheckpoint,
     DebateContinuation,
     DebateError,
     DebateRound,
@@ -23,10 +29,13 @@ from models import (
     LLMUsageLog,
     Message,
     PairwiseVote,
+    RedTeamSession,
     Score,
     SupportNote,
+    TerminalTransition,
     UserInteraction,
     UserPrediction,
+    Vote,
     VoteRecord,
     utcnow,
 )
@@ -41,12 +50,12 @@ logger = logging.getLogger(__name__)
 
 
 def purge_old_debates(session: "Session") -> int:
-    """Anonymize retained debate data older than RETAIN_DEBATES_DAYS.
+    """Anonymize decision data older than RETAIN_DEBATES_DAYS.
 
-    The current data model stores model output in normalized tables, not on the
-    Debate row. Scrub those related rows as part of the same retention action so
-    the configured retention period actually removes prompt/response content and
-    direct user/team linkage while preserving aggregate, non-content analytics.
+    Decision content is normalized across multiple tables. Scrub every
+    content-bearing row that can be reached from a Debate, detach direct
+    user/team identifiers, and preserve only explicitly aggregate/structural
+    facts needed for product quality and cost analysis.
     """
     days = settings.RETAIN_DEBATES_DAYS
     if not days or days <= 0:
@@ -54,7 +63,6 @@ def purge_old_debates(session: "Session") -> int:
         return 0
 
     cutoff = utcnow() - timedelta(days=days)
-
     old_debates = session.exec(
         select(Debate)
         .where(Debate.created_at < cutoff)
@@ -129,12 +137,46 @@ def purge_old_debates(session: "Session") -> int:
             owner_id=None,
         )
     )
+    session.execute(
+        sa.update(DebateCheckpoint)
+        .where(DebateCheckpoint.debate_id.in_(debate_ids))
+        .values(context_meta=None, resume_token=None)
+    )
+    session.execute(
+        sa.update(DebateAttempt)
+        .where(DebateAttempt.debate_id.in_(debate_ids))
+        .values(error_summary=None, meta=None)
+    )
+    session.execute(
+        sa.update(TerminalTransition)
+        .where(TerminalTransition.debate_id.in_(debate_ids))
+        .values(meta=None)
+    )
+    session.execute(
+        sa.update(AdminEvent)
+        .where(AdminEvent.debate_id.in_(debate_ids))
+        .values(message="[ANONYMIZED]", trace_id=None, meta=None)
+    )
 
-    # User-generated interaction/vote rows add little aggregate value and retain
-    # a direct user identifier, so delete them for expired debates.
+    # User-generated rows with little aggregate value are removed entirely.
     session.execute(sa.delete(UserInteraction).where(UserInteraction.debate_id.in_(debate_ids)))
     session.execute(sa.delete(UserPrediction).where(UserPrediction.debate_id.in_(debate_ids)))
     session.execute(sa.delete(VoteRecord).where(VoteRecord.debate_id.in_(debate_ids)))
+    session.execute(sa.delete(Vote).where(Vote.debate_id.in_(debate_ids)))
+    session.execute(
+        sa.delete(ConversationVote).where(ConversationVote.conversation_id.in_(debate_ids))
+    )
+    session.execute(sa.delete(RedTeamSession).where(RedTeamSession.debate_id.in_(debate_ids)))
+
+    challenge_ids = sa.select(ChallengeSession.id).where(
+        ChallengeSession.debate_id.in_(debate_ids)
+    )
+    session.execute(
+        sa.delete(ChallengeRound).where(ChallengeRound.session_id.in_(challenge_ids))
+    )
+    session.execute(
+        sa.delete(ChallengeSession).where(ChallengeSession.debate_id.in_(debate_ids))
+    )
 
     # Preserve that an audit action happened, but detach the expired decision
     # from a user and discard metadata such as IP addresses and target emails.
@@ -151,21 +193,15 @@ def purge_old_debates(session: "Session") -> int:
 
 
 def purge_old_debate_errors(session: "Session") -> int:
-    """
-    Delete DebateError rows older than RETAIN_DEBATE_ERRORS_DAYS.
-
-    Returns: Number of rows deleted.
-    """
+    """Delete DebateError rows older than RETAIN_DEBATE_ERRORS_DAYS."""
     days = settings.RETAIN_DEBATE_ERRORS_DAYS
     if not days or days <= 0:
         logger.info("DebateError retention disabled")
         return 0
 
     cutoff = utcnow() - timedelta(days=days)
-
     old_errors = session.exec(
-        select(DebateError)
-        .where(DebateError.created_at < cutoff)
+        select(DebateError).where(DebateError.created_at < cutoff)
     ).all()
 
     count = len(old_errors)
@@ -174,17 +210,13 @@ def purge_old_debate_errors(session: "Session") -> int:
 
     if count > 0:
         session.commit()
-        logger.info(f"Deleted {count} debate errors older than {days} days")
+        logger.info("Deleted %s debate errors older than %s days", count, days)
 
     return count
 
 
 def purge_old_support_notes(session: "Session") -> int:
-    """
-    Delete SupportNotes older than RETAIN_SUPPORT_NOTES_DAYS if configured.
-
-    Returns: Number of notes deleted (0 if retention is indefinite).
-    """
+    """Delete SupportNotes older than RETAIN_SUPPORT_NOTES_DAYS if configured."""
     days = settings.RETAIN_SUPPORT_NOTES_DAYS
     if days is None:
         logger.info("SupportNote retention is indefinite, skipping purge")
@@ -194,10 +226,8 @@ def purge_old_support_notes(session: "Session") -> int:
         return 0
 
     cutoff = utcnow() - timedelta(days=days)
-
     old_notes = session.exec(
-        select(SupportNote)
-        .where(SupportNote.created_at < cutoff)
+        select(SupportNote).where(SupportNote.created_at < cutoff)
     ).all()
 
     count = len(old_notes)
@@ -206,24 +236,18 @@ def purge_old_support_notes(session: "Session") -> int:
 
     if count > 0:
         session.commit()
-        logger.info(f"Deleted {count} support notes older than {days} days")
+        logger.info("Deleted %s support notes older than %s days", count, days)
 
     return count
 
 
 def run_all_purges(session: "Session") -> dict:
-    """
-    Execute all retention purge jobs.
-
-    Returns: Summary dict with counts per category.
-    """
+    """Execute all retention purge jobs and return counts by category."""
     logger.info("Starting data retention purge...")
-
     results = {
         "debates_anonymized": purge_old_debates(session),
         "debate_errors_deleted": purge_old_debate_errors(session),
         "support_notes_deleted": purge_old_support_notes(session),
     }
-
-    logger.info(f"Retention purge complete: {results}")
+    logger.info("Retention purge complete: %s", results)
     return results
