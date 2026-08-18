@@ -78,7 +78,6 @@ def test_active_subscription_grants_paid_daily_quota_even_with_free_marker(db_se
     user = _user(db_session, "canonical-pro@example.com", marker_plan="free")
     _activate_pro(db_session, user)
 
-    # 200k is above the static Free daily policy (100k) but below Pro (1m).
     check_quota(db_session, user, required_tokens=200_000)
 
 
@@ -107,9 +106,6 @@ def test_run_slot_token_headroom_uses_canonical_plan(db_session: Session):
         )
     )
     db_session.commit()
-
-    # The legacy global UsageQuota default is 150k, so this would have blocked
-    # a paid user before run-slot headroom was aligned to canonical entitlement.
     reserve_run_slot(db_session, canonical_pro.id)
 
 
@@ -159,6 +155,7 @@ def test_admin_quota_view_uses_canonical_entitlement_not_plan_marker(db_session:
     _activate_pro(db_session, canonical_pro)
 
     payload = admin_quota_usage(
+        user_id=None,
         email=None,
         plan=None,
         limit=50,
@@ -179,6 +176,7 @@ def test_admin_quota_plan_filter_uses_effective_plan(db_session: Session):
     _activate_pro(db_session, canonical_pro)
 
     payload = admin_quota_usage(
+        user_id=None,
         email=None,
         plan="pro",
         limit=50,
@@ -189,6 +187,26 @@ def test_admin_quota_plan_filter_uses_effective_plan(db_session: Session):
 
     assert canonical_pro.id in ids
     assert marker_only.id not in ids
+
+
+def test_admin_quota_exact_user_filter(db_session: Session):
+    marker_only = _user(db_session, "admin-exact-marker@example.com", marker_plan="pro")
+    canonical_pro = _user(db_session, "admin-exact-pro@example.com", marker_plan="free")
+    _activate_pro(db_session, canonical_pro)
+
+    payload = admin_quota_usage(
+        user_id=canonical_pro.id,
+        email=None,
+        plan=None,
+        limit=1,
+        session=db_session,
+        _=marker_only,
+    )
+
+    assert payload["total"] == 1
+    assert payload["users"][0]["user_id"] == canonical_pro.id
+    assert payload["users"][0]["plan"] == "pro"
+    assert payload["users"][0]["legacy_plan_marker"] == "free"
 
 
 def test_rejected_monthly_run_does_not_leak_into_usage(db_session: Session, monkeypatch):
@@ -206,8 +224,6 @@ def test_rejected_monthly_run_does_not_leak_into_usage(db_session: Session, monk
     with pytest.raises(AppRateLimitError):
         increment_debate_usage(db_session, user.id)
 
-    # Simulate the caller committing some independent refund bookkeeping after
-    # the rejection. The rejected monthly increment must still remain reverted.
     db_session.commit()
     db_session.expire_all()
     persisted = get_or_create_usage(db_session, user.id)
