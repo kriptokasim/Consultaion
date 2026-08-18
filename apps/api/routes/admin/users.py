@@ -58,7 +58,7 @@ def admin_users(
     search_text = q or email
     q_lower = search_text.lower() if search_text else None
 
-    # Prefetch plans, subscriptions, and usages
+    # Prefetch plans, subscriptions, and usages.
     from billing.models import BillingSubscription, BillingUsage
     from security.owner import is_owner
 
@@ -76,7 +76,7 @@ def admin_users(
             select(BillingSubscription)
             .where(
                 BillingSubscription.user_id.in_(user_ids),
-                BillingSubscription.status == "active",
+                BillingSubscription.status.in_(["active", "trialing"]),
                 BillingSubscription.current_period_start <= now_dt,
                 BillingSubscription.current_period_end > now_dt,
             )
@@ -107,7 +107,8 @@ def admin_users(
             if not email_match and not display_match:
                 continue
 
-        # Resolve active plan in-memory
+        # Resolve active plan in-memory using the same entitled statuses/window
+        # as billing.service.get_active_plan().
         plan = None
         if is_owner(user):
             owner_slug = settings.OWNER_PLAN
@@ -175,7 +176,9 @@ def admin_user_detail(
         plan = None
     usage = _latest_usage(session, user.id)
     subscriptions = session.exec(
-        select(BillingSubscription).where(BillingSubscription.user_id == user.id).order_by(BillingSubscription.created_at.desc())
+        select(BillingSubscription)
+        .where(BillingSubscription.user_id == user.id)
+        .order_by(BillingSubscription.created_at.desc())
     ).all()
     subs_payload = [
         {
@@ -205,16 +208,20 @@ def admin_user_billing(
 ):
     user = session.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="user not found")
+        raise HTTPException(status_code=404, detail="User not found")
     plan = None
     try:
         plan = get_active_plan(session, user.id)
     except HTTPException:
         plan = None
     from billing.service import _current_period
+
     current_period = _current_period()
     usage = session.exec(
-        select(BillingUsage).where(BillingUsage.user_id == user.id, BillingUsage.period == current_period)
+        select(BillingUsage).where(
+            BillingUsage.user_id == user.id,
+            BillingUsage.period == current_period,
+        )
     ).first()
     return {
         "plan": _plan_payload(plan),
@@ -230,12 +237,15 @@ def change_user_plan(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
-    """Change the legacy user plan marker (admin only).
+    """Change a user's subscription plan (admin only).
 
-    BillingSubscription remains the canonical paid entitlement source. This
-    endpoint retains its existing behavior for compatibility; callers must not
-    treat the marker alone as proof of a live paid subscription.
+    Valid plans: free, pro, internal. This operation is logged.
+    The change takes effect immediately.
     """
+    # Compatibility note: this endpoint currently updates the legacy User.plan
+    # marker only. Canonical paid entitlement is BillingSubscription; the
+    # response explicitly exposes that distinction until manual overrides have
+    # a first-class source/expiry model.
     from plan_config import validate_plan
 
     if not validate_plan(request.plan):
@@ -264,6 +274,7 @@ def change_user_plan(
     )
 
     from audit import record_audit
+
     record_audit(
         "plan_changed",
         user_id=admin.id,
@@ -330,6 +341,7 @@ def admin_user_summary(
     }
 
     from models import DebateError
+
     recent_errors_rows = session.exec(
         select(DebateError)
         .where(DebateError.user_id == user_id)
@@ -359,10 +371,14 @@ def admin_user_summary(
         "quota": {
             "tokens_used_today": usage["tokens_used"],
             "daily_token_limit": limits.daily_token_limit,
-            "token_usage_pct": round(usage["tokens_used"] / limits.daily_token_limit * 100, 1) if limits.daily_token_limit > 0 else 0,
+            "token_usage_pct": round(usage["tokens_used"] / limits.daily_token_limit * 100, 1)
+            if limits.daily_token_limit > 0
+            else 0,
             "exports_used_today": usage["exports_used"],
             "daily_export_limit": limits.daily_export_limit,
-            "export_usage_pct": round(usage["exports_used"] / limits.daily_export_limit * 100, 1) if limits.daily_export_limit > 0 else 0,
+            "export_usage_pct": round(usage["exports_used"] / limits.daily_export_limit * 100, 1)
+            if limits.daily_export_limit > 0
+            else 0,
         },
         "recent_debates": debates_data,
         "feedback_summary": feedback_summary,
@@ -433,6 +449,7 @@ def admin_create_user_note(
     logger.info("Support note created by %s for user %s: %s", admin.email, user.email, note.id)
 
     from audit import record_audit
+
     record_audit(
         "create_support_note",
         user_id=admin.id,
@@ -458,7 +475,11 @@ def admin_update_user_status(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
-    """Enable or disable a user account."""
+    """Enable or disable a user account.
+
+    Disabled users cannot create debates or use most features.
+    This operation is logged.
+    """
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -480,6 +501,7 @@ def admin_update_user_status(
     )
 
     from audit import record_audit
+
     record_audit(
         f"account_{action}",
         user_id=admin.id,
