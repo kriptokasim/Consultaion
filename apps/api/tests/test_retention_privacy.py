@@ -1,10 +1,11 @@
 from datetime import timedelta
 
+from sqlmodel import Session, select
+
 from auth import hash_password
 from config import settings
 from maintenance.retention import purge_old_debates
 from models import AuditLog, Debate, LLMUsageLog, Message, Score, User, utcnow
-from sqlmodel import Session, select
 
 
 def test_retention_scrubs_normalized_debate_content(
