@@ -144,6 +144,7 @@ def _daily_limit(plan: BillingPlan, key: str, fallback: int) -> int:
 
 @router.get("/usage/quota")
 def admin_quota_usage(
+    user_id: Optional[str] = Query(None, description="Filter by exact user ID"),
     email: Optional[str] = Query(None, description="Filter by email"),
     plan: Optional[str] = Query(None, description="Filter by canonical plan (free/pro/internal)"),
     limit: int = Query(50, ge=1, le=200),
@@ -160,7 +161,9 @@ def admin_quota_usage(
     from usage_limits import get_today_usage
     
     query = select(User).order_by(User.created_at.desc())
-    if email:
+    if user_id:
+        query = query.where(User.id == user_id)
+    elif email:
         query = query.where(User.email.contains(email))
     # Canonical plan is derived from subscription state, so applying SQL LIMIT
     # before resolving `plan` could drop matching users. Resolve first, then cap
@@ -190,6 +193,7 @@ def admin_quota_usage(
             "user_id": user.id,
             "email": user.email,
             "plan": active_plan.slug,
+            "legacy_plan_marker": user.plan,
             "tokens_used_today": usage["tokens_used"],
             "daily_token_limit": token_limit,
             "token_usage_pct": (
