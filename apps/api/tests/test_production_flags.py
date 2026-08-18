@@ -5,6 +5,9 @@ from config import AppSettings
 from tests.utils import override_env
 
 
+_PROD_INTERNAL_SECRET = "secure_internal_secret_32_characters_long_456"
+
+
 def test_production_config_validation_rules():
     """
     Assert that staging/production configurations raise errors when insecure flags are set.
@@ -17,6 +20,7 @@ def test_production_config_validation_rules():
         "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "REQUIRE_REAL_LLM": "True",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
+        "INTERNAL_SECRET": _PROD_INTERNAL_SECRET,
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
         "OPENAI_API_KEY": "sk-dummykey"
@@ -32,6 +36,7 @@ def test_production_config_validation_rules():
         "FAST_DEBATE": "False",
         "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
+        "INTERNAL_SECRET": _PROD_INTERNAL_SECRET,
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
         "OPENAI_API_KEY": "sk-dummykey"
@@ -48,6 +53,7 @@ def test_production_config_validation_rules():
         "FAST_DEBATE": "False",
         "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
+        "INTERNAL_SECRET": _PROD_INTERNAL_SECRET,
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
         "OPENAI_API_KEY": "sk-dummykey"
@@ -64,6 +70,7 @@ def test_production_config_validation_rules():
         "FAST_DEBATE": "False",
         "STRIPE_WEBHOOK_INSECURE_DEV": "False",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
+        "INTERNAL_SECRET": _PROD_INTERNAL_SECRET,
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
         "OPENAI_API_KEY": "sk-dummykey"
@@ -83,6 +90,7 @@ def test_fast_debate_warning_in_production():
         "REQUIRE_REAL_LLM": "True",
         "USE_MOCK": "False",
         "JWT_SECRET": "secure_production_secret_32_characters_long_123",
+        "INTERNAL_SECRET": _PROD_INTERNAL_SECRET,
         "STRIPE_WEBHOOK_SECRET": "dummy_stripe_secret",
         "REDIS_URL": "redis://localhost:6379",
         "OPENAI_API_KEY": "sk-dummykey"
