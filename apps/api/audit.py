@@ -8,6 +8,24 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 
+def _new_audit_log(
+    action: str,
+    *,
+    user_id: Optional[str],
+    target_type: Optional[str],
+    target_id: Optional[str],
+    meta: dict[str, Any],
+) -> AuditLog:
+    return AuditLog(
+        user_id=user_id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        meta=meta,
+        created_at=utcnow(),
+    )
+
+
 def record_audit(
     action: str,
     *,
@@ -18,17 +36,23 @@ def record_audit(
     meta: Optional[dict[str, Any]] = None,
     session: Optional[Session] = None,
 ) -> None:
-    """Record an audit event without compromising the caller's transaction.
+    """Record a best-effort audit event without committing caller-owned work.
 
     Transaction contract:
-    - no session supplied: use a standalone committed transaction;
-    - caller session has pending domain mutations: stage the audit row and let
-      the caller commit/rollback both atomically;
-    - caller session is clean (the common post-commit call-site pattern): commit
-      the audit-only row immediately so request teardown cannot discard it.
+    - no session supplied: persist in a standalone committed transaction;
+    - caller session has pending ORM mutations: stage the audit row in that same
+      transaction so caller commit/rollback remains atomic;
+    - caller session has no visible ORM mutations: persist the audit row through
+      a standalone transaction and leave the caller session untouched.
 
-    This preserves atomicity for mutation-time audit events while preventing the
-    historical silent loss of post-commit telemetry.
+    The last rule is intentionally conservative. ``session.new/dirty/deleted``
+    cannot see every Core ``session.execute(UPDATE/DELETE/INSERT)`` mutation, so
+    auto-committing a seemingly-clean caller session could accidentally commit
+    business data. Audit code must never own that decision.
+
+    Callers that require audit atomicity with Core DML should explicitly stage an
+    ``AuditLog`` in their transaction (or use a dedicated future helper) rather
+    than relying on implicit commit heuristics.
     """
     final_meta = dict(meta or {})
     if ip_address:
@@ -38,40 +62,45 @@ def record_audit(
         if session is None:
             with session_scope() as scoped:
                 scoped.add(
-                    AuditLog(
+                    _new_audit_log(
+                        action,
                         user_id=user_id,
-                        action=action,
                         target_type=target_type,
                         target_id=target_id,
                         meta=final_meta,
-                        created_at=utcnow(),
                     )
                 )
             return
 
-        # Snapshot caller-owned pending state *before* adding the audit row.
-        # If anything is pending, the audit must stay in the same transaction.
-        has_pending_domain_changes = bool(session.new or session.dirty or session.deleted)
-
-        session.add(
-            AuditLog(
-                user_id=user_id,
-                action=action,
-                target_type=target_type,
-                target_id=target_id,
-                meta=final_meta,
-                created_at=utcnow(),
+        # Snapshot caller-owned ORM state before adding anything. If domain ORM
+        # changes are pending, keep audit evidence in the caller transaction.
+        has_pending_orm_changes = bool(session.new or session.dirty or session.deleted)
+        if has_pending_orm_changes:
+            session.add(
+                _new_audit_log(
+                    action,
+                    user_id=user_id,
+                    target_type=target_type,
+                    target_id=target_id,
+                    meta=final_meta,
+                )
             )
-        )
+            return
 
-        if not has_pending_domain_changes:
-            try:
-                session.commit()
-            except SQLAlchemyError:
-                # We own this audit-only transaction. Reset the failed session so
-                # a best-effort audit failure does not poison the request session.
-                session.rollback()
-                return
+        # A clean ORM unit-of-work does NOT prove the transaction is read-only:
+        # Core DML executed via session.execute() is invisible to the collections
+        # above. Never commit/rollback the caller session here. Use an independent
+        # best-effort audit transaction instead.
+        with session_scope() as scoped:
+            scoped.add(
+                _new_audit_log(
+                    action,
+                    user_id=user_id,
+                    target_type=target_type,
+                    target_id=target_id,
+                    meta=final_meta,
+                )
+            )
     except SQLAlchemyError:
-        # Audit failures should never block primary flows.
+        # Audit failures must not commit, rollback, or poison caller-owned work.
         return
