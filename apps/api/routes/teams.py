@@ -166,18 +166,22 @@ async def add_team_member(
     else:
         member = TeamMember(team_id=team.id, user_id=user.id, role=body.role)
         session.add(member)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise HTTPException(status_code=409, detail="team member already exists") from None
+
+    # Membership/role authorization changes and their audit evidence are one
+    # transaction. If the mutation rolls back, the audit rolls back with it.
     record_audit(
         "team_member_added",
         user_id=current_user.id,
         target_type="team",
         target_id=team.id,
         meta={"member_id": member.user_id, "role": member.role},
+        session=session,
     )
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="team member already exists") from None
     return {
         "id": member.id,
         "team_id": member.team_id,
