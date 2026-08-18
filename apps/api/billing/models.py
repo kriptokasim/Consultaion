@@ -32,6 +32,7 @@ class BillingPlan(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
+
 class BillingSubscription(SQLModel, table=True):
     __tablename__ = "billing_subscriptions"
     __table_args__ = {"extend_existing": True}
@@ -47,8 +48,16 @@ class BillingSubscription(SQLModel, table=True):
     provider: str = Field(nullable=False)
     provider_customer_id: Optional[str] = Field(default=None)
     provider_subscription_id: Optional[str] = Field(default=None)
+    # Stripe webhook delivery order is not guaranteed. Persist the provider's
+    # event creation time so an older state event cannot overwrite a newer
+    # active/cancelled state after retries or delayed delivery.
+    provider_event_created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
 
 class BillingUsage(SQLModel, table=True):
     __tablename__ = "billing_usage"
@@ -122,4 +131,3 @@ class BillingReconciliationDiscrepancy(SQLModel, table=True):
     severity: str = Field(default="warning", nullable=False)  # "warning", "critical"
     details: Optional[str] = Field(default=None, sa_column=Column(String(1000), nullable=True))
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
-
