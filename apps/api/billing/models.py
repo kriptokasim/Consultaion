@@ -56,6 +56,12 @@ class BillingSubscription(SQLModel, table=True):
     provider: str = Field(nullable=False)
     provider_customer_id: Optional[str] = Field(default=None)
     provider_subscription_id: Optional[str] = Field(default=None)
+    # Non-provider/manual entitlement metadata. ``provider='manual'`` rows use
+    # ``status='trialing'`` so they grant product access without being counted
+    # as paid MRR by active-subscription revenue metrics.
+    entitlement_source: Optional[str] = Field(default=None, max_length=64)
+    entitlement_reason: Optional[str] = Field(default=None, max_length=500)
+    granted_by_user_id: Optional[str] = Field(default=None, max_length=64)
     # Stripe webhook delivery order is not guaranteed. Persist the provider's
     # event creation time so an older state event cannot overwrite a newer
     # active/cancelled state after retries or delayed delivery.
