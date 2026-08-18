@@ -18,28 +18,43 @@ def record_audit(
     meta: Optional[dict[str, Any]] = None,
     session: Optional[Session] = None,
 ) -> None:
-    # Add IP address to meta if provided
-    # Defensive copy — never mutate caller-owned metadata
+    """Record an audit event without compromising the caller's transaction.
+
+    Transaction contract:
+    - no session supplied: use a standalone committed transaction;
+    - caller session has pending domain mutations: stage the audit row and let
+      the caller commit/rollback both atomically;
+    - caller session is clean (the common post-commit call-site pattern): commit
+      the audit-only row immediately so request teardown cannot discard it.
+
+    This preserves atomicity for mutation-time audit events while preventing the
+    historical silent loss of post-commit telemetry.
+    """
     final_meta = dict(meta or {})
     if ip_address:
         final_meta["ip_address"] = ip_address
-    
+
     try:
         if session is None:
-            # Standalone call — create own session and commit
             with session_scope() as scoped:
-                log = AuditLog(
-                    user_id=user_id,
-                    action=action,
-                    target_type=target_type,
-                    target_id=target_id,
-                    meta=final_meta,
-                    created_at=utcnow(),
+                scoped.add(
+                    AuditLog(
+                        user_id=user_id,
+                        action=action,
+                        target_type=target_type,
+                        target_id=target_id,
+                        meta=final_meta,
+                        created_at=utcnow(),
+                    )
                 )
-                scoped.add(log)
-        else:
-            # Don't commit inside caller's transaction — let caller manage commit
-            log = AuditLog(
+            return
+
+        # Snapshot caller-owned pending state *before* adding the audit row.
+        # If anything is pending, the audit must stay in the same transaction.
+        has_pending_domain_changes = bool(session.new or session.dirty or session.deleted)
+
+        session.add(
+            AuditLog(
                 user_id=user_id,
                 action=action,
                 target_type=target_type,
@@ -47,7 +62,16 @@ def record_audit(
                 meta=final_meta,
                 created_at=utcnow(),
             )
-            session.add(log)
+        )
+
+        if not has_pending_domain_changes:
+            try:
+                session.commit()
+            except SQLAlchemyError:
+                # We own this audit-only transaction. Reset the failed session so
+                # a best-effort audit failure does not poison the request session.
+                session.rollback()
+                return
     except SQLAlchemyError:
         # Audit failures should never block primary flows.
         return
