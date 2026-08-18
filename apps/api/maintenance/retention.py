@@ -56,6 +56,12 @@ def purge_old_debates(session: "Session") -> int:
     content-bearing row that can be reached from a Debate, detach direct
     user/team identifiers, and preserve only explicitly aggregate/structural
     facts needed for product quality and cost analysis.
+
+    Legacy retention releases changed only ``Debate.prompt`` to
+    ``[ANONYMIZED]``. Do not use that prompt sentinel alone as the processed
+    marker: otherwise those historical rows keep normalized Message/Score/etc.
+    content forever. The remaining Debate fields below are an idempotent repair
+    signal for those known legacy records.
     """
     days = settings.RETAIN_DEBATES_DAYS
     if not days or days <= 0:
@@ -66,7 +72,18 @@ def purge_old_debates(session: "Session") -> int:
     old_debates = session.exec(
         select(Debate)
         .where(Debate.created_at < cutoff)
-        .where(Debate.prompt != "[ANONYMIZED]")
+        .where(
+            sa.or_(
+                Debate.prompt != "[ANONYMIZED]",
+                Debate.final_content.is_not(None),
+                Debate.final_meta.is_not(None),
+                Debate.config.is_not(None),
+                Debate.panel_config.is_not(None),
+                Debate.routing_meta.is_not(None),
+                Debate.user_id.is_not(None),
+                Debate.team_id.is_not(None),
+            )
+        )
     ).all()
 
     if not old_debates:
