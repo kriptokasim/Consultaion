@@ -40,6 +40,7 @@ class StripeBillingProvider(BillingProvider):
             )
 
         stripe.api_key = self.secret_key
+        metadata = {"user_id": str(user_id), "plan_slug": plan.slug}
         try:
             session = stripe.checkout.Session.create(
                 mode="subscription",
@@ -47,7 +48,12 @@ class StripeBillingProvider(BillingProvider):
                 line_items=[{"price": price_id, "quantity": 1}],
                 success_url=self.success_url + "?session_id={CHECKOUT_SESSION_ID}",
                 cancel_url=self.cancel_url,
-                metadata={"user_id": str(user_id), "plan_slug": plan.slug},
+                metadata=metadata,
+                # Checkout Session metadata is not a reliable source for later
+                # customer.subscription.* events. Put the same identifiers on
+                # the Subscription so those webhooks are self-contained even if
+                # Stripe delivers them before checkout.session.completed.
+                subscription_data={"metadata": metadata},
             )
             return session.url  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover - external dependency
@@ -89,14 +95,15 @@ class StripeBillingProvider(BillingProvider):
             if not plan_ref:
                 raise RuntimeError(f"Plan not found during webhook: slug={plan_slug}")
 
-            # Update user subscription plan
             user = db_session.get(User, user_id)
             if not user:
                 raise RuntimeError(f"User not found during webhook: user_id={user_id}")
-            user.plan = plan_slug
-            db_session.add(user)
 
-            # Upsert BillingSubscription
+            # Checkout completion proves the association, not the canonical
+            # subscription status/period. Those fields come from
+            # customer.subscription.created/updated. Mark a newly-seen row as
+            # pending so zero-length placeholder periods can never grant paid
+            # entitlement or inflate MRR.
             sub = db_session.exec(
                 select(BillingSubscription).where(
                     BillingSubscription.provider_subscription_id == subscription_id
@@ -108,20 +115,22 @@ class StripeBillingProvider(BillingProvider):
                 sub = BillingSubscription(
                     user_id=user_id,
                     plan_id=plan_ref.id,
-                    status="active",
+                    status="pending",
                     provider="stripe",
                     provider_subscription_id=subscription_id,
                     provider_customer_id=customer_id,
                     current_period_start=now,
-                    current_period_end=now,  # will be updated by customer.subscription.updated
+                    current_period_end=now,
                 )
             else:
-                sub.status = "active"
+                # Never overwrite status/period from a subscription webhook with
+                # the less-authoritative checkout event (e.g. trialing -> active).
                 sub.plan_id = plan_ref.id
+                sub.provider_customer_id = customer_id or sub.provider_customer_id
 
             db_session.add(sub)
-            # Don't commit here — let the webhook route transaction own the commit
-            # Side effects emitted after outer commit in webhook route
+            # User.plan is only a compatibility marker. Update it when the
+            # canonical subscription event tells us the actual entitled status.
 
         elif event_type in ("customer.subscription.created", "customer.subscription.updated") and db_session:
             subscription_id = data.get("id")
@@ -132,7 +141,11 @@ class StripeBillingProvider(BillingProvider):
             user_id = metadata.get("user_id")
             plan_slug = metadata.get("plan_slug")
 
-            # Resolve user_id/plan_slug if missing from subscription metadata
+            if not subscription_id or not status:
+                raise ValueError(f"{event_type} is missing subscription id or status")
+
+            # Resolve user_id/plan_slug from an existing checkout association if
+            # older Stripe objects do not carry subscription metadata.
             sub = db_session.exec(
                 select(BillingSubscription).where(
                     BillingSubscription.provider_subscription_id == subscription_id
@@ -144,40 +157,53 @@ class StripeBillingProvider(BillingProvider):
                 if not plan_slug:
                     plan_ref = db_session.get(BillingPlan, sub.plan_id)
                     plan_slug = plan_ref.slug if plan_ref else None
-            elif user_id and plan_slug:
-                plan_ref = db_session.exec(select(BillingPlan).where(BillingPlan.slug == plan_slug)).first()
-                if plan_ref:
-                    sub = BillingSubscription(
-                        user_id=user_id,
-                        plan_id=plan_ref.id,
-                        status=status,
-                        provider="stripe",
-                        provider_subscription_id=subscription_id,
-                        provider_customer_id=customer_id,
-                        current_period_start=datetime.now(timezone.utc),
-                        current_period_end=datetime.now(timezone.utc),
+            else:
+                # Event ordering is not guaranteed. If this event arrived before
+                # checkout.session.completed and lacks metadata, do NOT mark it
+                # processed: raising leaves Stripe free to retry after the
+                # checkout association exists.
+                if not user_id or not plan_slug:
+                    raise ValueError(
+                        f"Cannot resolve billing context for subscription {subscription_id}"
                     )
+                plan_ref = db_session.exec(select(BillingPlan).where(BillingPlan.slug == plan_slug)).first()
+                if not plan_ref:
+                    raise RuntimeError(f"Plan not found during webhook: slug={plan_slug}")
+                now = datetime.now(timezone.utc)
+                sub = BillingSubscription(
+                    user_id=user_id,
+                    plan_id=plan_ref.id,
+                    status=status,
+                    provider="stripe",
+                    provider_subscription_id=subscription_id,
+                    provider_customer_id=customer_id,
+                    current_period_start=now,
+                    current_period_end=now,
+                )
 
-            if sub:
-                sub.status = status
-                sub.cancel_at_period_end = bool(cancel_at_period_end)
-                
-                start_ts = data.get("current_period_start")
-                if start_ts:
-                    sub.current_period_start = datetime.fromtimestamp(start_ts, tz=timezone.utc)
-                
-                end_ts = data.get("current_period_end")
-                if end_ts:
-                    sub.current_period_end = datetime.fromtimestamp(end_ts, tz=timezone.utc)
+            start_ts = data.get("current_period_start")
+            end_ts = data.get("current_period_end")
+            if status in ("active", "trialing") and (not start_ts or not end_ts):
+                raise ValueError(
+                    f"{event_type} missing current period for entitled status '{status}'"
+                )
 
-                db_session.add(sub)
+            sub.status = status
+            sub.cancel_at_period_end = bool(cancel_at_period_end)
+            sub.provider_customer_id = customer_id or sub.provider_customer_id
 
-                # Update User
-                user = db_session.get(User, user_id)
-                if user:
-                    user.plan = plan_slug if status in ("active", "trialing") else "free"
-                    db_session.add(user)
-                # Don't commit here — let the webhook route transaction own the commit
+            if start_ts:
+                sub.current_period_start = datetime.fromtimestamp(start_ts, tz=timezone.utc)
+            if end_ts:
+                sub.current_period_end = datetime.fromtimestamp(end_ts, tz=timezone.utc)
+
+            db_session.add(sub)
+
+            # Keep the legacy marker synchronized with canonical entitlement.
+            user = db_session.get(User, user_id)
+            if user:
+                user.plan = plan_slug if status in ("active", "trialing") else "free"
+                db_session.add(user)
 
         elif event_type == "customer.subscription.deleted" and db_session:
             subscription_id = data.get("id")
