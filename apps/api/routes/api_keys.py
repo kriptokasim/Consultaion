@@ -18,7 +18,6 @@ from exceptions import NotFoundError, PermissionError, ValidationError
 from fastapi import APIRouter, Depends
 from models import APIKey, User
 from pydantic import BaseModel
-from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
@@ -61,15 +60,15 @@ async def list_api_keys(
 ):
     """
     List all API keys for the current user.
-    
+
     Returns keys owned by the user, excluding the full secret.
     """
     stmt = select(APIKey).where(
         APIKey.user_id == current_user.id
     ).order_by(APIKey.created_at.desc())
-    
+
     keys = session.exec(stmt).all()
-    
+
     return [
         APIKeyResponse(
             id=key.id,
@@ -93,17 +92,16 @@ async def create_api_key(
 ):
     """
     Create a new API key.
-    
+
     Returns the full secret exactly once. Store it securely!
     """
     if not body.name or not body.name.strip():
         raise ValidationError(
-            message="Key name is required", 
+            message="Key name is required",
             code="api_key.name_required",
             hint="Please provide a descriptive name for your API key."
         )
-    
-    
+
     # Validate team_id if provided - user must be a member of the team
     if body.team_id:
         from routes.common import user_is_team_member
@@ -112,7 +110,7 @@ async def create_api_key(
                 message="You are not a member of this team",
                 code="team.not_member"
             )
-    
+
     # Calculate expires_at
     expires_at = None
     if body.expires_in_days is not None and body.expires_in_days > 0:
@@ -121,7 +119,7 @@ async def create_api_key(
 
     # Generate key
     full_key, prefix, hashed_key = generate_api_key()
-    
+
     # Create database record
     api_key = APIKey(
         user_id=current_user.id,
@@ -132,25 +130,21 @@ async def create_api_key(
         expires_at=expires_at,
         revoked=False,
     )
-    
+
     session.add(api_key)
     session.commit()
     session.refresh(api_key)
-    
-    try:
-        record_audit(
-            "api_key_created",
-            user_id=current_user.id,
-            target_type="api_key",
-            target_id=api_key.id,
-            meta={"name": api_key.name, "prefix": prefix},
-            session=session,
-        )
-    except SQLAlchemyError as e:
-        logger.warning(f"Failed to write audit log for API key {api_key.id}: {e}")
-        # Do not rollback the API key creation; it's already committed and valid.
-        # Just swallow the error so the user gets their key.
-    
+
+    # Primary key creation is already committed. Persist the lifecycle audit in
+    # its own transaction so it cannot be silently rolled back at request close.
+    record_audit(
+        "api_key_created",
+        user_id=current_user.id,
+        target_type="api_key",
+        target_id=api_key.id,
+        meta={"name": api_key.name, "prefix": prefix},
+    )
+
     return APIKeyCreateResponse(
         id=api_key.id,
         name=api_key.name,
@@ -169,38 +163,37 @@ async def revoke_api_key(
 ):
     """
     Revoke an API key.
-    
+
     Once revoked, the key can no longer be used for authentication.
     """
     api_key = session.get(APIKey, key_id)
-    
+
     if not api_key:
         raise NotFoundError(message="API key not found", code="api_key.not_found")
-    
+
     # Only owner can revoke
     if api_key.user_id != current_user.id:
         raise PermissionError(message="Insufficient permissions", code="permission.denied")
-    
+
     if api_key.revoked:
         raise ValidationError(
-            message="Key already revoked", 
+            message="Key already revoked",
             code="api_key.already_revoked",
             hint="This key has already been revoked and cannot be used."
         )
-    
+
     api_key.revoked = True
     session.add(api_key)
     session.commit()
-    
+
     record_audit(
         "api_key_revoked",
         user_id=current_user.id,
         target_type="api_key",
         target_id=api_key.id,
         meta={"name": api_key.name, "prefix": api_key.prefix},
-        session=session,
     )
-    
+
     return {"id": key_id, "revoked": True}
 
 
