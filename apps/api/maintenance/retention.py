@@ -11,6 +11,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
+from billing.manual_entitlements import cleanup_expired_manual_entitlements
 from models import (
     AdminEvent,
     AuditLog,
@@ -336,10 +337,20 @@ def purge_old_support_notes(session: "Session") -> int:
 
 
 def run_all_purges(session: "Session") -> dict:
-    """Execute all retention purge jobs and return counts by category."""
+    """Execute all retention/maintenance purge jobs and return counts."""
     logger.info("Starting data retention purge...")
+
+    expired_manual_entitlements = cleanup_expired_manual_entitlements(session)
+    if expired_manual_entitlements:
+        session.commit()
+        logger.info(
+            "Canceled %s expired manual entitlements and resynced plan markers",
+            expired_manual_entitlements,
+        )
+
     auxiliary = purge_old_auxiliary_ai_content(session)
     results = {
+        "expired_manual_entitlements_canceled": expired_manual_entitlements,
         "debates_anonymized": purge_old_debates(session),
         **auxiliary,
         "debate_errors_deleted": purge_old_debate_errors(session),
