@@ -109,7 +109,7 @@ export default function TeamPage() {
             <button
               onClick={() => {
                 trackEvent("team_enterprise_cta_clicked");
-                window.location.href = "mailto:enterprise@consultaion.com?subject=Team%20Collaboration%20Inquiry";
+                window.location.href = "mailto:info@consultaion.com?subject=Team%20Collaboration%20Inquiry";
               }}
               className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-xs font-semibold text-white shadow transition hover:bg-slate-800 dark:bg-slate-850 dark:hover:bg-slate-700"
             >
