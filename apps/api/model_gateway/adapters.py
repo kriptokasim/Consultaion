@@ -11,6 +11,21 @@ from model_gateway.types import GatewayModelCallResult, ModelDelta, OnDeltaCallb
 
 logger = logging.getLogger("model_gateway.adapters")
 
+
+def _has_hidden_reasoning_activity(delta: Any) -> bool:
+    """Return True when a provider emitted non-user-visible reasoning.
+
+    The content is intentionally not surfaced; this signal only prevents a
+    healthy reasoning model from being mistaken for a silent connection.
+    """
+    if delta is None:
+        return False
+    for name in ("reasoning_content", "reasoning", "thinking"):
+        value = getattr(delta, name, None)
+        if value:
+            return True
+    return False
+
 class BaseAdapter(ABC):
     @abstractmethod
     async def stream_llm(
@@ -80,6 +95,8 @@ class DirectProviderAdapter(BaseAdapter):
         accumulated = ""
         seq = 0
         ttft_ms: float | None = None
+        activity_seen = False
+        activity_announced = False
 
         from config import settings
         first_token_timeout_s = getattr(settings, "ARENA_FIRST_TOKEN_TIMEOUT_MS", 15000) / 1000.0
@@ -105,7 +122,7 @@ class DirectProviderAdapter(BaseAdapter):
                 if total_elapsed >= total_timeout_s:
                     raise asyncio.TimeoutError("stream_total_timeout")
 
-                if ttft_ms is None:
+                if not activity_seen:
                     timeout_for_chunk = min(first_token_timeout_s, total_timeout_s - total_elapsed)
                 else:
                     timeout_for_chunk = min(active_stream_timeout_s, total_timeout_s - total_elapsed)
@@ -118,13 +135,21 @@ class DirectProviderAdapter(BaseAdapter):
                 except StopAsyncIteration:
                     break
                 except asyncio.TimeoutError:
-                    if ttft_ms is None:
+                    if not activity_seen:
                         raise asyncio.TimeoutError("stream_first_token_timeout") from None
-                    else:
-                        raise asyncio.TimeoutError("stream_active_stall") from None
+                    raise asyncio.TimeoutError("stream_active_stall") from None
 
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""
+                hidden_activity = _has_hidden_reasoning_activity(delta)
+                if text or hidden_activity:
+                    activity_seen = True
+                if hidden_activity and not text and not activity_announced:
+                    activity_announced = True
+                    seq += 1
+                    await on_delta(
+                        ModelDelta(text="", sequence=seq, accumulated_chars=len(accumulated))
+                    )
                 if text:
                     now = time.monotonic()
                     if ttft_ms is None:
@@ -348,6 +373,8 @@ class OpenRouterAdapter(BaseAdapter):
         accumulated = ""
         seq = 0
         ttft_ms: float | None = None
+        activity_seen = False
+        activity_announced = False
 
         from config import settings
         first_token_timeout_s = getattr(settings, "ARENA_FIRST_TOKEN_TIMEOUT_MS", 15000) / 1000.0
@@ -373,7 +400,7 @@ class OpenRouterAdapter(BaseAdapter):
                 if total_elapsed >= total_timeout_s:
                     raise asyncio.TimeoutError("stream_total_timeout")
 
-                if ttft_ms is None:
+                if not activity_seen:
                     timeout_for_chunk = min(first_token_timeout_s, total_timeout_s - total_elapsed)
                 else:
                     timeout_for_chunk = min(active_stream_timeout_s, total_timeout_s - total_elapsed)
@@ -386,13 +413,21 @@ class OpenRouterAdapter(BaseAdapter):
                 except StopAsyncIteration:
                     break
                 except asyncio.TimeoutError:
-                    if ttft_ms is None:
+                    if not activity_seen:
                         raise asyncio.TimeoutError("stream_first_token_timeout") from None
-                    else:
-                        raise asyncio.TimeoutError("stream_active_stall") from None
+                    raise asyncio.TimeoutError("stream_active_stall") from None
 
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""
+                hidden_activity = _has_hidden_reasoning_activity(delta)
+                if text or hidden_activity:
+                    activity_seen = True
+                if hidden_activity and not text and not activity_announced:
+                    activity_announced = True
+                    seq += 1
+                    await on_delta(
+                        ModelDelta(text="", sequence=seq, accumulated_chars=len(accumulated))
+                    )
                 if text:
                     now = time.monotonic()
                     if ttft_ms is None:

@@ -10,7 +10,7 @@ from integrations.langfuse import current_trace_id, log_model_observation
 from litellm import RateLimitError
 from llm_errors import TransientLLMError
 from model_gateway.model_target import resolve_model_target
-from model_gateway.provider_health import is_circuit_open, record_failure, record_success
+from model_gateway.provider_health import is_circuit_open
 from safety.pii import scrub_messages
 from schemas import AgentConfig, JudgeConfig
 
@@ -305,7 +305,7 @@ async def _raw_llm_call(
     from sqlmodel import Session
 
     try:
-        target = resolve_model_target(model_id or model_override)
+        target = resolve_model_target(model_override or model_id)
         provider_name = target.provider
         canonical_model_id = target.canonical_id
         target_model = target.litellm_model
@@ -364,7 +364,7 @@ async def _raw_llm_call(
         except Exception:
             pass
 
-    effective_model_id = model_override or model_cfg.id
+    effective_model_id = model_override or model_id or canonical_model_id
 
     start_ts = time.monotonic()
     try:
@@ -407,8 +407,8 @@ async def _raw_llm_call(
             },
         )
         
-        # Record successful call
-        record_success(provider_name, canonical_model_id=canonical_model_id)
+        # Provider health is recorded once inside the gateway using the
+        # actual routed model and credential scope. Do not double-count here.
 
         # Log observation
         log_model_observation(
@@ -447,7 +447,7 @@ async def _raw_llm_call(
     except TimeoutError:
         # Patchset 57.0: Handle timeout specifically
         latency_ms = (time.monotonic() - start_ts) * 1000
-        record_failure(provider_name, "timeout", "LLM call timed out", canonical_model_id=canonical_model_id)
+        # The gateway owns provider-health accounting.
         log_model_observation(
             trace_id=current_trace_id.get(),
             model_name=canonical_model_id or target_model,
@@ -465,7 +465,7 @@ async def _raw_llm_call(
         raise TransientLLMError(f"LLM call timed out after {settings.LLM_TIMEOUT_SECONDS}s", cause=None)
     except Exception as exc:  # pragma: no cover - handled by retry/fallback
         latency_ms = (time.monotonic() - start_ts) * 1000
-        record_failure(provider_name, "unknown", str(exc), canonical_model_id=canonical_model_id)
+        # The gateway owns provider-health accounting.
         
         # Patchset 41.0: Log failure observation
         log_model_observation(
@@ -478,6 +478,14 @@ async def _raw_llm_call(
         )
 
         raise TransientLLMError(f"LLM call failed for role {role}: {exc}", cause=exc)
+
+
+NON_RETRYABLE_LLM_ERROR_CODES = {
+    "invalid_credentials",
+    "insufficient_balance",
+    "model_key_unresolved",
+    "unknown_model",
+}
 
 
 async def call_llm_with_retry(
@@ -527,6 +535,8 @@ async def call_llm_with_retry(
                 raise TransientLLMError(f"Circuit breaker open: {exc}") from exc
         except TransientLLMError as exc:
             last_exc = exc
+            if exc.error_code in NON_RETRYABLE_LLM_ERROR_CODES:
+                raise
             if attempt >= max_attempts:
                 raise
             logger.warning(

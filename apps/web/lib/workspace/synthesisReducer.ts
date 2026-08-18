@@ -137,14 +137,20 @@ export function synthesisReducer(
   action: SynthesisAction,
 ): SynthesisStreamingState {
   switch (action.type) {
-    case "STARTED":
+    case "STARTED": {
       if (isStale(state, action.payload)) return state;
+      const sameRevision =
+        state.synthesisId === action.payload.synthesis_id
+        && state.runAttempt === action.payload.run_attempt
+        && state.revision === action.payload.revision;
+      if (sameRevision && state.status !== "idle") return state;
       return {
         ...fromSnapshot(state, action.payload, "streaming"),
         text: "",
         report: null,
         lastDeltaSequence: 0,
       };
+    }
     case "DELTA": {
       const payload = action.payload;
       const synthesisId = payload.synthesis_id || payload.response_id;

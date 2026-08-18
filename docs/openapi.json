@@ -795,7 +795,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Readyz Readyz Get"
                 }
@@ -819,7 +818,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Provider Health Api Health Providers Get"
                 }
@@ -843,7 +841,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Api Status Api Status Get"
                 }
@@ -866,7 +863,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Contracts Meta Contracts Get"
                 }
@@ -890,7 +886,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Runtime Parity Ops Runtime Parity Get"
                 }
@@ -926,7 +921,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Debate Diagnostics Ops Debates  Debate Id  Diagnostics Get"
                 }
               }
@@ -959,7 +953,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Providers Readiness Ops Providers Readiness Get"
                 }
@@ -983,7 +976,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Run Pipeline Health Ops Run Pipeline Health Get"
                 }
@@ -1007,7 +999,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Llm Smoke Test Ops Llm Smoke Test Post"
                 }
@@ -1043,7 +1034,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Probe Provider Ops Providers  Provider  Probe Post"
                 }
               }
@@ -1088,7 +1078,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Probe Provider User Ops Probe  Provider  Post"
                 }
               }
@@ -1147,7 +1136,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Readyz Api V1 Readyz Get"
                 }
@@ -1171,7 +1159,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Provider Health Api V1 Api Health Providers Get"
                 }
@@ -1195,7 +1182,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Api Status Api V1 Api Status Get"
                 }
@@ -1218,7 +1204,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Contracts Api V1 Meta Contracts Get"
                 }
@@ -1242,7 +1227,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Runtime Parity Api V1 Ops Runtime Parity Get"
                 }
@@ -1278,7 +1262,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Debate Diagnostics Api V1 Ops Debates  Debate Id  Diagnostics Get"
                 }
               }
@@ -1311,7 +1294,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Providers Readiness Api V1 Ops Providers Readiness Get"
                 }
@@ -1335,7 +1317,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Run Pipeline Health Api V1 Ops Run Pipeline Health Get"
                 }
@@ -1359,7 +1340,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Llm Smoke Test Api V1 Ops Llm Smoke Test Post"
                 }
@@ -1395,7 +1375,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Probe Provider Api V1 Ops Providers  Provider  Probe Post"
                 }
               }
@@ -1440,7 +1419,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Probe Provider User Api V1 Ops Probe  Provider  Post"
                 }
               }
@@ -7009,7 +6987,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get User Participation Users Me Participation Get"
                 }
@@ -7033,7 +7010,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get User Participation Api V1 Users Me Participation Get"
                 }
@@ -7069,7 +7045,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Divergence Report Arena  Debate Id  Divergence Get"
                 }
               }
@@ -7124,7 +7099,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Cast Arena Vote Arena  Debate Id  User Vote Post"
                 }
               }
@@ -7169,7 +7143,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Divergence Report Api V1 Arena  Debate Id  Divergence Get"
                 }
               }
@@ -7224,7 +7197,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Cast Arena Vote Api V1 Arena  Debate Id  User Vote Post"
                 }
               }
@@ -9893,14 +9865,14 @@
         }
       }
     },
-    "/v1/votes": {
+    "/votes": {
       "post": {
         "tags": [
           "votes"
         ],
         "summary": "Create Or Update Vote",
         "description": "Create or update a vote (upsert behavior).\n\nIdempotent on (conversation_id, message_id, user_id).",
-        "operationId": "create_or_update_vote_v1_votes_post",
+        "operationId": "create_or_update_vote_votes_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9935,14 +9907,14 @@
         }
       }
     },
-    "/v1/votes/summary": {
+    "/votes/summary": {
       "get": {
         "tags": [
           "votes"
         ],
         "summary": "Get Vote Summary",
         "description": "Get aggregated vote summary for a conversation.\n\nReturns total_up, total_down, and net_score.",
-        "operationId": "get_vote_summary_v1_votes_summary_get",
+        "operationId": "get_vote_summary_votes_summary_get",
         "parameters": [
           {
             "name": "conversation_id",
@@ -9980,14 +9952,14 @@
         }
       }
     },
-    "/api/v1/v1/votes": {
+    "/api/v1/votes": {
       "post": {
         "tags": [
           "votes"
         ],
         "summary": "Create Or Update Vote",
         "description": "Create or update a vote (upsert behavior).\n\nIdempotent on (conversation_id, message_id, user_id).",
-        "operationId": "create_or_update_vote_api_v1_v1_votes_post",
+        "operationId": "create_or_update_vote_api_v1_votes_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -10022,14 +9994,14 @@
         }
       }
     },
-    "/api/v1/v1/votes/summary": {
+    "/api/v1/votes/summary": {
       "get": {
         "tags": [
           "votes"
         ],
         "summary": "Get Vote Summary",
         "description": "Get aggregated vote summary for a conversation.\n\nReturns total_up, total_down, and net_score.",
-        "operationId": "get_vote_summary_api_v1_v1_votes_summary_get",
+        "operationId": "get_vote_summary_api_v1_votes_summary_get",
         "parameters": [
           {
             "name": "conversation_id",
@@ -10645,7 +10617,6 @@
           "details": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -11566,7 +11537,6 @@
           },
           "recent_debates": {
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -11574,7 +11544,6 @@
           },
           "champion_samples": {
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -11965,7 +11934,6 @@
           },
           "recent_429s": {
             "items": {
-              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -12129,7 +12097,6 @@
             "description": "Seat ID or name if applicable."
           },
           "payload": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Payload",
             "description": "Event-specific data."
@@ -12350,6 +12317,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

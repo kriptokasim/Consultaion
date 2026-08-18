@@ -406,7 +406,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                         displayName={slot.displayName}
                                         provider={slot.provider}
                                         logoUrl={slot.logoUrl}
-                                        className="min-h-[300px]"
+                                        className="min-h-[220px]"
                                     />
                                 );
                             }
@@ -422,7 +422,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                         accumulatedText={streamBuf.accumulatedText}
                                         errorCode={streamBuf.errorCode}
                                         errorMessage={streamBuf.errorMessage}
-                                        className="min-h-[300px]"
+                                        className="min-h-[220px]"
                                         onRetry={handleRetryAgent}
                                     />
                                 );
@@ -432,7 +432,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                                 <ModelCard
                                     key={slot.key}
                                     resp={resp}
-                                    className="min-h-[300px]"
+                                    className="min-h-[220px]"
                                     onRetry={handleRetryAgent}
                                 />
                             );

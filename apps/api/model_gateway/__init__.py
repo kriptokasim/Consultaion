@@ -235,6 +235,7 @@ async def route_llm_call(
 
         # Resolve user BYOK credential specifically for this provider
         current_api_key = None
+        credential_scope = "server"
         if db_session and request.user_id:
             try:
                 from sqlalchemy.ext.asyncio import AsyncSession
@@ -251,12 +252,14 @@ async def route_llm_call(
                 
                 if resolved and resolved.source == "user":
                     current_api_key = resolved.key
+                    credential_scope = "user"
                     logger.info("Using user BYOK key for provider=%s model=%s user=%s", provider, model_to_call, request.user_id)
             except Exception as e:
                 logger.warning(f"Failed to lookup BYOK key for provider {provider}: {e}")
 
         if not current_api_key and request.api_key:
             current_api_key = request.api_key
+            credential_scope = "user"
 
         try:
             # Use the correct adapter for the resolved provider
@@ -280,7 +283,7 @@ async def route_llm_call(
             )
             if result.success:
                 successful_result = result
-                record_success(provider)
+                record_success(provider, credential_scope=credential_scope)
                 # Patchset 136: Provider success metric
                 try:
                     from metrics import incr_metric
@@ -295,7 +298,12 @@ async def route_llm_call(
             else:
                 last_error = result.error_message
                 last_error_code = result.error_code
-                record_failure(provider, result.error_code or "unknown", result.error_message or "")
+                record_failure(
+                    provider,
+                    result.error_code or "unknown",
+                    result.error_message or "",
+                    credential_scope=credential_scope,
+                )
                 # Patchset 136: Provider failed metric
                 try:
                     from metrics import incr_metric
@@ -307,7 +315,12 @@ async def route_llm_call(
             logger.warning(f"Direct provider call failed for {model_to_call}: {e}")
             last_error = str(e)
             last_error_code = "unknown"
-            record_failure(provider, "unknown", str(e))
+            record_failure(
+                provider,
+                "unknown",
+                str(e),
+                credential_scope=credential_scope,
+            )
             retry_count += 1
 
     # Check if we should fall back to OpenRouter
@@ -438,6 +451,7 @@ async def route_llm_stream(
             routing_policy="stream",
         )
 
+    credential_scope = "user" if api_key else "server"
     if user_id and not api_key:
         try:
             from database_async import async_session_scope
@@ -446,6 +460,7 @@ async def route_llm_stream(
                 resolved = await get_model_api_key_async(session, user_id, provider)
                 if resolved:
                     api_key = resolved.key
+                    credential_scope = "user"
         except Exception as e:
             logger.warning(f"Failed to resolve api key in stream: {e}")
 
@@ -464,13 +479,18 @@ async def route_llm_stream(
     )
 
     if result.success:
-        record_success(provider, canonical_model_id=canonical_model_id)
+        record_success(
+            provider,
+            canonical_model_id=canonical_model_id,
+            credential_scope=credential_scope,
+        )
     else:
         record_failure(
             provider,
             result.error_code or "unknown",
             result.error_message or "",
             canonical_model_id=canonical_model_id,
+            credential_scope=credential_scope,
         )
 
     return result

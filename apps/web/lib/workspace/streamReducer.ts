@@ -60,8 +60,20 @@ export type StreamingAction =
 // Reducer
 // ---------------------------------------------------------------------------
 
-function stateForLifecycle(s: ModelState): ModelState {
-  return s;
+const MODEL_STATE_RANK: Record<ModelState, number> = {
+  queued: 0,
+  connecting: 1,
+  started: 2,
+  streaming: 3,
+  persisting: 4,
+  completed: 5,
+  failed: 5,
+};
+
+function shouldApplyLifecycle(current: ModelState | undefined, incoming: ModelState): boolean {
+  if (!current) return true;
+  if (current === "completed" || current === "failed") return false;
+  return MODEL_STATE_RANK[incoming] >= MODEL_STATE_RANK[current];
 }
 
 export function isValidLifecyclePayload(payload: any): payload is ModelResponseLifecyclePayload {
@@ -140,6 +152,8 @@ export function streamingReducer(
         return state;
       }
       const { response_id, model_id, display_name, provider } = action.payload;
+      const existing = state.buffers.get(response_id);
+      if (existing && !shouldApplyLifecycle(existing.state, "queued")) return state;
       const buf: StreamingModelBuffer = {
         responseId: response_id,
         modelId: model_id,
@@ -158,6 +172,7 @@ export function streamingReducer(
       if (!isValidLifecyclePayload(action.payload)) return state;
       const { response_id, model_id, display_name, provider } = action.payload;
       let buf = state.buffers.get(response_id);
+      if (buf && !shouldApplyLifecycle(buf.state, "connecting")) return state;
       if (!buf) {
         buf = {
           responseId: response_id,
@@ -178,6 +193,7 @@ export function streamingReducer(
       if (!isValidLifecyclePayload(action.payload)) return state;
       const { response_id, model_id, display_name, provider } = action.payload;
       let buf = state.buffers.get(response_id);
+      if (buf && !shouldApplyLifecycle(buf.state, "started")) return state;
       if (!buf) {
         buf = {
           responseId: response_id,
@@ -205,7 +221,7 @@ export function streamingReducer(
     case "RESPONSE_PERSISTING": {
       if (!action.payload || typeof action.payload.response_id !== "string") return state;
       const buf = state.buffers.get(action.payload.response_id);
-      if (!buf) return state;
+      if (!buf || !shouldApplyLifecycle(buf.state, "persisting")) return state;
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
       next.set(action.payload.response_id, { ...buf, state: "persisting" });
       return { ...state, buffers: next };
@@ -215,7 +231,7 @@ export function streamingReducer(
       if (!isValidLifecyclePayload(action.payload)) return state;
       const { response_id } = action.payload;
       const buf = state.buffers.get(response_id);
-      if (!buf) return state;
+      if (!buf || !shouldApplyLifecycle(buf.state, "completed")) return state;
       // Track G: Retain completed buffer with accumulated text until persistence arrives
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
       next.set(response_id, { ...buf, state: "completed" });
@@ -227,6 +243,7 @@ export function streamingReducer(
       const { response_id, model_id, display_name, provider, error, error_code } = action.payload;
       const buf = state.buffers.get(response_id);
       if (buf) {
+        if (!shouldApplyLifecycle(buf.state, "failed")) return state;
         // Existing buffer — mark as failed
         const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
         next.set(response_id, {

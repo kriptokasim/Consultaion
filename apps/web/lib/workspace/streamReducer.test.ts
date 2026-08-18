@@ -88,3 +88,32 @@ describe("streamingReducer buffer bounds", () => {
     expect(next.buffers.get("response-1")?.truncated).toBe(true);
   });
 });
+
+
+describe("streamingReducer lifecycle ordering", () => {
+  test("does not regress a streaming response to replayed queued state", () => {
+    const streaming = streamingReducer(INITIAL_STREAMING_STATE, delta("hello", 1));
+    const replayed = streamingReducer(streaming, {
+      type: "RESPONSE_QUEUED",
+      payload: { response_id: "response-1", model_id: "model-1" },
+    });
+
+    expect(replayed.buffers.get("response-1")?.state).toBe("streaming");
+    expect(replayed.buffers.get("response-1")?.accumulatedText).toBe("hello");
+  });
+
+  test("keeps completed state sticky when older lifecycle events replay", () => {
+    const streaming = streamingReducer(INITIAL_STREAMING_STATE, delta("done", 1));
+    const completed = streamingReducer(streaming, {
+      type: "RESPONSE_COMPLETED",
+      payload: { response_id: "response-1", model_id: "model-1" },
+    });
+    const replayed = streamingReducer(completed, {
+      type: "RESPONSE_STARTED",
+      payload: { response_id: "response-1", model_id: "model-1" },
+    });
+
+    expect(replayed.buffers.get("response-1")?.state).toBe("completed");
+    expect(replayed.buffers.get("response-1")?.accumulatedText).toBe("done");
+  });
+});

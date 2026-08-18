@@ -191,6 +191,10 @@ class AppSettings(BaseSettings):
     DEBATE_MAX_SEAT_FAIL_RATIO: float = Field(0.4, ge=0.0, le=1.0)
     DEBATE_MIN_REQUIRED_SEATS: int = Field(1, ge=0)
     DEBATE_FAIL_FAST: bool = Field(True, description="Abort debates when too many seats fail.")
+    DEBATE_STRICT_FAIL_RATIO: bool = Field(
+        False,
+        description="Treat an exceeded seat-failure ratio as terminal instead of degraded.",
+    )
     MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS: int = Field(2, ge=1, description="Minimum successful model responses required to proceed with synthesis.")
 
     # Staged streaming deadlines (PS184)

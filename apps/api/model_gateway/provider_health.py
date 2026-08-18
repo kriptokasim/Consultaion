@@ -65,8 +65,19 @@ def is_circuit_open(provider: str, canonical_model_id: str | None = None) -> boo
         return False
 
 
-def record_success(provider: str, canonical_model_id: str | None = None):
-    """Record a successful call to the provider, resetting failure counts."""
+def record_success(
+    provider: str,
+    canonical_model_id: str | None = None,
+    *,
+    credential_scope: str = "server",
+):
+    """Record a shared-provider success.
+
+    User-supplied BYOK calls are isolated from shared provider health: a
+    successful user key must not reset failures observed by hosted routes.
+    """
+    if credential_scope == "user":
+        return
     redis_client = get_redis()
     if not redis_client:
         return
@@ -88,8 +99,23 @@ def record_failure(
     failure_code: str,
     error_msg: str,
     canonical_model_id: str | None = None,
+    *,
+    credential_scope: str = "server",
 ):
-    """Record a failure for the provider and update the circuit breaker state."""
+    """Record a shared-provider failure and update the circuit breaker.
+
+    Failures from a user-owned BYOK credential are tenant-local. They may
+    represent an invalid key, exhausted personal balance, or personal quota
+    and therefore must never open or increment a circuit shared by others.
+    """
+    if credential_scope == "user":
+        logger.info(
+            "Ignoring user-scoped provider health mutation: provider=%s model=%s code=%s",
+            provider,
+            canonical_model_id,
+            failure_code,
+        )
+        return
     redis_client = get_redis()
     if not redis_client:
         return
