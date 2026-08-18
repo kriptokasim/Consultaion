@@ -6,7 +6,7 @@ from models import Debate, User, utcnow
 from routes.admin.referrals import admin_referral_metrics
 from services.account_erasure import erase_user_account
 from services.referrals import claim_referral, issue_referral_token, record_referral_visit
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 
 def _user(session: Session, email: str) -> User:
@@ -34,7 +34,6 @@ def _debate(session: Session, owner: User, debate_id: str) -> Debate:
 
 def test_referral_stores_only_hash_and_tracks_visit_claim(db_session: Session):
     owner = _user(db_session, "ref-owner@example.com")
-    visitor = _user(db_session, "ref-visitor@example.com")
     debate = _debate(db_session, owner, "ref-debate-1")
 
     token, row = issue_referral_token(
@@ -44,6 +43,8 @@ def test_referral_stores_only_hash_and_tracks_visit_claim(db_session: Session):
     )
     db_session.commit()
     db_session.refresh(row)
+    # Acquisition attribution requires an account created after the share link.
+    visitor = _user(db_session, "ref-visitor@example.com")
 
     assert token != row.token_hash
     assert row.token_hash == hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -69,15 +70,32 @@ def test_referral_stores_only_hash_and_tracks_visit_claim(db_session: Session):
     assert persisted.claimed_by_user_id == visitor.id
     assert persisted.claimed_at is not None
 
-    # Same-user retry is idempotent; another user cannot steal the claim.
     assert claim_referral(db_session, token=token, user_id=visitor.id) is True
     other = _user(db_session, "ref-other@example.com")
     assert claim_referral(db_session, token=token, user_id=other.id) is False
 
 
+def test_existing_account_is_engagement_not_signup_attribution(db_session: Session):
+    owner = _user(db_session, "ref-existing-owner@example.com")
+    existing_user = _user(db_session, "ref-existing-user@example.com")
+    debate = _debate(db_session, owner, "ref-debate-existing")
+    token, row = issue_referral_token(
+        db_session,
+        debate_id=debate.id,
+        created_by_user_id=owner.id,
+    )
+    db_session.commit()
+
+    assert record_referral_visit(db_session, token=token) is True
+    assert claim_referral(db_session, token=token, user_id=existing_user.id) is False
+    db_session.commit()
+    db_session.refresh(row)
+    assert row.claimed_by_user_id is None
+    assert row.claimed_at is None
+
+
 def test_claim_before_visit_beacon_counts_one_implicit_visit(db_session: Session):
     owner = _user(db_session, "ref-race-owner@example.com")
-    visitor = _user(db_session, "ref-race-visitor@example.com")
     debate = _debate(db_session, owner, "ref-debate-race")
     token, row = issue_referral_token(
         db_session,
@@ -85,6 +103,7 @@ def test_claim_before_visit_beacon_counts_one_implicit_visit(db_session: Session
         created_by_user_id=owner.id,
     )
     db_session.commit()
+    visitor = _user(db_session, "ref-race-visitor@example.com")
 
     assert claim_referral(db_session, token=token, user_id=visitor.id) is True
     db_session.commit()
@@ -117,7 +136,6 @@ def test_invalid_or_expired_referral_is_not_accepted(db_session: Session):
 def test_referral_metrics_use_token_grain_not_ip(db_session: Session):
     admin = _user(db_session, "ref-metrics-admin@example.com")
     owner = _user(db_session, "ref-metrics-owner@example.com")
-    claimed_user = _user(db_session, "ref-metrics-claim@example.com")
     debate = _debate(db_session, owner, "ref-debate-metrics")
 
     visited_token, _ = issue_referral_token(
@@ -130,6 +148,9 @@ def test_referral_metrics_use_token_grain_not_ip(db_session: Session):
         debate_id=debate.id,
         created_by_user_id=owner.id,
     )
+    db_session.commit()
+    claimed_user = _user(db_session, "ref-metrics-claim@example.com")
+
     assert unvisited_token != visited_token
     record_referral_visit(db_session, token=visited_token)
     claim_referral(db_session, token=visited_token, user_id=claimed_user.id)
@@ -146,13 +167,14 @@ def test_referral_metrics_use_token_grain_not_ip(db_session: Session):
 
 def test_account_erasure_detaches_referral_user_links(db_session: Session):
     owner = _user(db_session, "ref-erase-owner@example.com")
-    visitor = _user(db_session, "ref-erase-visitor@example.com")
     debate = _debate(db_session, owner, "ref-debate-erasure")
     token, row = issue_referral_token(
         db_session,
         debate_id=debate.id,
         created_by_user_id=owner.id,
     )
+    db_session.commit()
+    visitor = _user(db_session, "ref-erase-visitor@example.com")
     claim_referral(db_session, token=token, user_id=visitor.id)
     db_session.commit()
     row_id = row.id
