@@ -165,3 +165,49 @@ def revoke_manual_entitlements(session: Session, *, user_id: str) -> int:
     user.plan = get_active_plan(session, user_id).slug
     session.add(user)
     return len(grants)
+
+
+def cleanup_expired_manual_entitlements(
+    session: Session,
+    *,
+    now: datetime | None = None,
+) -> int:
+    """Cancel expired manual grants and resync affected compatibility markers.
+
+    Entitlement authorization already ignores out-of-period rows. This cleanup
+    keeps admin/user-facing legacy ``User.plan`` state from remaining stale after
+    a time-bounded grant expires. The function stages changes and leaves commit
+    ownership to the maintenance caller.
+    """
+    cutoff = (now or utcnow()).astimezone(timezone.utc)
+    expired = session.exec(
+        select(BillingSubscription)
+        .where(BillingSubscription.provider == MANUAL_PROVIDER)
+        .where(BillingSubscription.status.in_(["active", "trialing"]))
+        .where(BillingSubscription.current_period_end <= cutoff)
+    ).all()
+
+    if not expired:
+        return 0
+
+    affected_user_ids = {grant.user_id for grant in expired}
+    for grant in expired:
+        grant.status = "canceled"
+        grant.updated_at = cutoff
+        session.add(grant)
+
+    # Flush cancellation first so canonical resolution cannot select the expired
+    # manual row while compatibility markers are being recomputed.
+    session.flush()
+
+    from billing.service import get_active_plan
+
+    for user_id in affected_user_ids:
+        user = session.get(User, user_id)
+        if not user:
+            continue
+        user.plan = get_active_plan(session, user_id).slug
+        session.add(user)
+
+    session.flush()
+    return len(expired)
