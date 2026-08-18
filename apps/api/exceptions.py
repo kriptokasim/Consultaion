@@ -21,6 +21,26 @@ class AppError(Exception):
         super().__init__(message)
 
 
+class ConfigurationError(AppError):
+    """Server-side configuration errors that require operator action."""
+    def __init__(
+        self,
+        message: str = "Application configuration error",
+        code: str = "configuration_error",
+        status_code: int = 500,
+        details: Optional[Dict[str, Any]] = None,
+        hint: Optional[str] = None,
+    ):
+        super().__init__(
+            message,
+            code,
+            status_code,
+            details,
+            hint,
+            retryable=False,
+        )
+
+
 class AuthError(AppError):
     """Authentication and authorization errors."""
     def __init__(
