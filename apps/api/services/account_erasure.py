@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from sqlmodel import Session, select
 
 from auth import hash_password
-from billing.models import BillingSubscription
+from billing.models import BillingSubscription, ReferralAttribution
 from models import (
     APIKey,
     AdminEvent,
@@ -60,7 +60,6 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
-# Valid anonymized email domain — non-routable
 _ANONYMIZED_DOMAIN = "invalid.local"
 
 
@@ -117,19 +116,10 @@ def erase_user_account(
 
     Caller controls commit/rollback. This function stages all changes
     on the session but does NOT commit.
-
-    Args:
-        session: Active SQLModel session.
-        user: The User ORM instance to erase.
-        reason: Audit label (e.g. "user_request", "gdpr_scheduled").
-
-    Returns:
-        AccountErasureResult with counts for audit logging.
     """
     user_id = user.id
     deleted_email = f"deleted+{secrets.token_hex(8)}@{_ANONYMIZED_DOMAIN}"
 
-    # ── C1: User anonymization ──────────────────────────────────────
     user.email = deleted_email
     user.display_name = None
     user.avatar_url = None
@@ -140,21 +130,17 @@ def erase_user_account(
     user.deletion_requested_at = None
     user.deleted_at = utcnow()
     user.is_active = False
-    # Reset lockout metadata
     user.failed_login_attempts = 0
     user.locked_until = None
     user.last_failed_login_at = None
     session.add(user)
 
-    # Capture owned debates before their direct user linkage is removed.
     user_debates = session.exec(select(Debate).where(Debate.user_id == user_id)).all()
     debate_ids = [d.id for d in user_debates]
 
-    # ── C2: Delete direct user-owned records ────────────────────────
     session.execute(sa.delete(APIKey).where(APIKey.user_id == user_id))
     session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
     session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
-    # Anonymize support notes ABOUT the user (retained for support history)
     session.execute(
         sa.update(SupportNote)
         .where(SupportNote.user_id == user_id)
@@ -171,9 +157,8 @@ def erase_user_account(
     session.execute(sa.delete(DebateError).where(DebateError.user_id == user_id))
 
     # Manual grants are non-revenue support/trial records and may contain a
-    # free-form entitlement_reason. Delete target-user grants rather than
-    # retaining avoidable PII. If the deleted user was the granting admin, keep
-    # other users' entitlement facts but detach the granting-admin identifier.
+    # free-form reason. Remove target-user grants; detach a deleted granting
+    # admin from other users' surviving entitlement facts.
     session.execute(
         sa.delete(BillingSubscription)
         .where(BillingSubscription.user_id == user_id)
@@ -185,7 +170,20 @@ def erase_user_account(
         .values(granted_by_user_id=None)
     )
 
-    # Coding-agent artifacts can contain user prompts, source diffs, and model output.
+    # Referral tokens store no raw visitor identity/IP, but creator/claim user
+    # IDs are still account links. Detach both on erasure while retaining only
+    # aggregate token visit/claim facts for product analytics.
+    session.execute(
+        sa.update(ReferralAttribution)
+        .where(ReferralAttribution.created_by_user_id == user_id)
+        .values(created_by_user_id=None)
+    )
+    session.execute(
+        sa.update(ReferralAttribution)
+        .where(ReferralAttribution.claimed_by_user_id == user_id)
+        .values(claimed_by_user_id=None)
+    )
+
     coding_run_ids = sa.select(CodingRun.id).where(CodingRun.user_id == user_id)
     session.execute(
         sa.delete(CodingPatchArtifact).where(CodingPatchArtifact.coding_run_id.in_(coding_run_ids))
@@ -196,7 +194,6 @@ def erase_user_account(
     session.execute(sa.delete(CodingTurn).where(CodingTurn.coding_run_id.in_(coding_run_ids)))
     session.execute(sa.delete(CodingRun).where(CodingRun.user_id == user_id))
 
-    # Challenge/oracle/red-team sessions
     session.execute(
         sa.delete(ChallengeRound).where(
             ChallengeRound.session_id.in_(
@@ -216,9 +213,6 @@ def erase_user_account(
     session.execute(sa.delete(RedTeamSession).where(RedTeamSession.user_id == user_id))
 
     if debate_ids:
-        # DebateAttempt is referenced by Message/Score/DebateRound.attempt_id.
-        # Deleting attempts while retaining those structural rows violates the
-        # PostgreSQL FK graph. Keep the attempt fact, scrub free-form content.
         session.execute(
             sa.update(DebateAttempt)
             .where(DebateAttempt.debate_id.in_(debate_ids))
@@ -230,7 +224,6 @@ def erase_user_account(
             )
         )
 
-    # ── Anonymize retained Debate data ──────────────────────────────
     anonymized_count = 0
     for debate in user_debates:
         if debate.prompt != "[DELETED]":
@@ -245,7 +238,6 @@ def erase_user_account(
         debate.user_id = None
     session.add_all(user_debates)
 
-    # ── Anonymize/delete related debate data ────────────────────────
     if debate_ids:
         session.execute(
             sa.update(Message)
@@ -275,10 +267,6 @@ def erase_user_account(
             .values(message="[User deleted]", trace_id=None, meta=None)
         )
 
-    # ── Scrub PII from retained AuditLog metadata ──────────────────
-    # Include both actions performed BY the user and admin/system actions ABOUT
-    # the user. Otherwise target_email/client_ip data can survive erasure in an
-    # admin-authored plan/status/support audit row.
     audit_logs = session.exec(
         select(AuditLog).where(
             sa.or_(
