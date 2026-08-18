@@ -54,7 +54,7 @@ The current application setting is `RETAIN_DEBATES_DAYS=365`. This is a configur
 
 ### Auxiliary AI modes
 
-Standalone Coding Agent, Oracle and RedTeam content is now included in the automatic AI-content retention job using the same `RETAIN_DEBATES_DAYS` window. Child coding artifacts/turns and Oracle branches are deleted before their parent session/run. Standalone RedTeam rows (`debate_id IS NULL`) are deleted by the auxiliary purge; debate-linked RedTeam rows remain owned by the normal Debate purge. Account erasure also deletes the corresponding user-owned content immediately.
+Standalone Coding Agent, Oracle and RedTeam content is included in the automatic AI-content retention job using the same `RETAIN_DEBATES_DAYS` window. Child coding artifacts/turns and Oracle branches are deleted before their parent session/run. Standalone RedTeam rows (`debate_id IS NULL`) are deleted by the auxiliary purge; debate-linked RedTeam rows remain owned by the normal Debate purge. Account erasure also deletes the corresponding user-owned content immediately.
 
 ---
 
@@ -67,12 +67,12 @@ Standalone Coding Agent, Oracle and RedTeam content is now included in the autom
 | `ReferralAttribution.token_hash` | Public-link attribution identity | SHA-256 of a 192-bit random URL-safe token; raw token returned once to the sharing client and not persisted | High-entropy one-way identifier; unique at DB level |
 | `ReferralAttribution.view_count`, visit timestamps | Public-link engagement | Updated atomically without visitor identity or IP | Canonical visit denominator is unique visited token, not IP/event count |
 | `ReferralAttribution.claimed_*` | Signup attribution | First eligible newly-created account can atomically claim a token | Existing accounts created before the share token are excluded from acquisition conversion |
-| `AuditLog: view_shared_debate` | Legacy public-artifact audit telemetry | May still contain request IP in legacy/current audit flow | **Not used by canonical investor referral metrics**; raw-IP audit retention remains a follow-up |
+| `AuditLog: view_shared_debate` | Public-artifact audit telemetry | Records the event/target but central audit policy strips `ip_address`, `client_ip`, and `remote_addr` | Useful for aggregate engagement count; never used for acquisition attribution |
 | PostHog | Product events | Deployment/provider configuration dependent | Respect analytics opt-out and provider retention configuration |
 
-Canonical investor referral metrics are exposed from the token-based referral funnel and report `uses_visitor_ip=false` / `stores_raw_token=false`. The older same-IP approximation in the general metrics payload is a compatibility metric only and must not be used as the investor-grade acquisition KPI.
+Canonical investor referral metrics are token-based in both `/admin/referral-metrics` and the PLG section of `/admin/metrics`. They report `uses_visitor_ip=false` and `stores_raw_token=false`. Historical IP-shaped audit rows, if any remain inside their retention window from older releases, are not used for current referral conversion.
 
-The referral token is stored temporarily in the visitor browser so it can be claimed after authentication. Backend attribution stores only the hash. On account erasure, creator and claimant user IDs are detached while aggregate token visit/claim facts may remain.
+The referral token is stored temporarily in the visitor browser so it can be claimed after authentication. Backend attribution stores only the hash. The browser removes the token from the visible URL after capture. On account erasure, creator and claimant user IDs are detached while aggregate token visit/claim facts may remain.
 
 ---
 
@@ -96,9 +96,9 @@ External observability systems have their own retention/export/deletion settings
 | Table | Purpose | Default technical retention | Notes |
 |---|---|---:|---|
 | `SupportNote` | Internal support history | Indefinite unless `RETAIN_SUPPORT_NOTES_DAYS` is set | Can contain admin-entered user context; requires legal/policy review |
-| `AuditLog` | Security/admin/product audit trail | Policy dependent | Account erasure recursively redacts known PII keys; expired debate audit metadata is cleared |
+| `AuditLog` | Security/admin/product audit trail | Policy dependent | Public-view events strip visitor IP centrally; authentication/security events may retain IP when deliberately supplied; account erasure recursively redacts known PII keys |
 | `BillingSubscription` provider-backed rows | Paid/trial entitlement and billing state | Policy / legal retention dependent | Canonical entitlement authority; provider state and payment evidence may require retention |
-| `BillingSubscription` manual rows | Time-bounded support/design-partner grants | Max 30-day grant window | `provider=manual`, `status=trialing`, explicit source/reason/grantor; excluded from active MRR; target-user manual rows deleted on erasure |
+| `BillingSubscription` manual rows | Time-bounded support/design-partner grants | Max 30-day grant window | `provider=manual`, `status=trialing`, explicit source/reason/grantor; excluded from active MRR; expired rows are canceled by maintenance and target-user rows are deleted on erasure |
 | `BillingUsage` | Usage accounting | Policy dependent | Used for quota and reconciliation facts |
 | `APIKey` / `UserProviderKey` | Authentication / BYOK credentials | Until revocation or account erasure | API keys and provider keys deleted on account erasure |
 
@@ -149,7 +149,7 @@ Account erasure is distinct from time-based retention. Both paths must remain co
 | Decision/debate content and linked challenge/red-team content | 365 days |
 | Standalone Coding/Oracle/RedTeam content | 365 days via the AI-content retention job |
 | Referral token validity | 30 days; only token hash is persisted |
-| Manual entitlement grant | Maximum 30-day entitlement window |
+| Manual entitlement grant | Maximum 30-day entitlement window; expired grants are canceled during maintenance |
 | Debate errors | 90 days |
 | Support notes | Indefinite unless configured |
 | Usage statistics | 365 days |
@@ -165,11 +165,10 @@ These are **technical defaults**. Production terms, privacy notices, DPAs, custo
 
 Before representing Consultaion's privacy posture externally, verify all of the following against the production deployment:
 
-- retention jobs are actually scheduled and successfully executing;
+- retention and maintenance jobs are actually scheduled and successfully executing;
 - database, backups, logs, analytics and LLM-observability providers use compatible retention periods;
 - account erasure covers every newly introduced content-bearing or identity-bearing table;
-- canonical investor acquisition metrics use referral tokens, not the legacy raw-IP proxy;
-- decide whether `view_shared_debate` audit logs require request IP at all and set an explicit retention/lawful-basis policy if retained;
+- canonical investor acquisition metrics continue to use referral tokens and never reintroduce IP matching;
 - support-note indefinite retention has an explicit policy/lawful basis;
 - data-subject export and erasure tests pass against the production-equivalent schema;
 - subprocessors, regions and data-transfer terms are current;
