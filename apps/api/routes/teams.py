@@ -55,19 +55,28 @@ async def create_team(
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="team name required")
+
+    # Team creation, initial ownership, and its audit event are one domain
+    # transaction. The previous two-commit flow could leave an ownerless Team if
+    # the membership insert failed after the Team row had already committed.
     team = Team(name=name)
+    owner = TeamMember(team_id=team.id, user_id=current_user.id, role="owner")
     session.add(team)
-    session.commit()
-    session.refresh(team)
-    session.add(TeamMember(team_id=team.id, user_id=current_user.id, role="owner"))
-    session.commit()
+    session.add(owner)
     record_audit(
         "team_created",
         user_id=current_user.id,
         target_type="team",
         target_id=team.id,
         meta={"name": team.name},
+        session=session,
     )
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="team creation conflict") from None
+    session.refresh(team)
     return serialize_team(team, "owner")
 
 
