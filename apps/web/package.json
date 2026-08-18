@@ -57,7 +57,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
-    "@types/react-window": "^1.8.9",
+    "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^4.3.4",
     "axe-core": "^4.12.1",
     "eslint": "^9.39.1",
