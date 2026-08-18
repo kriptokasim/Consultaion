@@ -76,11 +76,7 @@ jobs:
 
       - name: Run pip-audit (Python Dependency Scan)
         run: |
-          # Temporary, narrowly-scoped exception: upstream cryptography advisory
-          # GHSA-g6cj-pr64-35w5 / PYSEC-2026-3552 is fixed in 50.0.0, but
-          # 50.0.0 is not yet published on PyPI. Consultaion does not call the
-          # affected pkcs7_decrypt_* APIs. Keep every other advisory blocking.
-          pip-audit -r apps/api/requirements.txt --ignore-vuln PYSEC-2026-3552
+          pip-audit -r apps/api/requirements.txt
 
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
