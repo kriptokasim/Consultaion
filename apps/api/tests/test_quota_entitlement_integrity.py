@@ -6,6 +6,7 @@ from billing.service import get_or_create_usage, increment_debate_usage
 from config import settings
 from exceptions import RateLimitError as AppRateLimitError
 from models import UsageCounter, User, utcnow
+from routes.admin.usage import admin_quota_usage
 from sqlmodel import Session, select
 from usage_limits import (
     QuotaExceededError,
@@ -150,6 +151,44 @@ def test_daily_export_increment_uses_canonical_entitlement(db_session: Session):
     ).first()
     assert counter is not None
     assert counter.exports_used == 6
+
+
+def test_admin_quota_view_uses_canonical_entitlement_not_plan_marker(db_session: Session):
+    marker_only = _user(db_session, "admin-marker-only@example.com", marker_plan="pro")
+    canonical_pro = _user(db_session, "admin-canonical-pro@example.com", marker_plan="free")
+    _activate_pro(db_session, canonical_pro)
+
+    payload = admin_quota_usage(
+        email=None,
+        plan=None,
+        limit=50,
+        session=db_session,
+        _=marker_only,
+    )
+    rows = {row["user_id"]: row for row in payload["users"]}
+
+    assert rows[marker_only.id]["plan"] == "free"
+    assert rows[marker_only.id]["daily_token_limit"] == 100_000
+    assert rows[canonical_pro.id]["plan"] == "pro"
+    assert rows[canonical_pro.id]["daily_token_limit"] == 1_000_000
+
+
+def test_admin_quota_plan_filter_uses_effective_plan(db_session: Session):
+    marker_only = _user(db_session, "admin-filter-marker@example.com", marker_plan="pro")
+    canonical_pro = _user(db_session, "admin-filter-pro@example.com", marker_plan="free")
+    _activate_pro(db_session, canonical_pro)
+
+    payload = admin_quota_usage(
+        email=None,
+        plan="pro",
+        limit=50,
+        session=db_session,
+        _=marker_only,
+    )
+    ids = {row["user_id"] for row in payload["users"]}
+
+    assert canonical_pro.id in ids
+    assert marker_only.id not in ids
 
 
 def test_rejected_monthly_run_does_not_leak_into_usage(db_session: Session, monkeypatch):
