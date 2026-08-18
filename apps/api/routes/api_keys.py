@@ -120,7 +120,8 @@ async def create_api_key(
     # Generate key
     full_key, prefix, hashed_key = generate_api_key()
 
-    # Create database record
+    # Credential creation and its security audit are one transaction. A key that
+    # exists without a corresponding lifecycle event is a poor security invariant.
     api_key = APIKey(
         user_id=current_user.id,
         team_id=body.team_id,
@@ -132,18 +133,16 @@ async def create_api_key(
     )
 
     session.add(api_key)
-    session.commit()
-    session.refresh(api_key)
-
-    # Primary key creation is already committed. Persist the lifecycle audit in
-    # its own transaction so it cannot be silently rolled back at request close.
     record_audit(
         "api_key_created",
         user_id=current_user.id,
         target_type="api_key",
         target_id=api_key.id,
         meta={"name": api_key.name, "prefix": prefix},
+        session=session,
     )
+    session.commit()
+    session.refresh(api_key)
 
     return APIKeyCreateResponse(
         id=api_key.id,
@@ -184,15 +183,15 @@ async def revoke_api_key(
 
     api_key.revoked = True
     session.add(api_key)
-    session.commit()
-
     record_audit(
         "api_key_revoked",
         user_id=current_user.id,
         target_type="api_key",
         target_id=api_key.id,
         meta={"name": api_key.name, "prefix": api_key.prefix},
+        session=session,
     )
+    session.commit()
 
     return {"id": key_id, "revoked": True}
 
