@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from auth import hash_password
 from models import (
     APIKey,
+    AdminEvent,
     AuditLog,
     ChallengeRound,
     ChallengeSession,
@@ -26,9 +27,12 @@ from models import (
     ConversationVote,
     Debate,
     DebateAttempt,
+    DebateContinuation,
+    DebateError,
     DebateRound,
     DebateStageCheckpoint,
     DebateTurn,
+    DivergenceReport,
     LLMUsageLog,
     Message,
     OracleBranch,
@@ -38,6 +42,7 @@ from models import (
     Score,
     SupportNote,
     TeamMember,
+    TerminalTransition,
     UsageCounter,
     UsageLedgerEntry,
     UsageQuota,
@@ -138,6 +143,7 @@ def erase_user_account(
     session.execute(sa.delete(LLMUsageLog).where(LLMUsageLog.user_id == user_id))
     session.execute(sa.delete(UsageLedgerEntry).where(UsageLedgerEntry.user_id == user_id))
     session.execute(sa.delete(ConversationVote).where(ConversationVote.user_id == user_id))
+    session.execute(sa.delete(DebateError).where(DebateError.user_id == user_id))
 
     # Coding-agent artifacts can contain user prompts, source diffs, and model output.
     coding_run_ids = sa.select(CodingRun.id).where(CodingRun.user_id == user_id)
@@ -165,14 +171,12 @@ def erase_user_account(
     session.execute(sa.delete(OracleSession).where(OracleSession.user_id == user_id))
     session.execute(sa.delete(RedTeamSession).where(RedTeamSession.user_id == user_id))
 
-    # Debate attempts via subquery
-    session.execute(sa.delete(DebateAttempt).where(DebateAttempt.debate_id.in_(
-        sa.select(Debate.id).where(Debate.user_id == user_id)
-    )))
-    # Debate stage checkpoints
-    session.execute(sa.delete(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id.in_(
-        sa.select(Debate.id).where(Debate.user_id == user_id)
-    )))
+    # Debate attempts and stage checkpoints via subquery
+    owned_debate_ids = sa.select(Debate.id).where(Debate.user_id == user_id)
+    session.execute(sa.delete(DebateAttempt).where(DebateAttempt.debate_id.in_(owned_debate_ids)))
+    session.execute(
+        sa.delete(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id.in_(owned_debate_ids))
+    )
 
     # ── Anonymize retained Debate data ──────────────────────────────
     user_debates = session.exec(
@@ -187,6 +191,8 @@ def erase_user_account(
             debate.final_meta = None
             debate.config = None
             debate.panel_config = None
+            debate.routing_meta = None
+            debate.team_id = None
             debate.user_id = None
             anonymized_count += 1
     session.add_all(user_debates)
@@ -204,6 +210,22 @@ def erase_user_account(
         session.execute(sa.delete(VoteRecord).where(VoteRecord.debate_id.in_(debate_ids)))
         session.execute(sa.delete(DebateRound).where(DebateRound.debate_id.in_(debate_ids)))
         session.execute(sa.delete(DebateTurn).where(DebateTurn.debate_id.in_(debate_ids)))
+        session.execute(sa.delete(DivergenceReport).where(DivergenceReport.debate_id.in_(debate_ids)))
+        session.execute(
+            sa.update(DebateContinuation)
+            .where(DebateContinuation.debate_id.in_(debate_ids))
+            .values(user_id=None, failure_detail_safe=None)
+        )
+        session.execute(
+            sa.update(TerminalTransition)
+            .where(TerminalTransition.debate_id.in_(debate_ids))
+            .values(meta=None)
+        )
+        session.execute(
+            sa.update(AdminEvent)
+            .where(AdminEvent.debate_id.in_(debate_ids))
+            .values(message="[User deleted]", meta=None)
+        )
 
     # ── Scrub PII from retained AuditLog metadata ──────────────────
     audit_logs = session.exec(
