@@ -113,7 +113,13 @@ class RateLimitError(AppError):
 
 
 class ProviderCircuitOpenError(AppError):
-    """Circuit breaker open error."""
+    """Circuit breaker open error.
+
+    ``auth.configuration_error`` historically flowed through this class from the
+    OAuth redirect helper. Preserve that call-site compatibility while ensuring
+    operator configuration failures are never marked retryable or surfaced as a
+    provider-outage 503.
+    """
     def __init__(
         self,
         message: str = "Service temporarily unavailable",
@@ -123,6 +129,10 @@ class ProviderCircuitOpenError(AppError):
         hint: Optional[str] = "The service is temporarily unavailable. Please try again later.",
         retryable: bool = True,
     ):
+        if code == "auth.configuration_error":
+            status_code = 500
+            retryable = False
+            hint = "Server configuration requires operator action."
         super().__init__(message, code, status_code, details, hint, retryable)
 
 
