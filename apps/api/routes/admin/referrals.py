@@ -13,17 +13,8 @@ from sqlmodel import Session, select
 router = APIRouter()
 
 
-@router.get("/referral-metrics")
-def admin_referral_metrics(
-    session: Session = Depends(get_session),
-    _: User = Depends(get_current_admin),
-):
-    """Return privacy-preserving public-share funnel metrics.
-
-    The denominator is unique referral tokens with a recorded visit; numerator
-    is unique tokens claimed by an authenticated user. No visitor IP is stored or
-    used for this canonical conversion metric.
-    """
+def build_referral_metrics(session: Session) -> dict:
+    """Build the canonical privacy-preserving public-share funnel metrics."""
     now = utcnow()
     month_ago = now - timedelta(days=30)
 
@@ -90,3 +81,17 @@ def admin_referral_metrics(
             "conversion_rate": "claimed_signups / visited_links; token-grain numerator and denominator.",
         },
     }
+
+
+@router.get("/referral-metrics")
+def admin_referral_metrics(
+    session: Session = Depends(get_session),
+    _: User = Depends(get_current_admin),
+):
+    """Return privacy-preserving public-share funnel metrics.
+
+    The denominator is unique referral tokens with a recorded visit; numerator
+    is unique tokens claimed by an authenticated user. No visitor IP is stored or
+    used for this canonical conversion metric.
+    """
+    return build_referral_metrics(session)
