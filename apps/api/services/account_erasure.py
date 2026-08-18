@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import sqlalchemy as sa
+from sqlmodel import Session, select
+
 from auth import hash_password
 from models import (
     APIKey,
@@ -54,7 +56,6 @@ from models import (
     VoteRecord,
     utcnow,
 )
-from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
