@@ -3,7 +3,6 @@ from datetime import timedelta
 import pytest
 from billing.models import BillingPlan, BillingSubscription
 from billing.service import get_or_create_usage, increment_debate_usage
-from config import settings
 from exceptions import RateLimitError as AppRateLimitError
 from models import UsageCounter, User, utcnow
 from routes.admin.usage import admin_quota_usage
@@ -15,6 +14,8 @@ from usage_limits import (
     increment_export_usage_daily,
     reserve_run_slot,
 )
+
+from config import settings
 
 
 def _user(session: Session, email: str, *, marker_plan: str) -> User:

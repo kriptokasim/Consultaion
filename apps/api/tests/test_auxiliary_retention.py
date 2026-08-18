@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from config import settings
 from maintenance.retention import purge_old_auxiliary_ai_content
 from models import (
     CodingRun,
@@ -13,6 +12,8 @@ from models import (
     utcnow,
 )
 from sqlmodel import Session, select
+
+from config import settings
 
 
 def test_auxiliary_ai_content_uses_debate_retention_window(

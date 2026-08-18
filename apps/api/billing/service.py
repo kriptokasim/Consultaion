@@ -235,9 +235,12 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
     from usage_limits import get_today_usage
 
     configured_limit = limits.get("max_exports_per_day")
-    try:
-        limit = int(configured_limit) if configured_limit is not None else None
-    except (TypeError, ValueError):
+    if isinstance(configured_limit, (str, int, float)) and not isinstance(configured_limit, bool):
+        try:
+            limit = int(configured_limit)
+        except ValueError:
+            limit = None
+    else:
         limit = None
     if limit is None:
         limit = get_plan_limits(plan.slug).daily_export_limit

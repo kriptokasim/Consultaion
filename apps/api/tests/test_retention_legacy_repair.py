@@ -1,10 +1,11 @@
 from datetime import timedelta
 
 from auth import hash_password
-from config import settings
 from maintenance.retention import purge_old_debates
 from models import Debate, Message, Score, User, utcnow
 from sqlmodel import Session, select
+
+from config import settings
 
 
 def test_retention_repairs_legacy_prompt_only_anonymization(

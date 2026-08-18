@@ -1,9 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
-
 from deps import get_sse_backend
+from fastapi import HTTPException
 
 
 class _Backend:

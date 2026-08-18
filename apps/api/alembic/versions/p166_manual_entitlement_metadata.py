@@ -1,7 +1,7 @@
 """P166: add explicit metadata for manual entitlement grants.
 
 Revision ID: p166_manual_entitlement_metadata
-Revises: p165_billing_subscription_provider_unique
+Revises: p165_billing_provider_unique
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "p166_manual_entitlement_metadata"
-down_revision: Union[str, None] = "p165_billing_subscription_provider_unique"
+down_revision: Union[str, None] = "p165_billing_provider_unique"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

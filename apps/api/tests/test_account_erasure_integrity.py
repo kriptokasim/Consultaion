@@ -1,7 +1,7 @@
 import uuid
 
-from services.account_erasure import erase_user_account
 from models import AuditLog, Debate, DebateAttempt, Message, User
+from services.account_erasure import erase_user_account
 from sqlmodel import Session, select
 
 
