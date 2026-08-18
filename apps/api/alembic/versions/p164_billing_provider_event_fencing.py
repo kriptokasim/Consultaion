@@ -1,6 +1,6 @@
 """P164: fence billing subscription state by provider event creation time.
 
-Revision ID: p164_billing_provider_event_fencing
+Revision ID: p164_billing_event_fence
 Revises: p163_recheck_unmanaged_rls
 """
 
@@ -11,7 +11,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "p164_billing_provider_event_fencing"
+revision: str = "p164_billing_event_fence"
 down_revision: Union[str, None] = "p163_recheck_unmanaged_rls"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
