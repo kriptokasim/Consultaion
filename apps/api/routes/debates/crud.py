@@ -192,13 +192,18 @@ async def create_debate(
             from beta_access import require_beta_access
             require_beta_access(current_user, "conversation mode")
 
-        config = body.config or default_debate_config()
-
-        # Validate config with JSON contract
+        # DebateCreate.config is already validated by the production Pydantic
+        # schema. Serialize it once and keep that dict as the canonical payload.
+        # The versioned JSON contract is a compatibility check only: its legacy
+        # nested schema must never replace/drop production fields.
+        config_model = body.config or default_debate_config()
+        config_payload = config_model.model_dump()
         from json_contracts import safe_validate_config
-        validated_config = safe_validate_config(config)
-        if validated_config:
-            config = validated_config.model_dump()
+        if safe_validate_config(config_payload) is None:
+            logger.warning(
+                "debate_config_contract_validation_failed",
+                extra={"user_id": current_user.id, "mode": str(body.mode)},
+            )
 
         enabled_models = {m.id: m for m in list_enabled_models_for_user(current_user.id)}
         if not enabled_models:
@@ -404,7 +409,6 @@ async def create_debate(
             routing_policy=body.routing_policy,
         )
 
-        config_payload = config.model_dump()
         # Store locale in config so the engine can instruct LLMs to respond in user's language
         if body.locale:
             config_payload["locale"] = body.locale
