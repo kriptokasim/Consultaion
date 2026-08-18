@@ -1,9 +1,6 @@
 from datetime import timedelta
 
-from sqlmodel import Session, select
-
 from auth import hash_password
-from config import settings
 from maintenance.retention import purge_old_debates
 from models import (
     AdminEvent,
@@ -23,6 +20,9 @@ from models import (
     Vote,
     utcnow,
 )
+from sqlmodel import Session, select
+
+from config import settings
 
 
 def test_retention_scrubs_normalized_debate_content(

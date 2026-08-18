@@ -4,7 +4,7 @@ from billing.manual_entitlements import grant_manual_entitlement
 from billing.models import BillingSubscription
 from models import User, utcnow
 from services.account_erasure import erase_user_account
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 
 def _user(session: Session, email: str) -> User:

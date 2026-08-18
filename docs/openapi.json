@@ -5241,7 +5241,7 @@
           "admin"
         ],
         "summary": "Change User Plan",
-        "description": "Change a user's subscription plan (admin only).\n\nValidates that the plan exists and logs the change for audit purposes.\n\nArgs:\n    user_id: ID of user to update\n    request: ChangePlanRequest with new plan name\n    session: Database session\n    admin: Current admin user (auth check)\n\nReturns:\n    Updated user info with old and new plan\n\nRaises:\n    HTTPException: 400 if plan invalid, 404 if user not found",
+        "description": "Change a user's subscription plan (admin only).\n\nValid plans: free, pro, internal. This operation is logged.\nThe change takes effect immediately.",
         "operationId": "change_user_plan_admin_users__user_id__plan_post",
         "parameters": [
           {
@@ -5435,7 +5435,7 @@
           "admin"
         ],
         "summary": "Admin Update User Status",
-        "description": "Enable or disable a user account.\nDisabled users cannot create debates or use most features.",
+        "description": "Enable or disable a user account.\n\nDisabled users cannot create debates or use most features.\nThis operation is logged.",
         "operationId": "admin_update_user_status_admin_users__user_id__status_post",
         "parameters": [
           {
@@ -5458,6 +5458,95 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{user_id}/entitlement": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Grant Manual Entitlement",
+        "description": "Grant a time-bounded non-revenue entitlement to a user.\n\nThis is intentionally separate from Stripe-backed paid subscriptions and\nfrom the legacy ``User.plan`` compatibility marker. The resulting manual\ngrant is a trialing entitlement with explicit source, reason, expiry and\ngranting-admin metadata.",
+        "operationId": "admin_grant_manual_entitlement_admin_users__user_id__entitlement_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualEntitlementGrantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Revoke Manual Entitlement",
+        "operationId": "admin_revoke_manual_entitlement_admin_users__user_id__entitlement_delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5577,9 +5666,27 @@
           "admin"
         ],
         "summary": "Admin Quota Usage",
-        "description": "View user quota usage with plan limits.\n\nShows tokens and exports used today vs daily limits for each user.\nUseful for monitoring and troubleshooting quota issues.",
+        "description": "View today's quota use against canonical entitlement limits.\n\n``User.plan`` is a compatibility marker and can lag subscription expiry or\nwebhook transitions. Resolve the effective BillingSubscription first, then\napply the same static/configured limits used by runtime quota authorization.",
         "operationId": "admin_quota_usage_admin_usage_quota_get",
         "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by exact user ID",
+              "title": "User Id"
+            },
+            "description": "Filter by exact user ID"
+          },
           {
             "name": "email",
             "in": "query",
@@ -5611,10 +5718,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter by plan (free/pro/internal)",
+              "description": "Filter by canonical plan (free/pro/internal)",
               "title": "Plan"
             },
-            "description": "Filter by plan (free/pro/internal)"
+            "description": "Filter by canonical plan (free/pro/internal)"
           },
           {
             "name": "limit",
@@ -5928,8 +6035,28 @@
           "admin"
         ],
         "summary": "Admin Metrics",
-        "description": "Get live system metrics: Activation, PLG/Sharing, Billing, and Economics.",
+        "description": "Get live system metrics: Activation, PLG/Sharing, Billing, Economics.",
         "operationId": "admin_metrics_admin_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/referral-metrics": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Referral Metrics",
+        "description": "Return privacy-preserving public-share funnel metrics.\n\nThe denominator is unique referral tokens with a recorded visit; numerator\nis unique tokens claimed by an authenticated user. No visitor IP is stored or\nused for this canonical conversion metric.",
+        "operationId": "admin_referral_metrics_admin_referral_metrics_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6213,7 +6340,7 @@
           "admin"
         ],
         "summary": "Change User Plan",
-        "description": "Change a user's subscription plan (admin only).\n\nValidates that the plan exists and logs the change for audit purposes.\n\nArgs:\n    user_id: ID of user to update\n    request: ChangePlanRequest with new plan name\n    session: Database session\n    admin: Current admin user (auth check)\n\nReturns:\n    Updated user info with old and new plan\n\nRaises:\n    HTTPException: 400 if plan invalid, 404 if user not found",
+        "description": "Change a user's subscription plan (admin only).\n\nValid plans: free, pro, internal. This operation is logged.\nThe change takes effect immediately.",
         "operationId": "change_user_plan_api_v1_admin_users__user_id__plan_post",
         "parameters": [
           {
@@ -6407,7 +6534,7 @@
           "admin"
         ],
         "summary": "Admin Update User Status",
-        "description": "Enable or disable a user account.\nDisabled users cannot create debates or use most features.",
+        "description": "Enable or disable a user account.\n\nDisabled users cannot create debates or use most features.\nThis operation is logged.",
         "operationId": "admin_update_user_status_api_v1_admin_users__user_id__status_post",
         "parameters": [
           {
@@ -6430,6 +6557,95 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/entitlement": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Grant Manual Entitlement",
+        "description": "Grant a time-bounded non-revenue entitlement to a user.\n\nThis is intentionally separate from Stripe-backed paid subscriptions and\nfrom the legacy ``User.plan`` compatibility marker. The resulting manual\ngrant is a trialing entitlement with explicit source, reason, expiry and\ngranting-admin metadata.",
+        "operationId": "admin_grant_manual_entitlement_api_v1_admin_users__user_id__entitlement_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualEntitlementGrantRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Revoke Manual Entitlement",
+        "operationId": "admin_revoke_manual_entitlement_api_v1_admin_users__user_id__entitlement_delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6549,9 +6765,27 @@
           "admin"
         ],
         "summary": "Admin Quota Usage",
-        "description": "View user quota usage with plan limits.\n\nShows tokens and exports used today vs daily limits for each user.\nUseful for monitoring and troubleshooting quota issues.",
+        "description": "View today's quota use against canonical entitlement limits.\n\n``User.plan`` is a compatibility marker and can lag subscription expiry or\nwebhook transitions. Resolve the effective BillingSubscription first, then\napply the same static/configured limits used by runtime quota authorization.",
         "operationId": "admin_quota_usage_api_v1_admin_usage_quota_get",
         "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by exact user ID",
+              "title": "User Id"
+            },
+            "description": "Filter by exact user ID"
+          },
           {
             "name": "email",
             "in": "query",
@@ -6583,10 +6817,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter by plan (free/pro/internal)",
+              "description": "Filter by canonical plan (free/pro/internal)",
               "title": "Plan"
             },
-            "description": "Filter by plan (free/pro/internal)"
+            "description": "Filter by canonical plan (free/pro/internal)"
           },
           {
             "name": "limit",
@@ -6900,8 +7134,28 @@
           "admin"
         ],
         "summary": "Admin Metrics",
-        "description": "Get live system metrics: Activation, PLG/Sharing, Billing, and Economics.",
+        "description": "Get live system metrics: Activation, PLG/Sharing, Billing, Economics.",
         "operationId": "admin_metrics_api_v1_admin_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/referral-metrics": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Admin Referral Metrics",
+        "description": "Return privacy-preserving public-share funnel metrics.\n\nThe denominator is unique referral tokens with a recorded visit; numerator\nis unique tokens claimed by an authenticated user. No visitor IP is stored or\nused for this canonical conversion metric.",
+        "operationId": "admin_referral_metrics_api_v1_admin_referral_metrics_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8126,6 +8380,166 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/visit": {
+      "post": {
+        "tags": [
+          "referrals"
+        ],
+        "summary": "Referral Visit",
+        "description": "Record a public-share visit without persisting visitor identity or IP.",
+        "operationId": "referral_visit_referrals_visit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/referrals/claim": {
+      "post": {
+        "tags": [
+          "referrals"
+        ],
+        "summary": "Referral Claim",
+        "description": "Idempotently bind a referral to the first authenticated user.",
+        "operationId": "referral_claim_referrals_claim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/referrals/visit": {
+      "post": {
+        "tags": [
+          "referrals"
+        ],
+        "summary": "Referral Visit",
+        "description": "Record a public-share visit without persisting visitor identity or IP.",
+        "operationId": "referral_visit_api_v1_referrals_visit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/referrals/claim": {
+      "post": {
+        "tags": [
+          "referrals"
+        ],
+        "summary": "Referral Claim",
+        "description": "Idempotently bind a referral to the first authenticated user.",
+        "operationId": "referral_claim_api_v1_referrals_claim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -11416,6 +11830,34 @@
         ],
         "title": "JudgeConfig"
       },
+      "ManualEntitlementGrantRequest": {
+        "properties": {
+          "plan": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Plan"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan",
+          "expires_at",
+          "reason"
+        ],
+        "title": "ManualEntitlementGrantRequest"
+      },
       "ModelPublic": {
         "properties": {
           "id": {
@@ -11982,6 +12424,21 @@
           "proposal_text"
         ],
         "title": "RedTeamCreate"
+      },
+      "ReferralTokenRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "ReferralTokenRequest"
       },
       "RetryAgentRequest": {
         "properties": {

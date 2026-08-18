@@ -9,9 +9,10 @@ from billing.models import BillingPlan, BillingSubscription
 from deps import get_session
 from fastapi import APIRouter, Depends
 from models import AuditLog, Debate, LLMUsageLog, User
-from routes.admin.referrals import build_referral_metrics
 from sqlalchemy import func
 from sqlmodel import Session, select
+
+from routes.admin.referrals import build_referral_metrics
 
 router = APIRouter()
 

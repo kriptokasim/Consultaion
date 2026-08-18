@@ -3,10 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy.exc import IntegrityError
-
 from models import Team, TeamMember
 from routes import teams
+from sqlalchemy.exc import IntegrityError
 
 
 def test_create_team_stages_owner_before_single_commit(monkeypatch):
