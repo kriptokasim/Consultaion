@@ -66,12 +66,16 @@ def get_plan_limits(plan_name: str) -> PlanLimits:
 
 
 def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
-    """Return the legacy/UI plan marker for a User object.
+    """Resolve a user-facing plan slug without making legacy state authoritative.
 
-    This helper intentionally has no database session and therefore cannot
-    resolve BillingSubscription entitlement. It is safe for compatibility
-    display/logging only. Billing, quota, model-tier, and export authorization
-    must use ``billing.service.get_active_plan`` instead.
+    When the User instance is attached to the request's SQLModel session, use
+    the same canonical ``BillingSubscription`` resolver as authorization. This
+    keeps `/me`, login/register responses, and generic user serialization from
+    displaying a stale compatibility marker after an entitlement expires or a
+    Stripe state transition lands.
+
+    Detached objects and non-request logging paths have no safe database
+    context; they retain the legacy marker as a compatibility fallback only.
     """
     if user is None:
         return "free"
@@ -86,6 +90,23 @@ def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
             extra={"user_id": user.id, "email": user.email, "override_type": "plan_marker"},
         )
         return settings.OWNER_PLAN
+
+    # SQLAlchemy can recover the owning request session from an attached ORM
+    # instance. SQLModel's Session exposes `.exec`; a plain SQLAlchemy session
+    # or detached object safely falls back to the compatibility marker.
+    try:
+        from sqlalchemy.orm import object_session
+
+        session = object_session(user)
+        if session is not None and hasattr(session, "exec"):
+            from billing.service import get_active_plan
+
+            return get_active_plan(session, user.id).slug  # type: ignore[arg-type]
+    except Exception:
+        # Serialization must remain non-fatal if a caller is detached, the
+        # session is closing, or billing tables are unavailable during a
+        # compatibility/test path. Authorization never uses this fallback.
+        pass
 
     return getattr(user, "plan", "free") or "free"
 
