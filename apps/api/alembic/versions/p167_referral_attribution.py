@@ -23,7 +23,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("token_hash", sa.String(length=64), nullable=False),
         sa.Column("debate_id", sa.String(), nullable=False),
-        sa.Column("created_by_user_id", sa.String(), nullable=False),
+        sa.Column("created_by_user_id", sa.String(), nullable=True),
         sa.Column("view_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("visited_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_visited_at", sa.DateTime(timezone=True), nullable=True),
