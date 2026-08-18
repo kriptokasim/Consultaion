@@ -64,7 +64,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
 
       - name: Install Python Security Tools
         run: |
@@ -76,11 +76,7 @@ jobs:
 
       - name: Run pip-audit (Python Dependency Scan)
         run: |
-          # PYSEC-2026-3552 lists cryptography 50.0.0 as its fix, but upstream
-          # pyca/cryptography has not released 50.0.0 yet. Keep the latest
-          # released 49.0.0 and suppress only this unfixed advisory until a
-          # released fixed version exists; all other advisories remain blocking.
-          pip-audit -r apps/api/requirements.txt --ignore-vuln PYSEC-2026-3552
+          pip-audit -r apps/api/requirements.txt
 
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
@@ -102,7 +98,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
 
       - name: Install SBOM Tools
         run: |
@@ -146,7 +142,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
 
       - name: Install dependencies
@@ -215,7 +211,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
 
       - name: Install dependencies
@@ -259,7 +255,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
 
       - name: Install dependencies
@@ -340,7 +336,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
 
       - name: Install Backend Dependencies
@@ -461,7 +457,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
       - name: Record exact commit
         run: echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Run Alembic audit (CI mode)
@@ -496,7 +492,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
       - name: Install dependencies
         working-directory: apps/api
@@ -533,7 +529,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
       - name: Install dependencies
         working-directory: apps/api
@@ -561,7 +557,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
       - name: Install dependencies
         working-directory: apps/api
@@ -587,7 +583,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.11.9"
           cache: "pip"
 
       - name: Install dependencies
