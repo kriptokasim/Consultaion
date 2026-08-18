@@ -3,21 +3,16 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ShareRunButton } from "./ShareRunButton";
 import React from "react";
 
-// Mock toast hook
 const mockPushToast = vi.fn();
 vi.mock("@/components/ui/toast", () => ({
-  useToast: () => ({
-    pushToast: mockPushToast,
-  }),
+  useToast: () => ({ pushToast: mockPushToast }),
 }));
 
-// Mock auth module
 const mockFetchWithAuth = vi.fn();
 vi.mock("@/lib/auth", () => ({
   fetchWithAuth: (...args: any[]) => mockFetchWithAuth(...args),
 }));
 
-// Mock analytics
 const mockTrackEvent = vi.fn();
 vi.mock("@/lib/analytics", () => ({
   trackEvent: (...args: any[]) => mockTrackEvent(...args),
@@ -26,20 +21,11 @@ vi.mock("@/lib/analytics", () => ({
 describe("ShareRunButton Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock navigator.clipboard
     Object.defineProperty(navigator, "clipboard", {
-      value: {
-        writeText: vi.fn().mockImplementation(() => Promise.resolve()),
-      },
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
       writable: true,
     });
-    // Mock window.location
-    Object.defineProperty(window, "location", {
-      value: {
-        href: "http://localhost/run/test-id",
-      },
-      writable: true,
-    });
+    window.history.replaceState({}, "", "/run/test-id");
   });
 
   it("renders share button in private state", () => {
@@ -52,24 +38,21 @@ describe("ShareRunButton Component", () => {
     expect(screen.getByRole("button", { name: "Public link" })).toBeInTheDocument();
   });
 
-  it("opens modal dialog on trigger click and allows sharing public link", async () => {
+  it("copies a referral-aware public link when sharing", async () => {
     mockFetchWithAuth.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ success: true }),
+      json: () => Promise.resolve({
+        id: "test-id",
+        is_public: true,
+        referral_token: "ref-token-123",
+      }),
     });
 
     render(<ShareRunButton debateId="test-id" initiallyPublic={false} />);
-    
-    // Open Dialog
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
-    
     expect(screen.getByText("Make this run public?")).toBeInTheDocument();
 
-    const makePublicButton = screen.getByRole("button", {
-      name: "Make public and copy link",
-    });
-    
-    fireEvent.click(makePublicButton);
+    fireEvent.click(screen.getByRole("button", { name: "Make public and copy link" }));
 
     await waitFor(() => {
       expect(mockFetchWithAuth).toHaveBeenCalledWith("/debates/test-id/share", {
@@ -79,7 +62,14 @@ describe("ShareRunButton Component", () => {
       });
     });
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("http://localhost/run/test-id");
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
+    });
+    const copied = vi.mocked(navigator.clipboard.writeText).mock.calls[0][0] as string;
+    const copiedUrl = new URL(copied);
+    expect(copiedUrl.pathname).toBe("/run/test-id");
+    expect(copiedUrl.searchParams.get("ref")).toBe("ref-token-123");
+
     expect(mockPushToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Link copied!" })
     );
@@ -87,5 +77,29 @@ describe("ShareRunButton Component", () => {
       "arena_share_enabled",
       expect.objectContaining({ debate_id: "test-id" })
     );
+    // The raw referral token is intentionally absent from analytics payloads.
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ referral_token: "ref-token-123" })
+    );
+  });
+
+  it("mints a fresh referral token when copying an already-public run", async () => {
+    mockFetchWithAuth.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        id: "test-id",
+        is_public: true,
+        referral_token: "fresh-token",
+      }),
+    });
+
+    render(<ShareRunButton debateId="test-id" initiallyPublic />);
+    fireEvent.click(screen.getByRole("button", { name: "Public link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy public link" }));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+    const copied = vi.mocked(navigator.clipboard.writeText).mock.calls[0][0] as string;
+    expect(new URL(copied).searchParams.get("ref")).toBe("fresh-token");
   });
 });
