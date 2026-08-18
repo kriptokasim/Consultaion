@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 router = APIRouter()
 
 _COMPLETED_STATUSES = ("completed", "completed_with_warnings")
+_IN_PROGRESS_STATUSES = ("queued", "running", "scheduled", "perspectives_ready")
 _REFERRAL_ATTRIBUTION_WINDOW = timedelta(days=7)
 
 
@@ -54,12 +55,15 @@ def admin_metrics(
     wau = _distinct_active_users(session, week_ago)
     mau = _distinct_active_users(session, month_ago)
 
-    active_debates_count = int(
+    runs_created_24h = int(
         session.exec(
-            select(func.count(Debate.id)).where(
-                (Debate.created_at >= day_ago)
-                | (Debate.status.in_(["queued", "running", "scheduled", "perspectives_ready"]))
-            )
+            select(func.count(Debate.id)).where(Debate.created_at >= day_ago)
+        ).one()
+        or 0
+    )
+    in_progress_runs = int(
+        session.exec(
+            select(func.count(Debate.id)).where(Debate.status.in_(_IN_PROGRESS_STATUSES))
         ).one()
         or 0
     )
@@ -137,12 +141,16 @@ def admin_metrics(
     ).all()
 
     ip_views: dict[str, list[datetime]] = defaultdict(list)
+    shared_view_ips_30d: set[str] = set()
     for created_at, meta in view_logs:
         ip_address = meta.get("ip_address") if meta else None
         if ip_address:
             ip_views[ip_address].append(created_at)
+            if created_at >= month_ago:
+                shared_view_ips_30d.add(ip_address)
 
     referred_signups_count = 0
+    referred_signup_ips_30d: set[str] = set()
     for signup_time, meta in signup_logs:
         signup_ip = meta.get("ip_address") if meta else None
         if not signup_ip or signup_ip not in ip_views:
@@ -150,19 +158,23 @@ def admin_metrics(
         earliest = signup_time - _REFERRAL_ATTRIBUTION_WINDOW
         if any(earliest <= view_time < signup_time for view_time in ip_views[signup_ip]):
             referred_signups_count += 1
+            referred_signup_ips_30d.add(signup_ip)
 
+    # An event-count numerator (signups) divided by view-event denominator can
+    # exceed 100% on NAT/shared networks. Until explicit referral IDs exist,
+    # report conversion at the same IP-identity grain on both sides.
     referral_conversion_rate_30d = (
-        referred_signups_count / shared_views_count * 100.0
-        if shared_views_count > 0
+        len(referred_signup_ips_30d) / len(shared_view_ips_30d) * 100.0
+        if shared_view_ips_30d
         else 0.0
     )
 
     # 3. Billing conversion and MRR.
     total_users = int(session.exec(select(func.count(User.id))).one() or 0)
-    free_users = int(
+    legacy_free_markers = int(
         session.exec(select(func.count(User.id)).where(User.plan == "free")).one() or 0
     )
-    pro_users = int(
+    legacy_pro_markers = int(
         session.exec(select(func.count(User.id)).where(User.plan == "pro")).one() or 0
     )
 
@@ -177,6 +189,7 @@ def admin_metrics(
 
     # Resolve the actual plan for each paid subscription. Status alone is not
     # sufficient: stale webhook state can leave an expired row marked active.
+    # Trialing rows are intentionally excluded from paid MRR/conversion.
     active_subscription_rows = session.exec(
         select(
             BillingSubscription.user_id,
@@ -323,7 +336,11 @@ def admin_metrics(
             "dau": dau,
             "wau": wau,
             "mau": mau,
-            "active_debates": active_debates_count,
+            "runs_created_24h": runs_created_24h,
+            "in_progress_runs": in_progress_runs,
+            # Compatibility alias: historically this field mixed all 24h-created
+            # runs with in-progress runs. It now means genuinely in-progress.
+            "active_debates": in_progress_runs,
             "completed_runs_7d": completed_runs_7d,
             "completed_runs_30d": completed_runs_30d,
         },
@@ -334,16 +351,21 @@ def admin_metrics(
             "share_rate_7d": share_rate_7d,
             "shared_views": shared_views_count,
             "shared_views_30d": shared_views_count,
+            "shared_view_ips_30d": len(shared_view_ips_30d),
             "referred_signups": referred_signups_count,
             "referred_signups_30d": referred_signups_count,
+            "referred_signup_ips_30d": len(referred_signup_ips_30d),
             "conversion_rate": referral_conversion_rate_30d,
             "conversion_rate_30d": referral_conversion_rate_30d,
-            "attribution_method": "ip_7d_proxy",
+            "attribution_method": "ip_identity_7d_proxy",
         },
         "billing_conversion": {
             "total_users": total_users,
-            "free_users": free_users,
-            "pro_users": pro_users,
+            # Compatibility counters only; do not treat User.plan as paid truth.
+            "free_users": legacy_free_markers,
+            "pro_users": legacy_pro_markers,
+            "legacy_free_plan_markers": legacy_free_markers,
+            "legacy_pro_plan_markers": legacy_pro_markers,
             "active_paid_users": active_paid_users,
             "active_paid_subscriptions": active_paid_subscriptions,
             "conversion_rate": paid_conversion_rate,
@@ -373,11 +395,13 @@ def admin_metrics(
         },
         "definitions": {
             "activity_source": "distinct users creating debate/decision runs",
+            "active_debates": "currently in-progress decision runs only; runs_created_24h is reported separately",
             "north_star": "weekly completed decision runs that are currently public/shareable",
             "share_rate_window_days": 7,
             "referral_attribution_window_days": 7,
-            "referral_attribution_note": "IP-based proxy; replace with explicit referral/session identifiers before external reporting.",
-            "mrr_note": "Only positive-priced subscriptions whose active billing period contains now are counted. Currencies are not FX-converted; estimated_mrr is USD-only.",
+            "referral_attribution_note": "IP-identity proxy with matched IP-grain numerator/denominator; replace with explicit privacy-preserving referral/session identifiers before external reporting.",
+            "billing_marker_note": "User.plan counts are compatibility markers only; active_paid_users/subscriptions and MRR come from canonical BillingSubscription rows.",
+            "mrr_note": "Only positive-priced ACTIVE subscriptions whose billing period contains now are counted; trialing is excluded. Currencies are not FX-converted; estimated_mrr is USD-only.",
             "unit_economics_window_days": 30,
         },
     }
