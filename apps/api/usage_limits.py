@@ -5,6 +5,7 @@ from datetime import date, timedelta, timezone
 from typing import Optional, TypedDict
 
 from database import session_scope
+from exceptions import RateLimitError as AppRateLimitError
 from models import UsageCounter, UsageQuota, utcnow
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -32,10 +33,21 @@ def _window_end(counter: UsageCounter) -> str:
     return end.isoformat()
 
 
-class RateLimitError(Exception):
+class RateLimitError(AppRateLimitError):
+    """Quota/rate-limit error compatible with the canonical HTTP error type.
+
+    Older quota code exposed ``detail`` and ``reset_at`` attributes that several
+    callers still use for structured 429 payloads. Subclass the application-wide
+    RateLimitError so those callers can catch one canonical hierarchy without
+    breaking the legacy diagnostic fields.
+    """
+
     def __init__(self, code: str, detail: str, reset_at: str):
-        super().__init__(detail)
-        self.code = code
+        super().__init__(
+            message=detail,
+            code=code,
+            details={"reset_at": reset_at},
+        )
         self.detail = detail
         self.reset_at = reset_at
 
@@ -239,8 +251,38 @@ def record_token_usage(
 
 
 def increment_export_usage_daily(session: Session, user_id: str) -> None:
-    """FH125 E-5: Increment the daily export counter on UsageCounter."""
+    """Increment the canonical daily export counter without allowing overage.
+
+    The old preflight path compared ``max_exports_per_day`` with the monthly
+    ``BillingUsage.exports_count`` counter. Enforce the actual daily window here
+    under the same row lock used for the increment, and resolve the limit from
+    canonical billing entitlement rather than the legacy ``User.plan`` marker.
+    """
+    from billing.service import get_active_plan
+    from plan_config import get_plan_limits
+
     counter = _get_or_reset_counter(session, user_id, "day", commit=False, lock=True)
+    plan = get_active_plan(session, user_id)
+    configured_limit = (plan.limits or {}).get("max_exports_per_day")
+    try:
+        limit = int(configured_limit) if configured_limit is not None else None
+    except (TypeError, ValueError):
+        limit = None
+    if limit is None:
+        limit = get_plan_limits(plan.slug).daily_export_limit
+
+    if limit >= 0 and counter.exports_used >= limit:
+        raise AppRateLimitError(
+            message="Export quota exceeded. Please try again after the daily window resets or upgrade your plan.",
+            code="quota.exports_exceeded",
+            details={
+                "limit": limit,
+                "used": counter.exports_used,
+                "window": "daily",
+                "reset_at": _window_end(counter),
+            },
+        )
+
     counter.exports_used += 1
     session.add(counter)
 
@@ -288,19 +330,12 @@ def check_quota(
     required_tokens: int = 0,
     required_exports: int = 0,
 ) -> None:
-    """
-    Check if user has quota for the requested operation.
-    
-    Raises QuotaExceededError if user would exceed their daily limits.
-    
-    Args:
-        session: Database session
-        user: User object (None for anonymous)
-        required_tokens: Estimated tokens needed for operation
-        required_exports: Number of exports needed (usually 0 or 1)
-    
-    Raises:
-        QuotaExceededError: If quota would be exceeded
+    """Check daily token/export quota using canonical billing entitlement.
+
+    ``User.plan`` is a compatibility marker and can be changed by legacy admin
+    tooling without changing paid entitlement. Daily quota decisions therefore
+    resolve the active BillingSubscription first and only then map its slug to
+    the static daily-limit policy.
     """
     # Owner unlimited bypass
     if user is not None:
@@ -315,10 +350,15 @@ def check_quota(
             )
             return  # bypass all quota checks
 
-    from plan_config import get_plan_limits, resolve_plan_for_user
-    
-    plan_name = resolve_plan_for_user(user)
-    limits = get_plan_limits(plan_name)
+    from plan_config import get_plan_limits
+
+    if user is None:
+        plan_slug = "free"
+    else:
+        from billing.service import get_active_plan
+        plan_slug = get_active_plan(session, user.id).slug
+
+    limits = get_plan_limits(plan_slug)
     usage = get_today_usage(session, user.id if user else None)
     
     # Check token quota
