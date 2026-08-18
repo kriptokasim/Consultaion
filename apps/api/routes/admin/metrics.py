@@ -43,11 +43,7 @@ def admin_metrics(
     session: Session = Depends(get_session),
     _: User = Depends(get_current_admin),
 ):
-    """Return investor-grade product, growth, billing, cost, and quality metrics.
-
-    The endpoint intentionally exposes metric definitions alongside values so
-    diligence dashboards do not silently mix incompatible windows or currencies.
-    """
+    """Get live system metrics: Activation, PLG/Sharing, Billing, Economics."""
     now = datetime.now(timezone.utc)
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
