@@ -20,6 +20,7 @@ class AppError(Exception):
         self.retryable = retryable
         super().__init__(message)
 
+
 class AuthError(AppError):
     """Authentication and authorization errors."""
     def __init__(
@@ -30,6 +31,7 @@ class AuthError(AppError):
         details: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, code, status_code, details)
+
 
 class PermissionError(AppError):
     """Permission denied errors."""
@@ -42,6 +44,7 @@ class PermissionError(AppError):
     ):
         super().__init__(message, code, status_code, details)
 
+
 class NotFoundError(AppError):
     """Resource not found errors."""
     def __init__(
@@ -52,6 +55,7 @@ class NotFoundError(AppError):
         details: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, code, status_code, details)
+
 
 class ValidationError(AppError):
     """Data validation errors."""
@@ -66,8 +70,9 @@ class ValidationError(AppError):
     ):
         super().__init__(message, code, status_code, details, hint, retryable)
 
+
 class RateLimitError(AppError):
-    """Rate limit exceeded errors."""
+    """Rate limit exceeded errors with backward-compatible quota diagnostics."""
     def __init__(
         self,
         message: str = "Rate limit exceeded",
@@ -80,6 +85,11 @@ class RateLimitError(AppError):
     ):
         super().__init__(message, code, status_code, details, hint, retryable)
         self.retry_after_seconds = retry_after_seconds
+        # Legacy usage-limit callers read ``detail`` and ``reset_at`` directly.
+        # Keep those diagnostics on the canonical error so billing quota errors
+        # and hourly quota errors can share one catch path without AttributeError.
+        self.detail = message
+        self.reset_at = self.details.get("reset_at")
 
 
 class ProviderCircuitOpenError(AppError):
