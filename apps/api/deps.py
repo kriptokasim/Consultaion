@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from database import get_session as base_get_session
 from fastapi import HTTPException, Request, status
 from sqlmodel import Session
@@ -8,18 +10,43 @@ def get_session() -> Session:
     yield from base_get_session()
 
 
+class _RequestSSEBackendProxy:
+    """Request-scoped SSE proxy that removes redundant channel pre-creation.
+
+    Debate creation historically called ``create_channel()`` after committing the
+    debate/quota transaction. RedisChannelBackend.create_channel() only writes an
+    otherwise-unused ``sse:meta:*`` key, so a Redis failure in that narrow
+    post-commit window could turn a successfully committed run into an HTTP 500.
+
+    The dependency already performs a readiness ping before the endpoint body.
+    Request-time ``create_channel()`` is therefore intentionally a no-op. All
+    real transport operations are delegated to the application backend. Memory
+    subscriptions remain correct because the bound backend ``subscribe()``
+    method creates its own in-memory channel; Redis publish/subscribe does not
+    require the metadata key. Worker/global backend access is unaffected because
+    only FastAPI dependency consumers receive this proxy.
+    """
+
+    def __init__(self, backend: BaseSSEBackend) -> None:
+        self._backend = backend
+
+    async def create_channel(self, channel_id: str) -> None:
+        # Deliberately no network I/O in the request commit boundary.
+        return None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._backend, name)
+
+
 async def get_sse_backend(request: Request) -> BaseSSEBackend:
-    """Return an SSE backend only when it is ready for request-time use.
+    """Return a readiness-checked request SSE backend.
 
-    Debate creation reserves hourly/monthly usage and may reserve hosted credits
-    before creating its SSE channel. If the Redis-backed SSE transport is down,
-    allowing the endpoint body to start can leave a committed queued debate and
-    consumed usage even though channel setup later fails.
-
-    FastAPI resolves this dependency before entering the endpoint body. Treat a
-    failed backend health probe as a 503 readiness failure so no business
-    mutation or quota reservation starts. MemoryChannelBackend.ping() is always
-    healthy; RedisChannelBackend.ping() performs the actual backend probe.
+    FastAPI resolves this dependency before entering endpoint bodies. A failed
+    Redis/SSE health probe therefore prevents quota reservation or debate
+    mutation. The returned request proxy also suppresses the redundant
+    post-commit ``create_channel`` write, closing the remaining ping→commit→SET
+    TOCTOU failure boundary while delegating actual publish/subscribe work to the
+    canonical application backend.
     """
     backend: BaseSSEBackend = request.app.state.sse_backend
     try:
@@ -37,4 +64,4 @@ async def get_sse_backend(request: Request) -> BaseSSEBackend:
             headers={"Retry-After": "5"},
         )
 
-    return backend
+    return cast(BaseSSEBackend, _RequestSSEBackendProxy(backend))
