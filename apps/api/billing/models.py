@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 from models import utcnow
 from pydantic import ConfigDict
-from sqlalchemy import JSON, Column, DateTime, Numeric, String, UniqueConstraint, text
+from sqlalchemy import JSON, Column, DateTime, Index, Numeric, String, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -35,7 +35,15 @@ class BillingPlan(SQLModel, table=True):
 
 class BillingSubscription(SQLModel, table=True):
     __tablename__ = "billing_subscriptions"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        Index(
+            "uq_billing_subscriptions_provider_ref",
+            "provider",
+            "provider_subscription_id",
+            unique=True,
+        ),
+        {"extend_existing": True},
+    )
     model_config = ConfigDict(protected_namespaces=())
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
