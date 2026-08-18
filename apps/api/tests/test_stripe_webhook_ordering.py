@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from billing.models import BillingPlan, BillingSubscription, BillingWebhookEvent
 from billing.providers.stripe_provider import StripeBillingProvider
+from billing.routes import _emit_post_commit_events
 from models import User
 from sqlmodel import Session, select
 
@@ -31,7 +32,7 @@ def _make_user(session: Session, *, plan: str = "pro") -> User:
     return user
 
 
-def test_older_active_update_cannot_reactivate_newer_deletion(db_session: Session):
+def test_older_active_update_cannot_reactivate_newer_deletion(db_session: Session, monkeypatch):
     provider = StripeBillingProvider()
     _ensure_plans(db_session)
     user = _make_user(db_session)
@@ -90,6 +91,14 @@ def test_older_active_update_cannot_reactivate_newer_deletion(db_session: Sessio
     assert sub.provider_event_created_at == datetime.fromtimestamp(base + 20, tz=timezone.utc)
     assert user.plan == "free"
     assert db_session.get(BillingWebhookEvent, stale_event_id) is not None
+
+    emitted = []
+    monkeypatch.setattr(
+        "integrations.events.emit_event",
+        lambda name, payload: emitted.append((name, payload)),
+    )
+    _emit_post_commit_events(stale_active)
+    assert emitted == []
 
 
 def test_deletion_before_local_association_creates_tombstone_and_fences_older_activation(
