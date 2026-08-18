@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from typing import Dict
-from uuid import UUID
 
 try:
     import stripe  # type: ignore
@@ -12,7 +11,7 @@ except ImportError:  # pragma: no cover
 from billing.models import BillingPlan
 from config import settings
 
-from .base import BillingProvider
+from .base import BillingProvider, BillingUserID
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class StripeBillingProvider(BillingProvider):
             "pro": settings.STRIPE_PRICE_PRO_ID or "",
         }
 
-    def create_checkout_session(self, user_id: UUID, plan: BillingPlan) -> str:
+    def create_checkout_session(self, user_id: BillingUserID, plan: BillingPlan) -> str:
         if not self.secret_key or not stripe:
             raise RuntimeError(
                 "Stripe billing is not configured. Set STRIPE_SECRET_KEY and install stripe SDK."
