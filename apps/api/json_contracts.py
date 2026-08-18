@@ -6,6 +6,7 @@ JSON blobs like ``Debate.config`` and ``Debate.final_meta``.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from enum import Enum
 from typing import Any, Literal, Optional
 
@@ -19,6 +20,10 @@ class DebateConfigVersion(int, Enum):
 
 
 class AgentConfig(BaseModel):
+    # Production DebateConfig has evolved beyond this legacy contract shape.
+    # Preserve unknown nested fields (name/persona/tools, etc.) so validation
+    # can never become a lossy transformation if a caller serializes the result.
+    model_config = {"extra": "allow"}
     model: str = "default"
     system_prompt: str = ""
     temperature: float = 0.7
@@ -26,6 +31,9 @@ class AgentConfig(BaseModel):
 
 
 class JudgeConfig(BaseModel):
+    # Preserve production fields such as name/rubrics while retaining backwards
+    # compatibility with the original versioned contract.
+    model_config = {"extra": "allow"}
     model: str = "default"
     system_prompt: str = ""
     criteria: list[str] = Field(default_factory=list)
@@ -65,39 +73,42 @@ class FinalMetaV2(BaseModel):
 
 
 def migrate_config_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
-    data["schema_version"] = 2
-    if "agents" not in data:
-        data["agents"] = []
-    if "judges" not in data:
-        data["judges"] = []
-    if "max_rounds" not in data:
-        data["max_rounds"] = 5
-    if "mode" not in data:
-        data["mode"] = "parliament"
-    return data
+    # Never mutate an ORM-owned JSON dict on a read/validation path. A caller may
+    # pass Debate.config directly; in-place migration can otherwise leak state
+    # into later serialization or an unrelated transaction.
+    migrated = deepcopy(data)
+    migrated["schema_version"] = 2
+    if "agents" not in migrated:
+        migrated["agents"] = []
+    if "judges" not in migrated:
+        migrated["judges"] = []
+    if "max_rounds" not in migrated:
+        migrated["max_rounds"] = 5
+    if "mode" not in migrated:
+        migrated["mode"] = "parliament"
+    return migrated
 
 
 def migrate_final_meta_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
-    data["schema_version"] = 2
-    data.setdefault("attempt_count", 0)
-    data.setdefault("continuation_count", 0)
-    data.setdefault("provider_calls", 0)
-    data.setdefault("total_tokens", 0)
-    return data
+    migrated = deepcopy(data)
+    migrated["schema_version"] = 2
+    migrated.setdefault("attempt_count", 0)
+    migrated.setdefault("continuation_count", 0)
+    migrated.setdefault("provider_calls", 0)
+    migrated.setdefault("total_tokens", 0)
+    return migrated
 
 
 def validate_debate_config(data: dict[str, Any]) -> DebateConfigV2:
     version = data.get("schema_version", 1)
-    if version == 1:
-        data = migrate_config_v1_to_v2(data)
-    return DebateConfigV2.model_validate(data)
+    candidate = migrate_config_v1_to_v2(data) if version == 1 else deepcopy(data)
+    return DebateConfigV2.model_validate(candidate)
 
 
 def validate_final_meta(data: dict[str, Any]) -> FinalMetaV2:
     version = data.get("schema_version", 1)
-    if version == 1:
-        data = migrate_final_meta_v1_to_v2(data)
-    return FinalMetaV2.model_validate(data)
+    candidate = migrate_final_meta_v1_to_v2(data) if version == 1 else deepcopy(data)
+    return FinalMetaV2.model_validate(candidate)
 
 
 def safe_validate_config(data: dict[str, Any] | None) -> DebateConfigV2 | None:
