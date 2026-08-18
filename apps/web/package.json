@@ -9,7 +9,7 @@
     "start": "next start -p 3000",
     "test:e2e": "playwright test",
     "test": "vitest run",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
@@ -57,7 +57,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
-    "@types/react-window": "^1.8.8",
+    "@types/react-window": "^1.8.9",
     "@vitejs/plugin-react": "^4.3.4",
     "axe-core": "^4.12.1",
     "eslint": "^9.39.1",
