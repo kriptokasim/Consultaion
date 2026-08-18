@@ -302,6 +302,6 @@ For complete API documentation, see:
 ## Support
 
 Need help? Contact us:
-- **Email**: support@consultaion.com
+- **Email**: info@consultaion.com
 - **Discord**: [Join our community](https://discord.gg/consultaion)
 - **GitHub**: [Report issues](https://github.com/consultaion/consultaion/issues)
