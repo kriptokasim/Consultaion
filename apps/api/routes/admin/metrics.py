@@ -9,6 +9,7 @@ from billing.models import BillingPlan, BillingSubscription
 from deps import get_session
 from fastapi import APIRouter, Depends
 from models import AuditLog, Debate, LLMUsageLog, User
+from routes.admin.referrals import build_referral_metrics
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -16,7 +17,6 @@ router = APIRouter()
 
 _COMPLETED_STATUSES = ("completed", "completed_with_warnings")
 _IN_PROGRESS_STATUSES = ("queued", "running", "scheduled", "perspectives_ready")
-_REFERRAL_ATTRIBUTION_WINDOW = timedelta(days=7)
 
 
 def _distinct_active_users(session: Session, since: datetime) -> int:
@@ -118,6 +118,9 @@ def admin_metrics(
         if target_id and meta and meta.get("is_public") is True
     }
 
+    # Generic public-view audit count remains useful as an engagement event
+    # count, but acquisition attribution is exclusively token based. Public-view
+    # audit rows intentionally no longer persist visitor IPs.
     shared_views_count = int(
         session.exec(
             select(func.count(AuditLog.id))
@@ -126,48 +129,7 @@ def admin_metrics(
         ).one()
         or 0
     )
-
-    # Referral attribution is currently an IP-based proxy. Bound it to a
-    # seven-day lookback so an ancient view cannot claim an unrelated signup.
-    signup_logs = session.exec(
-        select(AuditLog.created_at, AuditLog.meta)
-        .where(AuditLog.action.in_(["register", "register_google"]))
-        .where(AuditLog.created_at >= month_ago)
-    ).all()
-    view_logs = session.exec(
-        select(AuditLog.created_at, AuditLog.meta)
-        .where(AuditLog.action == "view_shared_debate")
-        .where(AuditLog.created_at >= month_ago - _REFERRAL_ATTRIBUTION_WINDOW)
-    ).all()
-
-    ip_views: dict[str, list[datetime]] = defaultdict(list)
-    shared_view_ips_30d: set[str] = set()
-    for created_at, meta in view_logs:
-        ip_address = meta.get("ip_address") if meta else None
-        if ip_address:
-            ip_views[ip_address].append(created_at)
-            if created_at >= month_ago:
-                shared_view_ips_30d.add(ip_address)
-
-    referred_signups_count = 0
-    referred_signup_ips_30d: set[str] = set()
-    for signup_time, meta in signup_logs:
-        signup_ip = meta.get("ip_address") if meta else None
-        if not signup_ip or signup_ip not in ip_views:
-            continue
-        earliest = signup_time - _REFERRAL_ATTRIBUTION_WINDOW
-        if any(earliest <= view_time < signup_time for view_time in ip_views[signup_ip]):
-            referred_signups_count += 1
-            referred_signup_ips_30d.add(signup_ip)
-
-    # An event-count numerator (signups) divided by view-event denominator can
-    # exceed 100% on NAT/shared networks. Until explicit referral IDs exist,
-    # report conversion at the same IP-identity grain on both sides.
-    referral_conversion_rate_30d = (
-        len(referred_signup_ips_30d) / len(shared_view_ips_30d) * 100.0
-        if shared_view_ips_30d
-        else 0.0
-    )
+    referral_metrics = build_referral_metrics(session)
 
     # 3. Billing conversion and MRR.
     total_users = int(session.exec(select(func.count(User.id))).one() or 0)
@@ -351,13 +313,21 @@ def admin_metrics(
             "share_rate_7d": share_rate_7d,
             "shared_views": shared_views_count,
             "shared_views_30d": shared_views_count,
-            "shared_view_ips_30d": len(shared_view_ips_30d),
-            "referred_signups": referred_signups_count,
-            "referred_signups_30d": referred_signups_count,
-            "referred_signup_ips_30d": len(referred_signup_ips_30d),
-            "conversion_rate": referral_conversion_rate_30d,
-            "conversion_rate_30d": referral_conversion_rate_30d,
-            "attribution_method": "ip_identity_7d_proxy",
+            "referral_issued_links_30d": referral_metrics["issued_links"],
+            "referral_visited_links_30d": referral_metrics["visited_links"],
+            "referral_total_views_30d": referral_metrics["total_views"],
+            "referred_signups": referral_metrics["claimed_signups"],
+            "referred_signups_30d": referral_metrics["claimed_signups"],
+            "conversion_rate": referral_metrics["conversion_rate"],
+            "conversion_rate_30d": referral_metrics["conversion_rate"],
+            "visit_rate_30d": referral_metrics["visit_rate"],
+            "attribution_method": referral_metrics["attribution_method"],
+            "uses_visitor_ip": False,
+            "stores_raw_token": False,
+            # Deprecated compatibility keys. New public-view audit rows do not
+            # retain IP and canonical acquisition metrics never use IP identity.
+            "shared_view_ips_30d": 0,
+            "referred_signup_ips_30d": 0,
         },
         "billing_conversion": {
             "total_users": total_users,
@@ -398,8 +368,8 @@ def admin_metrics(
             "active_debates": "currently in-progress decision runs only; runs_created_24h is reported separately",
             "north_star": "weekly completed decision runs that are currently public/shareable",
             "share_rate_window_days": 7,
-            "referral_attribution_window_days": 7,
-            "referral_attribution_note": "IP-identity proxy with matched IP-grain numerator/denominator; replace with explicit privacy-preserving referral/session identifiers before external reporting.",
+            "referral_attribution_window_days": referral_metrics["window_days"],
+            "referral_attribution_note": "Canonical acquisition attribution uses one-way-hashed high-entropy referral tokens. Public-view audit events do not retain visitor IP and IP identity is not used for conversion.",
             "billing_marker_note": "User.plan counts are compatibility markers only; active_paid_users/subscriptions and MRR come from canonical BillingSubscription rows.",
             "mrr_note": "Only positive-priced ACTIVE subscriptions whose billing period contains now are counted; trialing is excluded. Currencies are not FX-converted; estimated_mrr is USD-only.",
             "unit_economics_window_days": 30,
