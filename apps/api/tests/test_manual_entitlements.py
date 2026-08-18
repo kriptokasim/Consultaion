@@ -4,6 +4,7 @@ import pytest
 from billing.manual_entitlements import (
     MANUAL_PROVIDER,
     MANUAL_SOURCE,
+    cleanup_expired_manual_entitlements,
     grant_manual_entitlement,
     revoke_manual_entitlements,
 )
@@ -111,6 +112,37 @@ def test_manual_entitlement_revoke_returns_to_canonical_free(db_session: Session
     db_session.commit()
     db_session.refresh(user)
 
+    assert get_active_plan(db_session, user.id).slug == "free"
+    assert user.plan == "free"
+
+
+def test_expired_manual_entitlement_cleanup_resyncs_plan_marker(db_session: Session):
+    user = _user(db_session, "manual-cleanup@example.com")
+    admin = _user(db_session, "manual-cleanup-admin@example.com")
+
+    grant = grant_manual_entitlement(
+        db_session,
+        user_id=user.id,
+        plan_slug="pro",
+        granted_by_user_id=admin.id,
+        reason="Short evaluation",
+        expires_at=utcnow() + timedelta(days=1),
+    )
+    db_session.commit()
+
+    # Simulate the maintenance job running after the entitlement period ended.
+    grant.current_period_end = utcnow() - timedelta(seconds=1)
+    user.plan = "pro"
+    db_session.add(grant)
+    db_session.add(user)
+    db_session.commit()
+
+    assert cleanup_expired_manual_entitlements(db_session) == 1
+    db_session.commit()
+    db_session.refresh(grant)
+    db_session.refresh(user)
+
+    assert grant.status == "canceled"
     assert get_active_plan(db_session, user.id).slug == "free"
     assert user.plan == "free"
 
