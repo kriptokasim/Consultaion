@@ -40,7 +40,7 @@ export default async function SecurityPage() {
                     <section className="space-y-2">
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">4. Vulnerability Disclosure & Reporting</h2>
                         <div className="bg-amber-50 p-4 rounded-lg border border-amber-200/50 text-sm dark:bg-amber-900/20 dark:border-amber-900/30">
-                            <p className="dark:text-amber-200"><strong>Responsible Disclosure:</strong> If you discover a vulnerability, please report it to us by emailing <a href="mailto:security@consultaion.com" className="text-amber-700 underline">security@consultaion.com</a>. We request that you do not disclose it publicly until we have had a reasonable timeframe to resolve the issue.</p>
+                            <p className="dark:text-amber-200"><strong>Responsible Disclosure:</strong> If you discover a vulnerability, please report it to us by emailing <a href="mailto:info@consultaion.com" className="text-amber-700 underline">info@consultaion.com</a>. We request that you do not disclose it publicly until we have had a reasonable timeframe to resolve the issue.</p>
                         </div>
                     </section>
 
