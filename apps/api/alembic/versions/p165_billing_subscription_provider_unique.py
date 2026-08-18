@@ -1,7 +1,7 @@
 """P165: enforce one local row per provider subscription identity.
 
-Revision ID: p165_billing_subscription_provider_unique
-Revises: p164_billing_provider_event_fencing
+Revision ID: p165_billing_provider_unique
+Revises: p164_billing_event_fence
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import inspect
 
-revision: str = "p165_billing_subscription_provider_unique"
-down_revision: Union[str, None] = "p164_billing_provider_event_fencing"
+revision: str = "p165_billing_provider_unique"
+down_revision: Union[str, None] = "p164_billing_event_fence"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
