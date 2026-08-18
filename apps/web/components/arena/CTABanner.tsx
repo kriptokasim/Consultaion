@@ -5,6 +5,7 @@ import { Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { trackEvent } from "@/lib/analytics";
+import { ReferralVisitBridge } from "@/components/referrals/ReferralVisitBridge";
 
 interface CTABannerProps {
     debateId: string;
@@ -16,25 +17,28 @@ interface CTABannerProps {
  */
 export function PublicRunCTATop({ debateId }: { debateId: string }) {
     return (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-                <h3 className="font-semibold text-foreground text-sm">Want to compare models yourself?</h3>
-                <p className="text-muted-foreground text-sm mt-0.5">Run prompts across multiple models and get a synthesized answer.</p>
+        <>
+            <ReferralVisitBridge />
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                    <h3 className="font-semibold text-foreground text-sm">Want to compare models yourself?</h3>
+                    <p className="text-muted-foreground text-sm mt-0.5">Run prompts across multiple models and get a synthesized answer.</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    <Button asChild variant="outline" size="sm" onClick={() => trackEvent("public_run_cta_clicked", { debate_id: debateId, cta_location: "top_banner_run_same", is_authenticated: false, intent: "run_same_prompt" })}>
+                        <Link href={`/login?next=${encodeURIComponent(`/live?prefill_prompt_from=${debateId}&source=public_run`)}`}>
+                            <Play className="h-3.5 w-3.5 mr-1.5" />
+                            Run this prompt yourself
+                        </Link>
+                    </Button>
+                    <Button asChild size="sm" onClick={() => trackEvent("public_run_cta_clicked", { debate_id: debateId, cta_location: "top_banner", is_authenticated: false, intent: "create_own_run" })}>
+                        <Link href={`/login?next=${encodeURIComponent(`/live?source=public_run`)}`}>
+                            Create your own run
+                        </Link>
+                    </Button>
+                </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-                <Button asChild variant="outline" size="sm" onClick={() => trackEvent("public_run_cta_clicked", { debate_id: debateId, cta_location: "top_banner_run_same", is_authenticated: false, intent: "run_same_prompt" })}>
-                    <Link href={`/login?next=${encodeURIComponent(`/live?prefill_prompt_from=${debateId}&source=public_run`)}`}>
-                        <Play className="h-3.5 w-3.5 mr-1.5" />
-                        Run this prompt yourself
-                    </Link>
-                </Button>
-                <Button asChild size="sm" onClick={() => trackEvent("public_run_cta_clicked", { debate_id: debateId, cta_location: "top_banner", is_authenticated: false, intent: "create_own_run" })}>
-                    <Link href={`/login?next=${encodeURIComponent(`/live?source=public_run`)}`}>
-                        Create your own run
-                    </Link>
-                </Button>
-            </div>
-        </div>
+        </>
     );
 }
 
