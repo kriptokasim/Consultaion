@@ -48,10 +48,6 @@ class StripeBillingProvider(BillingProvider):
                 success_url=self.success_url + "?session_id={CHECKOUT_SESSION_ID}",
                 cancel_url=self.cancel_url,
                 metadata=metadata,
-                # Checkout Session metadata is not a reliable source for later
-                # customer.subscription.* events. Put the same identifiers on
-                # the Subscription so those webhooks are self-contained even if
-                # Stripe delivers them before checkout.session.completed.
                 subscription_data={"metadata": metadata},
             )
             return session.url  # type: ignore[attr-defined]
@@ -71,7 +67,6 @@ class StripeBillingProvider(BillingProvider):
         logger.info("Received Stripe webhook event=%s", event_type)
         data = (payload.get("data") or {}).get("object") or {}
 
-        # Idempotency / Duplicate Check
         event_id = payload.get("id")
         if event_id and db_session:
             from billing.models import BillingWebhookEvent
@@ -98,11 +93,6 @@ class StripeBillingProvider(BillingProvider):
             if not user:
                 raise RuntimeError(f"User not found during webhook: user_id={user_id}")
 
-            # Checkout completion proves the association, not the canonical
-            # subscription status/period. Those fields come from
-            # customer.subscription.created/updated. Mark a newly-seen row as
-            # pending so zero-length placeholder periods can never grant paid
-            # entitlement or inflate MRR.
             sub = db_session.exec(
                 select(BillingSubscription).where(
                     BillingSubscription.provider_subscription_id == subscription_id
@@ -122,14 +112,10 @@ class StripeBillingProvider(BillingProvider):
                     current_period_end=now,
                 )
             else:
-                # Never overwrite status/period from a subscription webhook with
-                # the less-authoritative checkout event (e.g. trialing -> active).
                 sub.plan_id = plan_ref.id
                 sub.provider_customer_id = customer_id or sub.provider_customer_id
 
             db_session.add(sub)
-            # User.plan is only a compatibility marker. Update it when the
-            # canonical subscription event tells us the actual entitled status.
 
         elif event_type in ("customer.subscription.created", "customer.subscription.updated") and db_session:
             subscription_id = data.get("id")
@@ -143,8 +129,6 @@ class StripeBillingProvider(BillingProvider):
             if not subscription_id or not status:
                 raise ValueError(f"{event_type} is missing subscription id or status")
 
-            # Resolve user_id/plan_slug from an existing checkout association if
-            # older Stripe objects do not carry subscription metadata.
             sub = db_session.exec(
                 select(BillingSubscription).where(
                     BillingSubscription.provider_subscription_id == subscription_id
@@ -157,10 +141,6 @@ class StripeBillingProvider(BillingProvider):
                     plan_ref = db_session.get(BillingPlan, sub.plan_id)
                     plan_slug = plan_ref.slug if plan_ref else None
             else:
-                # Event ordering is not guaranteed. If this event arrived before
-                # checkout.session.completed and lacks metadata, do NOT mark it
-                # processed: raising leaves Stripe free to retry after the
-                # checkout association exists.
                 if not user_id or not plan_slug:
                     raise ValueError(
                         f"Cannot resolve billing context for subscription {subscription_id}"
@@ -180,6 +160,19 @@ class StripeBillingProvider(BillingProvider):
                     current_period_end=now,
                 )
 
+            if not user_id or not plan_slug:
+                raise ValueError(
+                    f"Resolved subscription {subscription_id} is missing user or plan context"
+                )
+
+            # Enrich the in-memory payload so post-commit side effects can use
+            # the canonical DB-resolved context for legacy Stripe objects whose
+            # subscription metadata was empty. This does not alter Stripe data.
+            resolved_metadata = dict(metadata)
+            resolved_metadata.setdefault("user_id", user_id)
+            resolved_metadata.setdefault("plan_slug", plan_slug)
+            data["metadata"] = resolved_metadata
+
             start_ts = data.get("current_period_start")
             end_ts = data.get("current_period_end")
             if status in ("active", "trialing") and (not start_ts or not end_ts):
@@ -198,7 +191,6 @@ class StripeBillingProvider(BillingProvider):
 
             db_session.add(sub)
 
-            # Keep the legacy marker synchronized with canonical entitlement.
             user = db_session.get(User, user_id)
             if user:
                 user.plan = plan_slug if status in ("active", "trialing") else "free"
@@ -217,18 +209,11 @@ class StripeBillingProvider(BillingProvider):
                 sub.updated_at = datetime.now(timezone.utc)
                 db_session.add(sub)
 
-                # Reset user plan to free
                 user = db_session.get(User, sub.user_id)
                 if user:
                     user.plan = "free"
                     db_session.add(user)
 
-                # Don't commit here — let the webhook route transaction own the commit
-                # Side effects emitted after outer commit in webhook route
-
-        # Mark the event processed only after all domain handling above succeeds.
-        # The outer webhook transaction commits this marker atomically with the
-        # user/subscription updates; exceptions leave the event retryable.
         if event_id and db_session:
             from billing.models import BillingWebhookEvent
             db_session.add(
