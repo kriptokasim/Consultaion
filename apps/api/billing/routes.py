@@ -36,23 +36,31 @@ def csrf_exempt(func):
 
 
 def _emit_post_commit_events(payload: dict) -> None:
-    """Emit billing events only after the webhook transaction has committed.
-
-    FH125: Side effects must not occur if the DB commit fails. Checkout Session
-    completion establishes an association but does not prove active entitlement;
-    activation is emitted only from a canonical subscription status event.
-    """
+    """Emit billing automation only for committed, non-duplicate transitions."""
     from integrations.events import emit_event
+
+    # The provider sets this when the durable BillingWebhookEvent marker already
+    # exists. DB idempotency must extend to external side effects too.
+    if payload.get("_consultaion_duplicate") is True:
+        return
 
     event_type = payload.get("type", "")
     data = (payload.get("data") or {}).get("object") or {}
     metadata = data.get("metadata") or {}
+    previous_status = payload.get("_consultaion_previous_subscription_status")
+    entitled_statuses = {"active", "trialing"}
 
     if event_type in ("customer.subscription.created", "customer.subscription.updated"):
         status_value = data.get("status")
         user_id = metadata.get("user_id")
         plan_slug = metadata.get("plan_slug")
-        if status_value in ("active", "trialing") and user_id and plan_slug:
+        # Emit activation only when entering entitlement from a non-entitled
+        # state. Routine active->active updates must not spam CRM/n8n workflows.
+        entering_entitlement = (
+            status_value in entitled_statuses
+            and previous_status not in entitled_statuses
+        )
+        if entering_entitlement and user_id and plan_slug:
             emit_event(
                 "subscription_activated",
                 {
@@ -64,7 +72,9 @@ def _emit_post_commit_events(payload: dict) -> None:
             )
     elif event_type == "customer.subscription.deleted":
         subscription_id = data.get("id")
-        if subscription_id:
+        # A deletion for an already-cancelled/non-entitled subscription does not
+        # represent a new cancellation transition for external automations.
+        if subscription_id and previous_status not in {None, "canceled"}:
             emit_event(
                 "subscription_cancelled",
                 {"subscription_id": subscription_id, "provider": "stripe"},
@@ -283,7 +293,8 @@ async def billing_webhook(
                 record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "error")
                 raise
 
-        # Emit side effects only after durable commit
+        # Emit side effects only after durable commit. Duplicate/transition
+        # metadata added by the provider keeps external automation idempotent.
         _emit_post_commit_events(payload or {})
 
         from observability.metrics import record_billing_webhook
