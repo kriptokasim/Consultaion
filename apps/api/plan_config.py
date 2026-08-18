@@ -1,13 +1,14 @@
 """
-Plan Configuration for Consultaion Billing & Quotas
+Static daily quota and feature policy for Consultaion plan slugs.
 
-Defines available subscription plans and their limits.
-Payment provider integration deferred to future patchset.
+Paid entitlement is resolved from ``BillingSubscription`` by
+``billing.service.get_active_plan``. ``User.plan`` is retained as a legacy/UI
+compatibility marker and MUST NOT be used as the authority for paid access.
 
 Plans:
 - free: Default tier for new users
 - pro: Premium tier with higher limits
-- internal: For team/admin use with very high limits
+- internal: For owner/internal operations
 """
 
 from dataclasses import dataclass, field
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class PlanLimits:
-    """Limits and features for a subscription plan."""
+    """Static daily limits/features associated with a canonical plan slug."""
     
     daily_token_limit: int
     daily_export_limit: int
@@ -32,59 +33,45 @@ class PlanLimits:
             self.features = set()
 
 
-# Plan definitions
+# Plan definitions. These are daily/runtime policy defaults; billing plan rows
+# remain the authority for price, paid entitlement, and configurable limits.
 PLANS = {
     "free": PlanLimits(
         daily_token_limit=100_000,  # ~50-100 debate runs depending on complexity
-        daily_export_limit=5,        # 5 PDF exports per day
-        max_concurrent_debates=1,    # One debate at a time
-        features=set(),              # No premium features
+        daily_export_limit=5,
+        max_concurrent_debates=1,
+        features=set(),
     ),
     "pro": PlanLimits(
-        daily_token_limit=1_000_000,  # ~500-1000 debates per day
-        daily_export_limit=100,       # 100 exports per day
-        max_concurrent_debates=5,     # Up to 5 concurrent debates
+        daily_token_limit=1_000_000,
+        daily_export_limit=100,
+        max_concurrent_debates=5,
         features={"conversation_mode", "advanced_models"},
     ),
     "internal": PlanLimits(
-        daily_token_limit=10_000_000,  # Effectively unlimited for team use
+        daily_token_limit=10_000_000,
         daily_export_limit=1000,
-        max_concurrent_debates=None,   # No limit
+        max_concurrent_debates=None,
         features={"conversation_mode", "advanced_models", "admin_features"},
     ),
 }
 
 
 def get_plan_limits(plan_name: str) -> PlanLimits:
-    """
-    Get limits for a plan.
-    
-    If plan_name is unknown, defaults to 'free' plan.
-    This ensures system always has sensible limits even if plan is misconfigured.
-    
-    Args:
-        plan_name: Name of the plan (free/pro/internal)
-    
-    Returns:
-        PlanLimits object with token/export limits and features
+    """Return static daily policy for a canonical plan slug.
+
+    Unknown slugs fail safe to the Free policy.
     """
     return PLANS.get(plan_name, PLANS["free"])
 
 
 def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
-    """
-    Resolve plan name for a user.
-    
-    Rules:
-    - If user is None (anonymous): return "free"
-    - If user is in owner allowlist: return OWNER_PLAN (Patchset 103)
-    - Otherwise: return user.plan (which defaults to "free" in model)
-    
-    Args:
-        user: User object or None for anonymous users
-    
-    Returns:
-        Plan name string (free/pro/internal)
+    """Return the legacy/UI plan marker for a User object.
+
+    This helper intentionally has no database session and therefore cannot
+    resolve BillingSubscription entitlement. It is safe for compatibility
+    display/logging only. Billing, quota, model-tier, and export authorization
+    must use ``billing.service.get_active_plan`` instead.
     """
     if user is None:
         return "free"
@@ -96,7 +83,7 @@ def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
         from config import settings
         logging.getLogger(__name__).info(
             "owner_override_applied",
-            extra={"user_id": user.id, "email": user.email, "override_type": "plan"},
+            extra={"user_id": user.id, "email": user.email, "override_type": "plan_marker"},
         )
         return settings.OWNER_PLAN
 
@@ -104,10 +91,10 @@ def resolve_plan_for_user(user: Optional["User"]) -> str:  # noqa: F821
 
 
 def list_available_plans() -> list[str]:
-    """Get list of all available plan names."""
+    """Get list of all available compatibility plan slugs."""
     return list(PLANS.keys())
 
 
 def validate_plan(plan_name: str) -> bool:
-    """Check if a plan name is valid."""
+    """Check if a plan marker slug is valid."""
     return plan_name in PLANS
