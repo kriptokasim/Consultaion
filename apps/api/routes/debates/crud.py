@@ -72,10 +72,10 @@ async def get_debate_timeline(
     debate = require_debate_access(debate, current_user, session)
     if not debate:
         raise NotFoundError(message="Debate not found", code="debate.not_found")
-    
+
     # Return partial timeline for running debates instead of erroring
     timeline = build_debate_timeline(session, debate)
-    
+
     elapsed_ms = (time.time() - start_time) * 1000
     # Track timeline fetch performance
     if elapsed_ms > 500:
@@ -175,7 +175,6 @@ async def create_debate(
             target_type="debate",
             target_id=None,
             meta=payload,
-            session=session,
         )
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
@@ -206,23 +205,23 @@ async def create_debate(
             # Patchset 136: No models available — fail before further processing.
             # Quota was already reserved (line 140); the outer except block refunds it.
             raise ProviderCircuitOpenError(
-                message="No models available; configure provider keys.", 
+                message="No models available; configure provider keys.",
                 code="models.unavailable",
                 hint="Please contact the administrator to configure model providers."
             )
-        
+
         # Validate requested model if provided
         if body.model_id and body.model_id not in enabled_models:
             raise ValidationError(
-                message="Invalid or unavailable model_id", 
+                message="Invalid or unavailable model_id",
                 code="debate.invalid_model",
                 hint="Please select a different model from the list."
             )
-        
+
         # Patchset 49.2: Enforce model tier limits
         from billing.service import get_active_plan, reserve_hosted_credit
         plan = get_active_plan(session, current_user.id)
-        
+
         # Check the model's tier
         from parliament.model_registry import get_default_model
         target_model_id = body.model_id or get_default_model().id
@@ -253,7 +252,7 @@ async def create_debate(
             allowed_tiers = list(allowed_tiers)
             if "advanced" not in allowed_tiers:
                 allowed_tiers.append("advanced")
-                
+
         if model_tier not in allowed_tiers:
              raise ValidationError(
                 message=f"Model '{target_model_info.display_name if target_model_info else target_model_id}' is not available on your plan.",
@@ -353,7 +352,7 @@ async def create_debate(
             priority="normal",
         )
         best_model_id, candidates = choose_model(route_ctx)
-        
+
         # Structured logging for routing decisions
         logger.info(
             "Routing decision made",
@@ -369,14 +368,14 @@ async def create_debate(
                 "user_id": current_user.id,
             },
         )
-        
+
         # Track routing metrics
         from routes.common import track_metric
         track_metric(f"routing.policy.{body.routing_policy or 'router-smart'}")
         track_metric(f"routing.model.{best_model_id}")
         if body.model_id:
             track_metric("routing.explicit_override")
-        
+
         debate_id = str(uuid.uuid4())
 
         if needs_hosted_credit:
@@ -490,7 +489,7 @@ async def create_debate(
             best_model_id,
             trace_id=trace_id,
         )
-    
+
     from log_config import log_event
     log_event(
         "debate.created",
@@ -506,19 +505,22 @@ async def create_debate(
     if not settings.DISABLE_AUTORUN:
         track_metric("debate.dispatch.scheduled")
 
+    mode = body.mode or "conversation"
     from audit import record_audit
+    # The debate row was already committed above. Persist telemetry in its own
+    # transaction because the request-scoped session does not commit on teardown.
+    # Do not copy raw prompts into the audit log; length + mode are sufficient
+    # for product analytics and materially reduce sensitive-data retention.
     record_audit(
         "debate_created",
         user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
-        meta={"prompt": body.prompt},
-        session=session,
+        meta={"mode": str(mode), "prompt_length": len(body.prompt)},
     )
     track_metric("debates_created")
     # Track mode usage metrics
-    mode = body.mode or "conversation"
-    # Replaced legacy mode.{mode}.started with consistent mode.debate.started 
+    # Replaced legacy mode.{mode}.started with consistent mode.debate.started
     # and tracking the specific mode as a tag or sub-metric if needed, but for now just:
     track_metric(f"mode.debate.{mode}.started")
 
@@ -646,7 +648,7 @@ async def list_debates(
         if isinstance(total_result, tuple):
             total_result = total_result[0]
         total = int(total_result or 0)
-        
+
         if redis_client and cache_key:
             try:
                 redis_client.setex(cache_key, 30, total)  # Cache for 30 seconds
@@ -657,7 +659,7 @@ async def list_debates(
     with traced_span("debate.list", {"limit": str(limit), "offset": str(offset), "status": str(status)}):
         items_stmt = base_query.order_by(sa.desc(Debate.created_at)).offset(offset).limit(limit)
         debates = session.exec(items_stmt).all()
-    
+
     has_more = offset + len(debates) < total
     return {
         "items": debates,
@@ -691,19 +693,20 @@ async def get_debate(
     continuation = session.execute(stmt).scalars().first()
     continuation_status = continuation.status if continuation else None
 
-
     # Public users get a stripped-down DTO — no config, routing_meta, etc.
     if not current_user or not is_debate_owner(debate, current_user):
         if is_debate_public(debate):
             ip = request.client.host if (request and request.client) else None
             from audit import record_audit
+            # Public reads do not otherwise mutate the request-scoped session.
+            # Use the audit helper's committed standalone transaction so the
+            # PLG view event survives request teardown.
             record_audit(
                 "view_shared_debate",
                 user_id=current_user.id if current_user else None,
                 target_type="debate",
                 target_id=debate_id,
                 ip_address=ip,
-                session=session,
             )
             from serializers import serialize_debate_public
             return serialize_debate_public(debate, continuation_status=continuation_status, session=session)
@@ -765,7 +768,6 @@ async def update_debate(
             target_type="debate",
             target_id=debate.id,
             meta={"team_id": debate.team_id},
-            session=session,
         )
     return {
         "id": debate.id,
