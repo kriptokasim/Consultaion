@@ -42,6 +42,7 @@ def test_admin_quota_filters_and_limits_use_canonical_entitlement(db_session: Se
     db_session.commit()
 
     payload = admin_quota_usage(
+        user_id=None,
         email=None,
         plan="pro",
         limit=50,
