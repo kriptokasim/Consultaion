@@ -16,6 +16,10 @@ from models import (
     AuditLog,
     ChallengeRound,
     ChallengeSession,
+    CodingLaneResult,
+    CodingPatchArtifact,
+    CodingRun,
+    CodingTurn,
     ConversationVote,
     Debate,
     DebateAttempt,
@@ -28,6 +32,8 @@ from models import (
     DivergenceReport,
     LLMUsageLog,
     Message,
+    OracleBranch,
+    OracleSession,
     PairwiseVote,
     RedTeamSession,
     Score,
@@ -209,6 +215,77 @@ def purge_old_debates(session: "Session") -> int:
     return len(old_debates)
 
 
+def purge_old_auxiliary_ai_content(session: "Session") -> dict[str, int]:
+    """Delete standalone AI-mode content after the decision-content retention window.
+
+    Coding, Oracle, and standalone RedTeam sessions can exist without a Debate,
+    so ``purge_old_debates`` cannot reach them. Apply the same
+    ``RETAIN_DEBATES_DAYS`` window to these content-bearing surfaces to keep the
+    product's default AI-content retention policy coherent.
+
+    Debate-linked RedTeam sessions remain owned by ``purge_old_debates`` and are
+    intentionally excluded here.
+    """
+    days = settings.RETAIN_DEBATES_DAYS
+    if not days or days <= 0:
+        logger.info("Auxiliary AI retention disabled with debate retention")
+        return {
+            "coding_runs_deleted": 0,
+            "oracle_sessions_deleted": 0,
+            "standalone_redteam_sessions_deleted": 0,
+        }
+
+    cutoff = utcnow() - timedelta(days=days)
+
+    coding_ids = list(
+        session.exec(select(CodingRun.id).where(CodingRun.created_at < cutoff)).all()
+    )
+    oracle_ids = list(
+        session.exec(select(OracleSession.id).where(OracleSession.created_at < cutoff)).all()
+    )
+    redteam_ids = list(
+        session.exec(
+            select(RedTeamSession.id)
+            .where(RedTeamSession.debate_id.is_(None))
+            .where(RedTeamSession.created_at < cutoff)
+        ).all()
+    )
+
+    if coding_ids:
+        session.execute(
+            sa.delete(CodingPatchArtifact).where(
+                CodingPatchArtifact.coding_run_id.in_(coding_ids)
+            )
+        )
+        session.execute(
+            sa.delete(CodingLaneResult).where(CodingLaneResult.coding_run_id.in_(coding_ids))
+        )
+        session.execute(sa.delete(CodingTurn).where(CodingTurn.coding_run_id.in_(coding_ids)))
+        session.execute(sa.delete(CodingRun).where(CodingRun.id.in_(coding_ids)))
+
+    if oracle_ids:
+        session.execute(sa.delete(OracleBranch).where(OracleBranch.session_id.in_(oracle_ids)))
+        session.execute(sa.delete(OracleSession).where(OracleSession.id.in_(oracle_ids)))
+
+    if redteam_ids:
+        session.execute(sa.delete(RedTeamSession).where(RedTeamSession.id.in_(redteam_ids)))
+
+    if coding_ids or oracle_ids or redteam_ids:
+        session.commit()
+        logger.info(
+            "Deleted expired auxiliary AI content: coding=%s oracle=%s standalone_redteam=%s",
+            len(coding_ids),
+            len(oracle_ids),
+            len(redteam_ids),
+        )
+
+    return {
+        "coding_runs_deleted": len(coding_ids),
+        "oracle_sessions_deleted": len(oracle_ids),
+        "standalone_redteam_sessions_deleted": len(redteam_ids),
+    }
+
+
 def purge_old_debate_errors(session: "Session") -> int:
     """Delete DebateError rows older than RETAIN_DEBATE_ERRORS_DAYS."""
     days = settings.RETAIN_DEBATE_ERRORS_DAYS
@@ -261,8 +338,10 @@ def purge_old_support_notes(session: "Session") -> int:
 def run_all_purges(session: "Session") -> dict:
     """Execute all retention purge jobs and return counts by category."""
     logger.info("Starting data retention purge...")
+    auxiliary = purge_old_auxiliary_ai_content(session)
     results = {
         "debates_anonymized": purge_old_debates(session),
+        **auxiliary,
         "debate_errors_deleted": purge_old_debate_errors(session),
         "support_notes_deleted": purge_old_support_notes(session),
     }
