@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from types import SimpleNamespace
 from typing import Dict, List, Optional
 
@@ -192,11 +191,10 @@ def create_checkout(
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="plan not found")
     provider = get_billing_provider()
-    try:
-        user_uuid = uuid.UUID(current_user.id)
-    except ValueError:
-        user_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, current_user.id)
-    checkout_url = provider.create_checkout_session(user_uuid, plan)
+    # Preserve the exact application primary key in provider metadata. Previous
+    # code converted non-UUID IDs to UUID5, which made the webhook unable to
+    # resolve legacy/imported users after a successful payment.
+    checkout_url = provider.create_checkout_session(current_user.id, plan)
     return {"checkout_url": checkout_url}
 
 
