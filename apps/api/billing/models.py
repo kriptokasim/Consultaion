@@ -78,6 +78,8 @@ class ReferralAttribution(SQLModel, table=True):
 
     Raw referral tokens are never stored. Only a SHA-256 token hash is persisted,
     which allows unique visit/claim attribution without retaining visitor IPs.
+    User links are nullable so account erasure can detach attribution identity
+    while retaining aggregate visit/conversion facts.
     """
 
     __tablename__ = "referral_attributions"
@@ -90,7 +92,7 @@ class ReferralAttribution(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
     token_hash: str = Field(nullable=False, index=True, max_length=64)
     debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
-    created_by_user_id: str = Field(foreign_key="user.id", nullable=False, index=True)
+    created_by_user_id: Optional[str] = Field(default=None, foreign_key="user.id", nullable=True, index=True)
     view_count: int = Field(default=0, nullable=False)
     visited_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     last_visited_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
