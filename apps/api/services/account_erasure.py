@@ -72,14 +72,33 @@ class AccountErasureResult:
     completed_at: datetime
 
 
-PII_KEYS = {"email", "ip_address", "ip", "remote_addr", "email_address"}
+PII_KEYS = {
+    "email",
+    "email_address",
+    "target_email",
+    "user_email",
+    "ip",
+    "ip_address",
+    "client_ip",
+    "remote_addr",
+}
+
+
+def _is_pii_key(key: object) -> bool:
+    normalized = str(key).strip().lower()
+    return (
+        normalized in PII_KEYS
+        or normalized.endswith("_email")
+        or normalized.endswith("_ip")
+        or normalized.endswith("_ip_address")
+    )
 
 
 def _scrub_pii(value):
     """Recursively redact PII-bearing keys in JSON-compatible metadata."""
     if isinstance(value, dict):
         return {
-            key: "[REDACTED]" if str(key).lower() in PII_KEYS else _scrub_pii(item)
+            key: "[REDACTED]" if _is_pii_key(key) else _scrub_pii(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -126,6 +145,10 @@ def erase_user_account(
     user.last_failed_login_at = None
     session.add(user)
 
+    # Capture owned debates before their direct user linkage is removed.
+    user_debates = session.exec(select(Debate).where(Debate.user_id == user_id)).all()
+    debate_ids = [d.id for d in user_debates]
+
     # ── C2: Delete direct user-owned records ────────────────────────
     session.execute(sa.delete(APIKey).where(APIKey.user_id == user_id))
     session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
@@ -158,44 +181,52 @@ def erase_user_account(
     session.execute(sa.delete(CodingRun).where(CodingRun.user_id == user_id))
 
     # Challenge/oracle/red-team sessions
-    session.execute(sa.delete(ChallengeRound).where(
-        ChallengeRound.session_id.in_(
-            sa.select(ChallengeSession.id).where(ChallengeSession.user_id == user_id)
+    session.execute(
+        sa.delete(ChallengeRound).where(
+            ChallengeRound.session_id.in_(
+                sa.select(ChallengeSession.id).where(ChallengeSession.user_id == user_id)
+            )
         )
-    ))
+    )
     session.execute(sa.delete(ChallengeSession).where(ChallengeSession.user_id == user_id))
-    session.execute(sa.delete(OracleBranch).where(
-        OracleBranch.session_id.in_(
-            sa.select(OracleSession.id).where(OracleSession.user_id == user_id)
+    session.execute(
+        sa.delete(OracleBranch).where(
+            OracleBranch.session_id.in_(
+                sa.select(OracleSession.id).where(OracleSession.user_id == user_id)
+            )
         )
-    ))
+    )
     session.execute(sa.delete(OracleSession).where(OracleSession.user_id == user_id))
     session.execute(sa.delete(RedTeamSession).where(RedTeamSession.user_id == user_id))
 
-    # Debate attempts and stage checkpoints via subquery
-    owned_debate_ids = sa.select(Debate.id).where(Debate.user_id == user_id)
-    session.execute(sa.delete(DebateAttempt).where(DebateAttempt.debate_id.in_(owned_debate_ids)))
-    session.execute(
-        sa.delete(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id.in_(owned_debate_ids))
-    )
+    if debate_ids:
+        # DebateAttempt is referenced by Message/Score/DebateRound.attempt_id.
+        # Deleting attempts while retaining those structural rows violates the
+        # PostgreSQL FK graph. Keep the attempt fact, scrub free-form content.
+        session.execute(
+            sa.update(DebateAttempt)
+            .where(DebateAttempt.debate_id.in_(debate_ids))
+            .values(error_summary=None, meta=None)
+        )
+        session.execute(
+            sa.delete(DebateStageCheckpoint).where(
+                DebateStageCheckpoint.debate_id.in_(debate_ids)
+            )
+        )
 
     # ── Anonymize retained Debate data ──────────────────────────────
-    user_debates = session.exec(
-        select(Debate).where(Debate.user_id == user_id)
-    ).all()
-    debate_ids = [d.id for d in user_debates]
     anonymized_count = 0
     for debate in user_debates:
         if debate.prompt != "[DELETED]":
-            debate.prompt = "[DELETED]"
-            debate.final_content = None
-            debate.final_meta = None
-            debate.config = None
-            debate.panel_config = None
-            debate.routing_meta = None
-            debate.team_id = None
-            debate.user_id = None
             anonymized_count += 1
+        debate.prompt = "[DELETED]"
+        debate.final_content = None
+        debate.final_meta = None
+        debate.config = None
+        debate.panel_config = None
+        debate.routing_meta = None
+        debate.team_id = None
+        debate.user_id = None
     session.add_all(user_debates)
 
     # ── Anonymize/delete related debate data ────────────────────────
@@ -225,12 +256,20 @@ def erase_user_account(
         session.execute(
             sa.update(AdminEvent)
             .where(AdminEvent.debate_id.in_(debate_ids))
-            .values(message="[User deleted]", meta=None)
+            .values(message="[User deleted]", trace_id=None, meta=None)
         )
 
     # ── Scrub PII from retained AuditLog metadata ──────────────────
+    # Include both actions performed BY the user and admin/system actions ABOUT
+    # the user. Otherwise target_email/client_ip data can survive erasure in an
+    # admin-authored plan/status/support audit row.
     audit_logs = session.exec(
-        select(AuditLog).where(AuditLog.user_id == user_id)
+        select(AuditLog).where(
+            sa.or_(
+                AuditLog.user_id == user_id,
+                sa.and_(AuditLog.target_type == "user", AuditLog.target_id == user_id),
+            )
+        )
     ).all()
     for log in audit_logs:
         if log.meta:
