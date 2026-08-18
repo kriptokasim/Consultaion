@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+import database
 from audit import record_audit
-from database import engine
 from models import AuditLog, User
 from sqlmodel import Session, select
 
@@ -14,7 +14,10 @@ def test_record_audit_persists_when_caller_session_is_clean(db_session: Session)
         session=db_session,
     )
 
-    with Session(engine) as observer:
+    # Read the engine dynamically. Tests reset database.engine between cases;
+    # importing the engine object at module import time would leave this test
+    # attached to the pre-reset SQLite database.
+    with Session(database.engine) as observer:
         row = observer.exec(
             select(AuditLog)
             .where(AuditLog.action == "post_commit_event")
@@ -40,7 +43,7 @@ def test_record_audit_preserves_atomicity_with_pending_domain_changes(db_session
     )
 
     # A second session must not observe either row until the caller commits.
-    with Session(engine) as observer:
+    with Session(database.engine) as observer:
         assert observer.exec(select(User).where(User.id == user.id)).first() is None
         assert observer.exec(
             select(AuditLog).where(AuditLog.action == "atomic_event")
@@ -48,7 +51,7 @@ def test_record_audit_preserves_atomicity_with_pending_domain_changes(db_session
 
     db_session.commit()
 
-    with Session(engine) as observer:
+    with Session(database.engine) as observer:
         persisted_user = observer.exec(select(User).where(User.id == user.id)).first()
         persisted_audit = observer.exec(
             select(AuditLog).where(AuditLog.action == "atomic_event")
