@@ -13,7 +13,7 @@
 | `User.id` | Stable account identifier | Retained as anonymized account record after deletion | User, Admin, System |
 | `User.email` | Login and notifications | Replaced with non-routable randomized address on account erasure | User, Admin |
 | `User.display_name`, `avatar_url`, `bio`, `timezone` | UI personalization | Cleared on account erasure | User, Admin |
-| `User.plan` | Service tier / entitlement | Retained on anonymized account record where operationally required | User, Admin, Billing |
+| `User.plan` | Legacy plan marker; canonical paid entitlement is `BillingSubscription` | Retained on anonymized account record where operationally required | User, Admin, Billing |
 | `User.is_active` | Account status | Account is disabled on erasure | Admin, System |
 | `User.created_at`, `deleted_at` | Lifecycle / compliance evidence | Retained | Admin, System |
 | `User.analytics_opt_out` | Analytics preference | Retained with account lifecycle state | User, System |
@@ -39,12 +39,22 @@ Consultaion uses a normalized schema. Model output is **not** stored in a `debat
 | `DebateTurn.*` | Claims, position drift, moderation steering | 365 days | Content fields cleared |
 | `DivergenceReport.*` | Consensus / contested claim artifacts | 365 days | Content fields cleared |
 | `DebateContinuation.failure_detail_safe` | Continuation failure context | 365 days | Cleared with expired decision data |
-| `DebateStageCheckpoint.*` | Execution recovery metadata | 365 days | Content-bearing execution/error fields cleared |
+| `DebateStageCheckpoint.*`, `DebateCheckpoint.context_meta` | Execution/recovery metadata | 365 days | Content/error/context fields and resume token cleared |
+| `DebateAttempt.error_summary`, `DebateAttempt.meta` | Retry/attempt diagnostics | 365 days | Free-form fields cleared; numeric aggregate cost/token facts may remain |
+| `Vote`, `VoteRecord`, `ConversationVote` | Rankings, vote JSON, user feedback/reasons | 365 days | Deleted for expired decisions |
+| `RedTeamSession` linked to a debate | Proposal / critique content | 365 days | Deleted for expired decisions |
+| `ChallengeSession`, `ChallengeRound` | User pushback and model revisions | 365 days | Deleted for expired decisions |
+| `TerminalTransition.meta` | Terminal side-effect metadata | 365 days | Metadata cleared |
+| `AdminEvent` linked to a debate | Operational diagnostic text/meta | 365 days | Message anonymized; trace/meta cleared |
 | `LLMUsageLog` | Tokens, cost, provider/model, latency, errors | Usage facts retained per configured policy | Direct user link and free-form error context cleared for expired decisions |
 
 The current application setting is `RETAIN_DEBATES_DAYS=365`. This is a configurable engineering default, **not a legal conclusion** about how long every deployment is permitted or required to retain data.
 
-**Contains PII:** Potentially. Prompts and generated responses may contain personal, confidential, regulated, or customer-supplied information.
+**Contains PII:** Potentially. Prompts and generated responses may contain personal, confidential, regulated, source-code, or customer-supplied information.
+
+### Auxiliary AI modes
+
+Account erasure covers user-owned Coding Agent, Oracle and RedTeam artifacts. However, **standalone Coding/Oracle/RedTeam content does not yet have a dedicated automatic time-based retention job** when it is not linked to an expiring Debate. This is a known diligence gap and must not be represented externally as covered by the 365-day Debate purge until a product/legal retention policy is chosen and implemented.
 
 ---
 
@@ -68,7 +78,7 @@ Investor-facing funnel metrics must label IP-based referral attribution as a **p
 |---|---|---|---|
 | `LLMUsageLog` | Model/provider, tokens, cost, latency, success/fallback/retry | Unit economics and model reliability | Governed by application retention policy |
 | `DebateError` | Failed/degraded run context | Support and incident diagnosis | `RETAIN_DEBATE_ERRORS_DAYS=90` |
-| `AdminEvent` | Operational incidents / admin-facing event context | Operations | Deployment policy |
+| `AdminEvent` | Operational incidents / admin-facing event context | Operations | Debate-linked content is scrubbed with expired decisions; other events follow deployment policy |
 | Sentry | Error traces | Debugging and incident response | Provider/deployment configuration |
 | Langfuse | LLM traces | Quality and reliability analysis | Provider/deployment configuration |
 | Prometheus / OpenTelemetry | Aggregated operational metrics/traces | Reliability and capacity | Deployment configuration |
@@ -128,7 +138,8 @@ Account erasure is distinct from time-based retention. Both paths must remain co
 
 | Category | Current default |
 |---|---:|
-| Decision/debate content | 365 days |
+| Decision/debate content and linked challenge/red-team content | 365 days |
+| Standalone Coding/Oracle/RedTeam content | No dedicated timed purge yet; account erasure applies |
 | Debate errors | 90 days |
 | Support notes | Indefinite unless configured |
 | Usage statistics | 365 days |
@@ -145,6 +156,7 @@ These are **technical defaults**. Production terms, privacy notices, DPAs, custo
 Before representing Consultaion's privacy posture externally, verify all of the following against the production deployment:
 
 - retention jobs are actually scheduled and successfully executing;
+- choose and implement timed retention for standalone Coding/Oracle/RedTeam content;
 - database, backups, logs, analytics and LLM-observability providers use compatible retention periods;
 - account erasure covers every newly introduced content-bearing table;
 - referral attribution no longer depends on raw IP matching;
