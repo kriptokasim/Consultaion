@@ -38,24 +38,25 @@ async def share_debate(
 
     if not debate.config:
         debate.config = {}
-    
+
     config = dict(debate.config)
     config["is_public"] = body.is_public
     debate.config = config
 
     session.add(debate)
     session.commit()
-    
-    # Audit log
+
+    # The request-scoped DB dependency does not auto-commit on teardown.
+    # Persist post-commit telemetry in its own transaction so share events are
+    # not silently discarded when the request returns.
     record_audit(
         "debate_shared",
         user_id=current_user.id,
         target_type="debate",
         target_id=debate.id,
         meta={"is_public": body.is_public},
-        session=session,
     )
-    
+
     return {"id": debate.id, "is_public": body.is_public}
 
 
@@ -104,7 +105,7 @@ async def get_argument_tree(
 ):
     from models import DebateTurn
     _debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
-    
+
     stmt = select(DebateTurn).where(DebateTurn.debate_id == debate_id).order_by(DebateTurn.round_index.asc())
     turns = session.exec(stmt).all()
 
@@ -128,7 +129,7 @@ async def get_argument_tree(
                 target_raw = node.get("rebuts_target")
                 target_agent = raw_to_agent.get(target_raw) if target_raw else None
                 rebuts_target = f"{target_agent}_{target_raw}" if target_agent else None
-                
+
                 nodes.append({
                     "id": f"{t.agent_id}_{node.get('id')}",
                     "raw_id": node.get("id"),
