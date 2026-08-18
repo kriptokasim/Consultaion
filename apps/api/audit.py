@@ -7,6 +7,12 @@ from models import AuditLog, utcnow
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
+# Public-share acquisition attribution is token-based. Retaining visitor IP on
+# the generic public-view audit event no longer serves product attribution and
+# adds unnecessary personal-data retention. Security/auth actions may still
+# retain IP when their caller supplies it.
+_IP_SUPPRESSED_ACTIONS = {"view_shared_debate"}
+
 
 def _new_audit_log(
     action: str,
@@ -55,8 +61,15 @@ def record_audit(
     than relying on implicit commit heuristics.
     """
     final_meta = dict(meta or {})
-    if ip_address:
+    if ip_address and action not in _IP_SUPPRESSED_ACTIONS:
         final_meta["ip_address"] = ip_address
+    else:
+        # Central policy also protects against a caller placing the same field
+        # directly in meta for a public-view event.
+        final_meta.pop("ip_address", None)
+        if action in _IP_SUPPRESSED_ACTIONS:
+            final_meta.pop("client_ip", None)
+            final_meta.pop("remote_addr", None)
 
     try:
         if session is None:
