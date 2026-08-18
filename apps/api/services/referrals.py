@@ -4,6 +4,7 @@ import hashlib
 import secrets
 from datetime import timedelta
 
+import sqlalchemy as sa
 from billing.models import ReferralAttribution
 from models import utcnow
 from sqlmodel import Session, select
@@ -45,25 +46,29 @@ def issue_referral_token(
 
 
 def record_referral_visit(session: Session, *, token: str) -> bool:
-    """Record a public-share visit without storing visitor identity or IP."""
+    """Atomically record a public-share visit without visitor identity or IP."""
     digest = _token_hash(token)
     if digest is None:
         return False
 
     now = utcnow()
-    row = session.exec(
-        select(ReferralAttribution).where(ReferralAttribution.token_hash == digest)
-    ).first()
-    if row is None or row.expires_at <= now:
-        return False
-
-    row.view_count = int(row.view_count or 0) + 1
-    if row.visited_at is None:
-        row.visited_at = now
-    row.last_visited_at = now
-    session.add(row)
+    stmt = (
+        sa.update(ReferralAttribution)
+        .where(ReferralAttribution.token_hash == digest)
+        .where(ReferralAttribution.expires_at > now)
+        .values(
+            view_count=ReferralAttribution.view_count + 1,
+            visited_at=sa.case(
+                (ReferralAttribution.visited_at.is_(None), now),
+                else_=ReferralAttribution.visited_at,
+            ),
+            last_visited_at=now,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    result = session.execute(stmt)
     session.flush()
-    return True
+    return bool(result.rowcount)
 
 
 def claim_referral(
@@ -72,31 +77,53 @@ def claim_referral(
     token: str,
     user_id: str,
 ) -> bool:
-    """Claim a referral token for the first authenticated user, idempotently."""
+    """Atomically bind a referral token to the first authenticated user.
+
+    The conditional UPDATE is the concurrency authority. Two users racing to
+    claim the same token cannot overwrite one another; the loser re-reads the
+    winner and succeeds only when the existing claim already belongs to itself.
+    """
     digest = _token_hash(token)
     if digest is None:
         return False
 
     now = utcnow()
-    row = session.exec(
-        select(ReferralAttribution).where(ReferralAttribution.token_hash == digest)
-    ).first()
-    if row is None or row.expires_at <= now:
-        return False
-
-    if row.claimed_by_user_id:
-        return row.claimed_by_user_id == user_id
-
-    # A direct CTA click can reach signup before the best-effort visit beacon
-    # finishes. Treat claim as an implicit unique visit in that race rather than
-    # losing attribution.
-    if row.visited_at is None:
-        row.visited_at = now
-        row.last_visited_at = now
-        row.view_count = max(1, int(row.view_count or 0))
-
-    row.claimed_by_user_id = user_id
-    row.claimed_at = now
-    session.add(row)
+    stmt = (
+        sa.update(ReferralAttribution)
+        .where(ReferralAttribution.token_hash == digest)
+        .where(ReferralAttribution.expires_at > now)
+        .where(ReferralAttribution.claimed_by_user_id.is_(None))
+        .values(
+            claimed_by_user_id=user_id,
+            claimed_at=now,
+            visited_at=sa.case(
+                (ReferralAttribution.visited_at.is_(None), now),
+                else_=ReferralAttribution.visited_at,
+            ),
+            last_visited_at=sa.case(
+                (ReferralAttribution.last_visited_at.is_(None), now),
+                else_=ReferralAttribution.last_visited_at,
+            ),
+            # A claim can beat the best-effort visit beacon. Ensure that such a
+            # token still contributes one unique visited token without
+            # artificially incrementing repeat-view counts.
+            view_count=sa.case(
+                (ReferralAttribution.view_count < 1, 1),
+                else_=ReferralAttribution.view_count,
+            ),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    result = session.execute(stmt)
     session.flush()
-    return True
+    if result.rowcount:
+        return True
+
+    existing = session.exec(
+        select(ReferralAttribution.claimed_by_user_id)
+        .where(ReferralAttribution.token_hash == digest)
+        .where(ReferralAttribution.expires_at > now)
+    ).first()
+    if isinstance(existing, tuple):
+        existing = existing[0]
+    return existing == user_id
