@@ -36,6 +36,24 @@ export default function ParliamentHome({
     (stats?.speeches ?? 0) > 0 ||
     (stats?.votes ?? 0) > 0;
 
+  const handleAskQuestion = () => {
+    // Keep the parent callback as the canonical navigation/focus hook.
+    onStart?.();
+
+    // Defensive fallback for the live page: older compositions accidentally
+    // left the parent's prompt ref unattached, which made the CTA a visible
+    // no-op. Resolve the actual composer textarea after React has processed the
+    // click, then scroll and focus it. This also keeps the CTA functional if the
+    // surrounding layout changes while the composer itself remains present.
+    if (typeof document === "undefined") return;
+    requestAnimationFrame(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>("textarea");
+      if (!textarea) return;
+      textarea.scrollIntoView({ behavior: "smooth", block: "center" });
+      textarea.focus();
+    });
+  };
+
   return (
     <section className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-accent-secondary/5 via-secondary to-card p-6 shadow-smooth-lg">
       <div className="pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(circle_at_center,white,transparent)]">
@@ -66,7 +84,7 @@ export default function ParliamentHome({
             <button
               type="button"
               disabled={running}
-              onClick={onStart}
+              onClick={handleAskQuestion}
               aria-pressed={running}
               aria-label="Run AI Arena session"
               className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-smooth transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"

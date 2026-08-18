@@ -6,11 +6,13 @@ from uuid import UUID
 
 from billing.models import BillingPlan
 
+BillingUserID = str | UUID
+
 
 class BillingProvider(ABC):
     @abstractmethod
-    def create_checkout_session(self, user_id: UUID, plan: BillingPlan) -> str:
-        """Return provider-hosted checkout URL for the given user and plan."""
+    def create_checkout_session(self, user_id: BillingUserID, plan: BillingPlan) -> str:
+        """Return provider-hosted checkout URL for the canonical application user ID."""
         raise NotImplementedError
 
     @abstractmethod

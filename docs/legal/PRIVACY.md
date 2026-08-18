@@ -29,4 +29,4 @@ You have full control over your data:
 We implement industry-standard encryption in transit (HTTPS/TLS) and at rest to secure your account data, Saved API keys, and logs.
 
 ## 6. Updates & Contact
-We may update this policy periodically. If you have questions about our data practices, please contact us at privacy@consultaion.com.
+We may update this policy periodically. If you have questions about our data practices, please contact us at info@consultaion.com.

@@ -27,14 +27,17 @@ def _current_period() -> str:
 
 
 def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
+    """Resolve the canonical plan entitlement for a user.
+
+    Owner override wins first. Otherwise a subscription is entitled only while
+    its billing period contains `now`. Stripe `trialing` is an entitled state,
+    matching webhook behavior; future-dated or expired rows are never active.
+    """
     uid = _normalize_user_id(user_id)
-    
-    # Check owner override
+
     from models import User
     from security.owner import is_owner
 
-    from config import settings
-    
     user = db.get(User, uid)
     if is_owner(user):
         owner_slug = settings.OWNER_PLAN
@@ -47,8 +50,9 @@ def get_active_plan(db: Session, user_id: UserID) -> BillingPlan:
         select(BillingSubscription)
         .where(
             BillingSubscription.user_id == uid,
-            BillingSubscription.status == "active",
-            BillingSubscription.current_period_end >= now,
+            BillingSubscription.status.in_(["active", "trialing"]),
+            BillingSubscription.current_period_start <= now,
+            BillingSubscription.current_period_end > now,
         )
         .order_by(BillingSubscription.current_period_end.desc())
     )
@@ -84,11 +88,7 @@ def check_limits_and_raise(db: Session, user_id: UserID, usage: BillingUsage) ->
     # Owner override
     from models import User
     from security.owner import is_owner
-    
-    # We need to fetch the user to check ownership. 
-    # This adds a DB query but is necessary for the check.
-    # Optimization: could cache owner status or use ID allowlist if we didn't want DB hit, 
-    # but email allowlist requires user object.
+
     user = db.get(User, _normalize_user_id(user_id))
     if is_owner(user) and settings.OWNER_UNLIMITED:
         import logging
@@ -157,11 +157,25 @@ from log_config import log_event
 
 
 def increment_debate_usage(db: Session, user_id: UserID) -> BillingUsage:
+    """Stage one monthly debate usage unit without persisting rejected attempts."""
+    from exceptions import RateLimitError
+
     usage = get_or_create_usage(db, user_id)
     usage.debates_created += 1
     usage.last_updated_at = _now()
     log_event("billing.usage.increment", user_id=str(user_id), metric="debates", value=1, total=usage.debates_created)
-    check_limits_and_raise(db, user_id, usage)
+    try:
+        check_limits_and_raise(db, user_id, usage)
+    except RateLimitError:
+        # The hourly run slot is committed separately by reserve_run_slot().
+        # Keep the monthly BillingUsage row at its pre-attempt value so a caller
+        # that later commits the hourly refund cannot accidentally persist a
+        # rejected run as billable/consumed usage.
+        usage.debates_created = max(0, usage.debates_created - 1)
+        usage.last_updated_at = _now()
+        db.add(usage)
+        raise
+
     plan = get_active_plan(db, user_id)
     max_debates = plan.limits.get("max_debates_per_month")
     try:
@@ -182,14 +196,9 @@ def increment_export_usage(db: Session, user_id: UserID) -> BillingUsage:
 
 
 def check_export_quota(db: Session, user_id: UserID) -> None:
-    """
-    Check if user can export (daily quota check) BEFORE generating export.
-    Raises RateLimitError if quota exceeded.
-    
-    Patchset 65.B1
-    """
+    """Check export entitlement and the actual rolling daily export counter."""
     from exceptions import RateLimitError
-    
+
     if settings.ENV == "test":
         return
 
@@ -204,10 +213,10 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
             extra={"user_id": str(user_id), "email": getattr(user, "email", None), "override_type": "export_quota_bypass"}
         )
         return
-        
+
     plan = get_active_plan(db, user_id)
     limits: Dict[str, object] = plan.limits or {}
-    
+
     # Check if exports are enabled
     exports_flag = limits.get("exports_enabled", True)
     exports_allowed = exports_flag not in {False, "false", "False", "0"}
@@ -218,27 +227,35 @@ def check_export_quota(db: Session, user_id: UserID) -> None:
             code="quota.exports_disabled",
             details={"reason": "disabled", "plan": plan.slug},
         )
-    
-    # Check daily export limit
-    max_exports_per_day = limits.get("max_exports_per_day")
-    if max_exports_per_day is not None:
-        if isinstance(max_exports_per_day, (str, int, float)):
-            try:
-                limit = int(max_exports_per_day)
-            except ValueError:
-                limit = None
-        else:
-            limit = None
-            
-        if limit is not None:
-            usage = get_or_create_usage(db, user_id)
-            if usage.exports_count >= limit:
-                log_event("billing.export_blocked", user_id=str(user_id), reason="quota", limit=limit, used=usage.exports_count)
-                raise RateLimitError(
-                    message="Export quota exceeded. Please try again tomorrow or upgrade your plan.",
-                    code="quota.exports_exceeded",
-                    details={"limit": limit, "used": usage.exports_count, "window": "daily"},
-                )
+
+    # BillingUsage is monthly and must never be used as a daily quota counter.
+    # Prefer a plan-specific DB override when configured, otherwise use the
+    # canonical plan slug's daily policy from plan_config.
+    from plan_config import get_plan_limits
+    from usage_limits import get_today_usage
+
+    configured_limit = limits.get("max_exports_per_day")
+    try:
+        limit = int(configured_limit) if configured_limit is not None else None
+    except (TypeError, ValueError):
+        limit = None
+    if limit is None:
+        limit = get_plan_limits(plan.slug).daily_export_limit
+
+    usage = get_today_usage(db, _normalize_user_id(user_id))
+    if limit >= 0 and usage["exports_used"] >= limit:
+        log_event(
+            "billing.export_blocked",
+            user_id=str(user_id),
+            reason="quota",
+            limit=limit,
+            used=usage["exports_used"],
+        )
+        raise RateLimitError(
+            message="Export quota exceeded. Please try again tomorrow or upgrade your plan.",
+            code="quota.exports_exceeded",
+            details={"limit": limit, "used": usage["exports_used"], "window": "daily"},
+        )
 
 
 def add_tokens_usage(db: Session, user_id: UserID, model_id: str, tokens: int) -> BillingUsage:

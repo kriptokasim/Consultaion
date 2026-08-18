@@ -42,7 +42,7 @@ We take the security of our platform seriously. If you identify a security vulne
 
 ### Reporting a Vulnerability
 Please report security issues directly to our security team:
-* **Email:** security@consultaion.com
+* **Email:** info@consultaion.com
 * Please include a detailed description of the vulnerability, steps to reproduce, and any proof of concept.
 
 ### Scope

@@ -82,11 +82,10 @@ export default async function PricingPage() {
             </ul>
           </div>
           <Button asChild className="mt-8 w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700">
-            <a href="mailto:enterprise@consultaion.com?subject=Enterprise%20Plan%20Inquiry">Contact Sales</a>
+            <a href="mailto:info@consultaion.com?subject=Enterprise%20Plan%20Inquiry">Contact Sales</a>
           </Button>
         </Card>
       </div>
     </main>
   );
 }
-

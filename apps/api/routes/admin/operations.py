@@ -147,15 +147,17 @@ def admin_purge_old_data(
 ):
     """
     Trigger data retention purge jobs.
-    
+
     Anonymizes/deletes old data according to RETAIN_*_DAYS settings.
     Intended to be called by cron job or manually.
     """
     from audit import record_audit
     from maintenance.retention import run_all_purges
-    
+
     results = run_all_purges(session)
-    
+
+    # Purge helpers own their mutation transaction semantics. Persist the
+    # operator audit independently so a successful purge is never untraceable.
     record_audit(
         "maintenance_purge",
         user_id=admin.id,
@@ -163,9 +165,8 @@ def admin_purge_old_data(
         target_id=None,
         meta=results,
         ip_address=req.client.host if req.client else None,
-        session=session,
     )
-    
+
     return {
         "status": "ok",
         "purged": results,

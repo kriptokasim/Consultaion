@@ -160,29 +160,33 @@ def test_admin_payload_helpers_return_data():
 def test_admin_metrics():
     admin_id, member_id, _ = _seed_admin_data()
 
-    # Seed additional logs and data for metrics calculations
+    # Seed additional logs and data for investor metric calculations.
     with Session(engine) as session:
         admin_db = session.get(User, admin_id)
-        
-        # 1. Ensure a pro plan and pro subscription exists
+
+        # 1. Ensure a paid Pro plan and subscription exist. _seed_admin_data also
+        # creates an active Free subscription; it must never contribute to MRR.
         pro_plan = session.exec(select(BillingPlan).where(BillingPlan.slug == "pro")).first()
         if not pro_plan:
             pro_plan = BillingPlan(
                 slug="pro",
                 name="Pro Plan",
                 price_monthly=15.00,
-                is_default_free=False
+                currency="USD",
+                is_default_free=False,
             )
-            session.add(pro_plan)
-            session.commit()
-            session.refresh(pro_plan)
+        # Keep this test deterministic even if another test/fixture seeded Pro.
+        pro_plan.price_monthly = 15.00
+        pro_plan.currency = "USD"
+        pro_plan.is_default_free = False
+        session.add(pro_plan)
+        session.commit()
+        session.refresh(pro_plan)
 
-        # Make member_id a pro user
         member = session.get(User, member_id)
         member.plan = "pro"
         session.add(member)
 
-        # Seed active pro subscription
         sub = BillingSubscription(
             user_id=member_id,
             plan_id=pro_plan.id,
@@ -190,12 +194,26 @@ def test_admin_metrics():
             provider="stripe",
             provider_subscription_id=f"sub_metrics_{uuid.uuid4().hex[:6]}",
             provider_customer_id=f"cus_metrics_{uuid.uuid4().hex[:6]}",
-            current_period_start=datetime.now(timezone.utc),
+            current_period_start=datetime.now(timezone.utc) - timedelta(minutes=1),
             current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
         )
         session.add(sub)
 
-        # 2. Seed a public debate
+        # A stale row can remain status=active if provider reconciliation/webhook
+        # delivery lags. It must not inflate current MRR after its period ended.
+        expired_sub = BillingSubscription(
+            user_id=member_id,
+            plan_id=pro_plan.id,
+            status="active",
+            provider="stripe",
+            provider_subscription_id=f"sub_expired_{uuid.uuid4().hex[:6]}",
+            provider_customer_id=f"cus_expired_{uuid.uuid4().hex[:6]}",
+            current_period_start=datetime.now(timezone.utc) - timedelta(days=60),
+            current_period_end=datetime.now(timezone.utc) - timedelta(days=30),
+        )
+        session.add(expired_sub)
+
+        # 2. Seed a completed public decision artifact in the weekly cohort.
         pub_debate = Debate(
             id=str(uuid.uuid4()),
             prompt="Is recursion beautiful?",
@@ -208,79 +226,132 @@ def test_admin_metrics():
         )
         session.add(pub_debate)
 
-        # 3. Seed views and signups from the same IP to test PLG referrals
-        view_time = datetime.now(timezone.utc) - timedelta(minutes=10)
-        view_log = AuditLog(
-            action="view_shared_debate",
-            target_type="debate",
-            target_id=pub_debate.id,
-            meta={"ip_address": "192.168.1.50"},
-            created_at=view_time
+        # 3. Seed share/view/signup telemetry. Referral attribution should only
+        # accept a view in the seven days before the signup.
+        share_time = datetime.now(timezone.utc) - timedelta(minutes=15)
+        session.add(
+            AuditLog(
+                user_id=member_id,
+                action="debate_shared",
+                target_type="debate",
+                target_id=pub_debate.id,
+                meta={"is_public": True},
+                created_at=share_time,
+            )
         )
-        session.add(view_log)
+
+        view_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        session.add(
+            AuditLog(
+                action="view_shared_debate",
+                target_type="debate",
+                target_id=pub_debate.id,
+                meta={"ip_address": "192.168.1.50"},
+                created_at=view_time,
+            )
+        )
 
         signup_time = datetime.now(timezone.utc) - timedelta(minutes=5)
-        signup_log = AuditLog(
-            user_id=member_id,
-            action="register",
-            target_type="user",
-            target_id=member_id,
-            meta={"ip_address": "192.168.1.50"},
-            created_at=signup_time
+        session.add(
+            AuditLog(
+                user_id=member_id,
+                action="register",
+                target_type="user",
+                target_id=member_id,
+                meta={"ip_address": "192.168.1.50"},
+                created_at=signup_time,
+            )
         )
-        session.add(signup_log)
 
-        # 4. Seed LLM usage costs
+        # 4. Seed LLM usage with one success and one failed/fallback/retried call
+        # so quality and unit-economic rates are exercised.
         usage_log1 = LLMUsageLog(
+            debate_id=pub_debate.id,
+            user_id=member_id,
             provider="openai",
             model="gpt-4o",
             prompt_tokens=1000,
             completion_tokens=500,
             total_tokens=1500,
             cost_usd=0.015,
+            latency_ms=100.0,
             success=True,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(timezone.utc),
         )
         usage_log2 = LLMUsageLog(
+            debate_id=pub_debate.id,
+            user_id=member_id,
             provider="anthropic",
             model="claude-3-5-sonnet",
             prompt_tokens=2000,
             completion_tokens=1000,
             total_tokens=3000,
             cost_usd=0.045,
-            success=True,
-            created_at=datetime.now(timezone.utc)
+            latency_ms=300.0,
+            fallback_used=True,
+            fallback_reason="primary_unavailable",
+            retry_count=1,
+            success=False,
+            created_at=datetime.now(timezone.utc),
         )
         session.add(usage_log1)
         session.add(usage_log2)
 
         session.commit()
 
-        # Invoke admin_metrics
         res = admin_metrics(session=session, _=admin_db)
 
-    # Assert results
     assert "activation" in res
     assert "plg_sharing" in res
     assert "billing_conversion" in res
     assert "economics" in res
+    assert "ai_quality" in res
+    assert "definitions" in res
 
-    # Activation asserts
+    # Activation / cohort metrics.
     assert res["activation"]["dau"] >= 1
+    assert res["activation"]["wau"] >= res["activation"]["dau"]
+    assert res["activation"]["mau"] >= res["activation"]["wau"]
     assert res["activation"]["active_debates"] >= 1
+    assert res["activation"]["completed_runs_7d"] >= 1
+    assert res["activation"]["completed_runs_30d"] >= res["activation"]["completed_runs_7d"]
 
-    # PLG asserts
+    # PLG / sharing metrics.
     assert res["plg_sharing"]["public_debates"] >= 1
-    assert res["plg_sharing"]["shared_views"] >= 1
-    assert res["plg_sharing"]["referred_signups"] >= 1
-    assert res["plg_sharing"]["conversion_rate"] > 0.0
+    assert res["plg_sharing"]["weekly_shareable_artifacts"] >= 1
+    assert res["plg_sharing"]["weekly_share_enable_events"] >= 1
+    assert 0.0 <= res["plg_sharing"]["share_rate_7d"] <= 100.0
+    assert res["plg_sharing"]["shared_views_30d"] >= 1
+    assert res["plg_sharing"]["referred_signups_30d"] >= 1
+    assert res["plg_sharing"]["conversion_rate_30d"] > 0.0
+    assert res["plg_sharing"]["attribution_method"] == "ip_7d_proxy"
 
-    # Billing asserts
+    # Billing: Free and expired-active subscriptions must not be counted as paid
+    # MRR. Only the currently active $15 Pro subscription contributes.
     assert res["billing_conversion"]["pro_users"] >= 1
-    assert res["billing_conversion"]["subscription_statuses"].get("active", 0) >= 1
+    assert res["billing_conversion"]["active_paid_users"] == 1
+    assert res["billing_conversion"]["active_paid_subscriptions"] == 1
+    assert res["billing_conversion"]["subscription_statuses"].get("active", 0) >= 3
+    assert res["economics"]["estimated_mrr"] == pytest.approx(15.00)
+    assert res["economics"]["estimated_mrr_usd"] == pytest.approx(15.00)
+    assert res["economics"]["mrr_by_currency"]["USD"] == pytest.approx(15.00)
 
-    # Economics asserts
-    assert res["economics"]["estimated_mrr"] >= 15.00
+    # Unit economics.
     assert res["economics"]["cumulative_llm_cost"] >= 0.06
+    assert res["economics"]["llm_cost_30d"] >= 0.06
+    assert res["economics"]["completed_run_llm_cost_30d"] >= 0.06
+    assert res["economics"]["cost_per_completed_run_30d"] > 0.0
     assert res["economics"]["provider_cost_breakdown"]["openai"] >= 0.015
     assert res["economics"]["provider_cost_breakdown"]["anthropic"] >= 0.045
+    assert res["economics"]["provider_cost_breakdown_30d"]["openai"] >= 0.015
+
+    # AI quality / reliability.
+    assert res["ai_quality"]["model_calls_30d"] >= 2
+    assert res["ai_quality"]["failed_model_calls_30d"] >= 1
+    assert res["ai_quality"]["model_failure_rate_30d"] > 0.0
+    assert res["ai_quality"]["fallback_calls_30d"] >= 1
+    assert res["ai_quality"]["fallback_rate_30d"] > 0.0
+    assert res["ai_quality"]["retried_calls_30d"] >= 1
+    assert res["ai_quality"]["retry_rate_30d"] > 0.0
+    assert res["ai_quality"]["median_latency_ms_30d"] > 0.0
+    assert res["ai_quality"]["total_tokens_30d"] >= 4500

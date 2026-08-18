@@ -393,17 +393,19 @@ async def export_scores_csv(
     if not scores:
         raise NotFoundError(message="No scores found", code="scores.not_found")
 
+    # CSV generation is a small pure serialization step. Keep ORM objects and
+    # the request-scoped SQLModel Session on the request thread; SQLAlchemy
+    # sessions/attached ORM state are not safe to move through an executor.
     from billing.service import increment_export_usage
     from services.reporting import generate_csv_content
-    loop = asyncio.get_running_loop()
-    content = await loop.run_in_executor(None, lambda: generate_csv_content(scores))
-    
+    content = generate_csv_content(scores)
+
     increment_export_usage(session, current_user.id)
     from usage_limits import increment_export_usage_daily
     increment_export_usage_daily(session, current_user.id)
-    await loop.run_in_executor(None, session.commit)
-    
-    filename = f"scores_{debate_id}.csv"
+
+    # Stage the audit row before the single commit so usage accounting and audit
+    # evidence are persisted atomically.
     from audit import record_audit
     record_audit(
         "export_scores_csv",
@@ -412,6 +414,9 @@ async def export_scores_csv(
         target_id=debate_id,
         session=session,
     )
+    session.commit()
+
+    filename = f"scores_{debate_id}.csv"
     from fastapi import Response
     return Response(
         content=content,

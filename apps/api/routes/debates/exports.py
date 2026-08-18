@@ -26,17 +26,16 @@ async def export_debate_report(
     current_user: User = Depends(get_current_user),
 ):
     from services.reporting import build_report, report_to_markdown
-    
+
     # Check export quota BEFORE doing expensive work (Patchset 65.B1)
     check_export_quota(session, current_user.id)
-    
-    # Run heavy export generation in thread pool
+
+    # SQLAlchemy/SQLModel sessions are not thread-safe. Keep all DB access on
+    # the request thread and offload only the pure report rendering step.
+    report = build_report(session, debate_id, current_user)
     loop = asyncio.get_running_loop()
-    content = await loop.run_in_executor(
-        None, 
-        lambda: report_to_markdown(build_report(session, debate_id, current_user))
-    )
-    
+    content = await loop.run_in_executor(None, lambda: report_to_markdown(report))
+
     # Only increment and commit if export succeeded
     increment_export_usage(session, current_user.id)
     from usage_limits import increment_export_usage_daily
@@ -45,14 +44,15 @@ async def export_debate_report(
     from services.usage_ledger import record_export
     record_export(session, user_id=current_user.id, debate_id=debate_id)
     session.commit()
-    
+
     track_metric("exports_generated")
+    # Usage mutations are already committed. Persist the audit event in its own
+    # transaction because the request session does not commit on teardown.
     record_audit(
         "export_markdown",
         user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
-        session=session,
     )
     return PlainTextResponse(
         content=content,

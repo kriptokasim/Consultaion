@@ -3,6 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from routes.admin.alerts import admin_test_alert, router as alerts_router, update_ratings_endpoint
+from routes.admin.entitlements import (
+    ManualEntitlementGrantRequest,
+    admin_grant_manual_entitlement,
+    admin_revoke_manual_entitlement,
+    router as entitlements_router,
+)
 from routes.admin.leases import admin_leases, router as leases_router
 from routes.admin.logs import admin_events, admin_logs, router as logs_router
 from routes.admin.metrics import admin_metrics, router as metrics_router
@@ -18,6 +24,7 @@ from routes.admin.providers import (
     admin_test_provider,
     router as providers_router,
 )
+from routes.admin.referrals import admin_referral_metrics, router as referrals_router
 from routes.admin.usage import admin_quota_usage, admin_usage_overview, router as usage_router
 from routes.admin.users import (
     UpdateUserStatusRequest,
@@ -35,6 +42,7 @@ from routes.admin.users import (
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 router.include_router(users_router)
+router.include_router(entitlements_router)
 router.include_router(usage_router)
 router.include_router(operations_router)
 router.include_router(models_router)
@@ -43,6 +51,7 @@ router.include_router(leases_router)
 router.include_router(logs_router)
 router.include_router(providers_router)
 router.include_router(metrics_router)
+router.include_router(referrals_router)
 router.include_router(alerts_router)
 
 admin_router = router
@@ -56,6 +65,7 @@ __all__ = [
     "admin_leases",
     "admin_logs",
     "admin_metrics",
+    "admin_referral_metrics",
     "admin_models",
     "admin_ops_summary",
     "admin_purge_old_data",
@@ -64,6 +74,9 @@ __all__ = [
     "admin_test_provider",
     "admin_quota_usage",
     "admin_usage_overview",
+    "ManualEntitlementGrantRequest",
+    "admin_grant_manual_entitlement",
+    "admin_revoke_manual_entitlement",
     "UpdateUserStatusRequest",
     "admin_create_user_note",
     "admin_get_user_notes",

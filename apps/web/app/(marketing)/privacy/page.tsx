@@ -70,7 +70,7 @@ export default async function PrivacyPage() {
 
                     <section className="space-y-2">
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">6. Contact</h2>
-                        <p>For privacy questions, contact us at <a href="mailto:privacy@consultaion.com" className="text-amber-700 underline">privacy@consultaion.com</a>.</p>
+                        <p>For privacy questions, contact us at <a href="mailto:info@consultaion.com" className="text-amber-700 underline">info@consultaion.com</a>.</p>
                     </section>
 
                     <div className="pt-4 border-t border-amber-200/50 text-sm text-amber-900/60 dark:border-slate-800 dark:text-slate-400/60">

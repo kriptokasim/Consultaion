@@ -13,9 +13,13 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import sqlalchemy as sa
+from sqlmodel import Session, select
+
 from auth import hash_password
+from billing.models import BillingSubscription, ReferralAttribution
 from models import (
     APIKey,
+    AdminEvent,
     AuditLog,
     ChallengeRound,
     ChallengeSession,
@@ -26,9 +30,12 @@ from models import (
     ConversationVote,
     Debate,
     DebateAttempt,
+    DebateContinuation,
+    DebateError,
     DebateRound,
     DebateStageCheckpoint,
     DebateTurn,
+    DivergenceReport,
     LLMUsageLog,
     Message,
     OracleBranch,
@@ -38,6 +45,7 @@ from models import (
     Score,
     SupportNote,
     TeamMember,
+    TerminalTransition,
     UsageCounter,
     UsageLedgerEntry,
     UsageQuota,
@@ -49,11 +57,9 @@ from models import (
     VoteRecord,
     utcnow,
 )
-from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
-# Valid anonymized email domain — non-routable
 _ANONYMIZED_DOMAIN = "invalid.local"
 
 
@@ -66,14 +72,33 @@ class AccountErasureResult:
     completed_at: datetime
 
 
-PII_KEYS = {"email", "ip_address", "ip", "remote_addr", "email_address"}
+PII_KEYS = {
+    "email",
+    "email_address",
+    "target_email",
+    "user_email",
+    "ip",
+    "ip_address",
+    "client_ip",
+    "remote_addr",
+}
+
+
+def _is_pii_key(key: object) -> bool:
+    normalized = str(key).strip().lower()
+    return (
+        normalized in PII_KEYS
+        or normalized.endswith("_email")
+        or normalized.endswith("_ip")
+        or normalized.endswith("_ip_address")
+    )
 
 
 def _scrub_pii(value):
     """Recursively redact PII-bearing keys in JSON-compatible metadata."""
     if isinstance(value, dict):
         return {
-            key: "[REDACTED]" if str(key).lower() in PII_KEYS else _scrub_pii(item)
+            key: "[REDACTED]" if _is_pii_key(key) else _scrub_pii(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -91,19 +116,10 @@ def erase_user_account(
 
     Caller controls commit/rollback. This function stages all changes
     on the session but does NOT commit.
-
-    Args:
-        session: Active SQLModel session.
-        user: The User ORM instance to erase.
-        reason: Audit label (e.g. "user_request", "gdpr_scheduled").
-
-    Returns:
-        AccountErasureResult with counts for audit logging.
     """
     user_id = user.id
     deleted_email = f"deleted+{secrets.token_hex(8)}@{_ANONYMIZED_DOMAIN}"
 
-    # ── C1: User anonymization ──────────────────────────────────────
     user.email = deleted_email
     user.display_name = None
     user.avatar_url = None
@@ -114,17 +130,17 @@ def erase_user_account(
     user.deletion_requested_at = None
     user.deleted_at = utcnow()
     user.is_active = False
-    # Reset lockout metadata
     user.failed_login_attempts = 0
     user.locked_until = None
     user.last_failed_login_at = None
     session.add(user)
 
-    # ── C2: Delete direct user-owned records ────────────────────────
+    user_debates = session.exec(select(Debate).where(Debate.user_id == user_id)).all()
+    debate_ids = [d.id for d in user_debates]
+
     session.execute(sa.delete(APIKey).where(APIKey.user_id == user_id))
     session.execute(sa.delete(UserProviderKey).where(UserProviderKey.user_id == user_id))
     session.execute(sa.delete(SupportNote).where(SupportNote.author_id == user_id))
-    # Anonymize support notes ABOUT the user (retained for support history)
     session.execute(
         sa.update(SupportNote)
         .where(SupportNote.user_id == user_id)
@@ -138,8 +154,36 @@ def erase_user_account(
     session.execute(sa.delete(LLMUsageLog).where(LLMUsageLog.user_id == user_id))
     session.execute(sa.delete(UsageLedgerEntry).where(UsageLedgerEntry.user_id == user_id))
     session.execute(sa.delete(ConversationVote).where(ConversationVote.user_id == user_id))
+    session.execute(sa.delete(DebateError).where(DebateError.user_id == user_id))
 
-    # Coding-agent artifacts can contain user prompts, source diffs, and model output.
+    # Manual grants are non-revenue support/trial records and may contain a
+    # free-form reason. Remove target-user grants; detach a deleted granting
+    # admin from other users' surviving entitlement facts.
+    session.execute(
+        sa.delete(BillingSubscription)
+        .where(BillingSubscription.user_id == user_id)
+        .where(BillingSubscription.provider == "manual")
+    )
+    session.execute(
+        sa.update(BillingSubscription)
+        .where(BillingSubscription.granted_by_user_id == user_id)
+        .values(granted_by_user_id=None)
+    )
+
+    # Referral tokens store no raw visitor identity/IP, but creator/claim user
+    # IDs are still account links. Detach both on erasure while retaining only
+    # aggregate token visit/claim facts for product analytics.
+    session.execute(
+        sa.update(ReferralAttribution)
+        .where(ReferralAttribution.created_by_user_id == user_id)
+        .values(created_by_user_id=None)
+    )
+    session.execute(
+        sa.update(ReferralAttribution)
+        .where(ReferralAttribution.claimed_by_user_id == user_id)
+        .values(claimed_by_user_id=None)
+    )
+
     coding_run_ids = sa.select(CodingRun.id).where(CodingRun.user_id == user_id)
     session.execute(
         sa.delete(CodingPatchArtifact).where(CodingPatchArtifact.coding_run_id.in_(coding_run_ids))
@@ -150,48 +194,50 @@ def erase_user_account(
     session.execute(sa.delete(CodingTurn).where(CodingTurn.coding_run_id.in_(coding_run_ids)))
     session.execute(sa.delete(CodingRun).where(CodingRun.user_id == user_id))
 
-    # Challenge/oracle/red-team sessions
-    session.execute(sa.delete(ChallengeRound).where(
-        ChallengeRound.session_id.in_(
-            sa.select(ChallengeSession.id).where(ChallengeSession.user_id == user_id)
+    session.execute(
+        sa.delete(ChallengeRound).where(
+            ChallengeRound.session_id.in_(
+                sa.select(ChallengeSession.id).where(ChallengeSession.user_id == user_id)
+            )
         )
-    ))
+    )
     session.execute(sa.delete(ChallengeSession).where(ChallengeSession.user_id == user_id))
-    session.execute(sa.delete(OracleBranch).where(
-        OracleBranch.session_id.in_(
-            sa.select(OracleSession.id).where(OracleSession.user_id == user_id)
+    session.execute(
+        sa.delete(OracleBranch).where(
+            OracleBranch.session_id.in_(
+                sa.select(OracleSession.id).where(OracleSession.user_id == user_id)
+            )
         )
-    ))
+    )
     session.execute(sa.delete(OracleSession).where(OracleSession.user_id == user_id))
     session.execute(sa.delete(RedTeamSession).where(RedTeamSession.user_id == user_id))
 
-    # Debate attempts via subquery
-    session.execute(sa.delete(DebateAttempt).where(DebateAttempt.debate_id.in_(
-        sa.select(Debate.id).where(Debate.user_id == user_id)
-    )))
-    # Debate stage checkpoints
-    session.execute(sa.delete(DebateStageCheckpoint).where(DebateStageCheckpoint.debate_id.in_(
-        sa.select(Debate.id).where(Debate.user_id == user_id)
-    )))
+    if debate_ids:
+        session.execute(
+            sa.update(DebateAttempt)
+            .where(DebateAttempt.debate_id.in_(debate_ids))
+            .values(error_summary=None, meta=None)
+        )
+        session.execute(
+            sa.delete(DebateStageCheckpoint).where(
+                DebateStageCheckpoint.debate_id.in_(debate_ids)
+            )
+        )
 
-    # ── Anonymize retained Debate data ──────────────────────────────
-    user_debates = session.exec(
-        select(Debate).where(Debate.user_id == user_id)
-    ).all()
-    debate_ids = [d.id for d in user_debates]
     anonymized_count = 0
     for debate in user_debates:
         if debate.prompt != "[DELETED]":
-            debate.prompt = "[DELETED]"
-            debate.final_content = None
-            debate.final_meta = None
-            debate.config = None
-            debate.panel_config = None
-            debate.user_id = None
             anonymized_count += 1
+        debate.prompt = "[DELETED]"
+        debate.final_content = None
+        debate.final_meta = None
+        debate.config = None
+        debate.panel_config = None
+        debate.routing_meta = None
+        debate.team_id = None
+        debate.user_id = None
     session.add_all(user_debates)
 
-    # ── Anonymize/delete related debate data ────────────────────────
     if debate_ids:
         session.execute(
             sa.update(Message)
@@ -204,10 +250,30 @@ def erase_user_account(
         session.execute(sa.delete(VoteRecord).where(VoteRecord.debate_id.in_(debate_ids)))
         session.execute(sa.delete(DebateRound).where(DebateRound.debate_id.in_(debate_ids)))
         session.execute(sa.delete(DebateTurn).where(DebateTurn.debate_id.in_(debate_ids)))
+        session.execute(sa.delete(DivergenceReport).where(DivergenceReport.debate_id.in_(debate_ids)))
+        session.execute(
+            sa.update(DebateContinuation)
+            .where(DebateContinuation.debate_id.in_(debate_ids))
+            .values(user_id=None, failure_detail_safe=None)
+        )
+        session.execute(
+            sa.update(TerminalTransition)
+            .where(TerminalTransition.debate_id.in_(debate_ids))
+            .values(meta=None)
+        )
+        session.execute(
+            sa.update(AdminEvent)
+            .where(AdminEvent.debate_id.in_(debate_ids))
+            .values(message="[User deleted]", trace_id=None, meta=None)
+        )
 
-    # ── Scrub PII from retained AuditLog metadata ──────────────────
     audit_logs = session.exec(
-        select(AuditLog).where(AuditLog.user_id == user_id)
+        select(AuditLog).where(
+            sa.or_(
+                AuditLog.user_id == user_id,
+                sa.and_(AuditLog.target_type == "user", AuditLog.target_id == user_id),
+            )
+        )
     ).all()
     for log in audit_logs:
         if log.meta:

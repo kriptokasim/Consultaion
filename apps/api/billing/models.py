@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 from models import utcnow
 from pydantic import ConfigDict
-from sqlalchemy import JSON, Column, DateTime, Numeric, String, UniqueConstraint, text
+from sqlalchemy import JSON, Column, DateTime, Index, Numeric, String, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -32,9 +32,18 @@ class BillingPlan(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
+
 class BillingSubscription(SQLModel, table=True):
     __tablename__ = "billing_subscriptions"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        Index(
+            "uq_billing_subscriptions_provider_ref",
+            "provider",
+            "provider_subscription_id",
+            unique=True,
+        ),
+        {"extend_existing": True},
+    )
     model_config = ConfigDict(protected_namespaces=())
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
@@ -47,8 +56,51 @@ class BillingSubscription(SQLModel, table=True):
     provider: str = Field(nullable=False)
     provider_customer_id: Optional[str] = Field(default=None)
     provider_subscription_id: Optional[str] = Field(default=None)
+    # Non-provider/manual entitlement metadata. ``provider='manual'`` rows use
+    # ``status='trialing'`` so they grant product access without being counted
+    # as paid MRR by active-subscription revenue metrics.
+    entitlement_source: Optional[str] = Field(default=None, max_length=64)
+    entitlement_reason: Optional[str] = Field(default=None, max_length=500)
+    granted_by_user_id: Optional[str] = Field(default=None, max_length=64)
+    # Stripe webhook delivery order is not guaranteed. Persist the provider's
+    # event creation time so an older state event cannot overwrite a newer
+    # active/cancelled state after retries or delayed delivery.
+    provider_event_created_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
+
+class ReferralAttribution(SQLModel, table=True):
+    """Privacy-preserving public-share attribution.
+
+    Raw referral tokens are never stored. Only a SHA-256 token hash is persisted,
+    which allows unique visit/claim attribution without retaining visitor IPs.
+    User links are nullable so account erasure can detach attribution identity
+    while retaining aggregate visit/conversion facts.
+    """
+
+    __tablename__ = "referral_attributions"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_referral_attributions_token_hash"),
+        {"extend_existing": True},
+    )
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True, nullable=False)
+    token_hash: str = Field(nullable=False, index=True, max_length=64)
+    debate_id: str = Field(foreign_key="debate.id", nullable=False, index=True)
+    created_by_user_id: Optional[str] = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    view_count: int = Field(default=0, nullable=False)
+    visited_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    last_visited_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    claimed_by_user_id: Optional[str] = Field(default=None, foreign_key="user.id", index=True)
+    claimed_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    expires_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+
 
 class BillingUsage(SQLModel, table=True):
     __tablename__ = "billing_usage"
@@ -122,4 +174,3 @@ class BillingReconciliationDiscrepancy(SQLModel, table=True):
     severity: str = Field(default="warning", nullable=False)  # "warning", "critical"
     details: Optional[str] = Field(default=None, sa_column=Column(String(1000), nullable=True))
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
-

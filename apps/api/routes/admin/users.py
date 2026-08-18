@@ -58,7 +58,7 @@ def admin_users(
     search_text = q or email
     q_lower = search_text.lower() if search_text else None
 
-    # Prefetch plans, subscriptions, and usages
+    # Prefetch plans, subscriptions, and usages.
     from billing.models import BillingSubscription, BillingUsage
     from security.owner import is_owner
 
@@ -76,8 +76,9 @@ def admin_users(
             select(BillingSubscription)
             .where(
                 BillingSubscription.user_id.in_(user_ids),
-                BillingSubscription.status == "active",
-                BillingSubscription.current_period_end >= now_dt,
+                BillingSubscription.status.in_(["active", "trialing"]),
+                BillingSubscription.current_period_start <= now_dt,
+                BillingSubscription.current_period_end > now_dt,
             )
             .order_by(BillingSubscription.current_period_end.desc())
         ).all()
@@ -106,7 +107,8 @@ def admin_users(
             if not email_match and not display_match:
                 continue
 
-        # Resolve active plan in-memory
+        # Resolve active plan in-memory using the same entitled statuses/window
+        # as billing.service.get_active_plan().
         plan = None
         if is_owner(user):
             owner_slug = settings.OWNER_PLAN
@@ -174,7 +176,9 @@ def admin_user_detail(
         plan = None
     usage = _latest_usage(session, user.id)
     subscriptions = session.exec(
-        select(BillingSubscription).where(BillingSubscription.user_id == user.id).order_by(BillingSubscription.created_at.desc())
+        select(BillingSubscription)
+        .where(BillingSubscription.user_id == user.id)
+        .order_by(BillingSubscription.created_at.desc())
     ).all()
     subs_payload = [
         {
@@ -204,16 +208,20 @@ def admin_user_billing(
 ):
     user = session.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="user not found")
+        raise HTTPException(status_code=404, detail="User not found")
     plan = None
     try:
         plan = get_active_plan(session, user.id)
     except HTTPException:
         plan = None
     from billing.service import _current_period
+
     current_period = _current_period()
     usage = session.exec(
-        select(BillingUsage).where(BillingUsage.user_id == user.id, BillingUsage.period == current_period)
+        select(BillingUsage).where(
+            BillingUsage.user_id == user.id,
+            BillingUsage.period == current_period,
+        )
     ).first()
     return {
         "plan": _plan_payload(plan),
@@ -229,68 +237,65 @@ def change_user_plan(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
-    """
-    Change a user's subscription plan (admin only).
-    
-    Validates that the plan exists and logs the change for audit purposes.
-    
-    Args:
-        user_id: ID of user to update
-        request: ChangePlanRequest with new plan name
-        session: Database session
-        admin: Current admin user (auth check)
-    
-    Returns:
-        Updated user info with old and new plan
-    
-    Raises:
-        HTTPException: 400 if plan invalid, 404 if user not found
-    """
-    import logging
+    """Change a user's subscription plan (admin only).
 
+    Valid plans: free, pro, internal. This operation is logged.
+    The change takes effect immediately.
+    """
+    # Compatibility note: this endpoint currently updates the legacy User.plan
+    # marker only. Canonical paid entitlement is BillingSubscription; the
+    # response explicitly exposes that distinction until manual overrides have
+    # a first-class source/expiry model.
     from plan_config import validate_plan
-    
-    logger = logging.getLogger(__name__)
-    
-    # Validate plan exists
+
     if not validate_plan(request.plan):
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid plan: {request.plan}. Must be one of: free, pro, internal"
+            detail=f"Invalid plan: {request.plan}. Must be one of: free, pro, internal",
         )
-    
-    # Get user
+
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     old_plan = user.plan
     user.plan = request.plan
+    session.add(user)
     session.commit()
-    
-    # Audit log
+
     logger.info(
-        f"Plan changed by admin {admin.email} ({admin.id}): "
-        f"user={user.email} ({user.id}) old_plan={old_plan} new_plan={request.plan}"
+        "Plan marker changed by admin %s (%s): user=%s (%s) old_plan=%s new_plan=%s",
+        admin.email,
+        admin.id,
+        user.email,
+        user.id,
+        old_plan,
+        request.plan,
     )
-    
+
     from audit import record_audit
+
     record_audit(
         "plan_changed",
         user_id=admin.id,
         target_type="user",
         target_id=user.id,
-
-        meta={"old_plan": old_plan, "new_plan": request.plan, "target_email": user.email},
+        meta={
+            "old_plan": old_plan,
+            "new_plan": request.plan,
+            "target_email": user.email,
+            "entitlement_source": "user_plan_marker_only",
+        },
         ip_address=req.client.host if req.client else None,
-        session=session,
     )
-    
+
     return {
         "user_id": user.id,
         "email": user.email,
         "old_plan": old_plan,
         "new_plan": request.plan,
+        "entitlement_updated": False,
+        "warning": "BillingSubscription is the canonical paid entitlement source; this endpoint changed only the legacy user plan marker.",
     }
 
 
@@ -300,29 +305,24 @@ def admin_user_summary(
     session: Session = Depends(get_session),
     _: User = Depends(get_current_admin),
 ):
-    """
-    Get comprehensive user summary including quota, recent debates, and feedback.
-    """
+    """Get comprehensive user summary including quota, recent debates, and feedback."""
     from plan_config import get_plan_limits
     from usage_limits import get_today_usage
-    
-    # Get user
+
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # Get quota usage
+
     usage = get_today_usage(session, user_id)
     limits = get_plan_limits(user.plan)
-    
-    # Get recent debates
+
     recent_debates = session.exec(
         select(Debate)
         .where(Debate.user_id == user_id)
         .order_by(Debate.created_at.desc())
         .limit(10)
     ).all()
-    
+
     debates_data = [
         {
             "id": debate.id,
@@ -333,23 +333,22 @@ def admin_user_summary(
         }
         for debate in recent_debates
     ]
-    
-    # Feedback summary (stub for now - actual implementation would query feedback table)
+
     feedback_summary = {
         "total": 0,
         "helpful": 0,
         "not_helpful": 0,
     }
-    
-    # Patchset 57.0: Get recent debate errors from DebateError table
+
     from models import DebateError
+
     recent_errors_rows = session.exec(
         select(DebateError)
         .where(DebateError.user_id == user_id)
         .order_by(DebateError.created_at.desc())
         .limit(10)
     ).all()
-    
+
     recent_errors = [
         {
             "debate_id": err.debate_id,
@@ -359,7 +358,7 @@ def admin_user_summary(
         }
         for err in recent_errors_rows
     ]
-    
+
     return {
         "user": {
             "id": user.id,
@@ -372,10 +371,14 @@ def admin_user_summary(
         "quota": {
             "tokens_used_today": usage["tokens_used"],
             "daily_token_limit": limits.daily_token_limit,
-            "token_usage_pct": round(usage["tokens_used"] / limits.daily_token_limit * 100, 1) if limits.daily_token_limit > 0 else 0,
+            "token_usage_pct": round(usage["tokens_used"] / limits.daily_token_limit * 100, 1)
+            if limits.daily_token_limit > 0
+            else 0,
             "exports_used_today": usage["exports_used"],
             "daily_export_limit": limits.daily_export_limit,
-            "export_usage_pct": round(usage["exports_used"] / limits.daily_export_limit * 100, 1) if limits.daily_export_limit > 0 else 0,
+            "export_usage_pct": round(usage["exports_used"] / limits.daily_export_limit * 100, 1)
+            if limits.daily_export_limit > 0
+            else 0,
         },
         "recent_debates": debates_data,
         "feedback_summary": feedback_summary,
@@ -390,28 +393,24 @@ def admin_get_user_notes(
     session: Session = Depends(get_session),
     _: User = Depends(get_current_admin),
 ):
-    """
-    Get support notes for a user, ordered by newest first.
-    """
-    # Verify user exists
+    """Get support notes for a user, ordered by newest first."""
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     notes = session.exec(
         select(SupportNote)
         .where(SupportNote.user_id == user_id)
         .order_by(SupportNote.created_at.desc())
         .limit(limit)
     ).all()
-    
-    # Get author emails
+
     author_ids = [note.author_id for note in notes if note.author_id]
     authors = {}
     if author_ids:
         author_users = session.exec(select(User).where(User.id.in_(author_ids))).all()
         authors = {u.id: u.email for u in author_users}
-    
+
     return {
         "notes": [
             {
@@ -433,15 +432,11 @@ def admin_create_user_note(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
-    """
-    Create a support note for a user.
-    """
-    # Verify user exists
+    """Create a support note for a user."""
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # Create note
+
     note = SupportNote(
         user_id=user_id,
         author_id=admin.id,
@@ -450,10 +445,11 @@ def admin_create_user_note(
     session.add(note)
     session.commit()
     session.refresh(note)
-    
-    logger.info(f"Support note created by {admin.email} for user {user.email}: {note.id}")
+
+    logger.info("Support note created by %s for user %s: %s", admin.email, user.email, note.id)
 
     from audit import record_audit
+
     record_audit(
         "create_support_note",
         user_id=admin.id,
@@ -461,9 +457,8 @@ def admin_create_user_note(
         target_id=user.id,
         meta={"note_id": note.id, "target_email": user.email},
         ip_address=req.client.host if req.client else None,
-        session=session,
     )
-    
+
     return {
         "id": note.id,
         "note": note.note,
@@ -480,26 +475,33 @@ def admin_update_user_status(
     session: Session = Depends(get_session),
     admin: User = Depends(get_current_admin),
 ):
-    """
-    Enable or disable a user account.
+    """Enable or disable a user account.
+
     Disabled users cannot create debates or use most features.
+    This operation is logged.
     """
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     old_status = user.is_active
     user.is_active = request.is_active
+    session.add(user)
     session.commit()
-    
+
     action = "enabled" if request.is_active else "disabled"
     logger.info(
-        f"User account {action} by admin {admin.email}: "
-        f"user={user.email} ({user.id}) old_status={old_status} new_status={request.is_active}"
+        "User account %s by admin %s: user=%s (%s) old_status=%s new_status=%s",
+        action,
+        admin.email,
+        user.email,
+        user.id,
+        old_status,
+        request.is_active,
     )
-    
-    # Create audit log
+
     from audit import record_audit
+
     record_audit(
         f"account_{action}",
         user_id=admin.id,
@@ -507,9 +509,8 @@ def admin_update_user_status(
         target_id=user.id,
         meta={"old_status": old_status, "new_status": request.is_active, "target_email": user.email},
         ip_address=req.client.host if req.client else None,
-        session=session,
     )
-    
+
     return {
         "user_id": user.id,
         "email": user.email,

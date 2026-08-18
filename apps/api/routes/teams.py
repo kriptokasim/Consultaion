@@ -55,12 +55,14 @@ async def create_team(
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="team name required")
+
+    # Team creation, initial ownership, and its audit event are one domain
+    # transaction. The previous two-commit flow could leave an ownerless Team if
+    # the membership insert failed after the Team row had already committed.
     team = Team(name=name)
+    owner = TeamMember(team_id=team.id, user_id=current_user.id, role="owner")
     session.add(team)
-    session.commit()
-    session.refresh(team)
-    session.add(TeamMember(team_id=team.id, user_id=current_user.id, role="owner"))
-    session.commit()
+    session.add(owner)
     record_audit(
         "team_created",
         user_id=current_user.id,
@@ -69,6 +71,12 @@ async def create_team(
         meta={"name": team.name},
         session=session,
     )
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="team creation conflict") from None
+    session.refresh(team)
     return serialize_team(team, "owner")
 
 
@@ -158,11 +166,9 @@ async def add_team_member(
     else:
         member = TeamMember(team_id=team.id, user_id=user.id, role=body.role)
         session.add(member)
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise HTTPException(status_code=409, detail="team member already exists") from None
+
+    # Membership/role authorization changes and their audit evidence are one
+    # transaction. If the mutation rolls back, the audit rolls back with it.
     record_audit(
         "team_member_added",
         user_id=current_user.id,
@@ -171,6 +177,11 @@ async def add_team_member(
         meta={"member_id": member.user_id, "role": member.role},
         session=session,
     )
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="team member already exists") from None
     return {
         "id": member.id,
         "team_id": member.team_id,

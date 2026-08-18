@@ -50,6 +50,7 @@ def build_router_registry() -> List[RouterRegistration]:
     from routes.provider_keys import router as provider_keys_router
     from routes.public_stats import router as public_stats_router
     from routes.redteam import router as redteam_router
+    from routes.referrals import router as referrals_router
     from routes.routing_admin import router as routing_admin_router
     from routes.stats import router as stats_router
     from routes.teams import router as teams_router
@@ -71,6 +72,7 @@ def build_router_registry() -> List[RouterRegistration]:
         RouterRegistration(oracle_router),
         RouterRegistration(challenge_router),
         RouterRegistration(public_stats_router),
+        RouterRegistration(referrals_router),
         RouterRegistration(routing_admin_router),
         RouterRegistration(billing_router),
         RouterRegistration(promotions_router),

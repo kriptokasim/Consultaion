@@ -47,6 +47,33 @@ class TestDebateConfigV2:
         assert restored.max_rounds == 3
         assert restored.mode == "arena"
 
+    def test_production_nested_fields_are_not_dropped(self):
+        data = {
+            "agents": [
+                {
+                    "name": "Analyst",
+                    "persona": "Systems thinker",
+                    "model": "openai/gpt-4o-mini",
+                    "tools": ["retrieval"],
+                }
+            ],
+            "judges": [
+                {
+                    "name": "JudgeAlpha",
+                    "model": "openai/gpt-4o-mini",
+                    "rubrics": ["accuracy", "risk"],
+                }
+            ],
+            "budget": {"max_tokens": 1000, "max_cost_usd": 1.0},
+        }
+        restored = validate_debate_config(data).model_dump()
+        assert restored["agents"][0]["name"] == "Analyst"
+        assert restored["agents"][0]["persona"] == "Systems thinker"
+        assert restored["agents"][0]["tools"] == ["retrieval"]
+        assert restored["judges"][0]["name"] == "JudgeAlpha"
+        assert restored["judges"][0]["rubrics"] == ["accuracy", "risk"]
+        assert restored["budget"]["max_tokens"] == 1000
+
 
 class TestFinalMetaV2:
     def test_current_version(self):
@@ -107,8 +134,29 @@ class TestMigration:
         result = migrate_config_v1_to_v2(data)
         assert result["max_rounds"] == 10
 
+    def test_config_migration_does_not_mutate_caller_data(self):
+        data = {
+            "schema_version": 1,
+            "agents": [{"name": "Analyst", "tools": ["retrieval"]}],
+        }
+        original = {
+            "schema_version": 1,
+            "agents": [{"name": "Analyst", "tools": ["retrieval"]}],
+        }
+        result = migrate_config_v1_to_v2(data)
+        assert data == original
+        assert result is not data
+        assert result["schema_version"] == 2
+
     def test_final_meta_v1_to_v2_adds_counters(self):
         data = {"schema_version": 1, "winner": "a"}
         result = migrate_final_meta_v1_to_v2(data)
         assert result["attempt_count"] == 0
         assert result["continuation_count"] == 0
+
+    def test_final_meta_migration_does_not_mutate_caller_data(self):
+        data = {"schema_version": 1, "winner": "a"}
+        original = dict(data)
+        result = migrate_final_meta_v1_to_v2(data)
+        assert data == original
+        assert result is not data

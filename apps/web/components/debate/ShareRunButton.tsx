@@ -8,6 +8,22 @@ import { fetchWithAuth } from "@/lib/auth";
 import { trackEvent } from "@/lib/analytics";
 import * as Dialog from "@radix-ui/react-dialog";
 
+type ShareResponse = {
+    id: string;
+    is_public: boolean;
+    referral_token?: string | null;
+};
+
+function buildPublicShareUrl(referralToken?: string | null): string {
+    const url = new URL(window.location.href);
+    if (referralToken) {
+        url.searchParams.set("ref", referralToken);
+    } else {
+        url.searchParams.delete("ref");
+    }
+    return url.toString();
+}
+
 export function ShareRunButton({ debateId, initiallyPublic = false, modelCount = 0, hasSynthesis = false }: { debateId: string; initiallyPublic?: boolean; modelCount?: number; hasSynthesis?: boolean }) {
     const [isShared, setIsShared] = useState(initiallyPublic);
     const [isSharing, setIsSharing] = useState(false);
@@ -15,8 +31,8 @@ export function ShareRunButton({ debateId, initiallyPublic = false, modelCount =
     const [open, setOpen] = useState(false);
     const { pushToast } = useToast();
 
-    const handleCopy = () => {
-        navigator.clipboard.writeText(window.location.href);
+    const copyUrl = async (url: string) => {
+        await navigator.clipboard.writeText(url);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
         pushToast({
@@ -24,25 +40,48 @@ export function ShareRunButton({ debateId, initiallyPublic = false, modelCount =
             description: "Anyone with the link can view this run.",
             variant: "success"
         });
-        trackEvent("arena_share_link_copied", { debate_id: debateId, is_public: isShared });
+        trackEvent("arena_share_link_copied", { debate_id: debateId, is_public: true });
+    };
+
+    const updateShareState = async (makePublic: boolean): Promise<ShareResponse> => {
+        const res = await fetchWithAuth(`/debates/${debateId}/share`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_public: makePublic }),
+        });
+        if (!res.ok) throw new Error("Failed to update share state");
+        return res.json() as Promise<ShareResponse>;
+    };
+
+    const copyFreshPublicLink = async () => {
+        setIsSharing(true);
+        try {
+            // Mint a fresh attribution token for each copied public link. This
+            // allows unique visit→signup attribution without visitor IP storage.
+            const data = await updateShareState(true);
+            setIsShared(true);
+            await copyUrl(buildPublicShareUrl(data.referral_token));
+        } catch {
+            pushToast({
+                title: "Error",
+                description: "Could not create a public share link.",
+                variant: "error"
+            });
+        } finally {
+            setIsSharing(false);
+        }
     };
 
     const toggleShare = async (makePublic: boolean) => {
         setIsSharing(true);
         try {
-            const res = await fetchWithAuth(`/debates/${debateId}/share`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ is_public: makePublic }),
-            });
+            const data = await updateShareState(makePublic);
 
-            if (!res.ok) throw new Error("Failed to update share state");
-            
             setIsShared(makePublic);
             setOpen(false);
 
             if (makePublic) {
-                handleCopy();
+                await copyUrl(buildPublicShareUrl(data.referral_token));
                 trackEvent("arena_share_enabled", { debate_id: debateId, model_count: modelCount, has_synthesis: hasSynthesis, source: "arena_run_view" });
             } else {
                 pushToast({
@@ -94,13 +133,13 @@ export function ShareRunButton({ debateId, initiallyPublic = false, modelCount =
                     <Dialog.Description id="share-dialog-description" className="text-sm text-muted-foreground mb-6">
                         {dialogDescription}
                     </Dialog.Description>
-                    
+
                     <div className="flex flex-col gap-3">
                         {isShared ? (
                             <>
-                                <Button onClick={() => { handleCopy(); setOpen(false); }} className="w-full flex items-center gap-2">
+                                <Button onClick={async () => { await copyFreshPublicLink(); setOpen(false); }} disabled={isSharing} className="w-full flex items-center gap-2">
                                     {copied ? <Check className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
-                                    {copied ? "Copied" : "Copy public link"}
+                                    {copied ? "Copied" : isSharing ? "Creating link..." : "Copy public link"}
                                 </Button>
                                 <Button variant="outline" onClick={() => toggleShare(false)} disabled={isSharing} className="w-full text-error hover:text-error hover:bg-error/10 border-error/20 flex items-center gap-2">
                                     <Lock className="h-4 w-4" />

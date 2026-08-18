@@ -1,10 +1,12 @@
 import logging
 
+import sqlalchemy as sa
 from audit import record_audit
 from auth import get_current_user
+from billing.models import ReferralAttribution
 from deps import get_session
 from fastapi import APIRouter, Depends
-from models import Debate, User
+from models import Debate, User, utcnow
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -38,25 +40,50 @@ async def share_debate(
 
     if not debate.config:
         debate.config = {}
-    
+
     config = dict(debate.config)
     config["is_public"] = body.is_public
     debate.config = config
 
+    referral_token = None
+    if body.is_public:
+        from services.referrals import issue_referral_token
+
+        referral_token, _ = issue_referral_token(
+            session,
+            debate_id=debate.id,
+            created_by_user_id=current_user.id,
+        )
+    else:
+        # Revoking public access must revoke attribution eligibility as well.
+        # Otherwise old copied tokens could keep recording visits/claims while
+        # the underlying decision artifact is private.
+        session.execute(
+            sa.update(ReferralAttribution)
+            .where(ReferralAttribution.debate_id == debate.id)
+            .where(ReferralAttribution.expires_at > utcnow())
+            .values(expires_at=utcnow())
+        )
+
     session.add(debate)
     session.commit()
-    
-    # Audit log
+
     record_audit(
         "debate_shared",
         user_id=current_user.id,
         target_type="debate",
         target_id=debate.id,
-        meta={"is_public": body.is_public},
-        session=session,
+        meta={
+            "is_public": body.is_public,
+            "referral_token_issued": bool(referral_token),
+        },
     )
-    
-    return {"id": debate.id, "is_public": body.is_public}
+
+    return {
+        "id": debate.id,
+        "is_public": body.is_public,
+        "referral_token": referral_token,
+    }
 
 
 @router.post("/debates/{debate_id}/moderate")
@@ -104,7 +131,7 @@ async def get_argument_tree(
 ):
     from models import DebateTurn
     _debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
-    
+
     stmt = select(DebateTurn).where(DebateTurn.debate_id == debate_id).order_by(DebateTurn.round_index.asc())
     turns = session.exec(stmt).all()
 
@@ -120,7 +147,6 @@ async def get_argument_tree(
 
     nodes = []
     for t in turns:
-        # Skip moderator rows for tree nodes, but we could list them if needed.
         if t.agent_id == "moderator":
             continue
         if t.claims_nodes:
@@ -128,7 +154,7 @@ async def get_argument_tree(
                 target_raw = node.get("rebuts_target")
                 target_agent = raw_to_agent.get(target_raw) if target_raw else None
                 rebuts_target = f"{target_agent}_{target_raw}" if target_agent else None
-                
+
                 nodes.append({
                     "id": f"{t.agent_id}_{node.get('id')}",
                     "raw_id": node.get("id"),
