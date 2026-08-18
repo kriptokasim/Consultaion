@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import sqlalchemy as sa
 from billing.models import ReferralAttribution
-from models import utcnow
+from models import User, utcnow
 from sqlmodel import Session, select
 
 REFERRAL_TTL_DAYS = 30
@@ -20,6 +20,12 @@ def _token_hash(token: str) -> str | None:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def issue_referral_token(
     session: Session,
     *,
@@ -28,7 +34,6 @@ def issue_referral_token(
 ) -> tuple[str, ReferralAttribution]:
     """Create a one-way-hashed referral token for a public decision artifact."""
     now = utcnow()
-    # 192 bits of entropy before URL-safe base64 expansion.
     raw_token = secrets.token_urlsafe(24)
     digest = _token_hash(raw_token)
     assert digest is not None
@@ -77,17 +82,34 @@ def claim_referral(
     token: str,
     user_id: str,
 ) -> bool:
-    """Atomically bind a referral token to the first authenticated user.
+    """Atomically attribute a referral to the first *newly-created* account.
 
-    The conditional UPDATE is the concurrency authority. Two users racing to
-    claim the same token cannot overwrite one another; the loser re-reads the
-    winner and succeeds only when the existing claim already belongs to itself.
+    Existing users opening a public link must never inflate investor acquisition
+    metrics. A claim is therefore eligible only when the account was created on
+    or after the referral token was issued. The conditional UPDATE remains the
+    concurrency authority for two newly-created users racing to claim one token.
     """
     digest = _token_hash(token)
     if digest is None:
         return False
 
     now = utcnow()
+    referral = session.exec(
+        select(ReferralAttribution).where(ReferralAttribution.token_hash == digest)
+    ).first()
+    if referral is None or _as_utc(referral.expires_at) <= _as_utc(now):
+        return False
+
+    if referral.claimed_by_user_id:
+        return referral.claimed_by_user_id == user_id
+
+    user = session.get(User, user_id)
+    if user is None:
+        return False
+    if _as_utc(user.created_at) < _as_utc(referral.created_at):
+        # This account predates the share link: engagement, not acquisition.
+        return False
+
     stmt = (
         sa.update(ReferralAttribution)
         .where(ReferralAttribution.token_hash == digest)
@@ -104,9 +126,6 @@ def claim_referral(
                 (ReferralAttribution.last_visited_at.is_(None), now),
                 else_=ReferralAttribution.last_visited_at,
             ),
-            # A claim can beat the best-effort visit beacon. Ensure that such a
-            # token still contributes one unique visited token without
-            # artificially incrementing repeat-view counts.
             view_count=sa.case(
                 (ReferralAttribution.view_count < 1, 1),
                 else_=ReferralAttribution.view_count,
