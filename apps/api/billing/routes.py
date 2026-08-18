@@ -36,12 +36,13 @@ def csrf_exempt(func):
 
 
 def _emit_post_commit_events(payload: dict) -> None:
-    """Emit billing automation only for committed, non-duplicate transitions."""
+    """Emit billing automation only for committed, current state transitions."""
     from integrations.events import emit_event
 
-    # The provider sets this when the durable BillingWebhookEvent marker already
-    # exists. DB idempotency must extend to external side effects too.
-    if payload.get("_consultaion_duplicate") is True:
+    # DB idempotency and provider-state fencing must extend to external side
+    # effects. Neither duplicate deliveries nor stale out-of-order events may
+    # trigger CRM/n8n workflows.
+    if payload.get("_consultaion_duplicate") is True or payload.get("_consultaion_stale") is True:
         return
 
     event_type = payload.get("type", "")
@@ -54,8 +55,6 @@ def _emit_post_commit_events(payload: dict) -> None:
         status_value = data.get("status")
         user_id = metadata.get("user_id")
         plan_slug = metadata.get("plan_slug")
-        # Emit activation only when entering entitlement from a non-entitled
-        # state. Routine active->active updates must not spam CRM/n8n workflows.
         entering_entitlement = (
             status_value in entitled_statuses
             and previous_status not in entitled_statuses
@@ -72,8 +71,6 @@ def _emit_post_commit_events(payload: dict) -> None:
             )
     elif event_type == "customer.subscription.deleted":
         subscription_id = data.get("id")
-        # A deletion for an already-cancelled/non-entitled subscription does not
-        # represent a new cancellation transition for external automations.
         if subscription_id and previous_status not in {None, "canceled"}:
             emit_event(
                 "subscription_cancelled",
@@ -209,9 +206,6 @@ def create_checkout(
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="plan not found")
     provider = get_billing_provider()
-    # Preserve the exact application primary key in provider metadata. Previous
-    # code converted non-UUID IDs to UUID5, which made the webhook unable to
-    # resolve legacy/imported users after a successful payment.
     checkout_url = provider.create_checkout_session(current_user.id, plan)
     return {"checkout_url": checkout_url}
 
@@ -247,10 +241,10 @@ async def billing_webhook(
                     secret,
                 )
                 payload = event.to_dict_recursive() if hasattr(event, "to_dict_recursive") else dict(event)
-            except ValueError as exc:  # H-API-8: narrow catch — let SignatureVerificationError propagate
+            except ValueError as exc:
                 logger.warning("Stripe webhook payload invalid: %s", exc)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid payload") from exc
-            except Exception as exc:  # pragma: no cover - SignatureVerificationError and others
+            except Exception as exc:  # pragma: no cover
                 logger.warning("Stripe webhook signature invalid: %s", exc)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid signature") from exc
         else:
@@ -272,9 +266,6 @@ async def billing_webhook(
         provider = get_billing_provider()
         sig = inspect.signature(provider.handle_webhook)
 
-        # OT-10: Wrap webhook handler in explicit DB transaction for atomicity
-        # If the handler fails midway, the entire webhook is rolled back
-        # and Stripe will retry on the next delivery attempt.
         from database import session_scope
         with session_scope() as tx_session:
             try:
@@ -293,8 +284,6 @@ async def billing_webhook(
                 record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "error")
                 raise
 
-        # Emit side effects only after durable commit. Duplicate/transition
-        # metadata added by the provider keeps external automation idempotent.
         _emit_post_commit_events(payload or {})
 
         from observability.metrics import record_billing_webhook
