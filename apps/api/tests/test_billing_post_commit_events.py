@@ -88,6 +88,22 @@ def test_duplicate_webhook_skips_all_external_side_effects(monkeypatch):
     assert emitted == []
 
 
+def test_stale_webhook_skips_all_external_side_effects(monkeypatch):
+    emitted = _capture(monkeypatch)
+
+    _emit_post_commit_events({
+        "type": "customer.subscription.updated",
+        "_consultaion_stale": True,
+        "_consultaion_previous_subscription_status": "pending",
+        "data": {"object": {
+            "status": "active",
+            "metadata": {"user_id": "user-1", "plan_slug": "pro"},
+        }},
+    })
+
+    assert emitted == []
+
+
 def test_non_entitled_subscription_status_does_not_emit_activation(monkeypatch):
     emitted = _capture(monkeypatch)
 
