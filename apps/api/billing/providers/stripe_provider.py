@@ -78,10 +78,31 @@ class StripeBillingProvider(BillingProvider):
             previous = sub.provider_event_created_at
             if previous.tzinfo is None:
                 previous = previous.replace(tzinfo=timezone.utc)
-            # Duplicate event IDs are handled separately. Strictly older state
-            # events are stale; equal-second events are still processed because
-            # Stripe's event.created has second-level granularity.
-            return provider_event_created_at < previous
+            if provider_event_created_at < previous:
+                return True
+            # Stripe event.created has second-level granularity. If cancellation
+            # and an activation-like update share the same second, preserve the
+            # terminal cancellation instead of allowing a same-second replay to
+            # resurrect entitlement. A same-second deletion is still allowed to
+            # win over an active state.
+            return (
+                provider_event_created_at == previous
+                and sub.status == "canceled"
+                and event_type in ("customer.subscription.created", "customer.subscription.updated")
+            )
+
+        def _sync_legacy_user_plan(user_id: str | None) -> None:
+            """Mirror canonical entitlement into the compatibility User.plan field."""
+            if not user_id:
+                return
+            user = db_session.get(User, user_id)
+            if not user:
+                return
+            from billing.service import get_active_plan
+
+            resolved = get_active_plan(db_session, user_id)
+            user.plan = resolved.slug
+            db_session.add(user)
 
         event_id = payload.get("id")
         if event_id and db_session:
@@ -112,7 +133,8 @@ class StripeBillingProvider(BillingProvider):
 
             sub = db_session.exec(
                 select(BillingSubscription).where(
-                    BillingSubscription.provider_subscription_id == subscription_id
+                    BillingSubscription.provider == "stripe",
+                    BillingSubscription.provider_subscription_id == subscription_id,
                 )
             ).first()
 
@@ -150,7 +172,8 @@ class StripeBillingProvider(BillingProvider):
 
             sub = db_session.exec(
                 select(BillingSubscription).where(
-                    BillingSubscription.provider_subscription_id == subscription_id
+                    BillingSubscription.provider == "stripe",
+                    BillingSubscription.provider_subscription_id == subscription_id,
                 )
             ).first()
 
@@ -221,11 +244,11 @@ class StripeBillingProvider(BillingProvider):
                     sub.current_period_end = datetime.fromtimestamp(end_ts, tz=timezone.utc)
 
                 db_session.add(sub)
-
-                user = db_session.get(User, user_id)
-                if user:
-                    user.plan = plan_slug if status in ("active", "trialing") else "free"
-                    db_session.add(user)
+                # A single subscription can become past_due while another valid
+                # subscription for the same user remains active. Recompute the
+                # compatibility marker from canonical entitlement instead of
+                # blindly setting User.plan from this one event.
+                _sync_legacy_user_plan(user_id)
 
         elif event_type == "customer.subscription.deleted" and db_session:
             subscription_id = data.get("id")
@@ -234,7 +257,8 @@ class StripeBillingProvider(BillingProvider):
 
             sub = db_session.exec(
                 select(BillingSubscription).where(
-                    BillingSubscription.provider_subscription_id == subscription_id
+                    BillingSubscription.provider == "stripe",
+                    BillingSubscription.provider_subscription_id == subscription_id,
                 )
             ).first()
 
@@ -292,13 +316,8 @@ class StripeBillingProvider(BillingProvider):
                     if provider_event_created_at:
                         sub.provider_event_created_at = provider_event_created_at
                     db_session.add(sub)
-                    user = db_session.get(User, sub.user_id)
 
-                if user_id:
-                    user = db_session.get(User, user_id)
-                    if user:
-                        user.plan = "free"
-                        db_session.add(user)
+                _sync_legacy_user_plan(user_id)
 
         if event_id and db_session:
             from billing.models import BillingWebhookEvent
