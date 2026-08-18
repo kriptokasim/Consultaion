@@ -43,21 +43,42 @@ async def share_debate(
     config["is_public"] = body.is_public
     debate.config = config
 
+    referral_token = None
+    if body.is_public:
+        # Every copied public link may carry its own high-entropy attribution
+        # token. The raw token is returned once to the owner and never stored;
+        # only its SHA-256 hash is persisted by the referral service.
+        from services.referrals import issue_referral_token
+
+        referral_token, _ = issue_referral_token(
+            session,
+            debate_id=debate.id,
+            created_by_user_id=current_user.id,
+        )
+
     session.add(debate)
     session.commit()
 
     # The request-scoped DB dependency does not auto-commit on teardown.
     # Persist post-commit telemetry in its own transaction so share events are
-    # not silently discarded when the request returns.
+    # not silently discarded when the request returns. Never copy the raw
+    # referral token into audit metadata.
     record_audit(
         "debate_shared",
         user_id=current_user.id,
         target_type="debate",
         target_id=debate.id,
-        meta={"is_public": body.is_public},
+        meta={
+            "is_public": body.is_public,
+            "referral_token_issued": bool(referral_token),
+        },
     )
 
-    return {"id": debate.id, "is_public": body.is_public}
+    return {
+        "id": debate.id,
+        "is_public": body.is_public,
+        "referral_token": referral_token,
+    }
 
 
 @router.post("/debates/{debate_id}/moderate")
