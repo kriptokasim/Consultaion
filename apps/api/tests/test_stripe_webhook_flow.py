@@ -46,7 +46,7 @@ def _make_user(session: Session, prefix: str, *, plan: str = "free") -> User:
     return user
 
 
-def test_checkout_session_copies_metadata_to_subscription(monkeypatch, db_session):
+def test_checkout_session_copies_metadata_to_subscription(db_session):
     provider = StripeBillingProvider()
     _ensure_plans(db_session)
     pro_plan = db_session.exec(select(BillingPlan).where(BillingPlan.slug == "pro")).first()
@@ -94,7 +94,6 @@ def test_stripe_webhook_checkout_completed_creates_pending_association(db_sessio
     session.commit()
     session.refresh(user)
 
-    # Checkout completion alone is not authoritative entitlement evidence.
     assert user.plan == "free"
     sub = session.exec(
         select(BillingSubscription).where(
@@ -154,6 +153,12 @@ def test_subscription_event_after_checkout_activates_entitlement(db_session):
     assert sub.status == "active"
     assert sub.current_period_end > now
     assert user.plan == "pro"
+    # Resolved DB context is propagated for post-commit integrations even when
+    # the original Stripe subscription event had empty metadata.
+    assert created["data"]["object"]["metadata"] == {
+        "user_id": user.id,
+        "plan_slug": "pro",
+    }
 
 
 def test_subscription_event_without_context_is_retryable(db_session):
@@ -178,8 +183,6 @@ def test_subscription_event_without_context_is_retryable(db_session):
     with pytest.raises(ValueError, match="Cannot resolve billing context"):
         provider.handle_webhook(payload, {}, db_session=session)
 
-    # Handler failure must not mark the event processed; outer route rollback
-    # will therefore allow Stripe to retry it later.
     assert session.get(BillingWebhookEvent, event_id) is None
     session.rollback()
 
