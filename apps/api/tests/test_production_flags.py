@@ -1,8 +1,8 @@
 import pytest
-from config import AppSettings
 from pydantic import ValidationError
-from tests.utils import override_env
 
+from config import AppSettings
+from tests.utils import override_env
 
 _PROD_INTERNAL_SECRET = "secure_internal_secret_32_characters_long_456"
 
