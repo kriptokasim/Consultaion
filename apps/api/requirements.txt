@@ -27,5 +27,5 @@ opentelemetry-exporter-otlp==1.33.0
 cyclonedx-bom==7.3.0
 # FH125: Stripe billing + provider key encryption
 stripe==11.1.1
-cryptography==49.0.0
+cryptography==50.0.0
 lxml==6.1.0

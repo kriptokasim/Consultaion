@@ -21,6 +21,26 @@ class AppError(Exception):
         super().__init__(message)
 
 
+class ConfigurationError(AppError):
+    """Server-side configuration errors that require operator action."""
+    def __init__(
+        self,
+        message: str = "Application configuration error",
+        code: str = "configuration_error",
+        status_code: int = 500,
+        details: Optional[Dict[str, Any]] = None,
+        hint: Optional[str] = None,
+    ):
+        super().__init__(
+            message,
+            code,
+            status_code,
+            details,
+            hint,
+            retryable=False,
+        )
+
+
 class AuthError(AppError):
     """Authentication and authorization errors."""
     def __init__(
@@ -93,7 +113,13 @@ class RateLimitError(AppError):
 
 
 class ProviderCircuitOpenError(AppError):
-    """Circuit breaker open error."""
+    """Circuit breaker open error.
+
+    ``auth.configuration_error`` historically flowed through this class from the
+    OAuth redirect helper. Preserve that call-site compatibility while ensuring
+    operator configuration failures are never marked retryable or surfaced as a
+    provider-outage 503.
+    """
     def __init__(
         self,
         message: str = "Service temporarily unavailable",
@@ -103,6 +129,10 @@ class ProviderCircuitOpenError(AppError):
         hint: Optional[str] = "The service is temporarily unavailable. Please try again later.",
         retryable: bool = True,
     ):
+        if code == "auth.configuration_error":
+            status_code = 500
+            retryable = False
+            hint = "Server configuration requires operator action."
         super().__init__(message, code, status_code, details, hint, retryable)
 
 

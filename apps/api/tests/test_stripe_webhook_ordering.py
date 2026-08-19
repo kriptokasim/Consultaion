@@ -32,6 +32,13 @@ def _make_user(session: Session, *, plan: str = "pro") -> User:
     return user
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Normalize SQLite's timezone-naive round trip to canonical UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def test_older_active_update_cannot_reactivate_newer_deletion(db_session: Session, monkeypatch):
     provider = StripeBillingProvider()
     _ensure_plans(db_session)
@@ -66,7 +73,7 @@ def test_older_active_update_cannot_reactivate_newer_deletion(db_session: Sessio
     db_session.refresh(sub)
     db_session.refresh(user)
     assert sub.status == "canceled"
-    assert sub.provider_event_created_at == datetime.fromtimestamp(base + 20, tz=timezone.utc)
+    assert _as_utc(sub.provider_event_created_at) == datetime.fromtimestamp(base + 20, tz=timezone.utc)
     assert user.plan == "free"
 
     stale_event_id = f"evt_stale_{uuid.uuid4().hex}"
@@ -88,7 +95,7 @@ def test_older_active_update_cannot_reactivate_newer_deletion(db_session: Sessio
 
     assert stale_active["_consultaion_stale"] is True
     assert sub.status == "canceled"
-    assert sub.provider_event_created_at == datetime.fromtimestamp(base + 20, tz=timezone.utc)
+    assert _as_utc(sub.provider_event_created_at) == datetime.fromtimestamp(base + 20, tz=timezone.utc)
     assert user.plan == "free"
     assert db_session.get(BillingWebhookEvent, stale_event_id) is not None
 
@@ -131,7 +138,7 @@ def test_deletion_before_local_association_creates_tombstone_and_fences_older_ac
     ).first()
     assert tombstone is not None
     assert tombstone.status == "canceled"
-    assert tombstone.provider_event_created_at == datetime.fromtimestamp(base + 20, tz=timezone.utc)
+    assert _as_utc(tombstone.provider_event_created_at) == datetime.fromtimestamp(base + 20, tz=timezone.utc)
 
     older_created = {
         "id": f"evt_old_create_{uuid.uuid4().hex}",

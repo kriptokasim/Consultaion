@@ -40,9 +40,9 @@ from typing import Dict
 # - sse.lease.release_failed
 # - sse.lease.expired
 # - sse.heartbeat.emitted
-# - sse.backpressure.dropped
+# - sse.backpressure.dropped       (aggregate dropped-event count, includes overflow)
 # - sse.backpressure.coalesced
-# - sse.backpressure.overflow
+# - sse.backpressure.overflow      (subset: newly published event dropped because queue stayed full)
 # - sse.backpressure.slow_subscriber
 # - sse.backpressure.critical_enqueue_failed
 
@@ -78,6 +78,13 @@ def increment_metric(name: str, value: int = 1) -> None:
         if len(_metrics) >= _METRICS_MAX and name not in _metrics:
             return  # Drop new metric names when at capacity
         _metrics[name] += value
+
+        # An overflow means the newly published event itself was dropped because
+        # the subscriber queue remained full. Keep the diagnostic overflow
+        # counter while also feeding the canonical aggregate dropped-event
+        # counter used by dashboards and SLOs.
+        if name == "sse.backpressure.overflow":
+            _metrics["sse.backpressure.dropped"] += value
 
 # Aliases for newer code
 def incr_metric(name: str, value: int = 1, tags: Dict[str, str] = None) -> None:

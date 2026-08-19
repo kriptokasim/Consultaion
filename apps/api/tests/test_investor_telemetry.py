@@ -84,4 +84,8 @@ def test_public_view_event_persists_after_anonymous_read(
     assert audit_log is not None
     assert audit_log.user_id is None
     assert audit_log.meta is not None
-    assert audit_log.meta.get("ip_address")
+    # Public-share acquisition is token based; visitor IP retention is
+    # intentionally suppressed by the central audit privacy policy.
+    assert "ip_address" not in audit_log.meta
+    assert "client_ip" not in audit_log.meta
+    assert "remote_addr" not in audit_log.meta
