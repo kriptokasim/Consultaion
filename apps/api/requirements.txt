@@ -1,31 +1,31 @@
 # Consultaion API Dependencies
-fastapi==0.138.0
-uvicorn[standard]==0.30.6
-pydantic==2.10.6
-pydantic-settings==2.6.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.3
+pydantic==2.13.4
+pydantic-settings==2.15.0
 python-dotenv==1.2.2
-litellm==1.84.0
-sqlmodel==0.0.22
+litellm==1.97.0
+sqlmodel==0.0.39
 aiosqlite==0.22.1
-psycopg[binary]==3.2.12
-alembic==1.13.2
+psycopg[binary]==3.3.4
+alembic==1.19.1
 PyJWT==2.13.0
-sentry-sdk[fastapi]==2.20.0
+sentry-sdk[fastapi]==2.68.0
 redis==5.2.0
-celery==5.4.0
+celery==5.6.3
 starlette>=0.46.0
 httpx==0.28.1
 bcrypt==4.2.1
 langfuse==2.60.2
 loguru==0.7.3
 # OT-5: Observability
-prometheus-client==0.21.1
-opentelemetry-api==1.33.0
-opentelemetry-sdk==1.33.0
-opentelemetry-exporter-otlp==1.33.0
+prometheus-client==0.26.0
+opentelemetry-api==1.44.0
+opentelemetry-sdk==1.44.0
+opentelemetry-exporter-otlp==1.44.0
 # OT-11: Dependency integrity
-cyclonedx-bom==7.3.0
+cyclonedx-bom==7.3.1
 # FH125: Stripe billing + provider key encryption
 stripe==11.1.1
 cryptography==50.0.0
-lxml==6.1.0
+lxml==6.1.1
