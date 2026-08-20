@@ -1,7 +1,10 @@
-import logging
-from typing import Any, Dict, List, Sequence, Tuple
+from __future__ import annotations
 
-from .state import DebateStateManager
+import logging
+from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple
+
+if TYPE_CHECKING:
+    from .state import DebateStateManager
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +17,16 @@ class FinalizationService:
     @staticmethod
     def compute_rankings(scores: Sequence[Dict[str, Any]]) -> Tuple[List[str], Dict[str, Any]]:
         """
-        Compute Borda and Condorcet rankings from scores.
+        Compute Borda points and pairwise Condorcet wins from aggregate scores.
+
+        Condorcet wins are the number of head-to-head score comparisons won by
+        each persona. Tied scores award neither persona a win. The final order
+        uses Condorcet wins first and Borda points as the deterministic
+        tiebreaker.
         """
         if not scores:
             return [], {"borda": {}, "condorcet": {}, "combined": {}}
-            
+
         sorted_scores = sorted(scores, key=lambda s: s["score"], reverse=True)
         n = len(sorted_scores)
         borda = {entry["persona"]: float(n - idx - 1) for idx, entry in enumerate(sorted_scores)}
@@ -26,12 +34,14 @@ class FinalizationService:
 
         for i in range(n):
             for j in range(i + 1, n):
-                pass # Removed naive Condorcet implementation that duplicated Borda due to pre-sorting
+                a, a_score = sorted_scores[i]["persona"], sorted_scores[i]["score"]
+                b, b_score = sorted_scores[j]["persona"], sorted_scores[j]["score"]
+                if a_score > b_score:
+                    condorcet[a] += 1.0
+                elif b_score > a_score:
+                    condorcet[b] += 1.0
 
-        combined = {
-            persona: borda[persona]
-            for persona in borda
-        }
+        combined = {persona: (condorcet[persona], borda[persona]) for persona in borda}
 
         ranking = sorted(
             combined.keys(),
@@ -51,8 +61,4 @@ class FinalizationService:
         """
         Persist the vote result using the state manager.
         """
-        await state_manager.save_vote(
-            method="borda+condorcet",
-            ranking=ranking,
-            details=details
-        )
+        await state_manager.save_vote(method="borda+condorcet", ranking=ranking, details=details)

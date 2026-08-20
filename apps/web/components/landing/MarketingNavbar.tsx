@@ -127,7 +127,9 @@ export function MarketingNavbar() {
             {mobileMenuOpen && (
                 <>
                     {/* Backdrop */}
-                    <div
+                    <button
+                        type="button"
+                        aria-label={t("nav.mobile.close")}
                         className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
                         onClick={() => setMobileMenuOpen(false)}
                     />

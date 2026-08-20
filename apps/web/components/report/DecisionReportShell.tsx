@@ -379,7 +379,12 @@ export function DecisionReportShell({
             </button>
             {tocOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setTocOpen(false)} />
+                <button
+                  type="button"
+                  aria-label="Close actions menu"
+                  className="fixed inset-0 z-10"
+                  onClick={() => setTocOpen(false)}
+                />
                 <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-border bg-card shadow-lg py-1 animate-in fade-in slide-in-from-top-1 duration-100">
                   {showChrome && (
                     <button

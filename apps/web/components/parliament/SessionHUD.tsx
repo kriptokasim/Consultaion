@@ -1,3 +1,7 @@
+"use client";
+
+import { useI18n } from "@/lib/i18n/client";
+
 import StatusPill from "./StatusPill";
 import type { ArenaRunUiState } from "./StatusPill";
 
@@ -18,6 +22,7 @@ export default function SessionHUD({
   onCopy,
   runUrl,
 }: SessionHUDProps) {
+  const { t } = useI18n();
   const elapsedMinutes = Math.floor(elapsedSeconds / 60);
   const elapsedRemainder = elapsedSeconds % 60;
 
@@ -28,10 +33,11 @@ export default function SessionHUD({
         <div className="flex flex-wrap gap-4 text-sm text-stone-600">
           {debateId && (
             <div>
-              <p className="text-xs uppercase tracking-wide text-stone-400">Run ID</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">{t("live.session.runId")}</p>
               {runUrl ? (
                 <a
                   href={runUrl}
+                  aria-label={t("live.session.openRun", { id: debateId })}
                   className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
                 >
                   {debateId}
@@ -40,6 +46,7 @@ export default function SessionHUD({
                 <button
                   type="button"
                   onClick={onCopy}
+                  aria-label={t("live.session.copyRunId")}
                   className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700"
                 >
                   {debateId}
@@ -49,7 +56,7 @@ export default function SessionHUD({
           )}
           {status !== "idle" && status !== "creating" && status !== "created" && status !== "redirecting" && (
             <div>
-              <p className="text-xs uppercase tracking-wide text-stone-400">Elapsed</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">{t("live.session.elapsed")}</p>
               <p className="text-sm font-semibold text-stone-800">
                 {elapsedMinutes.toString().padStart(2, "0")}:
                 {elapsedRemainder.toString().padStart(2, "0")}
@@ -58,9 +65,9 @@ export default function SessionHUD({
           )}
           {(status === "running" || status === "streaming" || status === "synthesis_pending") && (
             <div>
-              <p className="text-xs uppercase tracking-wide text-stone-400">Active Model</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">{t("live.session.activeModel")}</p>
               <p className="text-sm font-semibold text-stone-800">
-                {activePersona ?? "Contacting models"}
+                {activePersona ?? t("live.session.contactingModels")}
               </p>
             </div>
           )}
@@ -68,17 +75,17 @@ export default function SessionHUD({
       </div>
       {status === "idle" && (
         <p className="mt-3 text-xs text-stone-600">
-          Arena is idle. Enter a prompt and click <strong>Run Arena</strong> to compare models.
+          {t("live.session.idleHelp")}
         </p>
       )}
       {status === "recoverable_error" && (
         <p className="mt-3 text-xs text-amber-600">
-          Connection interrupted — retrying automatically. You can safely leave this page.
+          {t("live.session.recoverableError")}
         </p>
       )}
       {status === "terminal_error" && (
         <p className="mt-3 text-xs text-red-600">
-          Run encountered a terminal error. Check the details below.
+          {t("live.session.terminalError")}
         </p>
       )}
     </section>

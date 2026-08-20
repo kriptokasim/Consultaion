@@ -98,12 +98,27 @@ export function PipelineProgress({
   const activeStageLabel = activeIdx >= 0 ? getStageLabel(ALL_STAGES[activeIdx]) : "Idle";
 
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const toggleExpanded = () => setIsExpanded((value) => !value);
+  const handleToggleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleExpanded();
+    }
+  };
 
   if (variant === "compact") {
     return (
       <div className={cn("rounded-2xl border border-stone-200 bg-white/85 p-3.5 shadow-sm dark:border-stone-800 dark:bg-stone-900/75 backdrop-blur-sm", className)}>
         {/* Horizontal dots rail */}
-        <div className="flex items-center w-full gap-1 mb-2.5 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? "Hide pipeline details" : "Show pipeline details"}
+          className="flex items-center w-full gap-1 mb-2.5 cursor-pointer"
+          onClick={toggleExpanded}
+          onKeyDown={handleToggleKeyDown}
+        >
           {ALL_STAGES.map((stage, idx) => {
             const isDone = idx < activeIdx;
             const isActive = idx === activeIdx;
@@ -131,7 +146,14 @@ export function PipelineProgress({
           })}
         </div>
         {/* Description line */}
-        <div className="flex items-center justify-between text-xs cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
+          className="flex items-center justify-between text-xs cursor-pointer select-none"
+          onClick={toggleExpanded}
+          onKeyDown={handleToggleKeyDown}
+        >
           <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 font-medium">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
             <span>Step {activeIdx + 1}/9:</span>

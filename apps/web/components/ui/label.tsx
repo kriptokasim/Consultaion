@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils"
 export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {}
 
 const Label = React.forwardRef<HTMLLabelElement, LabelProps>(({ className, ...props }, ref) => (
+  // Association is provided by each consumer through htmlFor or a nested control.
+  // eslint-disable-next-line jsx-a11y/label-has-associated-control
   <label
     ref={ref}
     className={cn(

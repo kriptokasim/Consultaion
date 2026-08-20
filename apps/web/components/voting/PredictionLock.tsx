@@ -108,9 +108,9 @@ export function PredictionLock({
 
             {/* Candidate Selector */}
             <div className="space-y-3">
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">
                     Choose Candidate Model
-                </label>
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {candidates.map((model) => {
                         const isSelected = selectedModel === model;
@@ -145,7 +145,7 @@ export function PredictionLock({
             {/* Confidence Slider */}
             <div className="mt-5 space-y-3">
                 <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <label htmlFor="prediction-confidence" className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                         Prediction Confidence
                         <span className="group relative cursor-pointer">
                             <HelpCircle className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
@@ -159,6 +159,7 @@ export function PredictionLock({
                     </span>
                 </div>
                 <input
+                    id="prediction-confidence"
                     type="range"
                     min="0"
                     max="1"

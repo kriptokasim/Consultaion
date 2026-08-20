@@ -320,9 +320,17 @@ export default function RedTeamWorkspace() {
                     const LensIcon = meta.icon;
 
                     return (
-                      <div 
+                      <div
                         key={idx}
                         onClick={() => setSelectedIssue(issue)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedIssue(issue);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
                         className={cn(
                           "flex items-center justify-between p-4 rounded-xl border cursor-pointer hover:-translate-y-0.5 transition-all bg-card hover:bg-muted/10",
                           issue.severity === "high" && "border-rose-500/20 hover:border-rose-500/40",
@@ -436,8 +444,11 @@ export default function RedTeamWorkspace() {
         )}
 
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Proposal or System Design</label>
+          <label htmlFor="red-team-proposal" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Proposal or System Design
+          </label>
           <textarea
+            id="red-team-proposal"
             value={proposal}
             onChange={(e) => setProposal(e.target.value)}
             placeholder="Describe your design, architectural pattern, or business process. E.g., 'We store customer API keys in plaintext in our DB for faster read performance, caching them in Redis without SSL...'"
@@ -450,16 +461,25 @@ export default function RedTeamWorkspace() {
         </div>
 
         <div className="space-y-3">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Select Risk Lenses</label>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Select Risk Lenses</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {Object.entries(lensMetadata).map(([key, meta]) => {
               const Icon = meta.icon;
               const isSelected = selectedLenses.includes(key);
 
               return (
-                <div 
+                <div
                   key={key}
                   onClick={() => toggleLens(key)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      toggleLens(key);
+                    }
+                  }}
+                  role="checkbox"
+                  aria-checked={isSelected}
+                  tabIndex={0}
                   className={cn(
                     "flex gap-3 p-3 rounded-xl border cursor-pointer hover:border-primary/45 hover:bg-muted/10 transition-all select-none items-start",
                     isSelected 

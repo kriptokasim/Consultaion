@@ -18,7 +18,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html>
+    <html lang="en">
       <body className="flex min-h-screen items-center justify-center bg-gradient-to-b from-amber-50 to-white p-6 text-center dark:from-stone-900 dark:to-stone-950">
         <div className="max-w-md rounded-3xl border border-stone-200 bg-white/90 p-8 shadow-xl dark:border-stone-800 dark:bg-stone-900/90">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-500">Something went wrong</p>

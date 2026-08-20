@@ -208,10 +208,11 @@ export default function APIKeyManager() {
                         )}
 
                         <div className="mt-4">
-                            <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
+                            <label htmlFor="api-key-name" className="block text-sm font-medium text-stone-700 dark:text-stone-300">
                                 Key Name
                             </label>
                             <input
+                                id="api-key-name"
                                 type="text"
                                 value={newKeyName}
                                 onChange={(e) => setNewKeyName(e.target.value)}
@@ -259,11 +260,12 @@ export default function APIKeyManager() {
                         </div>
 
                         <div className="mt-4">
-                            <label className="block text-sm font-medium text-stone-700 dark:text-stone-300">
+                            <label htmlFor="api-key-secret" className="block text-sm font-medium text-stone-700 dark:text-stone-300">
                                 API Key Secret
                             </label>
                             <div className="mt-1 flex gap-2">
                                 <input
+                                    id="api-key-secret"
                                     type="text"
                                     value={createdKey.secret}
                                     readOnly

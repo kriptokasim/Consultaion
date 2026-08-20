@@ -32,6 +32,7 @@ from orchestration.execution_lease import (
     release_execution_lease,
     renew_execution_lease,
 )
+from orchestration.finalization import FinalizationService
 from parliament.engine import run_parliament_debate
 from schemas import DebateConfig, DebateSummary, default_agents, default_judges
 from sse_backend import get_sse_backend
@@ -337,36 +338,8 @@ def _check_budget(budget, usage: UsageAccumulator) -> str | None:
 
 
 def _compute_rankings(scores: Sequence[Dict[str, Any]]):
-    if not scores:
-        return [], {"borda": {}, "condorcet": {}, "combined": {}}
-    sorted_scores = sorted(scores, key=lambda s: s["score"], reverse=True)
-    n = len(sorted_scores)
-    borda = {entry["persona"]: float(n - idx - 1) for idx, entry in enumerate(sorted_scores)}
-    condorcet = {entry["persona"]: 0.0 for entry in sorted_scores}
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            a, a_score = sorted_scores[i]["persona"], sorted_scores[i]["score"]
-            b, b_score = sorted_scores[j]["persona"], sorted_scores[j]["score"]
-            if a_score > b_score:
-                condorcet[a] += 1.0
-            elif b_score > a_score:
-                condorcet[b] += 1.0
-
-    combined = {persona: (condorcet[persona], borda[persona]) for persona in borda}
-
-    ranking = sorted(
-        combined.keys(),
-        key=lambda persona: (
-            combined[persona],
-            borda[persona],
-            condorcet[persona],
-        ),
-        reverse=True,
-    )
-
-    details = {"borda": borda, "condorcet": condorcet, "combined": combined}
-    return ranking, details
+    """Compatibility wrapper around the canonical ranking implementation."""
+    return FinalizationService.compute_rankings(scores)
 
 
 def _select_candidates(

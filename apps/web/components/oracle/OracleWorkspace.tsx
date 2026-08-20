@@ -281,11 +281,21 @@ export default function OracleWorkspace() {
                           "rounded-2xl border p-4 bg-card shadow-sm hover:shadow transition-all cursor-pointer",
                           isExpanded ? "border-primary/40" : "border-border"
                         )}>
-                          <div 
+                          <div
                             onClick={() => {
                               setExpandedNodeId(isExpanded ? null : node.id);
                               setForkNodeId(null);
                             }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setExpandedNodeId(isExpanded ? null : node.id);
+                                setForkNodeId(null);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={isExpanded}
                             className="flex items-center justify-between"
                           >
                             <div>
@@ -314,11 +324,15 @@ export default function OracleWorkspace() {
                                 <div className="mt-4">
                                   {isForking ? (
                                     <form onSubmit={handleForkSubmit} className="space-y-3 pt-2">
-                                      <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+                                      <label
+                                        htmlFor={`oracle-fork-${node.id}`}
+                                        className="text-[10px] font-bold text-amber-500 uppercase tracking-wider"
+                                      >
                                         Introduce Counter-Assumption
                                       </label>
                                       <div className="flex gap-2">
                                         <input
+                                          id={`oracle-fork-${node.id}`}
                                           value={forkAssumption}
                                           onChange={(e) => setForkAssumption(e.target.value)}
                                           placeholder="E.g. What if authentication keys expire every 5 minutes?"
@@ -391,8 +405,11 @@ export default function OracleWorkspace() {
         )}
 
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Inquiry Query</label>
+          <label htmlFor="oracle-inquiry" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Inquiry Query
+          </label>
           <textarea
+            id="oracle-inquiry"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Type a complex logical challenge, design trade-off, or operational riddle. E.g., 'Is local caching better than federated caching for distributed database sync operations?'"

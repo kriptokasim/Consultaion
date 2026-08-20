@@ -15,6 +15,14 @@ vi.mock("@/hooks/useRunWorkspace", () => ({
   useRunWorkspace: vi.fn(),
 }));
 
+vi.mock("@/lib/i18n/client", () => ({
+  useI18n: () => ({
+    t: (key: string) => ({
+      "runDetail.error.server": "Server Error",
+    })[key] ?? key,
+  }),
+}));
+
 // Enable feature flags for workspace tests
 vi.mock("@/lib/feature-flags", () => ({
   isFeatureEnabled: (flag: string) => {
@@ -208,4 +216,3 @@ describe("resolveRunViewKind — P143 mode fallback", () => {
     expect(resolveRunViewKind("something_unknown")).toBe("debate");
   });
 });
-

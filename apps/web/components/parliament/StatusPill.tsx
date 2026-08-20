@@ -1,4 +1,8 @@
+"use client";
+
 import type { HTMLAttributes } from "react";
+
+import { useI18n } from "@/lib/i18n/client";
 
 export type ArenaRunUiState =
   | "idle"
@@ -13,7 +17,7 @@ export type ArenaRunUiState =
   | "recoverable_error"
   | "terminal_error";
 
-const statusColors: Record<string, string> = {
+const statusColors: Record<ArenaRunUiState, string> = {
   idle: "bg-muted text-muted-foreground border-border",
   creating: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
   created: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800",
@@ -27,18 +31,18 @@ const statusColors: Record<string, string> = {
   terminal_error: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
 };
 
-const statusLabels: Record<string, string> = {
-  idle: "idle",
-  creating: "Creating run",
-  created: "Run created",
-  redirecting: "Opening live results",
-  queued: "Queued",
-  running: "Running",
-  streaming: "Collecting responses",
-  synthesis_pending: "Synthesizing report",
-  complete: "Complete",
-  recoverable_error: "Connection interrupted",
-  terminal_error: "Failed",
+const statusLabelKeys: Record<ArenaRunUiState, string> = {
+  idle: "live.status.idle",
+  creating: "live.status.creating",
+  created: "live.status.created",
+  redirecting: "live.status.redirecting",
+  queued: "live.status.queued",
+  running: "live.status.running",
+  streaming: "live.status.streaming",
+  synthesis_pending: "live.status.synthesisPending",
+  complete: "live.status.complete",
+  recoverable_error: "live.status.recoverableError",
+  terminal_error: "live.status.terminalError",
 };
 
 interface StatusPillProps extends HTMLAttributes<HTMLSpanElement> {
@@ -52,13 +56,15 @@ export default function StatusPill({
   className = "",
   ...rest
 }: StatusPillProps) {
+  const { t } = useI18n();
+
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full border px-4 py-1 text-xs font-semibold uppercase tracking-wide transition-all duration-200 ease-out ${statusColors[status] ?? statusColors.idle} ${className}`}
       {...rest}
     >
       <span className="h-2 w-2 rounded-full bg-current" />
-      {label ?? statusLabels[status] ?? status}
+      {label ?? t(statusLabelKeys[status])}
     </span>
   );
 }

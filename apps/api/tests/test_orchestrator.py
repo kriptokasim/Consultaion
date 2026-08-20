@@ -22,6 +22,7 @@ def anyio_backend():
 
 from agents import UsageAccumulator, UsageCall  # noqa: E402
 from models import Debate  # noqa: E402
+from orchestration.finalization import FinalizationService  # noqa: E402
 from orchestrator import (  # noqa: E402
     _check_budget,
     _compute_rankings,
@@ -46,15 +47,36 @@ def _usage(tokens: int) -> UsageAccumulator:
     return usage
 
 
-def test_compute_rankings_prefers_higher_scores():
+def test_compute_rankings_counts_pairwise_wins_and_uses_canonical_service():
     scores = [
         {"persona": "A", "score": 9.0},
         {"persona": "B", "score": 7.5},
         {"persona": "C", "score": 8.2},
     ]
     ranking, details = _compute_rankings(scores)
-    assert ranking[0] == "A"
-    assert details["borda"]["A"] > details["borda"]["B"]
+
+    assert (ranking, details) == FinalizationService.compute_rankings(scores)
+    assert ranking == ["A", "C", "B"]
+    assert details["borda"] == {"A": 2.0, "C": 1.0, "B": 0.0}
+    assert details["condorcet"] == {"A": 2.0, "C": 1.0, "B": 0.0}
+    assert details["combined"] == {
+        "A": (2.0, 2.0),
+        "C": (1.0, 1.0),
+        "B": (0.0, 0.0),
+    }
+
+
+def test_compute_rankings_does_not_award_pairwise_win_for_ties():
+    scores = [
+        {"persona": "A", "score": 9.0},
+        {"persona": "B", "score": 9.0},
+        {"persona": "C", "score": 7.0},
+    ]
+
+    ranking, details = FinalizationService.compute_rankings(scores)
+
+    assert ranking == ["A", "B", "C"]
+    assert details["condorcet"] == {"A": 1.0, "B": 1.0, "C": 0.0}
 
 
 def test_check_budget_detects_token_and_cost_limits():

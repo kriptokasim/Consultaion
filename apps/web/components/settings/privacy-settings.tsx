@@ -112,7 +112,9 @@ export function PrivacySettings({ initialOptOut }: PrivacySettingsProps) {
             {/* Custom Delete Confirmation Modal */}
             {showDeleteDialog && (
                 <>
-                    <div
+                    <button
+                        type="button"
+                        aria-label={t("common.close")}
                         className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
                         onClick={() => !isDeleting && setShowDeleteDialog(false)}
                     />
@@ -129,7 +131,7 @@ export function PrivacySettings({ initialOptOut }: PrivacySettingsProps) {
                                 onClick={() => setShowDeleteDialog(false)}
                                 disabled={isDeleting}
                             >
-                                {t("cancel")}
+                                {t("common.cancel")}
                             </Button>
                             <Button
                                 variant="destructive"

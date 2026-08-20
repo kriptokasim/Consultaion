@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "entries": {
+    "apps/web/components/ui/button.tsx": [
+      "amber-*\u0000'border border-amber-200 bg-amber-50 text-amber-900 shadow-smooth hover:bg-amber-100 hover:shadow-smooth-lg dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40',",
+      "amber-*\u0000'rounded-full bg-amber-500 text-amber-950 shadow-[0_14px_30px_#f59e0b73] transition-all duration-200 hover:bg-amber-600 hover:-translate-y-[1px] hover:shadow-[0_18px_40px_#f59e0b8c] active:translate-y-0',",
+      "inline hex\u0000'rounded-full bg-amber-500 text-amber-950 shadow-[0_14px_30px_#f59e0b73] transition-all duration-200 hover:bg-amber-600 hover:-translate-y-[1px] hover:shadow-[0_18px_40px_#f59e0b8c] active:translate-y-0',",
+      "inline hex\u0000'rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 text-white shadow-[0_14px_30px_#3b82f64d] hover:brightness-[1.03] hover:shadow-[0_18px_36px_#3b82f666] active:brightness-95',"
+    ],
+    "apps/web/app/(app)/dashboard/DashboardClient.tsx": [
+      "amber-*\u0000<span className=\"shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300\">"
+    ],
+    "apps/web/components/parliament/ParliamentHome.tsx": [
+      "amber-*\u0000? \"bg-gradient-to-r from-amber-500 to-amber-300\""
+    ],
+    "apps/web/components/debate/DebateArena.tsx": [
+      "amber-*\u0000connecting: \"bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200\","
+    ],
+    "apps/web/components/parliament/DebateView.tsx": [
+      "amber-*\u0000border: \"border-l-amber-400 dark:border-l-amber-500\",",
+      "amber-*\u0000dot: \"bg-amber-500\",",
+      "amber-*\u0000pairwise: \"bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800\",",
+      "stone-*\u0000round_started: \"bg-stone-50 text-stone-600 border-stone-200\","
+    ],
+    "apps/web/components/parliament/VotingSection.tsx": [
+      "amber-*\u0000? \"bg-gradient-to-r from-amber-500 to-amber-300\""
+    ],
+    "apps/web/components/ui/LLMSelector.tsx": [
+      "amber-*\u0000gradient: \"from-amber-400 via-rose-500 to-pink-600\","
+    ],
+    "apps/web/components/parliament/StatusPill.tsx": [
+      "amber-*\u0000queued: \"bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800\",",
+      "amber-*\u0000recoverable_error: \"bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800\","
+    ],
+    "apps/web/app/(app)/runs/[id]/RunDetailClient.tsx": [
+      "amber-*\u0000<div className=\"flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800\">",
+      "amber-*\u0000<div className=\"px-6 py-4 bg-amber-50/60 border-b border-amber-200 dark:bg-stone-900/40 dark:border-stone-850\">",
+      "amber-*\u0000<span className=\"flex h-2 w-2 rounded-full bg-amber-500 animate-pulse\" />",
+      "amber-*\u0000className=\"bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 font-semibold rounded-lg shrink-0\"",
+      "slate-*\u0000<div className=\"h-10 w-10 rounded-xl bg-slate-200 dark:bg-slate-800 shrink-0\" />",
+      "slate-*\u0000<div className=\"h-14 w-full bg-slate-100 dark:bg-slate-900/60 rounded-2xl animate-pulse\" />",
+      "slate-*\u0000<div className=\"h-3.5 w-24 bg-slate-200 dark:bg-slate-800 rounded-md\" />",
+      "slate-*\u0000<div className=\"h-4 w-64 bg-slate-100 dark:bg-slate-900 rounded-md\" />",
+      "slate-*\u0000<div className=\"h-4.5 w-36 bg-slate-200 dark:bg-slate-800 rounded-md\" />",
+      "slate-*\u0000<div className=\"h-5 w-3/4 bg-slate-100 dark:bg-slate-900 rounded-md\" />",
+      "slate-*\u0000<div className=\"h-5 w-full bg-slate-100 dark:bg-slate-900 rounded-md\" />",
+      "slate-*\u0000<div className=\"h-6 w-32 bg-slate-200 dark:bg-slate-800 rounded-md\" />",
+      "slate-*\u0000<div className=\"h-9 w-24 bg-slate-200 dark:bg-slate-800 rounded-md\" />",
+      "slate-*\u0000<div className=\"rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-card p-6 space-y-3\">",
+      "stone-*\u0000<div className=\"px-6 py-4 bg-amber-50/60 border-b border-amber-200 dark:bg-stone-900/40 dark:border-stone-850\">",
+      "stone-*\u0000<h3 className=\"text-sm font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2\">",
+      "stone-*\u0000<p className=\"text-xs text-stone-600 dark:text-stone-400\">"
+    ]
+  }
+}

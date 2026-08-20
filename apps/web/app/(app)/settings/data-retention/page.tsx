@@ -48,6 +48,7 @@ export default function DataRetentionPage() {
               {policies.map((p) => (
                 <label
                   key={p.id}
+                  htmlFor={`retention-${p.id}`}
                   className={`flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition ${
                     retentionPeriod === p.id
                       ? "border-amber-500 bg-amber-50/25 dark:bg-amber-950/10"
@@ -55,6 +56,8 @@ export default function DataRetentionPage() {
                   }`}
                 >
                   <input
+                    id={`retention-${p.id}`}
+                    aria-label={p.name}
                     type="radio"
                     name="retention"
                     value={p.id}

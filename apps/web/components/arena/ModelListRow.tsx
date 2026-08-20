@@ -14,10 +14,11 @@ interface ModelListRowProps {
 
 export function ModelListRow({ model, isSelected, onToggle }: ModelListRowProps) {
   return (
-    <div
+    <button
+      type="button"
       onClick={onToggle}
       className={cn(
-        'border rounded-2xl p-4 cursor-pointer transition-all duration-200 flex flex-col justify-between hover:bg-muted/40 relative',
+        'w-full border rounded-2xl p-4 cursor-pointer text-left transition-all duration-200 flex flex-col justify-between hover:bg-muted/40 relative',
         isSelected
           ? 'border-primary/60 bg-primary/5 dark:bg-primary/10'
           : 'border-border bg-card'
@@ -62,6 +63,6 @@ export function ModelListRow({ model, isSelected, onToggle }: ModelListRowProps)
           </span>
         </div>
       )}
-    </div>
+    </button>
   )
 }

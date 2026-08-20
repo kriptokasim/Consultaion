@@ -1,0 +1,207 @@
+{
+  "version": 1,
+  "literals": {
+    "apps/web/app/(app)/admin/events/AdminEventsClient.tsx": [
+      "Failed to send test alert",
+      "Monitor system errors and warnings."
+    ],
+    "apps/web/app/(app)/admin/models/page.tsx": [
+      "Inspect enabled providers, capabilities, and routing tiers.",
+      "No models are enabled."
+    ],
+    "apps/web/app/(app)/admin/ops/page.tsx": [
+      "Approximate usage across models",
+      "Current backend readiness and provider stats.",
+      "How often each role is scheduled in panels.",
+      "Keep tabs on debates, tokens, and infrastructure touchpoints.",
+      "Model usage by role",
+      "No parliament usage yet.",
+      "Token totals grouped by role + provider.",
+      "Token-heavy models across all time.",
+      "Unique debaters in the last day"
+    ],
+    "apps/web/app/(app)/admin/promotions/page.tsx": [
+      "Monitor which promos are active across locations."
+    ],
+    "apps/web/app/(app)/admin/users/page.tsx": [
+      "Search accounts, inspect billing, and review subscriptions."
+    ],
+    "apps/web/app/(app)/analytics/loading.tsx": [
+      "Fetching your debate stats…"
+    ],
+    "apps/web/app/(app)/coding-agent/[id]/loading.tsx": [
+      "Fetching agent timeline and patches..."
+    ],
+    "apps/web/app/(app)/coding-agent/[id]/page.tsx": [
+      "Agent is deliberating across lanes...",
+      "Assigned Tier 2 lanes (Fast, Thinking, Verifier, Judge)",
+      "Coding Agent Task - Tier ${tier}",
+      "Convergence check failed (similarity < 0.85). Proceeding to Judge.",
+      "Fast lane completed evaluation",
+      "Gemini 1.5 Pro (Thinking)",
+      "Groq Llama 3 (Fast)",
+      "Llama 3 70B (Verifier)",
+      "Run completed successfully. Final patch generated."
+    ],
+    "apps/web/app/(app)/coding-agent/page.tsx": [
+      "E.g., Refactor the authentication logic to use the new session cookie format and ensure backwards compatibility.",
+      "New Coding Agent Task"
+    ],
+    "apps/web/app/(app)/dashboard/DashboardClient.tsx": [
+      "Ask a new question to start an Arena run..."
+    ],
+    "apps/web/app/(app)/live/error.tsx": [
+      "An unexpected error occurred."
+    ],
+    "apps/web/app/(app)/live/page.tsx": [
+      "An unexpected client-side error occurred.",
+      "An unexpected error occurred."
+    ],
+    "apps/web/app/(app)/runs/[id]/error.tsx": [
+      "An unexpected error occurred while loading the debate."
+    ],
+    "apps/web/app/(app)/runs/[id]/loading.tsx": [
+      "Fetching debate transcript and judge tallies…"
+    ],
+    "apps/web/app/(app)/runs/error.tsx": [
+      "Failed to load runs."
+    ],
+    "apps/web/app/(app)/settings/audit-logs/page.tsx": [
+      "Activity Log (Last 100 entries)",
+      "Failed to export CSV. Please try again.",
+      "Failed to export JSON. Please try again.",
+      "Logs will be generated as you query models and start debates.",
+      "No audit logs found"
+    ],
+    "apps/web/app/(app)/settings/data-retention/page.tsx": [
+      "Automatically prune debate runs, timelines, and response data after 365 days.",
+      "For highly sensitive evaluations. Debates are auto-purged weekly.",
+      "Keep all debates, syntheses, and activity records until explicitly deleted by the user.",
+      "Short-term storage. Run details are purged 30 days after synthesis is completed."
+    ],
+    "apps/web/app/(app)/settings/error.tsx": [
+      "Could not load settings."
+    ],
+    "apps/web/app/(app)/settings/provider-keys/page.tsx": [
+      "Are you sure you want to delete your key for ${provider.toUpperCase()}? This will revert back to platform hosted credits.",
+      "Failed to delete provider key.",
+      "Key validation failed. Make sure the API key is valid and has proper permissions.",
+      "Network error trying to contact key validation services. Please try again.",
+      "Network error while testing ${provider.toUpperCase()} key.",
+      "Network error. Could not delete provider key.",
+      "Successfully deleted key for ${provider.toUpperCase()}",
+      "Successfully validated and saved key for ${provider.toUpperCase()}",
+      "Test successful: ${provider.toUpperCase()} key is active and responding."
+    ],
+    "apps/web/app/(app)/settings/team/page.tsx": [
+      "Team invitations require a team license. Please upgrade to a Team or Enterprise plan."
+    ],
+    "apps/web/components/parliament/AdminTabs.tsx": [
+      "Recent administrative actions with metadata",
+      "Track roles and debate counts"
+    ],
+    "apps/web/components/parliament/CIPill.tsx": [
+      "Wilson 95% CI: ${percent(low)} – ${percent(high)}"
+    ],
+    "apps/web/components/parliament/ExportButton.tsx": [
+      "Export debate as Markdown",
+      "We could not prepare the markdown file."
+    ],
+    "apps/web/components/parliament/ExportCSVButton.tsx": [
+      "Export judge scores as CSV",
+      "Please try again shortly.",
+      "Unable to export CSV"
+    ],
+    "apps/web/components/parliament/HansardTranscript.tsx": [
+      "Export transcript as text file"
+    ],
+    "apps/web/components/parliament/Hero.tsx": [
+      "Democracy Meets Artificial Intelligence",
+      "Democratic AI decision-making via multi-agent debate, judicial scoring, and voting."
+    ],
+    "apps/web/components/parliament/PanelConfigurator.tsx": [
+      "Select providers, models, and role profiles."
+    ],
+    "apps/web/components/parliament/ParliamentChamber.tsx": [
+      "AI Models in Active Deliberation"
+    ],
+    "apps/web/components/parliament/ParliamentHome.tsx": [
+      "Enter a decision question.",
+      "Open a structured decision report.",
+      "Run AI Arena session"
+    ],
+    "apps/web/components/parliament/ParliamentRunView.tsx": [
+      "Agent benches (model advocates)",
+      "Division in the Chamber",
+      "Final synthesis is being prepared...",
+      "How each persona performed across the debate.",
+      "Inspect official records and raw event logs.",
+      "No prompt available for this run.",
+      "No synthesized final answer was recorded for this run. You can still inspect all individual speeches in the model answers and Hansard transcript below.",
+      "Ranked #1 by AI judges in this session.",
+      "Round-by-round arguments and rebuttals between AI delegates.",
+      "View answer from ${entry.persona}",
+      "Visualizing judge scores against a threshold of ${threshold}.",
+      "Visualizing pairwise judge preferences between personas."
+    ],
+    "apps/web/components/parliament/PromptSuggestions.tsx": [
+      "Ask the chamber to draft a crisp, multi-stakeholder policy.",
+      "Click to prefill or copy a starting point.",
+      "Design a launch plan for a command-palette smart search inside a developer IDE.",
+      "Draft a national data governance policy that balances AI innovation with privacy protections.",
+      "Evaluate safety risks of deploying AI copilots to clinicians and propose governance guardrails.",
+      "Invite competing voices to weigh pros and cons.",
+      "Shape a feature with measurable outcomes.",
+      "Should governments subsidize foundation models for public services? Provide a 3-point debate.",
+      "Stress-test an idea across failure modes and mitigations."
+    ],
+    "apps/web/components/parliament/ReplayViewer.tsx": [
+      "Failed to load debate timeline."
+    ],
+    "apps/web/components/parliament/RoundNavigator.tsx": [
+      "Scroll to Round ${roundNum}"
+    ],
+    "apps/web/components/parliament/VotingChamber.tsx": [
+      "Derived from pairwise judge outcomes.",
+      "Members are still positioning inside the lobbies.",
+      "Scores above ${threshold.toFixed(1)} march through the Aye lobby.",
+      "The Ayes have it",
+      "The Ayes have it",
+      "The Ayes have it",
+      "The Nays have it",
+      "The Nays have it",
+      "The Nays have it",
+      "Voting complete. The Ayes have it with ${ayeVotes.length} votes. Margin: ${margin} votes.",
+      "Voting complete. The Nays have it with ${nayVotes.length} votes. Margin: ${margin} votes."
+    ],
+    "apps/web/components/parliament/VotingSection.tsx": [
+      "Export results as markdown",
+      "Final ranking of participants",
+      "Judge aggregates and ranking summaries",
+      "No scores have been recorded yet."
+    ],
+    "apps/web/components/prompt/ActiveWorkspaceComposer.tsx": [
+      "Ask a follow-up or refine the decision report..."
+    ],
+    "apps/web/components/prompt/advanced-settings-drawer.tsx": [
+      "Direct Providers (No Gateway)",
+      "High Availability (Fallback Chain)"
+    ],
+    "apps/web/components/prompt/prompt-panel.tsx": [
+      "Adversarial debate to find the best argument.",
+      "Arena compare in progress…",
+      "Ask a high-stakes question, compare multiple AI models, and get one synthesized answer...",
+      "Collaborative discussion to explore ideas.",
+      "Describe what you want the AI Arena to run…",
+      "What should the AI Parliament debate?",
+      "What topic should the panel explore collaboratively?",
+      "Your question will be sent to multiple AI models and synthesized into one decision-ready answer."
+    ],
+    "apps/web/components/prompt/prompt-presets.tsx": [
+      "Act as a panel of legal experts. Assess the main legal risks and mitigation strategies for:",
+      "Act as a strategic advisory council. Debate alternative strategies for:",
+      "Compare how different AI models would respond to:",
+      "Debate the strongest pros and cons of:"
+    ]
+  }
+}

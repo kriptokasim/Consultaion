@@ -63,11 +63,12 @@ export default function CodingAgentNewPage() {
             </div>
             
             <div className="space-y-2">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <GitBranch className="w-4 h-4 text-muted-foreground" />
+              <label htmlFor="coding-agent-target-files" className="text-sm font-medium flex items-center gap-2">
+                <GitBranch aria-hidden="true" className="w-4 h-4 text-muted-foreground" />
                 Target Files (Optional)
               </label>
-              <Input 
+              <Input
+                id="coding-agent-target-files"
                 placeholder="E.g., apps/api/auth.py, apps/web/session.ts"
                 value={files}
                 onChange={(e) => setFiles(e.target.value)}

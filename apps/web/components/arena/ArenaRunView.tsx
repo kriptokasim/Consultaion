@@ -454,7 +454,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
 
                         if (slot.type === "unavailable") {
                             return (
-                                <div key={slot.key} data-model-card tabIndex={0}>
+                                <div key={slot.key} data-model-card role="group" tabIndex={0}>
                                     <UnavailableModelCard
                                         displayName={slot.displayName}
                                         provider={slot.provider}
@@ -467,7 +467,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
                         if (slot.type === "stream") {
                             const streamBuf = slot.streamBuf!;
                             return (
-                                <div key={slot.key} data-model-card tabIndex={0}>
+                                <div key={slot.key} data-model-card role="group" tabIndex={0}>
                                     <StreamingModelCard
                                         displayName={streamBuf.displayName ?? "Model"}
                                         provider={streamBuf.provider}
@@ -484,7 +484,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
 
                         const resp = slot.resp!;
                         return (
-                            <div key={slot.key} data-model-card tabIndex={0}>
+                            <div key={slot.key} data-model-card role="group" tabIndex={0}>
                                 <ModelCard
                                     resp={resp}
                                     onRetry={handleRetryAgent}

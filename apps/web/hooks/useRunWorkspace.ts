@@ -499,7 +499,7 @@ export function useRunWorkspace(
 
   const mergedStreamingResponses = useMemo(
     () => selectMergedResponses(streamingState),
-    [streamingState.buffers, streamingState.persisted],
+    [streamingState],
   );
 
   // ── FH117: Independent abort controllers ───────────────────────────────

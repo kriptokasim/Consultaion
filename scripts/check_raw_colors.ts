@@ -1,15 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * check_raw_colors.ts — Warning-mode lint script for Patchset 106
+ * check_raw_colors.ts — Ratcheted semantic-token guard for Patchset 106
  *
  * Scans pilot surface files for raw Tailwind color classes (stone-*, amber-*,
  * slate-*, hex literals) that should be replaced with semantic tokens.
  *
  * Usage:  npx tsx scripts/check_raw_colors.ts
- * Exit:   0 (warning mode only, never fails CI)
+ * Exit:   1 when a new raw-color use is added or the baseline is stale
  */
 
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 const PILOT_FILES = [
@@ -45,7 +45,10 @@ const RAW_COLOR_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 ];
 
 const ROOT = resolve(import.meta.dirname || __dirname, "..");
+const BASELINE_PATH = resolve(ROOT, "scripts/raw_color_baseline.json");
 let totalWarnings = 0;
+type Finding = { file: string; line: number; label: string; source: string };
+const findings: Finding[] = [];
 
 for (const relPath of PILOT_FILES) {
     const absPath = resolve(ROOT, relPath);
@@ -63,7 +66,9 @@ for (const relPath of PILOT_FILES) {
 
         for (const { pattern, label } of RAW_COLOR_PATTERNS) {
             if (pattern.test(line)) {
-                fileWarnings.push(`  L${i + 1}: [${label}] ${line.trim().slice(0, 100)}`);
+                const source = line.trim();
+                fileWarnings.push(`  L${i + 1}: [${label}] ${source.slice(0, 100)}`);
+                findings.push({ file: relPath, line: i + 1, label, source });
             }
         }
     });
@@ -82,5 +87,66 @@ if (totalWarnings === 0) {
     console.warn("   Consider replacing with semantic tokens (see docs/THEME_MIGRATION.md).\n");
 }
 
-// Always exit 0 — this is warning-mode only
+function groupBaseline(items: Finding[]) {
+    const entries: Record<string, string[]> = {};
+    for (const finding of items) {
+        entries[finding.file] ??= [];
+        entries[finding.file].push(`${finding.label}\u0000${finding.source}`);
+    }
+    for (const values of Object.values(entries)) values.sort();
+    return { version: 1, entries };
+}
+
+if (process.argv.includes("--update-baseline")) {
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(groupBaseline(findings), null, 2)}\n`);
+    console.log(`✅ Updated raw-color baseline with ${findings.length} existing finding(s).`);
+    process.exit(0);
+}
+
+if (!existsSync(BASELINE_PATH)) {
+    console.error(`❌ Missing raw-color baseline: ${BASELINE_PATH}`);
+    process.exit(1);
+}
+
+const baseline = JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as {
+    version: number;
+    entries: Record<string, string[]>;
+};
+const expectedCounts = new Map<string, number>();
+
+for (const [file, entries] of Object.entries(baseline.entries ?? {})) {
+    for (const entry of entries) {
+        const key = `${file}\u0000${entry}`;
+        expectedCounts.set(key, (expectedCounts.get(key) ?? 0) + 1);
+    }
+}
+
+const regressions: Finding[] = [];
+for (const finding of findings) {
+    const key = `${finding.file}\u0000${finding.label}\u0000${finding.source}`;
+    const remaining = expectedCounts.get(key) ?? 0;
+    if (remaining > 0) {
+        expectedCounts.set(key, remaining - 1);
+    } else {
+        regressions.push(finding);
+    }
+}
+
+const staleEntries = [...expectedCounts.values()].reduce((total, count) => total + count, 0);
+if (regressions.length > 0) {
+    console.error(`❌ Raw-color guard found ${regressions.length} new violation(s):`);
+    regressions.forEach(({ file, line, label, source }) => {
+        console.error(`  - ${file}:${line} [${label}] ${source.slice(0, 120)}`);
+    });
+}
+if (staleEntries > 0) {
+    console.error(`❌ Raw-color baseline has ${staleEntries} stale entr${staleEntries === 1 ? "y" : "ies"}.`);
+}
+
+if (regressions.length > 0 || staleEntries > 0) {
+    console.error("   Replace the raw color, or intentionally refresh with: npm run lint:colors -- --update-baseline");
+    process.exit(1);
+}
+
+console.log("✅ Raw-color guard passed: no new pilot-surface violations.");
 process.exit(0);

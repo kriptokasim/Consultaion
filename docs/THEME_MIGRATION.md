@@ -69,3 +69,8 @@ When migrating a new surface, replace:
 ## Guardrail Script
 
 Run `npm run lint:colors` to detect remaining raw color usage in pilot surfaces.
+
+The check is enforced in CI as a ratchet: explicitly baselined legacy usages
+remain visible while every new raw color fails the build. When a legacy usage
+is replaced with a semantic token, refresh the baseline intentionally with
+`npm run lint:colors -- --update-baseline` in the same change.

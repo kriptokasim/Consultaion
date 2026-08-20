@@ -111,7 +111,9 @@ export default function ExportMenu({
 
       {isOpen && (
         <>
-          <div
+          <button
+            type="button"
+            aria-label="Close export menu"
             className="fixed inset-0 z-30"
             onClick={() => setIsOpen(false)}
           />

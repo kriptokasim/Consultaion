@@ -122,7 +122,6 @@ export function ActiveWorkspaceComposer({
                     onKeyDown={(e) => handleKeyDown(e, true)}
                     disabled={disabled || isLoading}
                     placeholder={placeholder}
-                    autoFocus
                     style={{ fontSize: '16px' }} // prevent iOS auto-zoom
                     className="w-full h-full bg-transparent text-foreground placeholder:text-muted-foreground outline-none resize-none py-1 leading-relaxed custom-scrollbar"
                   />

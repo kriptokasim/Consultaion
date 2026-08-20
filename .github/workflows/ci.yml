@@ -21,6 +21,9 @@ jobs:
       - name: Scan for hardcoded URLs
         run: npm run lint:urls
 
+      - name: Enforce theme token guardrail
+        run: npm run lint:colors
+
   i18n-parity:
     name: i18n Parity Check
     runs-on: ubuntu-latest
@@ -406,7 +409,7 @@ jobs:
           retention-days: 30
 
   web-typecheck:
-    name: Web TypeScript Check
+    name: Web Lint & TypeScript Check
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -422,6 +425,8 @@ jobs:
       - run: npm ci
       - name: Record exact commit
         run: echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: ESLint check
+        run: npm run lint
       - name: TypeScript check
         run: npx tsc --noEmit
 

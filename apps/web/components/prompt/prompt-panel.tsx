@@ -19,7 +19,6 @@ interface PromptPanelProps {
     onAdvancedSettingsClick?: () => void
     mode?: 'arena' | 'debate' | 'conversation'
     onModeChange?: (mode: 'arena' | 'debate' | 'conversation') => void
-    autoFocus?: boolean
 }
 
 /**
@@ -43,7 +42,6 @@ export function PromptPanel({
     onAdvancedSettingsClick,
     mode = 'arena',
     onModeChange,
-    autoFocus = false,
 }: PromptPanelProps) {
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
         // Cmd/Ctrl + Enter submits, plain Enter inserts a newline
@@ -113,7 +111,6 @@ export function PromptPanel({
                     onChange={(e) => onChange(e.target.value)}
                     onKeyDown={handleKeyDown}
                     disabled={disabled || status === 'running'}
-                    autoFocus={autoFocus}
                     placeholder={
                         mode === 'conversation' 
                             ? "What topic should the panel explore collaboratively?" 

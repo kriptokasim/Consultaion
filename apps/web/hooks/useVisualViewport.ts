@@ -6,6 +6,7 @@ export interface VisualViewportState {
   viewportHeight: number
   viewportWidth: number
   offsetTop: number
+  keyboardInset: number
   isKeyboardOpen: boolean
   orientation: 'portrait' | 'landscape'
 }
@@ -15,6 +16,7 @@ export function useVisualViewport(): VisualViewportState {
     viewportHeight: typeof window !== 'undefined' ? window.innerHeight : 800,
     viewportWidth: typeof window !== 'undefined' ? window.innerWidth : 600,
     offsetTop: 0,
+    keyboardInset: 0,
     isKeyboardOpen: false,
     orientation: 'portrait',
   })
@@ -26,14 +28,15 @@ export function useVisualViewport(): VisualViewportState {
       const vv = window.visualViewport
       if (!vv) return
 
-      const heightDiff = window.innerHeight - vv.height
+      const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
       // If visual viewport is significantly shorter than window height, keyboard is open
-      const isKeyboardOpen = heightDiff > 120
+      const isKeyboardOpen = keyboardInset > 120
 
       setState({
         viewportHeight: vv.height,
         viewportWidth: vv.width,
         offsetTop: vv.offsetTop,
+        keyboardInset,
         isKeyboardOpen,
         orientation: vv.width > vv.height ? 'landscape' : 'portrait',
       })

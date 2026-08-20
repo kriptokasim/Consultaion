@@ -20,6 +20,7 @@ import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
 import { ArenaRunContent } from "@/components/arena/ArenaRunContent";
 import type { DebateSummary } from "@/lib/api/types";
 import { isTerminalRunStatus, isSuccessfulRunStatus, deriveRunPhase, type RunPhase } from "@/lib/runs/status";
+import { useI18n } from "@/lib/i18n/client";
 
 const DebateArena = dynamic(() => import("@/components/debate/DebateArena"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
 const ParliamentRunView = dynamic(() => import("@/components/parliament/ParliamentRunView"), { loading: () => <div className="animate-pulse h-64 bg-muted rounded-xl" /> });
@@ -30,6 +31,35 @@ const VotingRunView = dynamic(() => import("@/components/voting/VotingRunView"),
 
 const POLL_INTERVAL_MS = 4000;
 const HARD_LOADING_CEILING_MS = 15000;
+
+const CORE_ERROR_TITLE_KEYS: Record<string, string> = {
+  not_found: "runDetail.error.notFound",
+  unauthorized: "runDetail.error.signInRequired",
+  forbidden: "runDetail.error.accessDenied",
+  timeout: "runDetail.error.timeout",
+  server_error: "runDetail.error.server",
+  network_error: "runDetail.error.connection",
+  cancelled: "runDetail.error.cancelled",
+};
+
+interface RecoveryNoticeProps {
+  title: string;
+  description: string;
+  retryLabel: string;
+  onRetry: () => void;
+}
+
+function RecoveryNotice({ title, description, retryLabel, onRetry }: RecoveryNoticeProps) {
+  return (
+    <div className="mb-4 rounded-lg border border-warning/20 bg-warning-light p-3 dark:bg-warning-dark/20">
+      <p className="text-sm font-medium text-warning">{title}</p>
+      <p className="mt-1 text-xs text-warning/80">{description}</p>
+      <Button size="sm" variant="outline" className="mt-2" onClick={onRetry}>
+        {retryLabel}
+      </Button>
+    </div>
+  );
+}
 
 export interface RunSnapshot {
   id: string;
@@ -160,6 +190,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   }, [id]);
 
   const { pushToast } = useToast();
+  const { t } = useI18n();
 
   const handleContinue = useCallback(async () => {
     if (!id || isContinuing) return;
@@ -168,12 +199,12 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
     } catch (err) {
       console.error("Failed to continue:", err);
       pushToast({
-        title: "Pipeline Error",
-        description: "Error resuming the decision pipeline. Please try again.",
+        title: t("runDetail.toast.pipelineError.title"),
+        description: t("runDetail.toast.pipelineError.description"),
         variant: "error",
       });
     }
-  }, [id, isContinuing, continueRun, pushToast]);
+  }, [id, isContinuing, continueRun, pushToast, t]);
 
   const handleRetry = useCallback(async () => {
     if (!id) return;
@@ -182,12 +213,12 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
     } catch (err) {
       console.error("Failed to retry:", err);
       pushToast({
-        title: "Retry Error",
-        description: "Error retrying the run. Please try again.",
+        title: t("runDetail.toast.retryError.title"),
+        description: t("runDetail.toast.retryError.description"),
         variant: "error",
       });
     }
-  }, [id, retryRun, pushToast]);
+  }, [id, retryRun, pushToast, t]);
 
   useEffect(() => {
     if (!isCompleted || !id || resultsFetched) return;
@@ -425,20 +456,20 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       <div className="container py-8 max-w-2xl">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Run is taking longer than expected</AlertTitle>
+          <AlertTitle>{t("runDetail.loading.timeoutTitle")}</AlertTitle>
           <AlertDescription>
-            <p className="mt-2 text-sm">This Run is taking longer than expected to load.</p>
+            <p className="mt-2 text-sm">{t("runDetail.loading.timeoutDescription")}</p>
             <div className="mt-4 flex gap-3">
               <Button variant="outline" onClick={() => refetch()}>
-                Retry
+                {t("runDetail.actions.retry")}
               </Button>
               <Button variant="ghost" onClick={() => router.push("/runs")}>
-                Back to Runs
+                {t("runDetail.actions.backToRuns")}
               </Button>
             </div>
             {process.env.NODE_ENV === "development" && (
               <p className="mt-3 text-xs text-muted-foreground">
-                Debate ID: {id} | Workspace status: {workspaceStatus}
+                {t("runDetail.debug.status", { id, status: workspaceStatus })}
               </p>
             )}
           </AlertDescription>
@@ -469,7 +500,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
           </div>
         </div>
 
-        <div className="h-14 w-full bg-slate-105 dark:bg-slate-900/60 rounded-2xl animate-pulse" />
+        <div className="h-14 w-full bg-slate-100 dark:bg-slate-900/60 rounded-2xl animate-pulse" />
 
         <div className="space-y-3 animate-pulse">
           <div className="h-4.5 w-36 bg-slate-200 dark:bg-slate-800 rounded-md" />
@@ -490,15 +521,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       <div className="container py-8 max-w-2xl">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>
-            {coreErrorCode === "not_found" && "Run Not Found"}
-            {coreErrorCode === "unauthorized" && "Sign-In Required"}
-            {coreErrorCode === "forbidden" && "Access Denied"}
-            {coreErrorCode === "timeout" && "Request Timed Out"}
-            {coreErrorCode === "server_error" && "Server Error"}
-            {coreErrorCode === "network_error" && "Connection Failed"}
-            {coreErrorCode === "cancelled" && "Request Cancelled"}
-          </AlertTitle>
+          <AlertTitle>{t(CORE_ERROR_TITLE_KEYS[coreErrorCode] ?? "runDetail.error.generic")}</AlertTitle>
           <AlertDescription>
             <p className="mt-2 text-sm">{workspaceError}</p>
             {coreHttpStatus && (
@@ -506,7 +529,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             )}
             {coreErrorCode !== "cancelled" && (
               <Button variant="outline" className="mt-4" onClick={() => refetch()}>
-                Retry
+                {t("runDetail.actions.retry")}
               </Button>
             )}
           </AlertDescription>
@@ -519,7 +542,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   // a generic error card. Only show the simple failure when NO persisted
   // responses could be retrieved.
   if (debate?.status === "failed") {
-    const errorReason = debate?.final_meta?.error || debate?.error_reason || "Run encountered a terminal error and failed.";
+    const errorReason = debate?.final_meta?.error || debate?.error_reason || t("runDetail.failure.defaultReason");
     const failureCode = debate?.final_meta?.failure_code;
     const failureDetail = debate?.final_meta?.failure_detail_safe;
     const correlationId = debate?.final_meta?.correlation_id;
@@ -547,8 +570,15 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             onRetry={handleRetry}
             onRefetch={refetch}
             failure={{
-              title: responses.length === 0 ? "Run Failed" : "Run Completed with Errors",
-              message: responses.length === 0 ? errorReason : `${responses.filter(r => r.success).length} of ${responses.length} models responded successfully.`,
+              title: responses.length === 0
+                ? t("runDetail.failure.title")
+                : t("runDetail.failure.completedWithErrors"),
+              message: responses.length === 0
+                ? errorReason
+                : t("runDetail.failure.modelsSucceeded", {
+                    successful: responses.filter((response) => response.success).length,
+                    total: responses.length,
+                  }),
               code: failureCode || undefined,
               correlationId: correlationId || undefined,
               retryable: true,
@@ -561,7 +591,6 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
     // Non-Arena failures retain specialized behavior
     const hasPersistedResponses = responsesState === "ready" && responses.length > 0;
     const responsesQueryFailed = responsesState === "failed";
-    const noResponsesPersisted = responsesState === "empty" || (responsesState === "ready" && responses.length === 0);
 
     if (hasPersistedResponses) {
       // FH93: Show model cards even for failed Runs
@@ -579,18 +608,23 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>
               {successCount === 0
-                ? "Run could not produce a final decision"
-                : "Run completed with errors"}
+                ? t("runDetail.failure.noFinalDecision")
+                : t("runDetail.failure.completedWithErrors")}
             </AlertTitle>
             <AlertDescription>
               <p className="mt-2 text-sm">
-                {successCount} of {totalCount} models responded successfully.
-                {failedCount > 0 && ` ${failedCount} provider${failedCount > 1 ? "s" : ""} failed.`}
+                {t("runDetail.failure.modelsSucceeded", {
+                  successful: successCount,
+                  total: totalCount,
+                })}
+                {failedCount > 0 && (
+                  <> {t(failedCount === 1 ? "runDetail.failure.providerFailed" : "runDetail.failure.providersFailed", { count: failedCount })}</>
+                )}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">{failureSummary}</p>
               {failureCode && (
                 <p className="mt-1 text-xs font-mono text-muted-foreground">
-                  Failure: {failureCode}
+                  {t("runDetail.failure.code")}: {failureCode}
                   {correlationId && <> · ID: {correlationId}</>}
                 </p>
               )}
@@ -598,7 +632,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
                 <p className="mt-1 text-xs text-muted-foreground">{failureDetail}</p>
               )}
               <Button variant="outline" className="mt-3" onClick={() => refetch()}>
-                Retry Run
+                {t("runDetail.actions.retryRun")}
               </Button>
             </AlertDescription>
           </Alert>
@@ -625,12 +659,12 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
         <div className="container py-8 max-w-2xl">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Run Failed</AlertTitle>
+            <AlertTitle>{t("runDetail.failure.title")}</AlertTitle>
             <AlertDescription>
-              <p className="mt-2 text-sm">Run failed, and stored responses could not be retrieved.</p>
+              <p className="mt-2 text-sm">{t("runDetail.failure.responsesUnavailable")}</p>
               <p className="mt-1 text-xs text-muted-foreground">{responsesError}</p>
               <Button variant="outline" className="mt-4" onClick={() => refetch()}>
-                Retry Loading Responses
+                {t("runDetail.actions.retryLoadingResponses")}
               </Button>
             </AlertDescription>
           </Alert>
@@ -643,12 +677,12 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       <div className="container py-8 max-w-2xl">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Run Failed</AlertTitle>
+          <AlertTitle>{t("runDetail.failure.title")}</AlertTitle>
           <AlertDescription>
             <p className="mt-2 text-sm">{errorReason}</p>
             {failureCode && (
               <p className="mt-1 text-xs font-mono text-muted-foreground">
-                Failure: {failureCode}
+                {t("runDetail.failure.code")}: {failureCode}
                 {correlationId && <> · ID: {correlationId}</>}
               </p>
             )}
@@ -656,7 +690,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
               <p className="mt-1 text-xs text-muted-foreground">{failureDetail}</p>
             )}
             <Button variant="outline" className="mt-4" onClick={() => refetch()}>
-              Retry / Refresh
+              {t("runDetail.actions.retryRefresh")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -671,22 +705,20 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       return (
         <div className="container max-w-[1400px] py-6">
           {hydrationQuality !== "complete" && (
-            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
-              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Run loaded in recovery mode</p>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                The core Run and stored report are available, but some timeline events could not be retrieved. Refresh or retry event loading.
-              </p>
-              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
-            </div>
+            <RecoveryNotice
+              title={t("runDetail.recovery.runTitle")}
+              description={t("runDetail.recovery.timelineAndReport")}
+              retryLabel={t("runDetail.actions.retryLoadingResults")}
+              onRetry={retryEnrichment}
+            />
           )}
           {completedLoadState === "ready_degraded" && hydrationQuality === "complete" && (
-            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
-              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Results loaded in recovery mode</p>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                The core Run is available, but post-run event enrichment failed.
-              </p>
-              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
-            </div>
+            <RecoveryNotice
+              title={t("runDetail.recovery.resultsTitle")}
+              description={t("runDetail.recovery.enrichment")}
+              retryLabel={t("runDetail.actions.retryLoadingResults")}
+              onRetry={retryEnrichment}
+            />
           )}
           <ArenaRunContent
             debate={debate}
@@ -720,22 +752,20 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       return (
         <div className="container max-w-6xl py-6">
           {hydrationQuality !== "complete" && (
-            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
-              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Run loaded in recovery mode</p>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                The core Run and stored report are available, but some timeline events could not be retrieved.
-              </p>
-              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
-            </div>
+            <RecoveryNotice
+              title={t("runDetail.recovery.runTitle")}
+              description={t("runDetail.recovery.timeline")}
+              retryLabel={t("runDetail.actions.retryLoadingResults")}
+              onRetry={retryEnrichment}
+            />
           )}
           {completedLoadState === "ready_degraded" && hydrationQuality === "complete" && (
-            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
-              <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Results loaded in recovery mode</p>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                The core Run is available, but post-run event enrichment failed.
-              </p>
-              <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
-            </div>
+            <RecoveryNotice
+              title={t("runDetail.recovery.resultsTitle")}
+              description={t("runDetail.recovery.enrichment")}
+              retryLabel={t("runDetail.actions.retryLoadingResults")}
+              onRetry={retryEnrichment}
+            />
           )}
           <VotingRunView
             debate={debate}
@@ -769,22 +799,20 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
     return (
       <div className="container max-w-6xl py-6">
         {hydrationQuality !== "complete" && (
-          <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
-            <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Run loaded in recovery mode</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              The core Run is available, but some optional data could not be retrieved.
-            </p>
-            <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
-          </div>
+          <RecoveryNotice
+            title={t("runDetail.recovery.runTitle")}
+            description={t("runDetail.recovery.optionalData")}
+            retryLabel={t("runDetail.actions.retryLoadingResults")}
+            onRetry={retryEnrichment}
+          />
         )}
         {completedLoadState === "ready_degraded" && hydrationQuality === "complete" && (
-          <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
-            <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Results loaded in recovery mode</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              The core Run is available, but post-run event enrichment failed.
-            </p>
-            <Button size="sm" variant="outline" className="mt-2" onClick={retryEnrichment}>Retry Loading Results</Button>
-          </div>
+          <RecoveryNotice
+            title={t("runDetail.recovery.resultsTitle")}
+            description={t("runDetail.recovery.enrichment")}
+            retryLabel={t("runDetail.actions.retryLoadingResults")}
+            onRetry={retryEnrichment}
+          />
         )}
         <ParliamentRunView
           id={id}
@@ -869,7 +897,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
       {isPollingFallback && (
         <div className="flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800">
           <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Connection interrupted — using polling fallback</span>
+          <span>{t("runDetail.connection.pollingFallback")}</span>
         </div>
       )}
       {debate?.status === "perspectives_ready" && (
@@ -878,12 +906,12 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-100 flex items-center gap-2">
                 <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                Perspectives Collected
+                {t("runDetail.synthesis.perspectivesCollected")}
               </h3>
               <p className="text-xs text-stone-600 dark:text-stone-400">
                 {outcomeUnknown
-                  ? "Request was sent but the outcome is unknown. You can safely retry — idempotency will prevent duplicate work."
-                  : "All individual agent responses are in. Click below to continue and generate the decision-ready report."}
+                  ? t("runDetail.synthesis.outcomeUnknown")
+                  : t("runDetail.synthesis.ready")}
               </p>
             </div>
             <Button
@@ -893,14 +921,14 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
               className="bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600 font-semibold rounded-lg shrink-0"
             >
               {outcomeUnknown ? (
-                "Retry Synthesis"
+                t("runDetail.synthesis.retry")
               ) : isContinuing ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  Synthesizing...
+                  {t("runDetail.synthesis.inProgress")}
                 </>
               ) : (
-                "Synthesize Verdict"
+                t("runDetail.synthesis.action")
               )}
             </Button>
           </div>
