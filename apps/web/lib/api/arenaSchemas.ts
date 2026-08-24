@@ -114,6 +114,7 @@ export const modelLifecycleSchema = z.object({
   model_id: z.string().optional().default(""),
   display_name: z.string().optional(),
   provider: z.string().optional(),
+  content: z.string().optional(),
   run_attempt: z.number().int().nonnegative().optional(),
   retry_generation: z.number().int().nonnegative().optional(),
   error: z.string().optional(),

@@ -67,13 +67,16 @@ function buildAnalytics(debates: DebateRecord[]): AnalyticsData {
 
   const winMap = new Map<string, AnalyticsWinRate>();
   debates.forEach((debate) => {
-    const winner = debate.final_meta?.ranking?.[0];
-    if (!winner) return;
+    const ranking = debate.final_meta?.ranking;
+    if (!Array.isArray(ranking) || ranking.length === 0) return;
+    const winner = ranking[0];
+    if (typeof winner !== "string" || !winner) return;
     const entry = winMap.get(winner) ?? { persona: winner, wins: 0, total: 0 };
     entry.wins += 1;
     entry.total += 1;
     winMap.set(winner, entry);
-    debate.final_meta?.ranking?.slice(1).forEach((persona) => {
+    ranking.slice(1).forEach((persona) => {
+      if (typeof persona !== "string" || !persona) return;
       const loserEntry = winMap.get(persona) ?? { persona, wins: 0, total: 0 };
       loserEntry.total += 1;
       winMap.set(persona, loserEntry);
@@ -89,7 +92,10 @@ function buildAnalytics(debates: DebateRecord[]): AnalyticsData {
   ];
 
   debates.forEach((debate) => {
-    debate.final_meta?.scores?.forEach((score) => {
+    const scores = debate.final_meta?.scores;
+    if (!Array.isArray(scores)) return;
+    scores.forEach((score) => {
+      if (!score || typeof score.score !== "number" || !Number.isFinite(score.score)) return;
       const bucket = scoreBuckets.find((item) => score.score >= item.min && score.score < item.max);
       if (bucket) bucket.count += 1;
     });

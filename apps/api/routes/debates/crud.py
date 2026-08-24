@@ -286,6 +286,40 @@ async def create_debate(
                     for model in default_arena_models
                 ]
             )
+        elif body.mode == "debate" and body.panel_config is None:
+            eligible_debate_models = [
+                model
+                for model in enabled_models.values()
+                if getattr(model, "tier", "standard") in allowed_tiers
+            ]
+            if not eligible_debate_models:
+                raise ProviderCircuitOpenError(
+                    message="No Structured Debate models are available on your plan.",
+                    code="models.unavailable",
+                    hint="Configure a provider or select another model.",
+                )
+            role_template = default_panel_config()
+            panel_config = role_template.model_copy(
+                update={
+                    "seats": [
+                        seat.model_copy(
+                            update={
+                                "provider_key": (
+                                    "google" if model.provider == "gemini" else model.provider
+                                ),
+                                "model": model.id,
+                            }
+                        )
+                        for seat, model in (
+                            (
+                                seat,
+                                eligible_debate_models[index % len(eligible_debate_models)],
+                            )
+                            for index, seat in enumerate(role_template.seats)
+                        )
+                    ]
+                }
+            )
         else:
             panel_config = body.panel_config or default_panel_config()
         try:
@@ -347,6 +381,54 @@ async def create_debate(
                     hint="Configure a provider or select another model.",
                 )
             panel = panel.model_copy(update={"seats": normalized_seats})
+
+        elif body.mode == "debate":
+            normalized_debate_seats: list[PanelSeat] = []
+            for seat in panel.seats:
+                model_info = resolve_model_info(seat.model)
+                if model_info is None or model_info.id not in enabled_models:
+                    raise ValidationError(
+                        message=f"Model '{seat.model}' is invalid or unavailable.",
+                        code="debate.invalid_model",
+                        hint="Please select a currently available model.",
+                    )
+
+                expected_provider = (
+                    "google" if model_info.provider == "gemini" else model_info.provider
+                )
+                if seat.provider_key != expected_provider:
+                    raise ValidationError(
+                        message=(
+                            f"Model '{seat.model}' does not belong to provider "
+                            f"'{seat.provider_key}'."
+                        ),
+                        code="debate.invalid_provider",
+                    )
+                if model_info.tier not in allowed_tiers:
+                    raise ValidationError(
+                        message=f"Model '{model_info.display_name}' is not available on your plan.",
+                        code="debate.model_tier_restricted",
+                        hint="Please upgrade to Pro or select a standard model.",
+                    )
+
+                # Keep the seat identity/display role intact. Structured Debate
+                # may intentionally assign one model to several distinct roles.
+                normalized_debate_seats.append(
+                    seat.model_copy(
+                        update={
+                            "provider_key": expected_provider,
+                            "model": model_info.id,
+                        }
+                    )
+                )
+
+            if not normalized_debate_seats:
+                raise ProviderCircuitOpenError(
+                    message="No requested panel models are available.",
+                    code="models.unavailable",
+                    hint="Configure a provider or select another model.",
+                )
+            panel = panel.model_copy(update={"seats": normalized_debate_seats})
 
         # Routing decision
         route_ctx = RouteContext(

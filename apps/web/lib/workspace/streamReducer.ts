@@ -114,6 +114,9 @@ function applyDeltaPayloads(
       accumulatedText: "",
       lastSequence: 0,
     };
+    // Terminal lifecycle events are authoritative. A reconnect/replay can deliver
+    // an older delta after completed/failed; never regress that buffer to streaming.
+    if (buf.state === "completed" || buf.state === "failed") continue;
     if (!isValidSequence(delta_sequence, buf.lastSequence)) continue;
 
     const combined = buf.accumulatedText + text;
@@ -229,12 +232,29 @@ export function streamingReducer(
 
     case "RESPONSE_COMPLETED": {
       if (!isValidLifecyclePayload(action.payload)) return state;
-      const { response_id } = action.payload;
+      const { response_id, model_id, display_name, provider, content } = action.payload;
       const buf = state.buffers.get(response_id);
-      if (!buf || !shouldApplyLifecycle(buf.state, "completed")) return state;
-      // Track G: Retain completed buffer with accumulated text until persistence arrives
       const next = new Map<string, StreamingModelBuffer>(Array.from(state.buffers.entries()));
-      next.set(response_id, { ...buf, state: "completed" });
+      if (buf) {
+        if (!shouldApplyLifecycle(buf.state, "completed")) return state;
+        next.set(response_id, {
+          ...buf,
+          state: "completed",
+          accumulatedText: content || buf.accumulatedText,
+        });
+      } else {
+        // Reconnect may resume at the completed boundary after earlier lifecycle
+        // events have fallen out of the transport/replay window.
+        next.set(response_id, {
+          responseId: response_id,
+          modelId: model_id || "",
+          displayName: display_name || "",
+          provider,
+          state: "completed",
+          accumulatedText: content || "",
+          lastSequence: 0,
+        });
+      }
       return { ...state, buffers: next };
     }
 

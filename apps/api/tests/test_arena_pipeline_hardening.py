@@ -1,14 +1,14 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from config import settings
 from model_gateway.model_target import UnknownModelError, resolve_model_target
 from model_gateway.provider_health import (
     CIRCUIT_FAILURE_THRESHOLD,
     is_circuit_open,
     record_failure,
 )
-
-from config import settings
 
 
 @pytest.mark.asyncio
@@ -99,7 +99,7 @@ async def test_staged_streaming_config_defaults():
     assert settings.ARENA_ACTIVE_STREAM_TIMEOUT_MS == 30000
     assert settings.ARENA_STREAM_TOTAL_TIMEOUT_MS == 60000
     assert settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS == 2
-    assert settings.ARENA_FAST_FINALIZATION_ENABLED is True
+    assert settings.ARENA_FAST_FINALIZATION_ENABLED is False
     assert settings.ARENA_FINAL_CONVERGENCE_GRACE_MS == 8000
 
 

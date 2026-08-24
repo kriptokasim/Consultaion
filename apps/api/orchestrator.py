@@ -286,6 +286,13 @@ async def _build_and_send_summary(debate_id: str, user_id: str | None) -> None:
 
 async def _start_round(debate_id: str, index: int, label: str, note: str) -> int:
     async with async_session_scope() as session:
+        from orchestration.execution_context import require_current_execution_lease
+        from orchestration.fencing import assert_execution_ownership
+
+        lease = require_current_execution_lease()
+        if lease.debate_id != debate_id:
+            raise RuntimeError("Execution lease/debate mismatch while starting round")
+        await assert_execution_ownership(session, lease)
         round_record = DebateRound(debate_id=debate_id, index=index, label=label, note=note)
         session.add(round_record)
         await session.commit()
@@ -297,6 +304,13 @@ async def _end_round(round_id: int) -> None:
     async with async_session_scope() as session:
         round_record = await session.get(DebateRound, round_id)
         if round_record:
+            from orchestration.execution_context import require_current_execution_lease
+            from orchestration.fencing import assert_execution_ownership
+
+            lease = require_current_execution_lease()
+            if lease.debate_id != round_record.debate_id:
+                raise RuntimeError("Execution lease/debate mismatch while ending round")
+            await assert_execution_ownership(session, lease)
             round_record.ended_at = datetime.now(timezone.utc)
             session.add(round_record)
             await session.commit()
@@ -310,6 +324,13 @@ async def _persist_messages(
     attempt_id: str | None = None,
 ) -> None:
     async with async_session_scope() as session:
+        from orchestration.execution_context import require_current_execution_lease
+        from orchestration.fencing import assert_execution_ownership
+
+        lease = require_current_execution_lease()
+        if lease.debate_id != debate_id:
+            raise RuntimeError("Execution lease/debate mismatch while persisting messages")
+        await assert_execution_ownership(session, lease)
         for payload in messages:
             session.add(
                 Message(
@@ -559,6 +580,11 @@ async def _run_judge_round(
     usage_tracker.extend(judge_usage)
 
     async with async_session_scope() as session:
+        from orchestration.execution_context import require_current_execution_lease
+        from orchestration.fencing import assert_execution_ownership
+
+        lease = require_current_execution_lease()
+        await assert_execution_ownership(session, lease)
         for detail in judge_details:
             session.add(
                 Score(
@@ -586,6 +612,11 @@ async def _run_judge_round(
     logger.debug("Debate %s: judges completed with %d entries", debate_id, len(judge_details))
 
     async with async_session_scope() as session:
+        from orchestration.execution_context import require_current_execution_lease
+        from orchestration.fencing import assert_execution_ownership
+
+        lease = require_current_execution_lease()
+        await assert_execution_ownership(session, lease)
         session.add(
             Vote(
                 debate_id=debate_id,
@@ -706,8 +737,10 @@ async def run_debate(
 
                 debate_user_id = debate.user_id
                 prompt = debate.prompt
-                is_parliament = bool(debate.panel_config)
                 debate_mode = debate.mode or "debate"
+                # Structured Debate has one explicit execution engine. Presence
+                # or absence of panel_config must never change the pipeline.
+                is_parliament = debate_mode == "debate"
 
                 # Resolve current attempt_id for attempt-scoped records
                 current_attempt_id: str | None = None
@@ -826,6 +859,20 @@ async def run_debate(
                             },
                         },
                     )
+
+                terminal_event_type = (
+                    "debate_completed"
+                    if result.status in {"completed", "completed_with_warnings"}
+                    else "debate_failed"
+                )
+                await backend.publish(
+                    channel_id,
+                    {
+                        "type": terminal_event_type,
+                        "debate_id": debate_id,
+                        "status": result.status,
+                    },
+                )
 
                 if result.status in {"completed", "completed_with_warnings"}:
                     from services.terminal_transition import (
@@ -947,7 +994,8 @@ async def run_debate(
                 return
 
             if is_parliament:
-                # Legacy Parliament Path (for now, or wrap in a pipeline later)
+                # Canonical Structured Debate engine. This branch is selected
+                # explicitly by mode, never implicitly by panel_config truthiness.
                 panel_result = await run_parliament_debate(debate_id, model_id=model_id)
                 final_meta = panel_result.final_meta
                 final_status = panel_result.status or "completed"
@@ -970,9 +1018,12 @@ async def run_debate(
                     await backend.publish(
                         channel_id,
                         {
-                            "type": "error",
+                            "type": "debate_failed",
                             "debate_id": debate_id,
                             "round": 0,
+                            "status": final_status,
+                            "reason": panel_result.error_reason
+                            or "seat_failure_threshold_exceeded",
                             "payload": {
                                 "reason": panel_result.error_reason
                                 or "seat_failure_threshold_exceeded",
@@ -1187,10 +1238,13 @@ async def run_debate(
             await backend.publish(
                 channel_id,
                 {
-                    "type": "error",
+                    "type": "debate_failed",
                     "debate_id": debate_id,
                     "round": 0,
-                    "payload": {"message": "Temporary AI provider issue. Please retry."},
+                    "payload": {
+                        "message": "Temporary AI provider issue. Please retry.",
+                        "failure_code": "transient_provider_error",
+                    },
                 },
             )
         except Exception:
@@ -1293,10 +1347,13 @@ async def run_debate(
             await backend.publish(
                 channel_id,
                 {
-                    "type": "error",
+                    "type": "debate_failed",
                     "debate_id": debate_id,
                     "round": 0,
-                    "payload": {"message": "Debate failed due to an internal error."},
+                    "payload": {
+                        "message": "Debate failed due to an internal error.",
+                        "failure_code": "terminal_execution_error",
+                    },
                 },
             )
         except Exception:

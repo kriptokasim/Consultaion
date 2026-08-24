@@ -203,8 +203,8 @@ class AppSettings(BaseSettings):
     ARENA_STREAM_TOTAL_TIMEOUT_MS: int = Field(60000, ge=1000, le=300000, description="Total timeout for streaming call")
 
     # Bounded Quorum Convergence (PS185)
-    ARENA_FAST_FINALIZATION_ENABLED: bool = Field(True, description="Enable fast synthesis finalization when min responses reached")
-    ARENA_FINAL_CONVERGENCE_GRACE_MS: int = Field(8000, ge=0, le=30000, description="Grace period after quorum before hard finalization")
+    ARENA_FAST_FINALIZATION_ENABLED: bool = Field(False, description="Deprecated compatibility flag; quorum never cancels active model tasks")
+    ARENA_FINAL_CONVERGENCE_GRACE_MS: int = Field(8000, ge=0, le=30000, description="Deprecated compatibility value; finalization waits for genuine model terminal states")
 
     # Stage-specific max_tokens limits
     ARENA_MAX_TOKENS: int = Field(1200, ge=100, description="Max tokens per arena model response")

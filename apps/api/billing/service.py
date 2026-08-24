@@ -186,6 +186,8 @@ def increment_debate_usage(db: Session, user_id: UserID) -> BillingUsage:
     return usage
 
 
+
+
 def increment_export_usage(db: Session, user_id: UserID) -> BillingUsage:
     usage = get_or_create_usage(db, user_id)
     usage.exports_count += 1
