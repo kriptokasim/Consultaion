@@ -102,6 +102,24 @@ describe("streamingReducer lifecycle ordering", () => {
     expect(replayed.buffers.get("response-1")?.accumulatedText).toBe("hello");
   });
 
+  test("reconstructs a completed response when earlier lifecycle events were missed", () => {
+    const completed = streamingReducer(INITIAL_STREAMING_STATE, {
+      type: "RESPONSE_COMPLETED",
+      payload: {
+        response_id: "response-late",
+        model_id: "model-late",
+        display_name: "Late Model",
+        provider: "test",
+        content: "Late answer survived reconnect",
+      },
+    });
+
+    expect(completed.buffers.get("response-late")?.state).toBe("completed");
+    expect(completed.buffers.get("response-late")?.accumulatedText).toBe(
+      "Late answer survived reconnect",
+    );
+  });
+
   test("keeps completed state sticky when older lifecycle events replay", () => {
     const streaming = streamingReducer(INITIAL_STREAMING_STATE, delta("done", 1));
     const completed = streamingReducer(streaming, {
@@ -115,5 +133,36 @@ describe("streamingReducer lifecycle ordering", () => {
 
     expect(replayed.buffers.get("response-1")?.state).toBe("completed");
     expect(replayed.buffers.get("response-1")?.accumulatedText).toBe("done");
+  });
+
+  test("does not reopen a completed response when a replayed delta arrives later", () => {
+    const completed = streamingReducer(INITIAL_STREAMING_STATE, {
+      type: "RESPONSE_COMPLETED",
+      payload: {
+        response_id: "response-1",
+        model_id: "model-1",
+        content: "terminal answer",
+      },
+    });
+    const replayed = streamingReducer(completed, delta(" stale tail", 99));
+
+    expect(replayed.buffers.get("response-1")?.state).toBe("completed");
+    expect(replayed.buffers.get("response-1")?.accumulatedText).toBe("terminal answer");
+  });
+
+  test("does not reopen a failed response when a replayed delta arrives later", () => {
+    const failed = streamingReducer(INITIAL_STREAMING_STATE, {
+      type: "RESPONSE_FAILED",
+      payload: {
+        response_id: "response-1",
+        model_id: "model-1",
+        error: "Provider request timed out.",
+        error_code: "model_timeout",
+      },
+    });
+    const replayed = streamingReducer(failed, delta(" stale tail", 99));
+
+    expect(replayed.buffers.get("response-1")?.state).toBe("failed");
+    expect(replayed.buffers.get("response-1")?.accumulatedText).toBe("");
   });
 });

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from database_async import async_session_scope
-from models import Debate, DebateCheckpoint, DebateRound, Message, Score, Vote
+from models import Debate, DebateAttempt, DebateCheckpoint, DebateRound, Message, Score, Vote
 from sqlmodel import select
 
 from config import settings
@@ -61,8 +61,13 @@ class DebateStateManager:
     async def start_round(self, index: int, label: str, note: str) -> int:
         """Create a new round record."""
         async with async_session_scope() as session:
+            if self.execution_lease is not None:
+                from orchestration.fencing import assert_execution_ownership
+
+                await assert_execution_ownership(session, self.execution_lease)
             round_record = DebateRound(
                 debate_id=self.debate_id,
+                attempt_id=self.attempt_id,
                 index=index,
                 label=label,
                 note=note
@@ -77,6 +82,10 @@ class DebateStateManager:
         async with async_session_scope() as session:
             round_record = await session.get(DebateRound, round_id)
             if round_record:
+                if self.execution_lease is not None:
+                    from orchestration.fencing import assert_execution_ownership
+
+                    await assert_execution_ownership(session, self.execution_lease)
                 round_record.ended_at = datetime.now(timezone.utc)
                 session.add(round_record)
                 await session.commit()
@@ -84,6 +93,10 @@ class DebateStateManager:
     async def save_messages(self, round_index: int, messages: List[Dict[str, Any]], role: str) -> None:
         """Persist a batch of messages."""
         async with async_session_scope() as session:
+            if self.execution_lease is not None:
+                from orchestration.fencing import assert_execution_ownership
+
+                await assert_execution_ownership(session, self.execution_lease)
             for payload in messages:
                 session.add(
                     Message(
@@ -101,6 +114,10 @@ class DebateStateManager:
     async def save_scores(self, scores: List[Dict[str, Any]]) -> None:
         """Persist judge scores."""
         async with async_session_scope() as session:
+            if self.execution_lease is not None:
+                from orchestration.fencing import assert_execution_ownership
+
+                await assert_execution_ownership(session, self.execution_lease)
             for detail in scores:
                 session.add(
                     Score(
@@ -117,6 +134,10 @@ class DebateStateManager:
     async def save_vote(self, method: str, ranking: List[str], details: Dict[str, Any]) -> None:
         """Persist the final vote/ranking."""
         async with async_session_scope() as session:
+            if self.execution_lease is not None:
+                from orchestration.fencing import assert_execution_ownership
+
+                await assert_execution_ownership(session, self.execution_lease)
             session.add(
                 Vote(
                     debate_id=self.debate_id,
@@ -124,7 +145,6 @@ class DebateStateManager:
                     rankings={"order": ranking},
                     weights={"borda_weight": 1.0, "condorcet_weight": 1.0},
                     result=details,
-                    attempt_id=self.attempt_id,
                 )
             )
             await session.commit()
@@ -180,6 +200,24 @@ class DebateStateManager:
                 step="done",
                 status=status,
             )
+
+            # DebateAttempt is the logical execution identity. It remains
+            # running across staged continuation and worker takeover, and only
+            # becomes terminal when the Debate itself becomes terminal.
+            if self.attempt_id:
+                attempt = await session.get(DebateAttempt, self.attempt_id)
+                if attempt is not None:
+                    attempt.status = (
+                        "completed"
+                        if status in {"completed", "completed_with_warnings"}
+                        else "failed"
+                    )
+                    attempt.tokens_used = max(
+                        int(getattr(attempt, "tokens_used", 0) or 0),
+                        max(int(tokens_total), 0),
+                    )
+                    attempt.completed_at = datetime.now(timezone.utc)
+                    session.add(attempt)
             
             if self.user_id:
                 try:

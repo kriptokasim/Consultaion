@@ -24,6 +24,31 @@ class RouterRegistration:
     tags: List[str] = field(default_factory=list)
 
 
+def _install_auth_hardening(auth_router: APIRouter) -> None:
+    """Replace login/callback mutations with inactive-account-safe handlers."""
+    if getattr(auth_router, "_consultaion_auth_hardened", False):
+        return
+
+    protected = {
+        ("/auth/login", "POST"),
+        ("/auth/google/callback", "GET"),
+        ("/auth/google/callback", "POST"),
+    }
+    auth_router.routes[:] = [
+        route
+        for route in auth_router.routes
+        if not any(
+            getattr(route, "path", None) == path
+            and method in (getattr(route, "methods", None) or set())
+            for path, method in protected
+        )
+    ]
+    from routes.auth_hardening import router as auth_hardening_router
+
+    auth_router.include_router(auth_hardening_router)
+    setattr(auth_router, "_consultaion_auth_hardened", True)
+
+
 def build_router_registry() -> List[RouterRegistration]:
     """Build the canonical list of all API routers.
 
@@ -56,6 +81,8 @@ def build_router_registry() -> List[RouterRegistration]:
     from routes.teams import router as teams_router
     from routes.votes import router as votes_router
     from routes.voting import router as voting_router
+
+    _install_auth_hardening(auth_router)
 
     return [
         RouterRegistration(auth_router),
@@ -114,29 +141,30 @@ def register_routers(app, settings) -> None:
                 prefix=reg.root_prefix or "",
             )
 
-        # /api/v1 routes (canonical)
+        # /api/v1 routes are the canonical namespace.
         if reg.v1_enabled:
-            from fastapi import APIRouter as _APIRouter
-
-            v1_ns = _APIRouter(prefix="/api/v1" + (reg.v1_prefix or ""))
+            v1_ns = APIRouter(prefix="/api/v1" + (reg.v1_prefix or ""))
             v1_ns.include_router(reg.router)
             app.include_router(v1_ns)
 
     # Mount debug router under v1 if enabled
     if v1_debug is not None:
-        from fastapi import APIRouter as _APIRouter
-
-        v1_debug_ns = _APIRouter(prefix="/api/v1")
+        v1_debug_ns = APIRouter(prefix="/api/v1")
         v1_debug_ns.include_router(v1_debug)
         app.include_router(v1_debug_ns)
 
     # FH125 C-4: Add deprecation headers to root (non-/api/v1) API routes
     if not settings.IS_LOCAL_ENV:
+
         @app.middleware("http")
         async def _root_deprecation_headers(request: Request, call_next):
             resp = await call_next(request)
             path = request.url.path
-            if not path.startswith("/api/v1") and not path.startswith("/metrics") and not path.startswith("/ops"):
+            if (
+                not path.startswith("/api/v1")
+                and not path.startswith("/metrics")
+                and not path.startswith("/ops")
+            ):
                 resp.headers["Deprecation"] = "true"
                 resp.headers["Sunset"] = "2026-09-01"
                 resp.headers["Link"] = f'</api/v1{path}>; rel="successor-version"'

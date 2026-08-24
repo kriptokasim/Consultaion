@@ -64,6 +64,7 @@ export interface ModelResponseLifecyclePayload {
   model_id: string;
   display_name?: string;
   provider?: string;
+  content?: string;
   error?: string;
   error_code?: string;
   run_attempt?: number;

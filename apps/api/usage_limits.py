@@ -173,7 +173,9 @@ def _ensure_daily_token_headroom(session: Session, user_id: str) -> None:
         )
 
 
-def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
+def reserve_run_slot(
+    session: Session, user_id: Optional[str], *, commit: bool = True
+) -> None:
     """Atomically reserve a run slot and validate token headroom.
 
     FH125 Track H: Uses conditional UPDATE with FOR UPDATE lock to prevent
@@ -242,7 +244,39 @@ def reserve_run_slot(session: Session, user_id: Optional[str]) -> None:
         session.rollback()
         raise
 
+    if commit:
+        session.commit()
+
+
+def refund_run_slot(session: Session, user_id: Optional[str]) -> bool:
+    """Refund one previously committed hourly run reservation.
+
+    This is the compensation pair for ``reserve_run_slot`` and is deliberately
+    floor-guarded so duplicate compensation cannot make usage negative.
+    """
+    if not user_id:
+        return False
+
+    from models import User
+    from security.owner import is_owner
+
+    user = session.get(User, user_id)
+    if is_owner(user) and settings.OWNER_UNLIMITED:
+        return False
+
+    stmt = (
+        select(UsageCounter)
+        .where(UsageCounter.user_id == user_id, UsageCounter.period == "hour")
+        .with_for_update()
+    )
+    counter = session.exec(stmt).first()
+    if counter is None or counter.runs_used <= 0:
+        session.rollback()
+        return False
+    counter.runs_used -= 1
+    session.add(counter)
     session.commit()
+    return True
 
 
 def _apply_token_usage(session: Session, user_id: str, tokens_int: int, *, commit: bool) -> None:

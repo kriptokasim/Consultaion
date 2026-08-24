@@ -131,11 +131,6 @@ async def _judge_performance(
     usage = UsageAccumulator()
     judge_details = []
     
-    # Simple scoring: Ask the Chair/Judge to rate everyone
-    # We use the first judge configuration for now to keep it simple, 
-    # or iterate if multiple judges are crucial. For Parliament, usually one 'Assessment' pass is enough.
-    judge_config = judges[0]
-    
     participants = [seat.display_name for seat in panel.seats]
     participants_str = ", ".join(participants)
 
@@ -199,28 +194,82 @@ async def _judge_performance(
             logger.warning("Failed to parse judge output: %s", exc)
             return []
 
-    # Run evaluation
-    results = await _evaluate(judge_config)
-    
-    # Normalize results into standard structure
-    # Ensure all seats have a score (default 0 if missing)
+    # Run every configured judge. A failed judge degrades evaluation evidence
+    # but does not erase scores from judges that completed successfully.
+    import asyncio
+
+    raw_results = await asyncio.gather(
+        *[_evaluate(judge) for judge in judges],
+        return_exceptions=True,
+    )
+    successful_judges: list[tuple[JudgeConfig, list[dict[str, Any]]]] = []
+    for judge, result in zip(judges, raw_results, strict=False):
+        if isinstance(result, Exception):
+            logger.warning("Judge %s failed: %s", judge.name, result)
+            continue
+        successful_judges.append((judge, result))
+
     final_scores = []
-    
     for seat in panel.seats:
-        found = next((r for r in results if r.get("persona") == seat.display_name), None)
-        score_val = float(found.get("score", 0.0)) if found else 0.0
-        rationale = found.get("rationale", "No evaluation provided.") if found else "Did not participate or parsing failed."
-        
-        detail = {
-            "persona": seat.display_name,
-            "judge": judge_config.name,
-            "score": score_val,
-            "rationale": rationale
-        }
-        judge_details.append(detail)
-        final_scores.append(detail)
-        
+        seat_scores: list[float] = []
+        rationales: list[str] = []
+        for judge, results in successful_judges:
+            found = next(
+                (r for r in results if r.get("persona") == seat.display_name),
+                None,
+            )
+            score_val = float(found.get("score", 0.0)) if found else 0.0
+            rationale = (
+                found.get("rationale", "No evaluation provided.")
+                if found
+                else "Did not participate or parsing failed."
+            )
+            judge_details.append(
+                {
+                    "persona": seat.display_name,
+                    "judge": judge.name,
+                    "score": score_val,
+                    "rationale": rationale,
+                }
+            )
+            seat_scores.append(score_val)
+            if rationale:
+                rationales.append(f"{judge.name}: {rationale}")
+
+        aggregate_score = (
+            sum(seat_scores) / len(seat_scores) if seat_scores else 0.0
+        )
+        final_scores.append(
+            {
+                "persona": seat.display_name,
+                "judge": "aggregate",
+                "score": aggregate_score,
+                "rationale": " | ".join(rationales)
+                if rationales
+                else "No judge completed successfully.",
+            }
+        )
+
     return final_scores, judge_details, usage
+
+
+def _assert_parliament_write(session, debate_id: str) -> tuple[Any, str | None]:
+    from models import DebateAttempt
+    from orchestration.execution_context import require_current_execution_lease
+    from orchestration.fencing import assert_execution_ownership_sync
+    from sqlmodel import select
+
+    lease = require_current_execution_lease()
+    if lease.debate_id != debate_id:
+        raise RuntimeError("Execution lease/debate mismatch in Parliament write")
+    assert_execution_ownership_sync(session, lease)
+    attempt_id = session.exec(
+        select(DebateAttempt.id).where(
+            DebateAttempt.debate_id == debate_id,
+            DebateAttempt.attempt_number == lease.run_attempt,
+        )
+    ).first()
+    return lease, attempt_id
 
 
 async def run_parliament_debate(
@@ -274,10 +323,7 @@ async def run_parliament_debate(
             locale=locale,
         )
         seat_messages: list[SeatMessage] = []
-        cumulative_score = 0  # v2.0: Track sentiment
         for turn in round_turns:
-            event = _build_seat_message_event(debate_id, turn, cumulative_score)
-            cumulative_score = event["winning_score"]  # Update for next turn
             transcript_buffer.append({"seat_name": turn.seat_name, "content": turn.content})
             seat_usage.append(
                 {
@@ -302,7 +348,6 @@ async def run_parliament_debate(
                     created_at=datetime.now(timezone.utc),
                 )
             )
-            await backend.publish(f"debate:{debate_id}", event)
         _ = DebateSnapshot(
             debate_id=str(debate_id),
             round_index=round_info["index"],
@@ -339,14 +384,8 @@ async def run_parliament_debate(
                 },
             )
         if outcome.status == "failed":
-            await backend.publish(
-                f"debate:{debate_id}",
-                {
-                    "type": "debate_failed",
-                    "debate_id": str(debate_id),
-                    "reason": outcome.reason or "seat_failure_threshold_exceeded",
-                },
-            )
+            # Return failure evidence to the orchestrator. It owns the terminal
+            # publish after Debate.status has been committed.
             failure_meta = {
                 "engine": panel.engine_version,
                 "rounds": round_history,
@@ -421,8 +460,9 @@ async def run_parliament_debate(
         )
         usage.extend(judge_usage)
 
-        # Persist scores
+        # Persist scores under the same lease fence as the parent Debate.
         with session_scope() as session:
+            _lease, attempt_id = _assert_parliament_write(session, debate_id)
             for detail in judge_details:
                 session.add(
                     Score(
@@ -431,6 +471,7 @@ async def run_parliament_debate(
                         judge=detail["judge"],
                         score=detail["score"],
                         rationale=detail["rationale"],
+                        attempt_id=attempt_id,
                     )
                 )
 
@@ -470,6 +511,9 @@ async def _execute_round(
     turns: list[SeatTurn] = []
     success_count = 0
     failure_count = 0
+    backend = get_sse_backend()
+    panel_order = {seat.seat_id: index for index, seat in enumerate(panel.seats)}
+    cumulative_score = 0
     fail_ratio_limit, min_required, fail_fast = _resolve_tolerance(panel)
     
     participants = [s for s in panel.seats if s.role_profile not in ("critic", "researcher", "chair")]
@@ -506,9 +550,14 @@ async def _execute_round(
             except Exception as exc:
                 return seat, None, None, exc
 
-        results = await asyncio.gather(*[_run_seat(seat, current_transcript) for seat in seat_group])
-        
-        for seat, envelope, call_usage, err in results:
+        group_turns: list[SeatTurn] = []
+        tasks = [
+            asyncio.create_task(_run_seat(seat, current_transcript))
+            for seat in seat_group
+        ]
+
+        for completed_task in asyncio.as_completed(tasks):
+            seat, envelope, call_usage, err = await completed_task
             if err:
                 logger.error(
                     "Seat %s failed in round %s: %s",
@@ -517,8 +566,25 @@ async def _execute_round(
                     err,
                 )
                 failure_count += 1
+                from llm_errors import classify_provider_exception
+
+                safe_failure = classify_provider_exception(err)
+                await backend.publish(
+                    f"debate:{debate_id}",
+                    {
+                        "type": "seat_failed",
+                        "debate_id": str(debate_id),
+                        "round": round_info["index"],
+                        "seat_id": seat.seat_id,
+                        "seat_name": seat.display_name,
+                        "provider": seat.provider_key,
+                        "model": seat.model,
+                        "error": safe_failure.message,
+                        "error_code": safe_failure.code.value,
+                    },
+                )
                 continue
-                
+
             usage_tracker.add_call(call_usage)
             turn = SeatTurn(
                 seat_id=seat.seat_id,
@@ -534,16 +600,32 @@ async def _execute_round(
                 usage=call_usage,
             )
             turns.append(turn)
-            
+            group_turns.append(turn)
+
             with session_scope() as session:
-                session.add(
-                    Message(
-                        debate_id=debate_id,
-                        round_index=round_info["index"],
-                        role="seat",
-                        persona=seat.display_name,
-                        content=envelope.content,
-                        meta={
+                lease, attempt_id = _assert_parliament_write(session, debate_id)
+                response_id = (
+                    f"parliament:{lease.run_attempt}:r{round_info['index']}:s{seat.seat_id}"
+                )
+                from sqlmodel import select
+
+                existing = session.exec(
+                    select(Message.id).where(
+                        Message.debate_id == debate_id,
+                        Message.response_id == response_id,
+                    )
+                ).first()
+                if existing is None:
+                    session.add(
+                        Message(
+                            debate_id=debate_id,
+                            attempt_id=attempt_id,
+                            response_id=response_id,
+                            round_index=round_info["index"],
+                            role="seat",
+                            persona=seat.display_name,
+                            content=envelope.content,
+                            meta={
                             "seat_id": seat.seat_id,
                             "role_profile": seat.role_profile,
                             "provider": seat.provider_key,
@@ -551,15 +633,28 @@ async def _execute_round(
                             "round_index": round_info["index"],
                             "stance": envelope.stance,
                             "reasoning": envelope.reasoning,
-                            "phase": round_info["phase"],
-                        },
+                                "phase": round_info["phase"],
+                            },
+                        )
                     )
-                )
             success_count += 1
-            current_transcript += f"\n{turn.seat_name}: {turn.content}"
+
+            event = _build_seat_message_event(debate_id, turn, cumulative_score)
+            cumulative_score = event["winning_score"]
+            await backend.publish(f"debate:{debate_id}", event)
+
+        # Later groups/rounds consume a stable transcript regardless of provider
+        # latency, even though the UI sees each seat immediately on completion.
+        group_turns.sort(key=lambda turn: panel_order.get(turn.seat_id, 999))
+        current_transcript += "".join(
+            f"\n{turn.seat_name}: {turn.content}" for turn in group_turns
+        )
 
 
-    total_seats = len(panel.seats) or (success_count + failure_count)
+    turns.sort(key=lambda turn: panel_order.get(turn.seat_id, 999))
+
+    executed_seat_count = len(participants) + len(critics)
+    total_seats = executed_seat_count or (success_count + failure_count)
     fail_ratio = (failure_count / total_seats) if total_seats else 1.0
     outcome_status = "ok"
     outcome_reason: Optional[str] = None

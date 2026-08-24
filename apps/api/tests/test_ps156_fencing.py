@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from database import session_scope
-from models import Debate, DebateStageCheckpoint, Message
+from models import Debate, DebateAttempt, DebateStageCheckpoint, Message
 from orchestration.checkpoints import (
     CheckpointIntegrityError,
     CheckpointOwnershipLostError,
@@ -770,3 +770,84 @@ def test_admin_leases_selects_latest_checkpoint_by_timestamp():
     payload = admin_leases(None)
     item = next(row for row in payload["debates"] if row["debate_id"] == debate_id)
     assert item["current_checkpoint"]["stage_key"] == "newer-stage"
+
+
+# ── Logical attempt identity vs execution ownership ─────────────────────
+
+
+@pytest.mark.anyio
+async def test_takeover_preserves_logical_run_attempt():
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    with session_scope() as session:
+        session.add(
+            DebateAttempt(
+                debate_id=debate_id,
+                attempt_number=1,
+                status="queued",
+            )
+        )
+        session.commit()
+
+    first = await acquire_execution_lease(debate_id, lease_seconds=30)
+    assert first.acquired
+    assert first.lease.run_attempt == 1
+
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        debate.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        session.add(debate)
+        session.commit()
+
+    second = await acquire_execution_lease(debate_id, lease_seconds=30)
+    assert second.acquired
+    assert second.lease.lease_epoch == first.lease.lease_epoch + 1
+    assert second.lease.run_attempt == 1
+
+    debate = _get_debate(debate_id)
+    assert debate.run_attempt == 1
+    with session_scope() as session:
+        attempt = session.query(DebateAttempt).filter_by(
+            debate_id=debate_id, attempt_number=1
+        ).one()
+        assert attempt.status == "running"
+
+
+@pytest.mark.anyio
+async def test_queued_retry_advances_logical_run_attempt_once():
+    debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
+    with session_scope() as session:
+        session.add(
+            DebateAttempt(
+                debate_id=debate_id,
+                attempt_number=1,
+                status="queued",
+            )
+        )
+        session.commit()
+
+    first = await acquire_execution_lease(debate_id, lease_seconds=30)
+    assert first.acquired and first.lease.run_attempt == 1
+
+    with session_scope() as session:
+        debate = session.get(Debate, debate_id)
+        debate.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        debate.status = "scheduled"
+        session.add(debate)
+        session.add(
+            DebateAttempt(
+                debate_id=debate_id,
+                attempt_number=2,
+                status="queued",
+            )
+        )
+        session.commit()
+
+    second = await acquire_execution_lease(debate_id, lease_seconds=30)
+    assert second.acquired
+    assert second.lease.run_attempt == 2
+    assert _get_debate(debate_id).run_attempt == 2
+    with session_scope() as session:
+        attempt = session.query(DebateAttempt).filter_by(
+            debate_id=debate_id, attempt_number=2
+        ).one()
+        assert attempt.status == "running"

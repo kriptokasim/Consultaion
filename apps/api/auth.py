@@ -373,8 +373,21 @@ def get_user_from_api_key(
         session.add(api_key_record)
         session.commit()
     
-    # Get the user
+    # Get the user. Account disablement is an authentication boundary, not
+    # merely a required-route authorization check: optional-auth endpoints must
+    # not treat a disabled API-key owner as an authenticated principal.
     user = session.get(User, api_key_record.user_id)
+    if user and hasattr(user, "is_active") and not user.is_active:
+        record_audit(
+            "api_key_auth_failed",
+            user_id=api_key_record.user_id,
+            target_type="api_key",
+            target_id=api_key_record.id,
+            meta={"prefix": prefix, "reason": "account_disabled"},
+            session=session,
+        )
+        session.commit()
+        return None
     if user:
         update_log_context(user_id=user.id, api_key_id=api_key_record.id)
     

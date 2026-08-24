@@ -82,6 +82,49 @@ async function installEventSourceFixture(page: Page) {
           content: "Fast provisional decision",
           report: null,
         }, "3");
+        this.emit(900, {
+          type: "model_response_queued",
+          contract_version: 1,
+          response_id: "response-b",
+          model_id: "model-b",
+          display_name: "Model B",
+          provider: "test",
+          run_attempt: 2,
+          retry_generation: 0,
+        }, "4");
+        this.emit(1_100, {
+          type: "model_response_started",
+          contract_version: 1,
+          response_id: "response-b",
+          model_id: "model-b",
+          display_name: "Model B",
+          provider: "test",
+          run_attempt: 2,
+          retry_generation: 0,
+        }, "5");
+        this.emit(1_300, {
+          type: "model_response_delta",
+          response_id: "response-b",
+          model_id: "model-b",
+          display_name: "Model B",
+          provider: "test",
+          text: "Late Model B answer remains visible.",
+          delta_sequence: 1,
+          accumulated_chars: 36,
+          run_attempt: 2,
+          retry_generation: 0,
+        }, "6");
+        this.emit(1_500, {
+          type: "model_response_completed",
+          contract_version: 1,
+          response_id: "response-b",
+          model_id: "model-b",
+          display_name: "Model B",
+          provider: "test",
+          content: "Late Model B answer remains visible.",
+          run_attempt: 2,
+          retry_generation: 0,
+        }, "7");
         this.emit(2_500, {
           type: "arena_synthesis_finalized",
           ...base,
@@ -94,7 +137,7 @@ async function installEventSourceFixture(page: Page) {
           content: "Converged final decision",
           report: null,
           provisional_promoted: false,
-        }, "4");
+        }, "8");
       }
 
       addEventListener() {}
@@ -200,6 +243,11 @@ for (const viewport of [
       expect(box?.height).toBeGreaterThanOrEqual(44);
       await decisionTab.click();
     }
+
+    const lateAnswer = page.locator("p:visible, pre:visible").filter({
+      hasText: "Late Model B answer remains visible.",
+    });
+    await expect(lateAnswer).toHaveCount(1);
 
     const card = page.getByTestId("live-synthesis-card");
     await expect(card).toContainText("Fast provisional decision");

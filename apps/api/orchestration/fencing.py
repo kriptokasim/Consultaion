@@ -71,6 +71,27 @@ async def fenced_debate_update(
         )
 
 
+def assert_execution_ownership_sync(session, lease: ExecutionLease) -> None:
+    """Synchronous transaction-scoped ownership fence for child-table writes."""
+    now = datetime.now(timezone.utc)
+    stmt = (
+        sa.select(Debate.id)
+        .where(Debate.id == lease.debate_id)
+        .where(Debate.runner_id == lease.owner_id)
+        .where(Debate.lease_epoch == lease.lease_epoch)
+        .where(Debate.status == "running")
+        .where(Debate.lease_expires_at.is_not(None))
+        .where(Debate.lease_expires_at > now)
+        .with_for_update()
+    )
+    if session.execute(stmt).first() is None:
+        lease.lease_lost_event.set()
+        raise ExecutionSupersededError(
+            f"Debate {lease.debate_id}: synchronous ownership verification failed "
+            f"for {lease.owner_id} at epoch {lease.lease_epoch}."
+        )
+
+
 async def assert_execution_ownership(session, lease: ExecutionLease) -> None:
     """Read-side ownership check (SELECT) for flows about to write state."""
     now = datetime.now(timezone.utc)

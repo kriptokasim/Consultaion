@@ -1031,7 +1031,11 @@ async def run_arena(
     all_models_terminal_at: float | None = None
 
     # Load responses with checkpoint safety
-    perspectives_input = {"prompt": prompt, "models": [m.id for m in arena_models]}
+    perspectives_input = {
+        "prompt": prompt,
+        "models": [m.id for m in arena_models],
+        "run_attempt": run_attempt,
+    }
 
     async def load_perspectives_fn(session):
         stmt = (
@@ -1439,6 +1443,12 @@ async def run_arena(
             response.run_attempt = run_attempt
             response.retry_generation = retry_generation
             response.usage_call = call_usage
+            if not response.success:
+                from llm_errors import classify_provider_exception
+
+                response.error = classify_provider_exception(
+                    RuntimeError(response.error or "Model failed to respond")
+                ).message
 
             await _publish_lifecycle_best_effort(
                 backend,
@@ -1478,7 +1488,7 @@ async def run_arena(
                     {
                         "type": "model_response_storage_failed",
                         **lifecycle_payload,
-                        "error": f"Response generated but persistence failed: {str(persist_exc)[:200]}",
+                        "error": "Response generated but could not be stored.",
                         "error_code": "persistence_failed",
                     },
                 )
@@ -1490,13 +1500,13 @@ async def run_arena(
                     response,
                     success=False,
                     content="Response could not be stored. Please retry this model.",
-                    error=f"Persistence failed: {str(persist_exc)[:200]}",
+                    error="Response persistence failed.",
                     error_code="persistence_failed",
                 )
                 terminal_payload = {
                     "type": "model_response_failed",
                     **lifecycle_payload,
-                    "error": f"Persistence failed: {str(persist_exc)[:200]}",
+                    "error": "Response persistence failed.",
                     "error_code": "persistence_failed",
                 }
                 await _publish_lifecycle_best_effort(
@@ -1507,6 +1517,9 @@ async def run_arena(
             terminal_payload = {
                 "type": "model_response_completed" if response.success else "model_response_failed",
                 **lifecycle_payload,
+                # Carry terminal content so a reconnect that missed earlier
+                # deltas can still render the successful answer immediately.
+                "content": response.content if response.success else "",
             }
             if not response.success:
                 terminal_payload.update(
@@ -1549,13 +1562,11 @@ async def run_arena(
 
         # Fan-out: call only missing models, collect as each completes.
         tasks: list[asyncio.Task] = []
-        task_models: dict[asyncio.Task, object] = {}
         for model in arena_models:
             if model.id in completed_models:
                 continue
             task = asyncio.create_task(_call_and_persist(model))
             tasks.append(task)
-            task_models[task] = model
         provisional_task: asyncio.Task[ArenaSynthesisRevision | None] | None = None
         provisional_state: dict[str, object] = {
             "started": False,
@@ -1649,150 +1660,39 @@ async def run_arena(
             provisional_task = asyncio.create_task(_run_provisional_after_grace(quorum_reached_at))
 
         _maybe_schedule_provisional()
-        fast_finalization = getattr(settings, "ARENA_FAST_FINALIZATION_ENABLED", True) is True
-        convergence_grace_s = int(getattr(settings, "ARENA_FINAL_CONVERGENCE_GRACE_MS", 8000)) / 1000.0
-        quorum_reached_ts: float | None = None
 
         try:
-            pending_set = set(tasks)
-            while pending_set:
-                timeout_for_next: float | None = None
-                if fast_finalization and quorum_reached_ts is not None:
-                    elapsed = time.monotonic() - quorum_reached_ts
-                    remaining = convergence_grace_s - elapsed
-                    if remaining <= 0:
-                        logger.info(
-                            "Arena bounded quorum convergence limit reached (%.1fs). Proceeding with %d responses.",
-                            convergence_grace_s,
-                            sum(1 for r in responses if r.success),
-                        )
-                        break
-                    timeout_for_next = remaining
-
+            # Every model owns its real provider deadline. Reaching synthesis
+            # quorum may start a provisional decision, but it must never mutate
+            # a still-running model into a synthetic failure.
+            for completed_task in asyncio.as_completed(tasks):
                 try:
-                    done_set, pending_set = await asyncio.wait(
-                        pending_set,
-                        timeout=timeout_for_next,
-                        return_when=asyncio.FIRST_COMPLETED,
+                    response, _call_usage = await completed_task
+                except Exception as exc:
+                    from orchestration.checkpoints import (
+                        CheckpointIntegrityError,
+                        CheckpointOwnershipLostError,
                     )
-                except Exception as wait_exc:
-                    logger.error("Error waiting for arena model tasks: %s", wait_exc)
-                    break
+                    from orchestration.execution_lease import ExecutionSupersededError
 
-                if not done_set and timeout_for_next is not None:
-                    logger.info(
-                        "Arena bounded quorum grace period expired. Finalizing synthesis with %d responses.",
-                        sum(1 for r in responses if r.success),
-                    )
-                    break
-
-                for completed_task in done_set:
-                    try:
-                        response, _call_usage = completed_task.result()
-                    except Exception as exc:
-                        from orchestration.checkpoints import (
-                            CheckpointIntegrityError,
+                    if isinstance(
+                        exc,
+                        (
+                            ExecutionSupersededError,
                             CheckpointOwnershipLostError,
-                        )
-                        from orchestration.execution_lease import ExecutionSupersededError
-
-                        if isinstance(
-                            exc,
-                            (
-                                ExecutionSupersededError,
-                                CheckpointOwnershipLostError,
-                                CheckpointIntegrityError,
-                            ),
-                        ):
-                            raise
-                        logger.error(
-                            "Arena model task failed outside provider boundary: %s",
-                            exc,
-                            exc_info=True,
-                        )
-                        continue
-                    responses.append(response)
-                    _maybe_schedule_provisional()
-
-                    if fast_finalization and quorum_reached_ts is None:
-                        if sum(1 for r in responses if r.success) >= min_required:
-                            quorum_reached_ts = time.monotonic()
-
-            if pending_set:
-                skipped_tasks = tuple(pending_set)
-                for pending_task in skipped_tasks:
-                    pending_task.cancel()
-                await asyncio.gather(*skipped_tasks, return_exceptions=True)
-
-                for pending_task in skipped_tasks:
-                    model_info = task_models[pending_task]
-                    retry_generation = 0
-                    response_id = (
-                        f"resp-{debate_id}-"
-                        f"a{run_attempt}-"
-                        f"g{retry_generation}-"
-                        f"{model_info.id}"
-                    )
-                    lifecycle_payload = {
-                        "contract_version": 1,
-                        "response_id": response_id,
-                        "model_id": model_info.id,
-                        "display_name": model_info.display_name,
-                        "provider": model_info.provider,
-                        "run_attempt": run_attempt,
-                        "retry_generation": retry_generation,
-                    }
-                    skipped_response = ArenaModelResponse(
-                        model_id=model_info.id,
-                        display_name=model_info.display_name,
-                        provider=model_info.provider,
-                        content=(
-                            "This model was still running when the response quorum "
-                            "finalized the decision."
+                            CheckpointIntegrityError,
                         ),
-                        success=False,
-                        logo_url=model_info.logo_url,
-                        persona_type=model_info.persona_type,
-                        persona_tagline=model_info.persona_tagline,
-                        error="Finalized after quorum before this model completed.",
-                        error_code="quorum_finalized",
-                        response_id=response_id,
-                        run_attempt=run_attempt,
-                        retry_generation=retry_generation,
+                    ):
+                        raise
+                    logger.error(
+                        "Arena model task failed outside provider boundary: %s",
+                        exc,
+                        exc_info=True,
                     )
-                    await _publish_lifecycle_best_effort(
-                        backend,
-                        f"debate:{debate_id}",
-                        {"type": "model_response_persisting", **lifecycle_payload},
-                    )
-                    try:
-                        async with async_session_scope() as session:
-                            await persist_and_publish_arena_response(
-                                session,
-                                backend,
-                                debate_id,
-                                skipped_response,
-                                owner_id=execution_owner_id,
-                                lease_epoch=lease_epoch,
-                            )
-                    except Exception as persist_exc:
-                        logger.warning(
-                            "Failed to persist quorum-finalized model %s: %s",
-                            model_info.id,
-                            persist_exc,
-                        )
-                    await _publish_lifecycle_best_effort(
-                        backend,
-                        f"debate:{debate_id}",
-                        {
-                            "type": "model_response_failed",
-                            **lifecycle_payload,
-                            "error": skipped_response.error,
-                            "error_code": skipped_response.error_code,
-                        },
-                    )
-                    responses.append(skipped_response)
-                pending_set.clear()
+                    continue
+
+                responses.append(response)
+                _maybe_schedule_provisional()
 
             all_models_terminal_at = time.monotonic()
 
@@ -2292,30 +2192,9 @@ async def run_arena(
     elif meta_updates.get("verification_status"):
         verification_status = meta_updates["verification_status"]
     is_verified = verification_status == "verified"
-    await _publish_lifecycle_best_effort(
-        backend,
-        f"debate:{debate_id}",
-        {
-            "type": "arena_synthesis_finalized",
-            "contract_version": 1,
-            "debate_id": str(debate_id),
-            "synthesis_id": f"synth-{debate_id}-a{run_attempt}",
-            "run_attempt": run_attempt,
-            "revision": 1,
-            "status": "final" if synthesis_success else "failed",
-            "content": synthesis_content,
-            "report": synthesis_report,
-            "input_hash": final_input_hash,
-            "response_ids": list(final_response_ids),
-            "successful_count": len(successful),
-            "total_count": len(model_responses),
-            "provisional_promoted": bool(meta_updates.get("provisional_promoted", False)),
-            "verification_status": verification_status,
-            "is_verified": is_verified,
-            "pipeline_type": "structured",
-            "report_version": 1,
-        },
-    )
+    # The final synthesis is durable here, but the orchestrator owns the
+    # terminal publish after Debate.status has been committed. This keeps
+    # transport state and durable state in the same order.
     if all_models_terminal_at is not None:
         try:
             from observability.metrics import record_arena_final_convergence
@@ -2355,6 +2234,8 @@ async def run_arena(
         "total_count": len(model_responses),
         "synthesis_success": synthesis_success,
         "synthesis_report": synthesis_report,
+        "verification_status": verification_status,
+        "is_verified": is_verified,
         "contract_version": 1,
         "synthesis_id": f"synth-{debate_id}-a{run_attempt}",
         "synthesis_revision": 1,
@@ -2370,7 +2251,7 @@ async def run_arena(
         final_answer=synthesis_content,
         final_meta=final_meta,
         usage_tracker=usage,
-        status="completed",
+        status="completed" if synthesis_success else "completed_with_warnings",
         model_responses=model_responses,
     )
 

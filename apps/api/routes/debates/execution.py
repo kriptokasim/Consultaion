@@ -103,6 +103,158 @@ def check_continue_preflight(debate: Debate, current_user: User, session: Sessio
             )
 
 
+def _retry_needs_hosted_credit(session: Session, current_user: User, debate: Debate) -> bool:
+    from billing.service import get_active_plan
+    from parliament.model_registry import resolve_model_info
+
+    plan = get_active_plan(session, current_user.id)
+    if not plan.is_default_free:
+        return False
+    if debate.mode == "arena":
+        return True
+
+    model_ids: list[str] = []
+    if debate.model_id:
+        model_ids.append(debate.model_id)
+    panel = debate.panel_config or {}
+    if isinstance(panel, dict):
+        for seat in panel.get("seats", []) or []:
+            if isinstance(seat, dict) and seat.get("model"):
+                model_ids.append(str(seat["model"]))
+    for model_id in model_ids:
+        info = resolve_model_info(model_id)
+        if info is not None and getattr(info, "tier", "standard") == "advanced":
+            return True
+    return False
+
+
+def _reserve_retry_billing(
+    session: Session,
+    current_user: User,
+    debate: Debate,
+    *,
+    next_attempt: int,
+) -> str | None:
+    """Reserve all billable-run entitlements before any retry provider call."""
+    from billing.service import reserve_hosted_credit
+    from usage_limits import refund_run_slot, reserve_run_slot
+
+    check_continue_preflight(debate, current_user, session)
+    reserve_run_slot(session, current_user.id)
+    try:
+        increment_debate_usage(session, current_user.id)
+        if _retry_needs_hosted_credit(session, current_user, debate):
+            return reserve_hosted_credit(
+                session,
+                current_user.id,
+                debate_id=debate.id,
+                run_attempt=next_attempt,
+            )
+        return None
+    except Exception:
+        session.rollback()
+        refund_run_slot(session, current_user.id)
+        raise
+
+
+def _refund_committed_retry_billing(
+    session: Session,
+    current_user: User,
+    debate: Debate,
+    *,
+    reservation_id: str | None,
+) -> None:
+    from billing.service import refund_hosted_credit
+    from usage_limits import refund_run_slot
+
+    if reservation_id:
+        refund_hosted_credit(
+            session,
+            current_user.id,
+            reservation_id=reservation_id,
+            debate_id=debate.id,
+        )
+    decrement_debate_usage(session, current_user.id)
+    session.commit()
+    refund_run_slot(session, current_user.id)
+
+
+def _retry_needs_hosted_credit(session: Session, current_user: User, debate: Debate) -> bool:
+    from billing.service import get_active_plan
+    from parliament.model_registry import resolve_model_info
+
+    plan = get_active_plan(session, current_user.id)
+    if not plan.is_default_free:
+        return False
+    if debate.mode == "arena":
+        return True
+
+    model_ids: list[str] = []
+    if debate.model_id:
+        model_ids.append(debate.model_id)
+    panel = debate.panel_config or {}
+    if isinstance(panel, dict):
+        for seat in panel.get("seats", []) or []:
+            if isinstance(seat, dict) and seat.get("model"):
+                model_ids.append(str(seat["model"]))
+    for model_id in model_ids:
+        info = resolve_model_info(model_id)
+        if info is not None and getattr(info, "tier", "standard") == "advanced":
+            return True
+    return False
+
+
+def _reserve_retry_billing(
+    session: Session,
+    current_user: User,
+    debate: Debate,
+    *,
+    next_attempt: int,
+) -> str | None:
+    """Reserve all billable-run entitlements before any retry provider call."""
+    from billing.service import increment_debate_usage, reserve_hosted_credit
+    from usage_limits import refund_run_slot, reserve_run_slot
+
+    check_continue_preflight(debate, current_user, session)
+    reserve_run_slot(session, current_user.id)
+    try:
+        increment_debate_usage(session, current_user.id)
+        if _retry_needs_hosted_credit(session, current_user, debate):
+            return reserve_hosted_credit(
+                session,
+                current_user.id,
+                debate_id=debate.id,
+                run_attempt=next_attempt,
+            )
+        return None
+    except Exception:
+        session.rollback()
+        refund_run_slot(session, current_user.id)
+        raise
+
+
+def _refund_committed_retry_billing(
+    session: Session,
+    current_user: User,
+    debate: Debate,
+    *,
+    reservation_id: str | None,
+) -> None:
+    from billing.service import decrement_debate_usage, refund_hosted_credit
+    from usage_limits import refund_run_slot
+
+    if reservation_id:
+        refund_hosted_credit(
+            session,
+            current_user.id,
+            reservation_id=reservation_id,
+            debate_id=debate.id,
+        )
+    decrement_debate_usage(session, current_user.id)
+    session.commit()
+    refund_run_slot(session, current_user.id)
+
+
 @router.post("/debates/{debate_id}/start")
 async def start_debate_run(
     debate_id: str,
@@ -417,7 +569,7 @@ async def continue_debate_run(
                     session,
                     current_user.id,
                     debate_id=debate_id,
-                    run_attempt=(getattr(debate, "run_attempt", 0) or 0) + 1,
+                    run_attempt=max(int(getattr(debate, "run_attempt", 0) or 0), 1),
                     continuation_id=continuation_record.id if continuation_record else None,
                 )
                 credit_reserved = True
@@ -687,18 +839,20 @@ async def retry_debate_run(
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     require_schema_current(session)
-    # Load debate and verify mutation access
     debate = session.get(Debate, debate_id)
     if not debate:
         raise NotFoundError(message=f"Debate {debate_id} not found", code="debate.not_found")
     debate = require_debate_mutation_access(debate, current_user, session)
+    if debate.status in {"scheduled", "running"}:
+        raise ValidationError(
+            message="A run is already scheduled or active for this debate",
+            code="debate.retry_conflict",
+        )
 
-    # 1. Determine target stage(s) to clear
     stage_key = body.stage_key if body else None
-    
-    from models import DebateStageCheckpoint
+    from models import DebateAttempt, DebateStageCheckpoint
+
     if not stage_key:
-        # If no stage key specified, look for any failed stage
         stmt = (
             select(DebateStageCheckpoint)
             .where(DebateStageCheckpoint.debate_id == debate_id)
@@ -709,7 +863,6 @@ async def retry_debate_run(
         if failed_checkpoint:
             stage_key = failed_checkpoint.stage_key
         else:
-            # Default to clearing last executed stage checkpoint if any exist
             stmt_last = (
                 select(DebateStageCheckpoint)
                 .where(DebateStageCheckpoint.debate_id == debate_id)
@@ -719,47 +872,55 @@ async def retry_debate_run(
             if last_checkpoint:
                 stage_key = last_checkpoint.stage_key
 
-    # If we still have a stage_key, invalidate downstream checkpoints (non-destructive)
-    if stage_key:
-        from orchestration.stage_graph import get_stages_to_invalidate
-        
-        stages_to_clear = get_stages_to_invalidate(stage_key)
-        
-        # Invalidate downstream checkpoints instead of deleting evidence
-        # Prior attempt evidence remains immutable and inspectable
-        stmt_invalidate = (
-            sa.update(DebateStageCheckpoint)
-            .where(DebateStageCheckpoint.debate_id == debate_id)
-            .where(DebateStageCheckpoint.stage_key.in_(stages_to_clear))
-            .values(status="invalidated")
+    # The endpoint prepares attempt N; lease acquisition is the sole writer of
+    # Debate.run_attempt and will atomically advance it to that same N.
+    next_attempt = (debate.run_attempt or 0) + 1
+    reservation_id: str | None = None
+    billing_reserved = False
+    try:
+        reservation_id = _reserve_retry_billing(
+            session, current_user, debate, next_attempt=next_attempt
         )
-        session.execute(stmt_invalidate)
+        billing_reserved = True
 
+        if stage_key:
+            from orchestration.stage_graph import get_stages_to_invalidate
+
+            stages_to_clear = get_stages_to_invalidate(stage_key)
+            session.execute(
+                sa.update(DebateStageCheckpoint)
+                .where(DebateStageCheckpoint.debate_id == debate_id)
+                .where(DebateStageCheckpoint.stage_key.in_(stages_to_clear))
+                .values(status="invalidated")
+            )
+
+        debate.status = "scheduled"
+        debate.updated_at = utcnow()
+        debate.credit_reservation_id = reservation_id
+        session.add(debate)
+        session.add(
+            DebateAttempt(
+                debate_id=debate_id,
+                attempt_number=next_attempt,
+                status="queued",
+                model_id=debate.model_id,
+                created_at=utcnow(),
+            )
+        )
+
+        channel_id = debate_channel_id(debate_id)
+        await sse_backend.create_channel(channel_id)
+        # Monthly usage, hosted-credit reservation, retry state and attempt row
+        # become durable together. Hourly slot was committed by reserve_run_slot.
         session.commit()
+    except Exception:
+        session.rollback()
+        if billing_reserved:
+            from usage_limits import refund_run_slot
 
-    # 2. Reset debate status to scheduled to trigger execution (force resume = True)
-    debate.status = "scheduled"
-    debate.updated_at = sa.func.now()
-    debate.run_attempt = (debate.run_attempt or 0) + 1
-    session.add(debate)
+            refund_run_slot(session, current_user.id)
+        raise
 
-    # FH125 G-7: Create DebateAttempt record for non-destructive retry
-    from models import DebateAttempt
-    attempt = DebateAttempt(
-        debate_id=debate_id,
-        attempt_number=debate.run_attempt,
-        status="queued",
-        model_id=debate.model_id,
-        created_at=utcnow(),
-    )
-    session.add(attempt)
-    session.commit()
-
-    # Setup SSE channel
-    channel_id = debate_channel_id(debate_id)
-    await sse_backend.create_channel(channel_id)
-
-    # Dispatch task
     background_tasks.add_task(
         dispatch_debate_run,
         debate_id,
@@ -771,24 +932,32 @@ async def retry_debate_run(
         resume=True,
     )
 
+    from audit import record_audit
     from log_config import log_event
+
     log_event(
         "debate.retried",
         debate_id=debate_id,
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         stage_key=stage_key,
+        attempt_number=next_attempt,
     )
-    from audit import record_audit
     record_audit(
         "debate_retry",
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         target_type="debate",
         target_id=debate_id,
-        meta={"stage_key": stage_key},
+        meta={"stage_key": stage_key, "attempt_number": next_attempt},
         session=session,
     )
+    session.commit()
 
-    return {"id": debate_id, "status": "scheduled", "retried_stage": stage_key}
+    return {
+        "id": debate_id,
+        "status": "scheduled",
+        "retried_stage": stage_key,
+        "attempt_number": next_attempt,
+    }
 
 
 @router.post("/debates/{debate_id}/retry-agent")
@@ -802,56 +971,75 @@ async def retry_agent(
     debate = session.get(Debate, debate_id)
     if not debate:
         raise NotFoundError(message="Debate not found", code="debate.not_found")
-    
     debate = require_debate_mutation_access(debate, current_user, session)
+    if debate.status in {"scheduled", "running"}:
+        raise ValidationError(
+            message="Agent retry is unavailable while the debate is running",
+            code="debate.retry_conflict",
+        )
+
     target_persona = body.persona
-
-    # FH125 G-7: Create new DebateAttempt for retry isolation
-    from models import DebateAttempt
-    debate.run_attempt = (debate.run_attempt or 0) + 1
-    attempt = DebateAttempt(
-        debate_id=debate_id,
-        attempt_number=debate.run_attempt,
-        status="running",
-        model_id=debate.model_id,
-        created_at=utcnow(),
-    )
-    session.add(attempt)
-    session.commit()
-
     agent_config_dict = None
     agents_list = debate.config.get("agents", []) if debate.config else []
-    for ag in agents_list:
-        if ag.get("name") == target_persona:
-            agent_config_dict = ag
+    for agent in agents_list:
+        if agent.get("name") == target_persona:
+            agent_config_dict = agent
             break
-            
     if not agent_config_dict:
         panel_seats = debate.panel_config.get("seats", []) if debate.panel_config else []
         for seat in panel_seats:
-            if seat.get("name") == target_persona:
+            if seat.get("name") == target_persona or seat.get("display_name") == target_persona:
                 agent_config_dict = {
-                    "name": seat.get("name"),
+                    "name": seat.get("name") or seat.get("display_name"),
                     "model": seat.get("model"),
-                    "provider": seat.get("provider"),
-                    "persona": seat.get("persona_tagline"),
+                    "provider": seat.get("provider") or seat.get("provider_key"),
+                    "persona": seat.get("persona_tagline") or seat.get("role_profile"),
                 }
                 break
-
     if not agent_config_dict:
-        raise ValidationError(message=f"Agent '{target_persona}' config not found in debate", code="agent.not_found")
+        raise ValidationError(
+            message=f"Agent '{target_persona}' config not found in debate",
+            code="agent.not_found",
+        )
 
-    # Extract provider before constructing AgentConfig (AgentConfig schema has no provider field)
     agent_provider = agent_config_dict.get("provider", "unknown")
-
     from schemas import AgentConfig
-    # Only pass fields that AgentConfig accepts
+
     agent_config = AgentConfig(
         name=agent_config_dict.get("name", target_persona),
         persona=agent_config_dict.get("persona", ""),
         model=agent_config_dict.get("model"),
         tools=agent_config_dict.get("tools"),
     )
+
+    from models import DebateAttempt
+
+    next_attempt = (debate.run_attempt or 0) + 1
+    reservation_id: str | None = None
+    billing_committed = False
+    try:
+        reservation_id = _reserve_retry_billing(
+            session, current_user, debate, next_attempt=next_attempt
+        )
+        debate.run_attempt = next_attempt
+        attempt = DebateAttempt(
+            debate_id=debate_id,
+            attempt_number=next_attempt,
+            status="running",
+            model_id=debate.model_id,
+            created_at=utcnow(),
+        )
+        session.add(debate)
+        session.add(attempt)
+        session.commit()
+        session.refresh(attempt)
+        billing_committed = True
+    except Exception:
+        session.rollback()
+        from usage_limits import refund_run_slot
+
+        refund_run_slot(session, current_user.id)
+        raise
 
     await sse_backend.publish(
         f"debate:{debate_id}",
@@ -860,61 +1048,83 @@ async def retry_agent(
             "level": "info",
             "debate_id": debate_id,
             "message": f"Retrying agent '{target_persona}'...",
-        }
+        },
     )
 
     from agents import produce_candidate
+
     try:
-        candidate_payload, candidate_usage = await produce_candidate(
+        candidate_payload, _candidate_usage = await produce_candidate(
             debate.prompt,
             agent_config,
             model_id=debate.model_id,
             debate_id=debate.id,
         )
-        
-        stmt = select(Message).where(
-            Message.debate_id == debate_id,
-            Message.round_index == 1,
-            Message.persona == target_persona,
-            Message.role == "candidate"
-        )
-        existing_msg = session.exec(stmt).first()
-        if existing_msg:
-            existing_msg.content = candidate_payload.get("text", "")
-            existing_msg.meta = {k: v for k, v in candidate_payload.items() if k not in {"persona", "text"}}
-            session.add(existing_msg)
-        else:
-            new_msg = Message(
-                debate_id=debate_id,
-                round_index=1,
-                role="candidate",
-                persona=target_persona,
-                content=candidate_payload.get("text", ""),
-                meta={k: v for k, v in candidate_payload.items() if k not in {"persona", "text"}},
-            )
-            session.add(new_msg)
 
-        try:
-            from billing.service import increment_debate_usage as _inc_usage
-            _inc_usage(session, current_user.id)
-        except Exception as usage_err:
-            logging.getLogger("fastapi").warning(f"Failed to increment usage: {usage_err}")
+        import hashlib
+
+        persona_hash = hashlib.sha256(target_persona.encode("utf-8")).hexdigest()[:12]
+        response_id = f"agent-retry:{debate_id}:a{next_attempt}:{persona_hash}"
+        existing_msg = session.exec(
+            select(Message).where(
+                Message.debate_id == debate_id,
+                Message.attempt_id == attempt.id,
+                Message.response_id == response_id,
+            )
+        ).first()
+        if existing_msg is None:
+            session.add(
+                Message(
+                    debate_id=debate_id,
+                    attempt_id=attempt.id,
+                    response_id=response_id,
+                    round_index=1,
+                    role="candidate",
+                    persona=target_persona,
+                    content=candidate_payload.get("text", ""),
+                    meta={
+                        **{
+                            key: value
+                            for key, value in candidate_payload.items()
+                            if key not in {"persona", "text"}
+                        },
+                        "retry_generation": next_attempt,
+                    },
+                )
+            )
 
         import copy
+
         final_meta = copy.deepcopy(debate.final_meta or {})
         model_warnings = final_meta.get("model_warnings", [])
-        new_warnings = [w for w in model_warnings if w.get("display_name") != target_persona and w.get("persona_name") != target_persona]
-        final_meta["model_warnings"] = new_warnings
-        
+        final_meta["model_warnings"] = [
+            warning
+            for warning in model_warnings
+            if warning.get("display_name") != target_persona
+            and warning.get("persona_name") != target_persona
+        ]
         models_list = final_meta.get("models", [])
-        for m_info in models_list:
-            if m_info.get("display_name") == target_persona:
-                m_info["success"] = True
-                
-        final_meta["successful_count"] = sum(1 for m in models_list if m.get("success") is not False)
+        for model_info in models_list:
+            if model_info.get("display_name") == target_persona:
+                model_info["success"] = True
+        final_meta["successful_count"] = sum(
+            1 for model_info in models_list if model_info.get("success") is not False
+        )
         final_meta["models"] = models_list
         debate.final_meta = final_meta
+        attempt.status = "completed"
         session.add(debate)
+        session.add(attempt)
+
+        if reservation_id:
+            from billing.service import consume_hosted_credit
+
+            consume_hosted_credit(
+                session,
+                current_user.id,
+                reservation_id=reservation_id,
+                debate_id=debate_id,
+            )
         session.commit()
 
         await sse_backend.publish(
@@ -927,16 +1137,30 @@ async def retry_agent(
                 "provider": agent_provider,
                 "content": candidate_payload.get("text", ""),
                 "success": True,
-            }
+                "response_id": response_id,
+                "run_attempt": next_attempt,
+            },
         )
-
         return {
             "success": True,
             "message": f"Agent '{target_persona}' successfully retried.",
             "content": candidate_payload.get("text", ""),
+            "attempt_number": next_attempt,
         }
     except Exception as exc:
-        logging.getLogger("fastapi").exception(f"Failed to retry agent {target_persona}: {exc}")
+        logger.exception("Failed to retry agent %s", target_persona)
+        session.rollback()
+        if billing_committed:
+            attempt_db = session.get(DebateAttempt, attempt.id)
+            if attempt_db:
+                attempt_db.status = "failed"
+                session.add(attempt_db)
+            _refund_committed_retry_billing(
+                session,
+                current_user,
+                debate,
+                reservation_id=reservation_id,
+            )
         await sse_backend.publish(
             f"debate:{debate_id}",
             {
@@ -944,6 +1168,8 @@ async def retry_agent(
                 "level": "error",
                 "debate_id": debate_id,
                 "message": f"Retry for agent '{target_persona}' failed.",
-            }
+            },
         )
-        raise HTTPException(status_code=500, detail="Agent retry failed. Please try again later.") from exc
+        raise HTTPException(
+            status_code=500, detail="Agent retry failed. Please try again later."
+        ) from exc

@@ -1,10 +1,26 @@
 import type { Metadata } from 'next'
 import '@/styles/globals.css'
 import { I18nProvider, loadMessages, resolveLocale } from '@/lib/i18n/provider'
-import { Providers } from './providers';
+import { Providers } from './providers'
+import { AnalyticsProvider } from '@/components/analytics-provider'
+import { ViewTransitions } from 'next-view-transitions'
+
+function resolveMetadataBase(): URL {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  if (configured) return new URL(configured)
+
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() ||
+    process.env.VERCEL_URL?.trim()
+  if (vercelHost) {
+    return new URL(vercelHost.startsWith('http') ? vercelHost : `https://${vercelHost}`)
+  }
+
+  return new URL('http://localhost:3000')
+}
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
+  metadataBase: resolveMetadataBase(),
   title: {
     default: 'Consultaion — One Question, Multiple AI Perspectives, One Decision Report',
     template: '%s | Consultaion',
@@ -19,7 +35,7 @@ export const metadata: Metadata = {
     locale: 'en_US',
     siteName: 'Consultaion',
     title: 'Consultaion — One Question, Multiple AI Perspectives, One Decision Report',
-  description: 'Submit one question and get structured comparison across multiple AI models. Consultaion surfaces where models agree or disagree and delivers a clear decision report with verdict, risks, and next actions.',
+    description: 'Submit one question and get structured comparison across multiple AI models. Consultaion surfaces where models agree or disagree and delivers a clear decision report with verdict, risks, and next actions.',
     images: [
       {
         url: '/api/og?title=Consultaion&models=4',
@@ -40,10 +56,6 @@ export const metadata: Metadata = {
     follow: true,
   },
 }
-
-import { AnalyticsProvider } from '@/components/analytics-provider'
-
-import { ViewTransitions } from 'next-view-transitions'
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await resolveLocale()

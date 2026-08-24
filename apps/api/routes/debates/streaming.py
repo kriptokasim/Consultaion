@@ -601,7 +601,7 @@ async def stream_events(
 
                     # Check for any terminal event type — close SSE stream so
                     # the frontend can transition to its completion state.
-                    terminal_types = {"final", "debate_completed", "debate_failed", "arena_synthesis_finalized"}
+                    terminal_types = {"final", "debate_completed", "debate_failed"}
                     if evt_type in terminal_types or payload_type in terminal_types:
                         break
             finally:
