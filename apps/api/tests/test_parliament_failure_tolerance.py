@@ -5,6 +5,18 @@ import pytest
 from agents import UsageCall
 from models import Debate
 from parliament.engine import ParliamentResult, run_parliament_debate
+
+
+async def _bind_live_lease(debate_id: str):
+    """Bind a real execution lease so fenced engine writes pass."""
+    from orchestration.execution_context import bind_execution_lease, reset_execution_lease
+    from orchestration.execution_lease import acquire_execution_lease
+
+    acquired = await acquire_execution_lease(debate_id, lease_seconds=60)
+    assert acquired.acquired
+    return bind_execution_lease(acquired.lease), reset_execution_lease
+
+
 from schemas import PanelSeat, default_panel_config
 from sqlmodel import Session
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests
@@ -47,7 +59,11 @@ async def test_parliament_tolerance_allows_minor_failures(db_session: Session, m
     flaky = _FlakyLLM(fail_on_calls={3})  # one failure out of three seats
     monkeypatch.setattr(agents, "call_llm_for_role", flaky)
     monkeypatch.setattr("parliament.engine.call_llm_for_role", flaky)
-    result: ParliamentResult = await run_parliament_debate(debate.id, model_id=None)
+    token, _reset = await _bind_live_lease(debate.id)
+    try:
+        result: ParliamentResult = await run_parliament_debate(debate.id, model_id=None)
+    finally:
+        _reset(token)
     assert result.status == "completed"
     assert result.error_reason is None
 
@@ -87,7 +103,11 @@ async def test_parliament_tolerance_aborts_when_threshold_exceeded(db_session: S
     monkeypatch.setattr(settings, "DEBATE_STRICT_FAIL_RATIO", True)
     monkeypatch.setattr(agents, "call_llm_for_role", flaky)
     monkeypatch.setattr("parliament.engine.call_llm_for_role", flaky)
-    result: ParliamentResult = await run_parliament_debate(debate.id, model_id=None)
+    token, _reset = await _bind_live_lease(debate.id)
+    try:
+        result: ParliamentResult = await run_parliament_debate(debate.id, model_id=None)
+    finally:
+        _reset(token)
     assert result.status == "failed"
     assert result.error_reason == "seat_failure_threshold_exceeded"
     assert result.final_meta.get("failure", {}).get("failure_count") == 3

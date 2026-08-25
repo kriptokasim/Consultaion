@@ -1,12 +1,20 @@
 import pytest
 from conversation.engine import run_conversation_debate
 from models import Debate, Message
+from orchestration.execution_context import bind_execution_lease, reset_execution_lease
+from orchestration.execution_lease import acquire_execution_lease
 from orchestrator import run_debate
 from schemas import default_panel_config
 from sqlmodel import select
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests
 
 from config import settings
+
+
+async def _bind_live_lease(debate_id: str):
+    result = await acquire_execution_lease(debate_id, lease_seconds=60)
+    assert result.acquired
+    return bind_execution_lease(result.lease)
 
 
 @pytest.mark.anyio("asyncio")
@@ -35,7 +43,11 @@ async def test_conversation_engine_runs_with_mock_llm(db_session):
     settings.ENABLE_CONVERSATION_MODE = True
     settings.FAST_DEBATE = False
     
-    result = await run_conversation_debate(debate.id, model_id=None)
+    token = await _bind_live_lease(debate.id)
+    try:
+        result = await run_conversation_debate(debate.id, model_id=None)
+    finally:
+        reset_execution_lease(token)
     
     assert result.status == "completed"
     assert result.final_answer
@@ -105,7 +117,8 @@ async def test_conversation_truncation(db_session):
     settings.ENABLE_CONVERSATION_MODE = True
     settings.FAST_DEBATE = False
     settings.CONVERSATION_MAX_ROUNDS = 1
-    
+
+    token = await _bind_live_lease(debate.id)
     result = await run_conversation_debate(debate.id, model_id=None)
     
     assert result.status == "completed"
@@ -125,6 +138,7 @@ async def test_conversation_truncation(db_session):
     settings.CONVERSATION_MAX_TOTAL_TOKENS = 10 # Very low limit
     
     result = await run_conversation_debate(debate.id, model_id=None)
+    reset_execution_lease(token)
     
     # It might run 1 round if check is at start of loop and usage is 0.
     # Then for round 2 it would break?

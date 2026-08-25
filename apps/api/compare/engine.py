@@ -7,6 +7,8 @@ from typing import Any
 from agents import UsageAccumulator, call_llm_for_role
 from database_async import async_session_scope
 from models import Debate, Message
+from orchestration.execution_context import require_current_execution_lease
+from orchestration.fencing import assert_execution_ownership
 from sse_backend import get_sse_backend
 
 logger = logging.getLogger(__name__)
@@ -16,14 +18,21 @@ async def run_compare_debate(
 ) -> Any:
     """
     Orchestrate a side-by-side compare mode run.
+
+    Responses are persisted and published progressively as each model
+    finishes (as_completed), each write is fenced on execution-lease
+    ownership, and every durable message carries an attempt-scoped
+    ``response_id`` so duplicate dispatches cannot create duplicates.
     """
+    lease = require_current_execution_lease()
+
     async with async_session_scope() as session:
         debate = await session.get(Debate, debate_id)
         if not debate:
             raise ValueError(f"Debate {debate_id} not found")
         prompt = debate.prompt
         config = debate.config or {}
-        compare_models = config.get("compare_models", [])
+        compare_models = list(config.get("compare_models", []))
         _user_id = debate.user_id
 
     if not compare_models:
@@ -31,7 +40,9 @@ async def run_compare_debate(
 
     backend = get_sse_backend()
     usage = UsageAccumulator()
-    
+    succeeded = 0
+    failed = 0
+
     await backend.publish(
         f"debate:{debate_id}",
         {"type": "round_started", "debate_id": str(debate_id), "round": 1, "phase": "compare"}
@@ -40,12 +51,12 @@ async def run_compare_debate(
     async def _run_model(model_id: str):
         # We need to resolve provider names for display if available
         display_name = model_id.split("/")[-1]
-        
+
         messages = [
             {"role": "system", "content": "You are a helpful AI assistant. Answer the user's prompt clearly and directly."},
             {"role": "user", "content": prompt}
         ]
-        
+
         try:
             content, call_usage = await call_llm_for_role(
                 messages,
@@ -61,62 +72,101 @@ async def run_compare_debate(
                 "content": content,
                 "usage": call_usage,
                 "success": True,
+                "error": None,
             }
         except Exception as e:
             logger.error(f"Error in compare run for model {model_id}: {e}")
             return {
                 "model_id": model_id,
                 "display_name": display_name,
-                "content": f"Failed to generate response: {e}",
+                "content": None,
                 "usage": None,
                 "success": False,
+                "error": str(e),
             }
 
-    results = await asyncio.gather(*[_run_model(mid) for mid in compare_models])
-    
-    final_contents = []
-    for res in results:
+    async def _persist_and_publish(res: dict) -> None:
+        nonlocal succeeded, failed
         if res["usage"]:
             usage.add_call(res["usage"])
-        
+
+        response_id = f"compare:{debate_id}:a{lease.run_attempt}:{res['model_id']}"
+
         async with async_session_scope() as session:
-            msg = Message(
-                debate_id=debate_id,
-                round_index=1,
-                role="seat",
-                persona=res["display_name"],
-                content=res["content"],
-                meta={
-                    "seat_id": res["model_id"],
-                    "model": res["model_id"],
-                    "mode": "compare"
-                }
-            )
-            session.add(msg)
-            await session.commit()
-            
+            assert_execution_ownership(session, lease)
+
+            from sqlalchemy import select as _select
+            existing = (
+                await session.execute(
+                    _select(Message).where(
+                        Message.debate_id == debate_id,
+                        Message.response_id == response_id,
+                    )
+                )
+            ).first()
+            if existing is None:
+                session.add(
+                    Message(
+                        debate_id=debate_id,
+                        attempt_id=None,
+                        response_id=response_id,
+                        round_index=1,
+                        role="seat",
+                        persona=res["display_name"],
+                        content=res["content"] or "",
+                        meta={
+                            "seat_id": res["model_id"],
+                            "model": res["model_id"],
+                            "mode": "compare",
+                            "success": res["success"],
+                            "error": res["error"],
+                            "run_attempt": lease.run_attempt,
+                        },
+                    )
+                )
+                await session.commit()
+
         await backend.publish(
             f"debate:{debate_id}",
             {
                 "type": "seat_message",
-                "debate_id": debate_id,
+                "debate_id": str(debate_id),
                 "round": 1,
                 "seat_name": res["display_name"],
                 "seat_id": res["model_id"],
                 "content": res["content"],
                 "model": res["model_id"],
-                "mode": "compare"
+                "mode": "compare",
+                "response_id": response_id,
+                "success": res["success"],
             }
         )
-        final_contents.append(f"### {res['display_name']}\n{res['content']}\n")
+
+        if res["success"]:
+            succeeded += 1
+        else:
+            failed += 1
+
+    tasks = [asyncio.create_task(_run_model(mid)) for mid in compare_models]
+    try:
+        for coro in asyncio.as_completed(tasks):
+            res = await coro
+            await _persist_and_publish(res)
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     final_meta = {
         "models": compare_models,
+        "successful_count": succeeded,
+        "total_count": len(compare_models),
+        "failed_count": failed,
         "usage": usage.snapshot(),
         "mode": "compare",
+        "run_attempt": lease.run_attempt,
     }
-    
-    joined_content = "\n\n---\n\n".join(final_contents)
 
     class CompareResult:
         def __init__(self, answer, meta, usg, status, err):
@@ -126,10 +176,45 @@ async def run_compare_debate(
             self.status = status
             self.error_reason = err
 
+    if succeeded == 0:
+        return CompareResult(
+            answer="",
+            meta=final_meta,
+            usg=usage,
+            status="failed",
+            err="all_compare_models_failed",
+        )
+
+    final_contents = []
+    async with async_session_scope() as session:
+        from sqlalchemy import select as _select
+        rows = (
+            await session.execute(
+                _select(Message)
+                .where(
+                    Message.debate_id == debate_id,
+                    Message.role == "seat",
+                    Message.response_id.like(f"compare:{debate_id}:a{lease.run_attempt}:%"),
+                )
+                .order_by(Message.id.asc())
+            )
+        ).scalars().all()
+        seen: set[str] = set()
+        for row in rows:
+            if row.response_id in seen or not row.content:
+                continue
+            seen.add(row.response_id)
+            final_contents.append(f"### {row.persona}\n{row.content}\n")
+
+    joined_content = "\n\n---\n\n".join(final_contents)
+
+    status = "completed" if failed == 0 else "completed_with_warnings"
+    err = None if failed == 0 else f"{failed}_of_{len(compare_models)}_models_failed"
+
     return CompareResult(
         answer=joined_content,
         meta=final_meta,
         usg=usage,
-        status="completed",
-        err=None
+        status=status,
+        err=err,
     )

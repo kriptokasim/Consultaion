@@ -7,12 +7,15 @@ from agents import UsageAccumulator, call_llm_for_role
 from database import session_scope
 from integrations.langfuse import update_trace_metadata
 from models import Debate, Message
+from orchestration.execution_context import require_current_execution_lease
+from orchestration.fencing import assert_execution_ownership_sync
 from prompts.conversation import (
     CONVERSATION_SCRIBE_PROMPT,
     CONVERSATION_SYNTHESIS_PROMPT,
     CONVERSATION_SYSTEM_PROMPT,
 )
 from schemas import PanelConfig, default_panel_config
+from sqlalchemy import select
 from sse_backend import get_sse_backend
 
 from config import settings
@@ -26,7 +29,13 @@ async def run_conversation_debate(
 ) -> Any:
     """
     Orchestrate a collaborative conversation mode run.
+
+    Message writes are fenced on execution-lease ownership and carry an
+    attempt-scoped ``response_id`` so duplicate dispatches cannot create
+    duplicates. Run status is deterministic: zero successful seat
+    contributions fails the run instead of reporting a fabricated result.
     """
+    lease = require_current_execution_lease()
     # Load debate data synchronously to avoid detached objects
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
@@ -47,6 +56,7 @@ async def run_conversation_debate(
     backend = get_sse_backend()
     usage = UsageAccumulator()
     transcript: List[dict] = []
+    total_seat_failures = 0
     
     # Configuration
     num_rounds = settings.CONVERSATION_MAX_ROUNDS
@@ -75,7 +85,7 @@ async def run_conversation_debate(
         )
         
         round_messages = []
-        
+
         for seat in panel.seats:
             # Build context from transcript
             context_text = "\n".join([f"{t['seat']}: {t['content']}" for t in transcript])
@@ -99,23 +109,38 @@ async def run_conversation_debate(
                     extra_tags={"mode": "conversation", "round": round_idx},
                 )
                 usage.add_call(call_usage)
-                
-                # Persist message
+
+                # Persist message (fenced + idempotent per attempt/round/seat)
+                response_id = (
+                    f"conversation:{debate_id}:a{lease.run_attempt}"
+                    f":r{round_idx}:{seat.seat_id}"
+                )
                 with session_scope() as session:
-                    session.add(
-                        Message(
-                            debate_id=debate_id,
-                            round_index=round_idx,
-                            role="delegate",
-                            persona=seat.display_name,
-                            content=content,
-                            meta={
-                                "seat_id": seat.seat_id,
-                                "model": seat.model,
-                                "mode": "conversation"
-                            }
+                    assert_execution_ownership_sync(session, lease)
+                    existing = session.exec(
+                        select(Message).where(
+                            Message.debate_id == debate_id,
+                            Message.response_id == response_id,
                         )
-                    )
+                    ).first()
+                    if existing is None:
+                        session.add(
+                            Message(
+                                debate_id=debate_id,
+                                attempt_id=None,
+                                response_id=response_id,
+                                round_index=round_idx,
+                                role="delegate",
+                                persona=seat.display_name,
+                                content=content,
+                                meta={
+                                    "seat_id": seat.seat_id,
+                                    "model": seat.model,
+                                    "mode": "conversation",
+                                    "run_attempt": lease.run_attempt,
+                                }
+                            )
+                        )
                 
                 # Update transcript
                 transcript.append({"seat": seat.display_name, "content": content})
@@ -130,12 +155,14 @@ async def run_conversation_debate(
                         "round": round_idx,
                         "seat_name": seat.display_name,
                         "content": content,
-                        "mode": "conversation"
+                        "mode": "conversation",
+                        "response_id": response_id,
                     }
                 )
-                
+
             except Exception as e:
                 logger.error(f"Error in conversation round {round_idx} for seat {seat.display_name}: {e}")
+                total_seat_failures += 1
                 # Fallback or continue - for now continue to keep flow going
                 continue
 
@@ -206,7 +233,39 @@ async def run_conversation_debate(
         "mode": "conversation",
         "truncated": truncated,
         "truncate_reason": truncate_reason,
+        "run_attempt": lease.run_attempt,
     }
+
+    class _ConversationResult:
+        def __init__(self, answer, meta, usg, status, err):
+            self.final_answer = answer
+            self.final_meta = meta
+            self.usage_tracker = usg
+            self.status = status
+            self.error_reason = err
+
+    # Deterministic terminal semantics: no successful seat contribution at all
+    # is a failed run — never fabricate a completed result from an empty transcript.
+    if not transcript:
+        final_meta["total_seat_failures"] = total_seat_failures
+        return _ConversationResult(
+            answer="",
+            meta=final_meta,
+            usg=usage,
+            status="failed",
+            err="all_conversation_seats_failed",
+        )
+
+    synthesis_failed = final_content == "Failed to generate synthesis."
+    if synthesis_failed:
+        # Do not present the internal failure string as a model verdict.
+        final_content = "\n\n".join(
+            [f"**{t['seat']}**: {t['content']}" for t in transcript]
+        )
+        final_meta["synthesis_failed"] = True
+
+    if total_seat_failures:
+        final_meta["total_seat_failures"] = total_seat_failures
 
     # Update trace metadata
     update_trace_metadata({
@@ -227,10 +286,16 @@ async def run_conversation_debate(
         except Exception as e:
             logger.error(f"Failed to record token usage for conversation {debate_id}: {e}")
     
-    return type("ConversationResult", (), {
-        "final_answer": final_content,
-        "final_meta": final_meta,
-        "usage_tracker": usage,
-        "status": "completed",
-        "error_reason": None
-    })
+    status = "completed"
+    err = None
+    if synthesis_failed or total_seat_failures:
+        status = "completed_with_warnings"
+        err = "conversation_partial_failure"
+
+    return _ConversationResult(
+        answer=final_content,
+        meta=final_meta,
+        usg=usage,
+        status=status,
+        err=err,
+    )

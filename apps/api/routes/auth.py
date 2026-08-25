@@ -347,7 +347,15 @@ async def google_callback(
     )
     session.commit()
     session.refresh(user)
-    
+
+    # Disabled accounts must never receive a fresh token (GET callback)
+    if not user.is_active:
+        raise AuthError(
+            message="Account disabled",
+            code="auth.account_disabled",
+            status_code=403,
+        )
+
     # [AUTH_DEBUG] Patchset 53.0: Log before token creation
     if settings.AUTH_DEBUG:
         logger.info(
@@ -538,6 +546,14 @@ async def google_callback_post(
     session.commit()
     session.refresh(user)
 
+    # Disabled accounts must never receive a fresh token (POST callback)
+    if not user.is_active:
+        raise AuthError(
+            message="Account disabled",
+            code="auth.account_disabled",
+            status_code=403,
+        )
+
     if settings.AUTH_DEBUG:
         logger.info(
             "[AUTH_DEBUG] Google login (POST) success, creating token",
@@ -650,6 +666,14 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
             session.add(user)
             session.commit()
         raise AuthError(message="Invalid credentials", code="auth.invalid_credentials")
+
+    # Disabled accounts must never receive a fresh token
+    if not user.is_active:
+        raise AuthError(
+            message="Account disabled",
+            code="auth.account_disabled",
+            status_code=403,
+        )
 
     # Successful login — reset lockout state
     if user.failed_login_attempts or user.locked_until:

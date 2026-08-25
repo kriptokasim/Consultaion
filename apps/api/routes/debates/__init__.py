@@ -1,6 +1,6 @@
+from divergence_guard import install_divergence_guard
 from fastapi import APIRouter
 from models import Debate, Message, PairwiseVote, Score  # re-export for backward compat
-from divergence_guard import install_divergence_guard
 from parliament_budget_guard import install_parliament_budget_guard
 from sse_terminal_guard import install_terminal_commit_guard
 from state_terminal_guard import install_terminal_accounting_guard

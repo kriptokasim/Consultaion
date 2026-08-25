@@ -86,7 +86,7 @@ export function VotingRunView({
 
     // Collect candidates
     const candidates = useMemo(() => {
-        if (debate.final_meta?.models) {
+        if (Array.isArray(debate.final_meta?.models)) {
             return debate.final_meta.models.map((m: any) => m.display_name);
         }
         if ((debate.config as any)?.members) {

@@ -268,4 +268,95 @@ describe("synthesisReducer replay ordering", () => {
     expect(replayed.text).toBe("visible");
     expect(replayed.status).toBe("streaming");
   });
+
+  test("replayed delta does not roll a finalized report back to streaming", () => {
+    const finalized = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "FINALIZED",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 2,
+        status: "final",
+        content: "Final decision",
+        successful_count: 3,
+        total_count: 4,
+      },
+    });
+    expect(finalized.status).toBe("final");
+
+    const replayedDelta = synthesisReducer(finalized, {
+      type: "DELTA",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 2,
+        status: "final",
+        text: " stale chunk",
+        delta_sequence: 5,
+      },
+    });
+    expect(replayedDelta).toBe(finalized);
+
+    const replayedStarted = synthesisReducer(finalized, {
+      type: "STARTED",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 2,
+        status: "provisional",
+      },
+    });
+    expect(replayedStarted).toBe(finalized);
+  });
+
+  test("replayed delta does not roll a failed report back to streaming", () => {
+    const failed = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "FINALIZED",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 3,
+        status: "failed",
+        content: "Fallback content",
+      },
+    });
+    const replayed = synthesisReducer(failed, {
+      type: "DELTA",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 3,
+        status: "provisional",
+        text: " late",
+        delta_sequence: 9,
+      },
+    });
+    expect(replayed).toBe(failed);
+  });
+
+  test("a genuinely newer revision supersedes a terminal state", () => {
+    const finalized = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "FINALIZED",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 2,
+        status: "final",
+        content: "Final decision",
+      },
+    });
+    const nextRevision = synthesisReducer(finalized, {
+      type: "DELTA",
+      payload: {
+        synthesis_id: "s2",
+        run_attempt: 1,
+        revision: 3,
+        status: "provisional",
+        text: "rev3",
+        delta_sequence: 1,
+      },
+    });
+    expect(nextRevision.status).toBe("streaming");
+    expect(nextRevision.text).toBe("rev3");
+  });
 });

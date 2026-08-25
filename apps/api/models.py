@@ -185,7 +185,7 @@ class Debate(SQLModel, table=True):
     routing_policy: Optional[str] = Field(default=None, nullable=True)
     gateway_policy: Optional[str] = Field(default=None, nullable=True)
     routing_meta: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
-    mode: str = Field(default="conversation", nullable=False, index=True)
+    mode: str = Field(default="arena", nullable=False, index=True)
 
     # FH125 G-5: Validate status assignments at ORM level
     @field_validator("status")

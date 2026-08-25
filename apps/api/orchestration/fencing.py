@@ -58,7 +58,13 @@ async def fenced_debate_update(
     if extra_where:
         for cond in extra_where:
             stmt = stmt.where(cond)
-    result = await session.execute(stmt)
+    # synchronize_session=False: the default "evaluate" strategy re-runs the
+    # WHERE clause in Python against identity-map objects, which crashes on
+    # naive/aware datetime comparisons under SQLite and can corrupt in-memory
+    # state. Rowcount alone is the source of truth here.
+    result = await session.execute(
+        stmt.execution_options(synchronize_session=False)
+    )
     if result.rowcount == 0:
         logger.warning(
             "debate.fenced_write_rejected debate_id=%s owner=%s epoch=%s what=%s",

@@ -132,6 +132,21 @@ function fromSnapshot(
   };
 }
 
+function isTerminal(state: SynthesisStreamingState): boolean {
+  return state.status === "final" || state.status === "failed";
+}
+
+function supersedesTerminal(
+  state: SynthesisStreamingState,
+  payload: Pick<SynthesisSnapshotPayload, "run_attempt" | "revision">,
+): boolean {
+  return payload.run_attempt > state.runAttempt
+    || (
+      payload.run_attempt === state.runAttempt
+      && payload.revision > state.revision
+    );
+}
+
 export function synthesisReducer(
   state: SynthesisStreamingState,
   action: SynthesisAction,
@@ -139,6 +154,9 @@ export function synthesisReducer(
   switch (action.type) {
     case "STARTED": {
       if (isStale(state, action.payload)) return state;
+      if (isTerminal(state) && !supersedesTerminal(state, action.payload)) {
+        return state;
+      }
       const sameRevision =
         state.synthesisId === action.payload.synthesis_id
         && state.runAttempt === action.payload.run_attempt
@@ -155,6 +173,9 @@ export function synthesisReducer(
       const payload = action.payload;
       const synthesisId = payload.synthesis_id || payload.response_id;
       if (!synthesisId || isStale(state, payload)) return state;
+      if (isTerminal(state) && !supersedesTerminal(state, payload)) {
+        return state;
+      }
       if (
         state.synthesisId === synthesisId
         && payload.delta_sequence <= state.lastDeltaSequence

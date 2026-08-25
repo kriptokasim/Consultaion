@@ -557,7 +557,16 @@ async def _execute_round(
         ]
 
         for completed_task in asyncio.as_completed(tasks):
-            seat, envelope, call_usage, err = await completed_task
+            try:
+                seat, envelope, call_usage, err = await completed_task
+            except BaseException:
+                # Consumer failure (e.g. SSE publish error) must not leak the
+                # remaining seat tasks — cancel them before propagating.
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
             if err:
                 logger.error(
                     "Seat %s failed in round %s: %s",

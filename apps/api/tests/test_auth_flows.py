@@ -8,7 +8,7 @@ from pathlib import Path
 import jwt
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 fd, temp_path = tempfile.mkstemp(prefix="consultaion_auth_flows_", suffix=".db")
 os.close(fd)
@@ -86,6 +86,35 @@ async def test_email_password_flow_sets_cookies(client: AsyncClient):
 
     logout = await client.post("/auth/logout", headers=_csrf_headers(client))
     assert logout.status_code == 200
+    assert not client.cookies.get(COOKIE_NAME)
+
+
+async def test_disabled_account_cannot_login_or_use_token(client: AsyncClient):
+    email = f"disabled-{uuid.uuid4().hex[:6]}@example.com"
+    password = "SecurePass123!"
+    res = await client.post("/auth/register", json={"email": email, "password": password})
+    assert res.status_code == 201
+
+    # Disable the account directly (admin action equivalent)
+    with Session(database.engine) as session:
+        user = session.exec(select(User).where(User.email == email)).first()
+        assert user is not None
+        user.is_active = False
+        session.add(user)
+        session.commit()
+
+    # Existing token must stop working
+    with Session(database.engine) as session:
+        user = session.exec(select(User).where(User.email == email)).first()
+        stale_token = create_access_token(user_id=user.id, email=user.email, role=user.role)
+    client.cookies.set(COOKIE_NAME, stale_token, domain="testserver", path="/")
+    me = await client.get("/me")
+    assert me.status_code in (401, 403)
+
+    # Fresh password login must be refused — no new token may be issued
+    client.cookies.delete(COOKIE_NAME)
+    login = await client.post("/auth/login", json={"email": email, "password": password})
+    assert login.status_code == 403
     assert not client.cookies.get(COOKIE_NAME)
 
 

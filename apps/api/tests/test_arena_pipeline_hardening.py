@@ -1,14 +1,14 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from config import settings
 from model_gateway.model_target import UnknownModelError, resolve_model_target
 from model_gateway.provider_health import (
     CIRCUIT_FAILURE_THRESHOLD,
     is_circuit_open,
     record_failure,
 )
+
+from config import settings
 
 
 @pytest.mark.asyncio
