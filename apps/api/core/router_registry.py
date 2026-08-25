@@ -46,7 +46,7 @@ def _install_auth_hardening(auth_router: APIRouter) -> None:
     from routes.auth_hardening import router as auth_hardening_router
 
     auth_router.include_router(auth_hardening_router)
-    setattr(auth_router, "_consultaion_auth_hardened", True)
+    auth_router._consultaion_auth_hardened = True
 
 
 def build_router_registry() -> List[RouterRegistration]:

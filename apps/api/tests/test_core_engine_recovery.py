@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 API_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -95,9 +94,17 @@ def test_continuation_does_not_invent_new_logical_attempt():
 
 
 def test_retry_does_not_increment_debates_created_counter():
+    # Product policy: retries never count as new monthly debates.
+    # The legacy retry handlers and their billing helpers were removed; the
+    # hardened authority in routes/debates/hardening.py must not meter
+    # debates_created either.
     execution = _source("routes/debates/execution.py")
-    retry_helpers = execution.split("def _retry_needs_hosted_credit", 1)[1].split(
-        '@router.post("/debates/{debate_id}/start")', 1
+    assert "increment_debate_usage" not in execution
+    assert "_retry_needs_hosted_credit" not in execution
+
+    hardening = _source("routes/debates/hardening.py")
+    retry_block = hardening.split("async def _schedule_retry", 1)[1].split(
+        "@router.post", 1
     )[0]
-    assert "increment_debate_usage" not in retry_helpers
-    assert "reserve_run_slot" in retry_helpers
+    assert "increment_debate_usage" not in retry_block
+    assert "reserve_run_slot" in retry_block

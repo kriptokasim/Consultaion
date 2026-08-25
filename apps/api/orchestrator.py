@@ -737,7 +737,7 @@ async def run_debate(
 
                 debate_user_id = debate.user_id
                 prompt = debate.prompt
-                debate_mode = debate.mode or "debate"
+                debate_mode = debate.mode or "arena"
                 # Structured Debate has one explicit execution engine. Presence
                 # or absence of panel_config must never change the pipeline.
                 is_parliament = debate_mode == "debate"

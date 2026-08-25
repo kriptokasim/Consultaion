@@ -2,6 +2,18 @@ import pytest
 from agents import UsageCall
 from models import Debate
 from parliament.engine import run_parliament_debate
+
+
+async def _bind_live_lease(debate_id: str):
+    """Bind a real execution lease so fenced engine writes pass."""
+    from orchestration.execution_context import bind_execution_lease, reset_execution_lease
+    from orchestration.execution_lease import acquire_execution_lease
+
+    acquired = await acquire_execution_lease(debate_id, lease_seconds=60)
+    assert acquired.acquired
+    return bind_execution_lease(acquired.lease), reset_execution_lease
+
+
 from parliament.prompts import build_messages_for_seat
 from schemas import default_panel_config
 from sqlmodel import Session
@@ -42,7 +54,11 @@ async def test_parliament_engine_runs_with_mock_llm(db_session: Session):
     reset_sse_backend_for_tests()
     backend = get_sse_backend()
     await backend.create_channel(f"debate:{debate_id}")
-    result = await run_parliament_debate(debate.id, model_id=None)
+    token, _reset = await _bind_live_lease(debate.id)
+    try:
+        result = await run_parliament_debate(debate.id, model_id=None)
+    finally:
+        _reset(token)
     assert result.final_meta["panel"]["engine_version"] == panel.engine_version
     assert result.final_meta["seat_usage"], "seat usage should be recorded"
     assert isinstance(result.final_answer, str) and result.final_answer
@@ -74,5 +90,9 @@ async def test_parliament_engine_parses_structured_output(db_session: Session, m
     reset_sse_backend_for_tests()
     backend = get_sse_backend()
     await backend.create_channel(f"debate:{debate_id}")
-    result = await run_parliament_debate(debate.id, model_id=None)
+    token, _reset = await _bind_live_lease(debate.id)
+    try:
+        result = await run_parliament_debate(debate.id, model_id=None)
+    finally:
+        _reset(token)
     assert result.final_meta["seat_usage"]

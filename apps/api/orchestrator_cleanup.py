@@ -243,8 +243,48 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
                 )
             except Exception as audit_err:
                 logger.warning("Failed to record audit for stale debate %s: %s", debate_id, audit_err)
-            
+
+            # Billing compensation: a debate that never left the queue can
+            # never have executed provider work, so the user must not pay.
+            if reason == "queued_timeout":
+                try:
+                    from billing.service import get_or_create_usage, refund_hosted_credit
+
+                    usage_row = get_or_create_usage(session, db_debate.user_id)
+                    usage_row.debates_created = max(
+                        0, int(usage_row.debates_created or 0) - 1
+                    )
+                    session.add(usage_row)
+                    refunded = refund_hosted_credit(
+                        session, db_debate.user_id, debate_id=debate_id
+                    )
+                    logger.info(
+                        "Stale queued debate %s compensated: monthly_usage_reverted credit_refunded=%s",
+                        debate_id,
+                        refunded,
+                    )
+                except Exception as comp_err:
+                    logger.warning(
+                        "Billing compensation failed for stale debate %s: %s",
+                        debate_id,
+                        comp_err,
+                    )
+
             session.commit()
+
+        # Refund hourly run slot for never-dispatched debates (own tx, floor-guarded)
+        if reason == "queued_timeout":
+            try:
+                from usage_limits import refund_run_slot
+
+                with session_scope() as s2:
+                    d2 = s2.get(Debate, debate_id)
+                    if d2 is not None:
+                        refund_run_slot(s2, d2.user_id)
+            except Exception as slot_err:
+                logger.warning(
+                    "Run-slot refund failed for stale debate %s: %s", debate_id, slot_err
+                )
         
         # Emit SSE event for observability
         try:

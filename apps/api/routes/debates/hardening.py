@@ -301,6 +301,9 @@ async def _schedule_retry(
 
     try:
         reserve_run_slot(session, current_user.id, commit=False)
+        # Product policy (test_core_engine_recovery): retries do not count as
+        # new monthly debates — they consume only a run slot (+ hosted credit
+        # when applicable), not the monthly debates_created counter.
         if _retry_needs_hosted_credit(session, current_user, debate):
             reservation_id = reserve_hosted_credit(
                 session,

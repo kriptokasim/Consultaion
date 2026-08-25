@@ -107,7 +107,7 @@ function buildAnalytics(debates: DebateRecord[]): AnalyticsData {
     .slice(0, 8)
     .map((debate) => ({
       id: debate.id,
-      title: debate.prompt.slice(0, 90),
+      title: typeof debate.prompt === "string" ? debate.prompt.slice(0, 90) : "",
       timestamp: debate.updated_at || debate.created_at,
       status: debate.status,
     }));

@@ -407,7 +407,8 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   }, [id, debate?.prompt, debate?.mode, debate?.status, currentWorkspaceStage, runPhase, sseStatus, isPollingFallback, isTerminal, onRunSnapshot]);
 
   const modelSlots = useMemo<WorkspaceModelSlot[]>(() => {
-    const modelsList = debate?.final_meta?.models || (debate?.config as any)?.models || [];
+    const rawModels = debate?.final_meta?.models || (debate?.config as any)?.models;
+    const modelsList = Array.isArray(rawModels) ? rawModels : [];
     return modelsList.map((model: any) => {
       const modelId = typeof model === "string" ? model : model.model_id;
       const matchingDetail = AVAILABLE_MODELS.find((m) => m.id === modelId);

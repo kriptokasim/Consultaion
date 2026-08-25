@@ -98,7 +98,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
 
         // Fallback: try to extract model responses from top-level models or final_meta
         const fallbackModels = debate.models ?? debate.final_meta?.models;
-        if (eventResponses.length === 0 && fallbackModels) {
+        if (eventResponses.length === 0 && Array.isArray(fallbackModels)) {
             const seatMessages = events.filter((e: any) => e.type === "seat_message");
             for (const model of fallbackModels) {
                 const matching = seatMessages.find((e: any) =>
@@ -171,7 +171,7 @@ export default function ArenaRunView({ debate, events, responses: persistedRespo
             debateModels: debate?.models,
             persistedResponses: persistedResponses,
             streamingBuffers: streamingBuffers,
-            fallbackModelIds: debate?.final_meta?.models?.map((m: any) => typeof m === "string" ? m : m.model_id),
+            fallbackModelIds: (Array.isArray(debate?.final_meta?.models) ? debate.final_meta.models : [])?.map((m: any) => typeof m === "string" ? m : m.model_id),
         });
 
         // Track D: Render all slots in canonical order, preserving placeholders

@@ -545,7 +545,7 @@ def test_retry_debate_run(authenticated_client, db_session):
     db_session.commit()
 
     # Call /retry on "judge" stage
-    with patch("routes.debates.execution.dispatch_debate_run") as mock_dispatch:
+    with patch("debate_dispatch.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/api/v1/debates/{debate.id}/retry",
             json={"stage_key": "judge"}

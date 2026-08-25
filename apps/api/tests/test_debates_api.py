@@ -1,6 +1,7 @@
+from unittest.mock import patch
 from uuid import uuid4
 
-from models import Debate, Message, User
+from models import Debate, DebateAttempt, User
 from sqlmodel import Session, select
 
 
@@ -164,9 +165,8 @@ def test_continue_debate_run(authenticated_client, db_session: Session):
 
 
 def test_retry_agent(authenticated_client, db_session: Session):
-    from unittest.mock import AsyncMock, patch
     user = db_session.exec(select(User).where(User.email == "normal@example.com")).first()
-    
+
     panel_config = {
         "seats": [
             {
@@ -188,55 +188,42 @@ def test_retry_agent(authenticated_client, db_session: Session):
         ],
         "total_count": 1,
         "successful_count": 0,
-        "model_warnings": [
-            {
-                "display_name": "Expert Agent",
-                "provider": "openai",
-                "error": "Failed previously"
-            }
-        ]
     }
-    
+
     debate = Debate(
         id=str(uuid4()),
         prompt="Test agent retry",
         user_id=user.id,
         status="failed",
+        mode="debate",
         panel_config=panel_config,
         final_meta=final_meta
     )
     db_session.add(debate)
     db_session.commit()
-    
-    with patch("agents.produce_candidate", new_callable=AsyncMock) as mock_produce:
-        mock_produce.return_value = (
-            {"text": "Retried agent response content", "tokens_used": 100},
-            {"prompt_tokens": 10, "completion_tokens": 10}
-        )
-        
+
+    # The hardened retry-agent schedules a coherent full retry of the
+    # debate's draft stage (attempt N+1) instead of mutating the failed
+    # attempt's artifacts in place.
+    with patch("debate_dispatch.dispatch_debate_run") as mock_dispatch:
         response = authenticated_client.post(
             f"/debates/{debate.id}/retry-agent",
             json={"persona": "Expert Agent"}
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["success"] is True
-        assert data["content"] == "Retried agent response content"
-        
-    db_session.refresh(debate)
-    assert debate.final_meta["successful_count"] == 1
-    assert len(debate.final_meta["model_warnings"]) == 0
-    assert debate.final_meta["models"][0]["success"] is True
+        assert data["status"] == "scheduled"
+        assert data["retried_stage"] == "draft"
+        assert data["attempt_number"] == 2
+        mock_dispatch.assert_called_once()
 
-    msg = db_session.exec(
-        select(Message).where(
-            Message.debate_id == debate.id,
-            Message.round_index == 1,
-            Message.persona == "Expert Agent"
-        )
-    ).first()
-    assert msg is not None
-    assert msg.content == "Retried agent response content"
+    db_session.refresh(debate)
+    attempts = db_session.exec(
+        select(DebateAttempt).where(DebateAttempt.debate_id == debate.id)
+    ).all()
+    assert len(attempts) == 1
+    assert attempts[0].attempt_number == 2
+    assert attempts[0].status == "queued"
 
 def test_get_debate_with_continuation_row(authenticated_client, db_session: Session):
     import datetime
