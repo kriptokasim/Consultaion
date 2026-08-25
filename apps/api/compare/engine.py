@@ -6,8 +6,10 @@ from typing import Any
 
 from agents import UsageAccumulator, call_llm_for_role
 from database_async import async_session_scope
-from models import Debate, Message
+from llm_errors import classify_provider_exception
+from models import Debate, DebateAttempt, Message
 from orchestration.execution_context import require_current_execution_lease
+from orchestration.execution_lease import ExecutionSupersededError
 from orchestration.fencing import assert_execution_ownership
 from sse_backend import get_sse_backend
 
@@ -20,9 +22,13 @@ async def run_compare_debate(
     Orchestrate a side-by-side compare mode run.
 
     Responses are persisted and published progressively as each model
-    finishes (as_completed), each write is fenced on execution-lease
-    ownership, and every durable message carries an attempt-scoped
-    ``response_id`` so duplicate dispatches cannot create duplicates.
+    finishes (as_completed). Every write is fenced on execution-lease
+    ownership; ownership loss raises ExecutionSupersededError and stops the
+    run immediately (no further persistence, SSE, or result reporting).
+    Durable messages carry both the relational ``attempt_id`` and a
+    deterministic attempt-scoped ``response_id`` for idempotency. Provider
+    failures are classified into safe codes/messages — raw exception text is
+    never persisted or emitted.
     """
     lease = require_current_execution_lease()
 
@@ -72,17 +78,23 @@ async def run_compare_debate(
                 "content": content,
                 "usage": call_usage,
                 "success": True,
-                "error": None,
+                "error_message": None,
+                "error_code": None,
             }
         except Exception as e:
-            logger.error(f"Error in compare run for model {model_id}: {e}")
+            safe = classify_provider_exception(e)
+            logger.error(
+                "Compare model %s failed for debate %s: code=%s",
+                model_id, debate_id, safe.code.value,
+            )
             return {
                 "model_id": model_id,
                 "display_name": display_name,
                 "content": None,
                 "usage": None,
                 "success": False,
-                "error": str(e),
+                "error_message": safe.message,
+                "error_code": safe.code.value,
             }
 
     async def _persist_and_publish(res: dict) -> None:
@@ -93,9 +105,21 @@ async def run_compare_debate(
         response_id = f"compare:{debate_id}:a{lease.run_attempt}:{res['model_id']}"
 
         async with async_session_scope() as session:
-            assert_execution_ownership(session, lease)
+            # Awaited async fence: a superseded owner raises here and the
+            # exception propagates out of the engine (never swallowed).
+            await assert_execution_ownership(session, lease)
 
             from sqlalchemy import select as _select
+
+            attempt_id = (
+                await session.execute(
+                    _select(DebateAttempt.id).where(
+                        DebateAttempt.debate_id == debate_id,
+                        DebateAttempt.attempt_number == lease.run_attempt,
+                    )
+                )
+            ).scalar_one_or_none()
+
             existing = (
                 await session.execute(
                     _select(Message).where(
@@ -108,7 +132,7 @@ async def run_compare_debate(
                 session.add(
                     Message(
                         debate_id=debate_id,
-                        attempt_id=None,
+                        attempt_id=attempt_id,
                         response_id=response_id,
                         round_index=1,
                         role="seat",
@@ -119,7 +143,8 @@ async def run_compare_debate(
                             "model": res["model_id"],
                             "mode": "compare",
                             "success": res["success"],
-                            "error": res["error"],
+                            "error": res["error_message"],
+                            "error_code": res["error_code"],
                             "run_attempt": lease.run_attempt,
                         },
                     )
@@ -139,6 +164,8 @@ async def run_compare_debate(
                 "mode": "compare",
                 "response_id": response_id,
                 "success": res["success"],
+                "error": res["error_message"],
+                "error_code": res["error_code"],
             }
         )
 
@@ -152,6 +179,14 @@ async def run_compare_debate(
         for coro in asyncio.as_completed(tasks):
             res = await coro
             await _persist_and_publish(res)
+    except ExecutionSupersededError:
+        # Ownership lost: cancel all in-flight provider work and stop. No
+        # final result, no terminal event — the new owner owns the run.
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
     finally:
         for task in tasks:
             if not task.done():
