@@ -6,8 +6,9 @@ from typing import Any, List
 from agents import UsageAccumulator, call_llm_for_role
 from database import session_scope
 from integrations.langfuse import update_trace_metadata
-from models import Debate, Message
+from models import Debate, DebateAttempt, Message
 from orchestration.execution_context import require_current_execution_lease
+from orchestration.execution_lease import ExecutionSupersededError
 from orchestration.fencing import assert_execution_ownership_sync
 from prompts.conversation import (
     CONVERSATION_SCRIBE_PROMPT,
@@ -117,6 +118,12 @@ async def run_conversation_debate(
                 )
                 with session_scope() as session:
                     assert_execution_ownership_sync(session, lease)
+                    attempt_id = session.execute(
+                        select(DebateAttempt.id).where(
+                            DebateAttempt.debate_id == debate_id,
+                            DebateAttempt.attempt_number == lease.run_attempt,
+                        )
+                    ).scalar_one_or_none()
                     existing = session.exec(
                         select(Message).where(
                             Message.debate_id == debate_id,
@@ -127,7 +134,7 @@ async def run_conversation_debate(
                         session.add(
                             Message(
                                 debate_id=debate_id,
-                                attempt_id=None,
+                                attempt_id=attempt_id,
                                 response_id=response_id,
                                 round_index=round_idx,
                                 role="delegate",
@@ -160,6 +167,11 @@ async def run_conversation_debate(
                     }
                 )
 
+            except ExecutionSupersededError:
+                # Ownership lost: this is NOT a seat failure. Stop the entire
+                # run immediately — no further seats, rounds, scribe, synthesis,
+                # events, or paid provider work. The new owner owns the run.
+                raise
             except Exception as e:
                 logger.error(f"Error in conversation round {round_idx} for seat {seat.display_name}: {e}")
                 total_seat_failures += 1

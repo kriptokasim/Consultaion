@@ -60,6 +60,57 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _validate_compare_models(
+    requested: Optional[list[str]],
+    enabled_models: dict,
+) -> list[str]:
+    """Validate Compare mode model selection at the create boundary.
+
+    Every requested model must be canonical (known), enabled for the user
+    (covers provider validity and BYOK/hosted availability), tier-allowed by
+    the user's plan, and unique after normalization. At least two valid
+    UNIQUE models are required — raw ``len(requested) >= 2`` is not enough.
+
+    Returns the deduplicated validated list. Raises ValidationError otherwise.
+    """
+    if not requested or not isinstance(requested, list):
+        raise ValidationError(
+            message="Compare mode requires at least 2 models",
+            code="debate.invalid_compare_models",
+        )
+
+    seen: set[str] = set()
+    validated: list[str] = []
+    for raw in requested:
+        if not isinstance(raw, str) or not raw.strip():
+            raise ValidationError(
+                message="Invalid model in compare selection",
+                code="debate.invalid_compare_models",
+            )
+        model_id = raw.strip()
+        # ``enabled_models`` is the user-scoped view of the canonical model
+        # registry: membership covers known/enabled/provider-valid and
+        # BYOK/hosted availability for this user. Tier gating happens after
+        # the hosted-credit extension of ``allowed_tiers`` so a free-plan
+        # user may select advanced models through the per-run credit policy.
+        info = enabled_models.get(model_id)
+        if info is None:
+            raise ValidationError(
+                message=f"Model '{model_id}' is invalid, disabled, or unavailable to you",
+                code="debate.invalid_compare_models",
+            )
+        if model_id not in seen:
+            seen.add(model_id)
+            validated.append(model_id)
+
+    if len(validated) < 2:
+        raise ValidationError(
+            message="Compare mode requires at least 2 distinct valid models",
+            code="debate.invalid_compare_models",
+        )
+    return validated
+
+
 @router.get("/debates/{debate_id}/timeline", response_model=list[TimelineEvent])
 async def get_debate_timeline(
     debate_id: str,
@@ -227,6 +278,15 @@ async def create_debate(
         from billing.service import get_active_plan, reserve_hosted_credit
         plan = get_active_plan(session, current_user.id)
 
+        # Compare mode: full entitlement validation BEFORE any billing
+        # reservation — invalid input must never consume quota or credits.
+        validated_compare_models: list[str] | None = None
+        if body.mode == "compare":
+            validated_compare_models = _validate_compare_models(
+                requested=body.compare_models,
+                enabled_models=enabled_models,
+            )
+
         # Check the model's tier
         from parliament.model_registry import get_default_model
         target_model_id = body.model_id or get_default_model().id
@@ -235,8 +295,24 @@ async def create_debate(
         if target_model_info:
             model_tier = getattr(target_model_info, "tier", "standard")
 
-        # Phase 8: Hosted Credits check for Free plan users - only for advanced/SOTA models
-        is_sota_run = (model_tier == "advanced" or body.mode == "arena")
+        compare_has_advanced = bool(
+            validated_compare_models
+            and any(
+                getattr(enabled_models.get(m), "tier", "standard") == "advanced"
+                for m in validated_compare_models
+            )
+        )
+
+        # Phase 8: Hosted Credits check for Free plan users - only for advanced/SOTA models.
+        # Product policy (per-run reservation unit): a free-plan run that will
+        # execute ANY advanced/SOTA model requires exactly one hosted credit
+        # reservation for the run. Arena always executes advanced fan-out;
+        # Compare requires one when any selected model is advanced.
+        is_sota_run = (
+            model_tier == "advanced"
+            or body.mode == "arena"
+            or compare_has_advanced
+        )
         # Reservation happens after debate_id is assigned (durable ledger key).
         needs_hosted_credit = bool(plan.is_default_free and is_sota_run)
         has_hosted_credits = False
@@ -264,6 +340,18 @@ async def create_debate(
                 code="debate.model_tier_restricted",
                 hint="Please upgrade to Pro to use advanced models."
             )
+
+        # Compare models: re-check tiers AFTER the free-plan hosted-credit
+        # extension of allowed_tiers so the policy matches single-model runs.
+        if validated_compare_models:
+            for m in validated_compare_models:
+                tier = getattr(enabled_models.get(m), "tier", "standard")
+                if tier not in allowed_tiers:
+                    raise ValidationError(
+                        message=f"Model '{m}' is not available on your plan.",
+                        code="debate.model_tier_restricted",
+                        hint="Please upgrade to Pro to use advanced models.",
+                    )
 
         if body.mode == "arena" and body.panel_config is None:
             default_arena_models = [
@@ -495,9 +583,8 @@ async def create_debate(
         if body.locale:
             config_payload["locale"] = body.locale
         if body.mode == "compare":
-            if not body.compare_models or len(body.compare_models) < 2:
-                raise ValidationError(message="Compare mode requires at least 2 models", code="debate.invalid_compare_models")
-            config_payload["compare_models"] = body.compare_models
+            # Validated earlier (pre-reservation) via _validate_compare_models.
+            config_payload["compare_models"] = validated_compare_models
 
         debate = Debate(
             id=debate_id,

@@ -1,5 +1,55 @@
 # Production-Critical Hardening — Audit Report
 
+## Wave 2 (branch: agent/prod-critical-hardening-final, BASE 46434fe)
+
+### PC-CMP-003 — Compare ownership fence was a no-op (P0) — VERIFIED
+- **Symptom:** `assert_execution_ownership(session, lease)` was called without
+  `await` in the async persistence path — the coroutine never ran, so a stale
+  worker could persist messages, emit SSE, and report results after losing
+  ownership.
+- **Fix:** `await` the fence; on supersede, all in-flight provider tasks are
+  cancelled and ExecutionSupersededError propagates (no result, no terminal
+  event from the stale worker).
+- **Negative regression:** `test_compare_superseded_between_provider_and_persist_stops_completely`
+  (takeover injected between provider completion and persistence; asserts no
+  Message rows, no seat_message SSE events, pending provider work cancelled).
+
+### PC-CNV-002 — Conversation treated ownership loss as a seat failure (P1) — VERIFIED
+- **Symptom:** broad `except Exception` in the seat loop swallowed
+  ExecutionSupersededError and continued to next seats/rounds/scribe/synthesis
+  — paid provider work by a superseded worker.
+- **Fix:** explicit `except ExecutionSupersededError: raise` before the generic
+  handler.
+- **Negative regression:** `test_conversation_supersede_is_not_a_seat_failure`
+  (exactly one provider call after takeover; no persisted messages; no
+  seat_message events).
+
+### PC-CMP-002 — Compare model entitlement not validated at boundary (P1) — VERIFIED
+- **Symptom:** create route only checked `len(compare_models) >= 2`; arbitrary,
+  duplicate, disabled, or unknown IDs went straight into config. Free-plan
+  users could run advanced models via compare_models with NO hosted credit
+  reservation (paid execution bypassing billing).
+- **Fix:** `_validate_compare_models` at the create boundary pre-reservation:
+  normalization (strip), canonical/enabled check against the user-scoped
+  registry view, dedupe, ≥2 distinct required. Per-run hosted-credit policy
+  extended to Compare: any advanced selected model on the free plan requires
+  exactly one reservation, same as Arena.
+- **Regressions:** tests/test_compare_entitlement.py (6 tests incl. credit
+  exhaustion and free-plan advanced-with-reservation paths).
+
+### PC-CMP-004 — Raw provider exception text persisted/emitted by Compare (P2→P1) — VERIFIED
+- **Fix:** failures classified via classify_provider_exception; only safe
+  message + code stored in Message.meta / seat_message events.
+
+### PC-IDT-001 — Relational attempt identity on engine writes (P2) — VERIFIED
+- Compare/Conversation durable messages now carry the real `attempt_id`
+  (DebateAttempt FK for the leased attempt) in addition to the deterministic
+  response_id.
+
+---
+
+## Wave 1
+
 - **BASE_SHA:** `f2f5cec8ac1df6b440c17bd8d70fc30bcb48910c` (origin/main at start)
 - **Branch:** `agent/prod-critical-hardening`
 - **Method:** three parallel deep audits (backend execution authorities, frontend
