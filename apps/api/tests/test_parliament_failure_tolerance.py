@@ -111,3 +111,45 @@ async def test_parliament_tolerance_aborts_when_threshold_exceeded(db_session: S
     assert result.status == "failed"
     assert result.error_reason == "seat_failure_threshold_exceeded"
     assert result.final_meta.get("failure", {}).get("failure_count") == 3
+
+
+@pytest.mark.anyio("asyncio")
+async def test_superseded_score_write_aborts_not_falls_back(db_session: Session, monkeypatch):
+    """Ownership loss during the fenced Score write must propagate as
+    ExecutionSupersededError — never be swallowed into a 'judging failed'
+    seat-order fallback that would let a stale worker keep producing ranking."""
+    from unittest.mock import patch
+
+    from orchestration.execution_lease import ExecutionSupersededError
+
+    panel = default_panel_config()
+    panel.max_seat_fail_ratio = 0.9
+    debate_id = f"supersede-judge-{uuid.uuid4().hex[:6]}"
+    debate = Debate(
+        id=debate_id,
+        prompt="Judging ownership loss",
+        status="queued",
+        panel_config=panel.model_dump(),
+        engine_version=panel.engine_version,
+    )
+    db_session.add(debate)
+    db_session.commit()
+    db_session.refresh(debate)
+
+    reset_sse_backend_for_tests()
+    backend = get_sse_backend()
+    await backend.create_channel(f"debate:{debate_id}")
+
+    # Seats succeed; only the judging-phase fenced Score write is superseded.
+    monkeypatch.setattr(agents, "call_llm_for_role", _FlakyLLM(set()))
+    monkeypatch.setattr("parliament.engine.call_llm_for_role", _FlakyLLM(set()))
+    token, _reset = await _bind_live_lease(debate.id)
+    try:
+        with patch(
+            "parliament.engine._assert_parliament_write",
+            side_effect=ExecutionSupersededError("lease lost"),
+        ):
+            with pytest.raises(ExecutionSupersededError):
+                await run_parliament_debate(debate.id, model_id=None)
+    finally:
+        _reset(token)

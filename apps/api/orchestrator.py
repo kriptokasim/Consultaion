@@ -871,6 +871,7 @@ async def run_debate(
                         "type": terminal_event_type,
                         "debate_id": debate_id,
                         "status": result.status,
+                        "reason": result.error_reason if terminal_event_type == "debate_failed" else None,
                     },
                 )
 

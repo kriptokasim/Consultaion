@@ -9,6 +9,7 @@ from typing import Any, List, Optional
 from agents import UsageAccumulator, UsageCall, call_llm_for_role
 from database import session_scope
 from models import Debate, Message, Score
+from orchestration.execution_lease import ExecutionSupersededError
 from orchestration.finalization import FinalizationService
 from pydantic import ValidationError
 from schemas import DebateConfig, JudgeConfig, PanelConfig, default_judges, default_panel_config
@@ -477,6 +478,11 @@ async def run_parliament_debate(
 
         # Compute Ranking
         ranking, _ = FinalizationService.compute_rankings(scores)
+    except ExecutionSupersededError:
+        # Ownership lost during the fenced Score write: never convert this into
+        # a "judging failed" fallback. Abort immediately — the new owner owns
+        # this run, and any further scoring/ranking/terminal work is invalid.
+        raise
     except Exception as judge_exc:
         logger.error("Judging phase failed, falling back to seat-order ranking: %s", judge_exc)
         scores = []
