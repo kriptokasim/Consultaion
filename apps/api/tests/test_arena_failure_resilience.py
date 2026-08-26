@@ -1078,3 +1078,47 @@ class _mock_session_scope:
 async def _bypass_checkpoint(debate_id, stage_name, input_data, run_fn, load_fn, **_kwargs):
     """Skip checkpoint logic — just call the run function directly."""
     return await run_fn()
+
+
+@pytest.mark.anyio
+async def test_all_models_fail_does_not_emit_terminal_from_engine():
+    """Terminal ownership invariant: the child arena engine must NOT publish a
+    terminal debate_failed event — that is the orchestrator's job, emitted only
+    AFTER the durable terminal DB commit. A terminal event from the engine
+    would allow SSE='failed' while DB='running'."""
+    from arena.engine import ArenaResult, run_arena
+
+    async def always_fail(*args, **kwargs):
+        raise RuntimeError("Provider is down")
+
+    backend = AsyncMock()
+    with (
+        patch("arena.engine.get_arena_models", return_value=_ARENA_MODELS),
+        patch("arena.engine.call_llm_for_role", side_effect=always_fail),
+        patch("arena.engine.get_sse_backend", return_value=backend),
+        patch("arena.engine.async_session_scope", new_callable=lambda: _mock_session_scope),
+        patch("orchestration.checkpoints.run_with_checkpoint", side_effect=_bypass_checkpoint),
+        patch("config.settings") as mock_settings,
+    ):
+        mock_settings.FAST_DEBATE = False
+        mock_settings.STREAMING_RESPONSES_ENABLED = False
+        mock_settings.ARENA_MODEL_TIMEOUT_SECONDS = 45
+        mock_settings.ARENA_MODEL_TOTAL_TIMEOUT_S = 60
+        mock_settings.ARENA_MAX_TOKENS = 1200
+        mock_settings.STAGED_DECISION_PIPELINE = False
+        mock_settings.MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 1
+
+        result = await run_arena("test-debate-no-terminal")
+
+    assert isinstance(result, ArenaResult)
+    assert result.status == "failed"
+
+    terminal_events = [
+        c.args[1]
+        for c in backend.publish.call_args_list
+        if c.args and isinstance(c.args[1], dict) and c.args[1].get("type") == "debate_failed"
+    ]
+    assert terminal_events == [], (
+        "arena engine emitted a terminal debate_failed event; terminal state "
+        "must be owned solely by the orchestrator after durable commit"
+    )

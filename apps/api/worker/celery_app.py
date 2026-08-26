@@ -207,3 +207,14 @@ if hasattr(celery_app, "task"):
 
 # Write initial heartbeat on import
 _write_worker_heartbeat()
+
+# The Celery worker does not import the API router, so the terminal-commit
+# guard installed in routes/debates/__init__.py is absent here. Install it
+# explicitly so a premature child-engine terminal event can never leak before
+# the durable terminal DB commit in worker (Celery) execution mode.
+try:
+    from sse_terminal_guard import install_terminal_commit_guard
+
+    install_terminal_commit_guard()
+except Exception:  # pragma: no cover - guard is best-effort hardening
+    logger.warning("Could not install terminal commit guard in worker", exc_info=True)

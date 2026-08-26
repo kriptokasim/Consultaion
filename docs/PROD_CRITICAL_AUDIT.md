@@ -1,5 +1,29 @@
 # Production-Critical Hardening — Audit Report
 
+## Wave 3 (branch: agent/prod-critical-audit-wave3)
+
+### PC-ARENA-002 — Terminal event had two owners; engine emitted terminal before durable commit (P1) — VERIFIED
+- **Symptom:** `arena/engine.py` published `debate_failed` (`reason="all_models_failed"`)
+  from the child engine before the orchestrator committed the terminal DB
+  status. In Celery mode the `TerminalCommitGuard` (installed only in the API
+  process) was absent, so SSE could say "failed" while the DB still said
+  "running" — a release-blocker race.
+- **Fix:** removed the premature terminal emit from the engine (terminal is
+  now owned solely by the orchestrator, post-commit); added `reason` to the
+  orchestrator's authoritative terminal event; installed the guard in the
+  worker process as defense-in-depth.
+- **Regression:** `test_all_models_fail_does_not_emit_terminal_from_engine`.
+
+### PC-PARL-002 — Judging-phase fence loss swallowed as "judging failed" (P2) — VERIFIED
+- **Symptom:** `ExecutionSupersededError` from the fenced Score write was
+  caught by a broad `except Exception`, relabeled "judging failed", and the
+  run fell back to seat-order ranking — deferring the superseded abort.
+- **Fix:** explicit `except ExecutionSupersededError: raise` before the generic
+  handler.
+- **Regression:** `test_superseded_score_write_aborts_not_falls_back`.
+
+---
+
 ## Wave 2 (branch: agent/prod-critical-hardening-final, BASE 46434fe)
 
 ### PC-CMP-003 — Compare ownership fence was a no-op (P0) — VERIFIED

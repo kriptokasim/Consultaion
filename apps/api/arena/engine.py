@@ -1767,15 +1767,11 @@ async def run_arena(
     # Check if we have enough successful responses for synthesis
     successful = [r for r in model_responses if r.success]
     if len(successful) < min_required:
-        await _publish_lifecycle_best_effort(
-            backend,
-            f"debate:{debate_id}",
-            {
-                "type": "debate_failed",
-                "debate_id": str(debate_id),
-                "reason": "all_models_failed",
-            },
-        )
+        # NOTE: no terminal event is published here. Terminal state has exactly
+        # one owner — the orchestrator — which emits debate_failed only AFTER
+        # the durable terminal DB commit. Emitting a terminal event from the
+        # child engine would let SSE say "failed" while the DB still says
+        # "running" (a release-blocker race, especially in Celery mode).
         return ArenaResult(
             final_answer="All models failed to respond. Please try again.",
             final_meta={
