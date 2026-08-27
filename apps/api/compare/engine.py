@@ -151,23 +151,31 @@ async def run_compare_debate(
                 )
                 await session.commit()
 
-        await backend.publish(
-            f"debate:{debate_id}",
-            {
-                "type": "seat_message",
-                "debate_id": str(debate_id),
-                "round": 1,
-                "seat_name": res["display_name"],
-                "seat_id": res["model_id"],
-                "content": res["content"],
-                "model": res["model_id"],
-                "mode": "compare",
-                "response_id": response_id,
-                "success": res["success"],
-                "error": res["error_message"],
-                "error_code": res["error_code"],
-            }
-        )
+        try:
+            await backend.publish(
+                f"debate:{debate_id}",
+                {
+                    "type": "seat_message",
+                    "debate_id": str(debate_id),
+                    "round": 1,
+                    "seat_name": res["display_name"],
+                    "seat_id": res["model_id"],
+                    "content": res["content"],
+                    "model": res["model_id"],
+                    "mode": "compare",
+                    "response_id": response_id,
+                    "success": res["success"],
+                    "error": res["error_message"],
+                    "error_code": res["error_code"],
+                }
+            )
+        except ExecutionSupersededError:
+            raise
+        except Exception as pub_exc:
+            logger.warning(
+                "Compare seat publish failed (best-effort) debate_id=%s model=%s error=%s",
+                debate_id, res["model_id"], pub_exc,
+            )
 
         if res["success"]:
             succeeded += 1
