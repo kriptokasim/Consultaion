@@ -219,27 +219,47 @@ class DebateStateManager:
                     attempt.completed_at = datetime.now(timezone.utc)
                     session.add(attempt)
             
-            if self.user_id:
-                try:
-                    import asyncio
-                    tokens = max(int(tokens_total), 0)
-                    if tokens > 0:
-                        def _record():
-                            from database import session_scope
-                            from services.usage_ledger import record_token_usage as ledger_record
-                            with session_scope() as s:
-                                ledger_record(
-                                    s,
-                                    user_id=self.user_id,
-                                    debate_id=self.debate_id,
-                                    attempt_id=self.attempt_id,
-                                    tokens=tokens,
-                                )
-                        loop = asyncio.get_running_loop()
-                        await loop.run_in_executor(None, _record)
-                except Exception:
-                    logger.exception("Failed to record token usage for debate %s", self.debate_id)
             await session.commit()
+
+        # Terminal product state is authoritative. Record and settle usage only
+        # after the debate + attempt commit so API and Celery execution have the
+        # same crash semantics and never leave a successful run merely reserved.
+        tokens = max(int(tokens_total), 0)
+        if not self.user_id or tokens <= 0:
+            return
+
+        def _record_and_settle() -> None:
+            from database import session_scope
+            from services.usage_ledger import record_token_usage, settle_token_usage
+
+            with session_scope() as session:
+                entry = record_token_usage(
+                    session,
+                    user_id=self.user_id,
+                    debate_id=self.debate_id,
+                    attempt_id=self.attempt_id,
+                    tokens=tokens,
+                )
+                if entry.status in {
+                    "reserved",
+                    "settlement_pending",
+                    "reconciliation_pending",
+                }:
+                    settle_token_usage(
+                        session,
+                        user_id=self.user_id,
+                        debate_id=self.debate_id,
+                        attempt_id=self.attempt_id,
+                    )
+
+        try:
+            import asyncio
+
+            await asyncio.get_running_loop().run_in_executor(None, _record_and_settle)
+        except Exception:
+            # The terminal commit is durable and ledger operations are
+            # idempotent by debate/attempt, so reconciliation can safely retry.
+            logger.exception("Failed to settle token usage for debate %s", self.debate_id)
 
     # ========== Checkpoint Methods (Async) ==========
 

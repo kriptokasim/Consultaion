@@ -6,12 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import sqlalchemy as sa
+from agents import call_llm_for_role as _call_llm_for_role
 from database_async import async_session_scope
 from models import Debate, LLMUsageLog
-from parliament import engine as parliament_engine
 
-_installed = False
-_original_call = parliament_engine.call_llm_for_role
 _state_lock = threading.Lock()
 
 
@@ -86,32 +84,24 @@ def _assert_headroom(state: _BudgetState) -> None:
         raise ParliamentBudgetExceeded("cost_budget_exceeded")
 
 
-def install_parliament_budget_guard() -> None:
-    """Stop subsequent Parliament provider calls once actual usage reaches budget.
+async def call_llm_for_role_budgeted(*args: Any, **kwargs: Any):
+    """Canonical Parliament provider boundary with durable budget accounting.
 
     Existing seat concurrency is preserved: calls already in flight may finish,
     while later seat groups/chair/judges are rejected before a new provider call.
     This bounds overshoot to the currently active concurrent group rather than
     serializing Structured Debate.
     """
-    global _installed
-    if _installed:
-        return
+    debate_id = kwargs.get("debate_id")
+    state = await _load_state(str(debate_id)) if debate_id else None
+    if state is not None:
+        with state.lock:
+            _assert_headroom(state)
 
-    async def guarded_call(*args: Any, **kwargs: Any):
-        debate_id = kwargs.get("debate_id")
-        state = await _load_state(str(debate_id)) if debate_id else None
-        if state is not None:
-            with state.lock:
-                _assert_headroom(state)
-
-        result = await _original_call(*args, **kwargs)
-        if state is not None and isinstance(result, tuple) and len(result) >= 2:
-            usage = result[1]
-            with state.lock:
-                state.tokens += max(int(getattr(usage, "total_tokens", 0) or 0), 0)
-                state.cost_usd += max(float(getattr(usage, "cost_usd", 0.0) or 0.0), 0.0)
-        return result
-
-    parliament_engine.call_llm_for_role = guarded_call
-    _installed = True
+    result = await _call_llm_for_role(*args, **kwargs)
+    if state is not None and isinstance(result, tuple) and len(result) >= 2:
+        usage = result[1]
+        with state.lock:
+            state.tokens += max(int(getattr(usage, "total_tokens", 0) or 0), 0)
+            state.cost_usd += max(float(getattr(usage, "cost_usd", 0.0) or 0.0), 0.0)
+    return result

@@ -69,105 +69,125 @@ async def _extract_claims_from_response(prompt: str, response_content: str, mode
 
 
 async def _execute_divergence_computation(debate_id: str) -> None:
-    """Core logic to fetch responses, extract claims, calculate similarity, and store report."""
+    """Compute divergence from only the current attempt's canonical responses."""
     async with async_session_scope() as session:
         debate = await session.get(Debate, debate_id)
-        if not debate:
+        if debate is None:
             module_logger.warning("Debate %s not found for divergence computation", debate_id)
             return
-        
         prompt = debate.prompt
-        
-        # Fetch arena responses
-        stmt = select(Message).where(
-            Message.debate_id == debate_id,
-            Message.role == "arena_response"
+        run_attempt = max(int(debate.run_attempt or 0), 1)
+        result = await session.execute(
+            select(Message)
+            .where(Message.debate_id == debate_id)
+            .where(Message.role == "arena_response")
+            .order_by(Message.created_at.asc(), Message.id.asc())
         )
-        db_responses_result = await session.execute(stmt)
-        db_responses = db_responses_result.scalars().all()
-        responses = [
-            {"content": r.content, "persona": r.persona or "Model"}
-            for r in db_responses
-        ]
+        rows = list(result.scalars().all())
+
+    latest: dict[str, Message] = {}
+    generations: dict[str, int] = {}
+    for row in rows:
+        meta = row.meta or {}
+        if int(meta.get("run_attempt", 1) or 1) != run_attempt:
+            continue
+        if meta.get("success", True) is False:
+            continue
+        model_id = str(meta.get("model_id") or row.persona or row.id)
+        generation = int(meta.get("retry_generation", 0) or 0)
+        if model_id not in latest or generation >= generations[model_id]:
+            latest[model_id] = row
+            generations[model_id] = generation
+
+    responses = [
+        {
+            "model_id": model_id,
+            "content": row.content,
+            "persona": row.persona or model_id,
+            "response_id": row.response_id,
+        }
+        for model_id, row in sorted(latest.items())
+    ]
 
     if not responses:
-        module_logger.warning("No arena responses found for debate %s", debate_id)
-        # Create empty report
         async with async_session_scope() as session:
             result = await session.execute(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id))
-            report = result.scalars().first()
-            if not report:
-                report = DivergenceReport(
-                    debate_id=debate_id,
-                    divergence_score=0.0,
-                    consensus_claims={"claims": []},
-                    contested_claims={"claims": []}
-                )
-                session.add(report)
-                await session.commit()
-            return
+            report = result.scalars().first() or DivergenceReport(debate_id=debate_id)
+            report.divergence_score = 0.0
+            report.consensus_claims = {"claims": []}
+            report.contested_claims = {"claims": []}
+            session.add(report)
+            await session.commit()
+        return
 
     checkpoint_input = {
         "prompt": prompt,
-        "responses": responses
+        "run_attempt": run_attempt,
+        "responses": [
+            {
+                "model_id": item["model_id"],
+                "response_id": item["response_id"],
+                "content": item["content"],
+            }
+            for item in responses
+        ],
     }
 
     async def run_divergence():
-        # Delegate to the upgraded semantic claim matching synthesizer analysis
         from reporting.synthesizer import run_semantic_claims_analysis
         try:
-            res = await run_semantic_claims_analysis(prompt, responses, debate_id)
-            divergence_score = res["divergence_score"]
-            consensus_list = res["consensus_claims"]
-            contested_list = res["contested_claims"]
+            result = await run_semantic_claims_analysis(prompt, responses, debate_id)
+            divergence_score = result["divergence_score"]
+            consensus_list = result["consensus_claims"]
+            contested_list = result["contested_claims"]
         except Exception as exc:
-            module_logger.error("Failed semantic divergence analysis: %s. Falling back to string overlap.", exc)
-            # Fallback to older inline logic using compute_string_similarity
-            tasks = []
-            for resp in responses:
-                tasks.append(_extract_claims_from_response(prompt, resp["content"], resp["persona"], debate_id))
-            extracted_lists = await asyncio.gather(*tasks)
-            
-            all_claims = []
-            for resp, claims in zip(responses, extracted_lists, strict=False):
-                model_name = resp["persona"]
-                for c in claims:
-                    all_claims.append({"claim": c, "model": model_name})
-            
-            processed = set()
+            module_logger.warning(
+                "Semantic divergence failed for %s; using string fallback: %s",
+                debate_id,
+                exc,
+            )
+            extracted = await asyncio.gather(
+                *[
+                    _extract_claims_from_response(
+                        prompt,
+                        item["content"],
+                        item["persona"],
+                        debate_id,
+                    )
+                    for item in responses
+                ]
+            )
+            all_claims: list[dict[str, str]] = []
+            for item, claims in zip(responses, extracted, strict=False):
+                for claim in claims:
+                    all_claims.append({"claim": claim, "model": item["persona"]})
+
+            processed: set[int] = set()
             consensus_list = []
             contested_list = []
-            
-            for i, item1 in enumerate(all_claims):
-                if i in processed:
+            for index, item in enumerate(all_claims):
+                if index in processed:
                     continue
-                matching_indices = []
-                matching_models = [item1["model"]]
-                
-                for j, item2 in enumerate(all_claims):
-                    if i != j and j not in processed:
-                        sim = compute_string_similarity(item1["claim"], item2["claim"])
-                        if sim >= 0.70:
-                            matching_indices.append(j)
-                            matching_models.append(item2["model"])
-                
-                if matching_indices:
-                    processed.add(i)
-                    for idx in matching_indices:
-                        processed.add(idx)
-                    consensus_list.append({
-                        "claim": item1["claim"],
-                        "models": list(set(matching_models))
-                    })
+                matches: list[int] = []
+                models = [item["model"]]
+                for other_index, other in enumerate(all_claims):
+                    if index == other_index or other_index in processed:
+                        continue
+                    if compute_string_similarity(item["claim"], other["claim"]) >= 0.70:
+                        matches.append(other_index)
+                        models.append(other["model"])
+                processed.add(index)
+                if matches:
+                    processed.update(matches)
+                    consensus_list.append(
+                        {"claim": item["claim"], "models": sorted(set(models))}
+                    )
                 else:
-                    processed.add(i)
-                    contested_list.append({
-                        "claim": item1["claim"],
-                        "model": item1["model"]
-                    })
-            
-            total_distinct = len(consensus_list) + len(contested_list)
-            divergence_score = len(contested_list) / total_distinct if total_distinct > 0 else 0.0
+                    contested_list.append(
+                        {"claim": item["claim"], "model": item["model"]}
+                    )
+            total = len(consensus_list) + len(contested_list)
+            divergence_score = len(contested_list) / total if total else 0.0
 
         async with async_session_scope() as session:
             result = await session.execute(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id))
@@ -183,13 +203,15 @@ async def _execute_divergence_computation(debate_id: str) -> None:
         return divergence_score, consensus_list, contested_list
 
     async def load_divergence(session):
-        stmt_rep = select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
-        res_rep = await session.execute(stmt_rep)
-        report = res_rep.scalars().first()
-        if report:
-            module_logger.info("Loaded semantic DivergenceReport from DB for debate %s.", debate_id)
-            return report.divergence_score, report.consensus_claims.get("claims", []), report.contested_claims.get("claims", [])
-        return 0.0, [], []
+        result = await session.execute(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id))
+        report = result.scalars().first()
+        if report is None:
+            return 0.0, [], []
+        return (
+            report.divergence_score,
+            (report.consensus_claims or {}).get("claims", []),
+            (report.contested_claims or {}).get("claims", []),
+        )
 
     from orchestration.checkpoints import run_with_checkpoint
     await run_with_checkpoint(
@@ -197,7 +219,7 @@ async def _execute_divergence_computation(debate_id: str) -> None:
         stage_key="divergence_analysis",
         input_data=checkpoint_input,
         run_fn=run_divergence,
-        load_fn=load_divergence
+        load_fn=load_divergence,
     )
 
 

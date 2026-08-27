@@ -191,6 +191,7 @@ describe("synthesisReducer", () => {
         successful_count: 2,
       },
     });
+    expect(finalStarted.text).toBe("Draft");
     const finalDelta = synthesisReducer(finalStarted, {
       type: "DELTA",
       payload: {
@@ -358,5 +359,30 @@ describe("synthesisReducer replay ordering", () => {
     });
     expect(nextRevision.status).toBe("streaming");
     expect(nextRevision.text).toBe("rev3");
+  });
+
+  test("same-revision snapshots cannot regress final state", () => {
+    const finalized = synthesisReducer(INITIAL_SYNTHESIS_STATE, {
+      type: "FINALIZED",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 2,
+        status: "final",
+        content: "Final decision",
+      },
+    });
+    const replayed = synthesisReducer(finalized, {
+      type: "REVISION",
+      payload: {
+        synthesis_id: "s1",
+        run_attempt: 1,
+        revision: 2,
+        status: "provisional",
+        content: "Late provisional snapshot",
+      },
+    });
+
+    expect(replayed).toBe(finalized);
   });
 });

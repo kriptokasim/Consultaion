@@ -1,9 +1,6 @@
-from divergence_guard import install_divergence_guard
 from fastapi import APIRouter
 from models import Debate, Message, PairwiseVote, Score  # re-export for backward compat
-from parliament_budget_guard import install_parliament_budget_guard
 from sse_terminal_guard import install_terminal_commit_guard
-from state_terminal_guard import install_terminal_accounting_guard
 from structured_judge_guard import install_structured_judge_guard
 
 from routes.debates.config_routes import (
@@ -33,10 +30,7 @@ from routes.debates.exports import export_debate_report, router as _exports_rout
 # Install cross-cutting guards before the hardened router captures the legacy
 # create callable. The judge guard rewrites that callable in-place.
 install_structured_judge_guard()
-install_parliament_budget_guard()
-install_terminal_accounting_guard()
 install_terminal_commit_guard()
-install_divergence_guard()
 
 from routes.debates.hardening import (  # noqa: E402
     create_debate_hardened as create_debate,

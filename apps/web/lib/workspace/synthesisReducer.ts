@@ -112,6 +112,17 @@ function fromSnapshot(
   status: SynthesisStateStatus,
 ): SynthesisStreamingState {
   if (isStale(state, payload)) return state;
+  if (
+    isTerminal(state)
+    && !supersedesTerminal(state, payload)
+    && (
+      payload.run_attempt !== state.runAttempt
+      || payload.revision !== state.revision
+      || status !== state.status
+    )
+  ) {
+    return state;
+  }
   return {
     synthesisId: payload.synthesis_id,
     runAttempt: payload.run_attempt,
@@ -164,8 +175,6 @@ export function synthesisReducer(
       if (sameRevision && state.status !== "idle") return state;
       return {
         ...fromSnapshot(state, action.payload, "streaming"),
-        text: "",
-        report: null,
         lastDeltaSequence: 0,
       };
     }

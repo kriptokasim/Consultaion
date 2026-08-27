@@ -12,6 +12,58 @@ from model_gateway.types import GatewayModelCallResult, ModelDelta, OnDeltaCallb
 logger = logging.getLogger("model_gateway.adapters")
 
 
+def _usage_value(usage: Any, name: str) -> int:
+    if usage is None:
+        return 0
+    value = usage.get(name, 0) if isinstance(usage, dict) else getattr(usage, name, 0)
+    try:
+        return max(int(value or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _stream_cost(chunk: Any, usage: Any) -> float:
+    candidates = [
+        getattr(chunk, "response_cost", None),
+        usage.get("total_cost") if isinstance(usage, dict) else getattr(usage, "total_cost", None),
+    ]
+    hidden = getattr(chunk, "_hidden_params", None)
+    if isinstance(hidden, dict):
+        candidates.append(hidden.get("response_cost"))
+    for candidate in candidates:
+        try:
+            cost = float(candidate or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if cost > 0:
+            return cost
+    return 0.0
+
+
+def _estimate_stream_usage(
+    *,
+    model: str,
+    messages: List[Dict[str, str]],
+    content: str,
+) -> tuple[int, int, int, float]:
+    """Best-effort accounting when a provider stream ends before its usage chunk."""
+    try:
+        from litellm import cost_per_token, token_counter
+
+        prompt_tokens = max(int(token_counter(model=model, messages=messages) or 0), 0)
+        completion_tokens = max(int(token_counter(model=model, text=content) or 0), 0)
+        prompt_cost, completion_cost = cost_per_token(
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        cost_usd = max(float(prompt_cost or 0.0) + float(completion_cost or 0.0), 0.0)
+        return prompt_tokens, completion_tokens, prompt_tokens + completion_tokens, cost_usd
+    except Exception:
+        logger.warning("Could not estimate interrupted stream usage for %s", model, exc_info=True)
+        return 0, 0, 0, 0.0
+
+
 def _has_hidden_reasoning_activity(delta: Any) -> bool:
     """Return True when a provider emitted non-user-visible reasoning.
 
@@ -97,6 +149,10 @@ class DirectProviderAdapter(BaseAdapter):
         ttft_ms: float | None = None
         activity_seen = False
         activity_announced = False
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        cost_usd = 0.0
 
         from config import settings
         first_token_timeout_s = getattr(settings, "ARENA_FIRST_TOKEN_TIMEOUT_MS", 15000) / 1000.0
@@ -113,6 +169,7 @@ class DirectProviderAdapter(BaseAdapter):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
+                stream_options={"include_usage": True},
                 **llm_kwargs,
             )
             response_aiter = response.__aiter__()
@@ -138,6 +195,16 @@ class DirectProviderAdapter(BaseAdapter):
                     if not activity_seen:
                         raise asyncio.TimeoutError("stream_first_token_timeout") from None
                     raise asyncio.TimeoutError("stream_active_stall") from None
+
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage:
+                    prompt_tokens = max(prompt_tokens, _usage_value(chunk_usage, "prompt_tokens"))
+                    completion_tokens = max(
+                        completion_tokens,
+                        _usage_value(chunk_usage, "completion_tokens"),
+                    )
+                    total_tokens = max(total_tokens, _usage_value(chunk_usage, "total_tokens"))
+                cost_usd = max(cost_usd, _stream_cost(chunk, chunk_usage))
 
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""
@@ -168,10 +235,22 @@ class DirectProviderAdapter(BaseAdapter):
         except asyncio.TimeoutError as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             err_code = str(e) if str(e) in ("stream_first_token_timeout", "stream_active_stall", "stream_total_timeout") else "stream_total_timeout"
+            if total_tokens <= 0:
+                prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
+                    model=target_model,
+                    messages=messages,
+                    content=accumulated,
+                )
+                cost_usd = max(cost_usd, estimated_cost)
             return GatewayModelCallResult(
                 content=accumulated,
                 model_used=target_model,
                 provider=provider_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens or (prompt_tokens + completion_tokens),
+                cost_usd=cost_usd,
+                estimated_cost_usd=cost_usd,
                 latency_ms=latency_ms,
                 ttft_ms=ttft_ms,
                 success=False,
@@ -183,10 +262,22 @@ class DirectProviderAdapter(BaseAdapter):
         except Exception as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             failure = classify_provider_exception(e)
+            if total_tokens <= 0:
+                prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
+                    model=target_model,
+                    messages=messages,
+                    content=accumulated,
+                )
+                cost_usd = max(cost_usd, estimated_cost)
             return GatewayModelCallResult(
                 content=accumulated,
                 model_used=target_model,
                 provider=provider_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens or (prompt_tokens + completion_tokens),
+                cost_usd=cost_usd,
+                estimated_cost_usd=cost_usd,
                 latency_ms=latency_ms,
                 ttft_ms=ttft_ms,
                 success=False,
@@ -197,10 +288,22 @@ class DirectProviderAdapter(BaseAdapter):
             )
 
         latency_ms = (time.monotonic() - start_ts) * 1000
+        if total_tokens <= 0:
+            prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
+                model=target_model,
+                messages=messages,
+                content=accumulated,
+            )
+            cost_usd = max(cost_usd, estimated_cost)
         return GatewayModelCallResult(
             content=accumulated,
             model_used=target_model,
             provider=provider_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens or (prompt_tokens + completion_tokens),
+            cost_usd=cost_usd,
+            estimated_cost_usd=cost_usd,
             latency_ms=latency_ms,
             ttft_ms=ttft_ms,
             success=True,
@@ -375,6 +478,10 @@ class OpenRouterAdapter(BaseAdapter):
         ttft_ms: float | None = None
         activity_seen = False
         activity_announced = False
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        cost_usd = 0.0
 
         from config import settings
         first_token_timeout_s = getattr(settings, "ARENA_FIRST_TOKEN_TIMEOUT_MS", 15000) / 1000.0
@@ -391,6 +498,7 @@ class OpenRouterAdapter(BaseAdapter):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
+                stream_options={"include_usage": True},
                 **llm_kwargs
             )
             response_aiter = response.__aiter__()
@@ -416,6 +524,16 @@ class OpenRouterAdapter(BaseAdapter):
                     if not activity_seen:
                         raise asyncio.TimeoutError("stream_first_token_timeout") from None
                     raise asyncio.TimeoutError("stream_active_stall") from None
+
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage:
+                    prompt_tokens = max(prompt_tokens, _usage_value(chunk_usage, "prompt_tokens"))
+                    completion_tokens = max(
+                        completion_tokens,
+                        _usage_value(chunk_usage, "completion_tokens"),
+                    )
+                    total_tokens = max(total_tokens, _usage_value(chunk_usage, "total_tokens"))
+                cost_usd = max(cost_usd, _stream_cost(chunk, chunk_usage))
 
                 delta = chunk.choices[0].delta if chunk.choices else None
                 text = getattr(delta, "content", None) or "" if delta else ""
@@ -445,10 +563,22 @@ class OpenRouterAdapter(BaseAdapter):
         except asyncio.TimeoutError as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             err_code = str(e) if str(e) in ("stream_first_token_timeout", "stream_active_stall", "stream_total_timeout") else "stream_total_timeout"
+            if total_tokens <= 0:
+                prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
+                    model=target_model,
+                    messages=messages,
+                    content=accumulated,
+                )
+                cost_usd = max(cost_usd, estimated_cost)
             return GatewayModelCallResult(
                 content=accumulated,
                 model_used=target_model,
                 provider="openrouter",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens or (prompt_tokens + completion_tokens),
+                cost_usd=cost_usd,
+                estimated_cost_usd=cost_usd,
                 latency_ms=latency_ms,
                 ttft_ms=ttft_ms,
                 success=False,
@@ -460,10 +590,22 @@ class OpenRouterAdapter(BaseAdapter):
         except Exception as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             failure = classify_provider_exception(e)
+            if total_tokens <= 0:
+                prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
+                    model=target_model,
+                    messages=messages,
+                    content=accumulated,
+                )
+                cost_usd = max(cost_usd, estimated_cost)
             return GatewayModelCallResult(
                 content=accumulated,
                 model_used=target_model,
                 provider="openrouter",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens or (prompt_tokens + completion_tokens),
+                cost_usd=cost_usd,
+                estimated_cost_usd=cost_usd,
                 latency_ms=latency_ms,
                 ttft_ms=ttft_ms,
                 success=False,
@@ -474,10 +616,22 @@ class OpenRouterAdapter(BaseAdapter):
             )
 
         latency_ms = (time.monotonic() - start_ts) * 1000
+        if total_tokens <= 0:
+            prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
+                model=target_model,
+                messages=messages,
+                content=accumulated,
+            )
+            cost_usd = max(cost_usd, estimated_cost)
         return GatewayModelCallResult(
             content=accumulated,
             model_used=target_model,
             provider="openrouter",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens or (prompt_tokens + completion_tokens),
+            cost_usd=cost_usd,
+            estimated_cost_usd=cost_usd,
             latency_ms=latency_ms,
             ttft_ms=ttft_ms,
             success=True,

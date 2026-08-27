@@ -1,5 +1,63 @@
 # Production-Critical Hardening — Audit Report
 
+## C2-BUGFIX-22 — Production-readiness audit and fixes
+
+Scope: streaming accounting, terminal settlement, Parliament worker parity,
+attempt fencing, synthesis durability, and frontend replay monotonicity. The
+review covered both API and Celery import paths and searched sibling provider
+adapters for the same fault classes.
+
+### C2-ACC-001 — Streaming usage and cost were discarded (P1) — VERIFIED
+
+- Direct-provider and OpenRouter streams now request provider usage, consume
+  the final usage-only chunk, and persist provider-reported cost.
+- Interrupted streams retain partial content and use a best-effort LiteLLM
+  token/cost estimate when no terminal usage chunk arrives.
+- Targeted tests cover complete Direct/OpenRouter streams and interruption.
+
+### C2-FINAL-001 — Report normalization could erase a paid final (P1) — VERIFIED
+
+- Report normalization is now non-fatal after generation: the already-streamed
+  final content and synthesis usage remain durable if structured report parsing
+  rejects malformed metadata.
+- The parser failure is logged for diagnosis without changing run truth.
+
+### C2-BILL-001 — API and Celery used different terminal accounting (P1) — VERIFIED
+
+- Token recording and settlement moved into the canonical post-commit terminal
+  state transition used by both runtimes.
+- Durable terminal state commits before ledger operations; ledger idempotency
+  remains keyed by debate and attempt for safe retry/reconciliation.
+
+### C2-PARL-001 — Worker skipped budget and attempt boundaries (P1) — VERIFIED
+
+- Parliament budget enforcement now lives at the canonical provider-call
+  boundary rather than an API-only import-time patch.
+- Divergence computation now reads only successful responses from the current
+  run attempt, selecting the latest retry generation per model.
+
+### C2-FE-001 — Final synthesis could blank or regress on replay (P2) — VERIFIED
+
+- Starting a newer final preserves visible provisional text during final TTFT.
+- Same/older snapshots cannot regress a terminal synthesis revision.
+
+### Validation performed
+
+- 79 targeted backend tests passed with coverage gating disabled for the
+  intentionally narrow selection.
+- Ruff passed on all changed critical Python modules; Python compileall passed.
+- Alembic graph audit passed with one head; i18n parity passed at 841 keys;
+  `git diff --check` passed.
+- Heavy PostgreSQL/Redis/Docker/E2E and the complete frontend regression matrix
+  are intentionally delegated to CI/a follow-up coding-agent pass.
+
+### External release gate
+
+At audit start, GitHub Actions jobs for CI, Docker Smoke, CodeQL, and Gitleaks
+failed before runner allocation. Repository code cannot prove or repair an
+account/organization runner or billing restriction. A new main run must execute
+these gates before production promotion.
+
 ## Wave 3 (branch: agent/prod-critical-audit-wave3)
 
 ### PC-ARENA-002 — Terminal event had two owners; engine emitted terminal before durable commit (P1) — VERIFIED

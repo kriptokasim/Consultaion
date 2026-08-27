@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
-from agents import UsageAccumulator, UsageCall, call_llm_for_role
+from agents import UsageAccumulator, UsageCall
 from database import session_scope
 from models import Debate, Message, Score
 from orchestration.execution_lease import ExecutionSupersededError
 from orchestration.finalization import FinalizationService
+from parliament_budget_guard import call_llm_for_role_budgeted as call_llm_for_role
 from pydantic import ValidationError
 from schemas import DebateConfig, JudgeConfig, PanelConfig, default_judges, default_panel_config
 from sse_backend import get_sse_backend

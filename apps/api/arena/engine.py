@@ -186,6 +186,33 @@ class ArenaSynthesisRevision:
     usage_call: UsageCall | None = None
 
 
+def _build_synthesis_report_nonfatal(
+    *,
+    prompt: str,
+    content: str,
+    model_responses: list[dict],
+    debate_id: str,
+    synthesis_id: str,
+) -> dict | None:
+    """Normalize the optional report without invalidating visible synthesis."""
+    try:
+        from reporting.report_builder import build_report_from_synthesis
+
+        return build_report_from_synthesis(
+            prompt,
+            content,
+            model_responses=model_responses,
+        ).model_dump(mode="json")
+    except Exception:
+        logger.warning(
+            "arena.synthesis_report_normalization_failed debate_id=%s synthesis_id=%s",
+            debate_id,
+            synthesis_id,
+            exc_info=True,
+        )
+        return None
+
+
 def _message_to_arena_response(message: Message) -> ArenaModelResponse:
     meta = message.meta or {}
     return ArenaModelResponse(
@@ -701,7 +728,6 @@ async def _generate_and_persist_streamed_synthesis_revision(
     """Stream and durably identify one synthesis response snapshot."""
     from model_gateway import route_llm_stream
     from parliament.model_registry import get_default_model
-    from reporting.report_builder import build_report_from_synthesis
 
     from arena.delta_publisher import ArenaDeltaPublisher
     from config import settings
@@ -849,9 +875,9 @@ async def _generate_and_persist_streamed_synthesis_revision(
     persisted_status = revision_status
     if result.success and result.content.strip():
         content = result.content
-        report = build_report_from_synthesis(
-            prompt,
-            content,
+        report = _build_synthesis_report_nonfatal(
+            prompt=prompt,
+            content=content,
             model_responses=[
                 {
                     "model_id": response.model_id,
@@ -862,7 +888,9 @@ async def _generate_and_persist_streamed_synthesis_revision(
                 }
                 for response in ordered
             ],
-        ).model_dump(mode="json")
+            debate_id=debate_id,
+            synthesis_id=synthesis_id,
+        )
     elif revision_status == "provisional":
         raise RuntimeError(result.error_message or "Provisional synthesis returned no content.")
     else:
