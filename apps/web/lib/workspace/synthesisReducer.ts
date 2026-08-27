@@ -194,12 +194,13 @@ export function synthesisReducer(
       const resetForNewRevision = state.synthesisId !== synthesisId
         || state.runAttempt !== payload.run_attempt
         || state.revision !== payload.revision;
+      const isFirstDeltaOfRevision = state.lastDeltaSequence === 0;
       return {
         synthesisId,
         runAttempt: payload.run_attempt,
         revision: payload.revision,
         status: "streaming",
-        text: `${resetForNewRevision ? "" : state.text}${payload.text}`,
+        text: `${resetForNewRevision || isFirstDeltaOfRevision ? "" : state.text}${payload.text}`,
         report: resetForNewRevision ? null : state.report,
         inputHash: payload.input_hash,
         responseIds: payload.response_ids ?? state.responseIds,

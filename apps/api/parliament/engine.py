@@ -618,46 +618,61 @@ async def _execute_round(
             turns.append(turn)
             group_turns.append(turn)
 
-            with session_scope() as session:
-                lease, attempt_id = _assert_parliament_write(session, debate_id)
-                response_id = (
-                    f"parliament:{lease.run_attempt}:r{round_info['index']}:s{seat.seat_id}"
-                )
-                from sqlmodel import select
+            try:
+                with session_scope() as session:
+                    lease, attempt_id = _assert_parliament_write(session, debate_id)
+                    response_id = (
+                        f"parliament:{lease.run_attempt}:r{round_info['index']}:s{seat.seat_id}"
+                    )
+                    from sqlmodel import select
 
-                existing = session.exec(
-                    select(Message.id).where(
-                        Message.debate_id == debate_id,
-                        Message.response_id == response_id,
-                    )
-                ).first()
-                if existing is None:
-                    session.add(
-                        Message(
-                            debate_id=debate_id,
-                            attempt_id=attempt_id,
-                            response_id=response_id,
-                            round_index=round_info["index"],
-                            role="seat",
-                            persona=seat.display_name,
-                            content=envelope.content,
-                            meta={
-                            "seat_id": seat.seat_id,
-                            "role_profile": seat.role_profile,
-                            "provider": seat.provider_key,
-                            "model": seat.model,
-                            "round_index": round_info["index"],
-                            "stance": envelope.stance,
-                            "reasoning": envelope.reasoning,
-                                "phase": round_info["phase"],
-                            },
+                    existing = session.exec(
+                        select(Message.id).where(
+                            Message.debate_id == debate_id,
+                            Message.response_id == response_id,
                         )
-                    )
+                    ).first()
+                    if existing is None:
+                        session.add(
+                            Message(
+                                debate_id=debate_id,
+                                attempt_id=attempt_id,
+                                response_id=response_id,
+                                round_index=round_info["index"],
+                                role="seat",
+                                persona=seat.display_name,
+                                content=envelope.content,
+                                meta={
+                                "seat_id": seat.seat_id,
+                                "role_profile": seat.role_profile,
+                                "provider": seat.provider_key,
+                                "model": seat.model,
+                                "round_index": round_info["index"],
+                                "stance": envelope.stance,
+                                "reasoning": envelope.reasoning,
+                                    "phase": round_info["phase"],
+                                },
+                            )
+                        )
+            except ExecutionSupersededError:
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
             success_count += 1
 
             event = _build_seat_message_event(debate_id, turn, cumulative_score)
             cumulative_score = event["winning_score"]
-            await backend.publish(f"debate:{debate_id}", event)
+            try:
+                await backend.publish(f"debate:{debate_id}", event)
+            except ExecutionSupersededError:
+                raise
+            except Exception as pub_exc:
+                logger.warning(
+                    "Parliament seat publish failed (best-effort) debate_id=%s seat=%s error=%s",
+                    debate_id, seat.seat_id, pub_exc,
+                )
 
         # Later groups/rounds consume a stable transcript regardless of provider
         # latency, even though the UI sees each seat immediately on completion.

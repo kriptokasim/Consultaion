@@ -295,18 +295,94 @@ Other confirmed-but-not-blocking items from audit:
   Celery-mode synchronous compensation + stale-queued reaper + billing
   compensation added here) (P1 for inline deployments; production runs Celery)
 
+## Wave 4 — Arena + Debate hardening pass (branch: agent/prod-critical-hardening-final, BASE fcf0a81)
+
+### PC-PARL-003 — Parliament seat persistence did not cancel remaining tasks on supersede (P1) — FIXED
+- **Component:** `parliament/engine.py::_execute_round` per-seat fenced persistence.
+- **Symptom:** the `except BaseException` that cancelled remaining `asyncio.create_task` seats
+  only wrapped `await completed_task`. The subsequent fenced `session_scope` write
+  (`_assert_parliament_write`) and `backend.publish` were outside that guard. When
+  `ExecutionSupersededError` fired at the fence, remaining seat provider tasks
+  leaked — paid work continued for a superseded worker.
+- **Secondary:** `backend.publish` failure for a seat (e.g. Redis `SSESequenceError`)
+  would also propagate and leak remaining tasks, aborting the debate even though
+  the seat was durably persisted.
+- **Fix:** wrap the fenced write in `try/except ExecutionSupersededError: cancel+raise`;
+  wrap `backend.publish` as best-effort (log, do not abort) except for
+  `ExecutionSupersededError` which still propagates after cancelling tasks.
+  SSE transport must never block accounting or abort remaining provider work after
+  the DB is the source of truth.
+- **Verification:** targeted suite `test_parliament_failure_tolerance` still passes (6/6);
+  full Arena+Debate targeted suite 42/42 passes.
+
+### PC-COMP-SSE-001 — Compare SSE publish failure aborted the run (P2) — FIXED
+- **Component:** `compare/engine.py::_persist_and_publish`.
+- **Symptom:** `backend.publish` raising (e.g. `SSESequenceError` when Redis is
+  degraded) propagated out of the `as_completed` loop, cancelled all remaining
+  provider tasks and failed the run after a durable persist+commit had succeeded.
+- **Fix:** wrap the publish as best-effort: `ExecutionSupersededError` still
+  propagates (with task cancellation), any other exception is logged and the
+  run continues. The DB remains the durability source; the frontend rehydrates
+  from persisted rows.
+- **Verification:** `test_mode_engine_hardening` 7/7 passes.
+
+### PC-ORCH-002 — Raw provider exception text persisted into user-visible final_meta (P1) — FIXED
+- **Component:** `orchestrator.py` transient + terminal failure handlers.
+- **Symptom:** `failure_detail_safe` was set to `str(exc)[:500]` where `exc` was
+  `TransientLLMError(f"LLM call failed for role …: {provider_exc}")` or a generic
+  `Exception` carrying raw provider text (hostnames, request IDs, potentially
+  key-adjacent substrings). The name `failure_detail_safe` implied safety but
+  the value was raw. Persisted into `Debate.final_meta` (exposed via
+  `serialize_debate_private` to the run owner) and into `DebateContinuation`.
+- **Fix:** added `_safe_failure_detail(exc)` at the orchestrator boundary:
+  known safe product errors (`ValueError: Conversation mode is disabled`) are
+  preserved; provider-like errors are classified via `classify_provider_exception`
+  and only the safe `message` is stored (non-`unknown` codes); remaining strings
+  are redacted (`sk-…`, `Bearer …`), checked for sensitive substrings
+  (`api_key`, `credential`, `secret`, `traceback`, …), and length/newline
+  gated before persistence. Applied at all 4 persistence sites plus the Slack
+  alert payloads.
+- **Verification:** compile + ruff clean; targeted 42-test suite still passes.
+
+### PC-FE-SYN-001 — Final synthesis DELTA appended to preserved provisional text (P2) — FIXED
+- **Component:** `apps/web/lib/workspace/synthesisReducer.ts` (`DELTA` handler).
+- **Symptom:** `C2-FE-001` removed `text: ""` from the `STARTED` handler so the
+  provisional text remains visible during final TTFT. The `DELTA` handler then
+  computed `resetForNewRevision` only from `synthesisId/runAttempt/revision`
+  equality — after `STARTED` already set the new `synthesisId/revision`, the
+  first `DELTA` of the final (`delta_sequence: 1`) did `state.text + payload.text`
+  → `"DraftDefinitive"` instead of `"Definitive"`.
+- **Fix:** also reset on `state.lastDeltaSequence === 0` (first delta of the
+  revision's streaming session) so the final's actual content replaces, rather
+  than appends to, the TTFT placeholder.
+- **Verification:** `synthesisReducer.test.ts` was failing (1/11) before the
+  fix; now 11/11 passes. Full frontend suite 392/392 passes (was 391/392).
+
+### Product-surface note (Arena + Debate scope)
+- The live creation UI (`/live`) offers `arena | debate | conversation` modes.
+  `compare` has full backend + run-detail rendering support and is exercised by
+  targeted tests, but no creation affordance in the current production UI.
+  Marketing copy ("compare LLM outputs") is satisfied by Arena's multi-model
+  fan-out. Per the mission's "focus on Arena and Debate" direction, Compare is
+  treated as API-reachable but not user-facing for this wave; no creation-UI
+  change is included.
+
 ## Gate status (local)
 
 | Gate | Result |
 |---|---|
 | ruff check apps/api | PASS |
 | mypy (targeted critical modules) | no new errors vs BASE (repo-wide noise pre-existing) |
-| pytest (SQLite, audited subset) | 0 regressions vs BASE; 9 fixed |
-| vitest | 391 passed |
+| pytest (SQLite, targeted Arena/Debate) | 42 passed (0 regressions in scope) |
+| vitest | 392 passed (was 391; 1 fixed) |
 | tsc --noEmit | PASS |
 | eslint | PASS |
 | next build | PASS |
+| alembic upgrade head (sqlite) | PASS |
 
 Not runnable locally: gitleaks/bandit/pip-audit/npm-audit binaries not
 installed in this environment; Playwright/Docker smoke require services.
-CI covers these remotely.
+Full backend suite (~230 pre-existing failures) remains triaged as documented
+above — Arena/Debate in-scope paths have 0 regressions; broader suite
+stabilization is a dedicated follow-up wave.
+CI covers the remaining gates remotely.

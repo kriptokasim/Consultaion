@@ -42,6 +42,33 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
+def _safe_failure_detail(exc: BaseException, fallback: str = "An internal error occurred.") -> str:
+    raw = str(exc).strip()
+    if not raw:
+        return fallback
+    if isinstance(exc, ValueError) and "Conversation mode is disabled" in raw:
+        return raw[:500]
+    try:
+        from llm_errors import classify_provider_exception
+
+        safe = classify_provider_exception(exc if isinstance(exc, Exception) else Exception(raw))
+        msg = safe.message.strip() if safe.message else ""
+        if msg and safe.code.value != "unknown":
+            return msg[:500]
+    except Exception:
+        pass
+    import re
+
+    redacted = re.sub(r"sk-[a-zA-Z0-9\-_]{12,}", "[REDACTED]", raw)
+    redacted = re.sub(r"Bearer\s+[a-zA-Z0-9\-_.]+", "Bearer [REDACTED]", redacted, flags=re.IGNORECASE)
+    sensitive = ("api_key", "api-key", "credential", "secret", "token", "traceback", "stack_trace", "apikey")
+    if any(w in redacted.lower() for w in sensitive):
+        return fallback
+    if len(redacted) > 500 or "\n" in redacted:
+        return fallback
+    return redacted[:500]
+
+
 class DebateEngineError(RuntimeError):
     """Base class for orchestration errors."""
 
@@ -1172,7 +1199,7 @@ async def run_debate(
             "failed",
             ["running", "dispatched", "requested", "preflight_passed"],
             failure_code="transient_provider_error",
-            failure_detail_safe=str(exc),
+            failure_detail_safe=_safe_failure_detail(exc),
         )
         from services.terminal_transition import TRANSITION_SLACK_ALERT, claim_transition_async
 
@@ -1182,7 +1209,7 @@ async def run_debate(
                 level="warning",
                 meta={
                     "debate_id": debate_id,
-                    "error": str(exc)[:500],
+                    "error": _safe_failure_detail(exc),
                 },
             )
         try:
@@ -1195,7 +1222,7 @@ async def run_debate(
                     final_meta = {
                         "error": "Temporary AI provider issue. Please retry.",
                         "failure_code": "transient_provider_error",
-                        "failure_detail_safe": str(exc)[:500],
+                        "failure_detail_safe": _safe_failure_detail(exc),
                         "correlation_id": corr_ctx.request_id if corr_ctx else None,
                     }
                     updated_at = datetime.now(timezone.utc)
@@ -1259,7 +1286,7 @@ async def run_debate(
             "failed",
             ["running", "dispatched", "requested", "preflight_passed"],
             failure_code="terminal_execution_error",
-            failure_detail_safe=str(exc),
+            failure_detail_safe=_safe_failure_detail(exc),
         )
 
         # Slack Alert (idempotent — fires at most once per debate)
@@ -1272,7 +1299,7 @@ async def run_debate(
                 meta={
                     "debate_id": debate_id,
                     "user_id": str(debate_user_id) if debate_user_id else "unknown",
-                    "error": str(exc)[:500],
+                    "error": _safe_failure_detail(exc),
                 },
             )
 
@@ -1308,7 +1335,7 @@ async def run_debate(
                         "error": error_msg,
                         "failure_code": failure_code,
                         "failure_detail_safe": existing_meta.get("failure_detail_safe")
-                        or str(exc)[:500],
+                        or _safe_failure_detail(exc),
                         "correlation_id": existing_meta.get("correlation_id")
                         or (corr_ctx.request_id if corr_ctx else None),
                     }
