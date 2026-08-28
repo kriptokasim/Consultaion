@@ -249,25 +249,32 @@ ARENA_MODELS: List[str] = ["gpt4o-deep", "claude-sonnet", "gemini-2-5-pro", "dee
 
 
 def _provider_enabled(provider: str) -> bool:
+    """Return whether a model can run directly or through the hosted router."""
     if settings.USE_MOCK:
         return True
+
+    openrouter_available = bool(settings.OPENROUTER_API_KEY)
     if provider == "openrouter":
-        return bool(settings.OPENROUTER_API_KEY)
+        return openrouter_available
     if provider == "openai":
-        return bool(settings.OPENAI_API_KEY)
+        return bool(settings.OPENAI_API_KEY or openrouter_available)
     if provider == "anthropic":
-        return bool(settings.ANTHROPIC_API_KEY)
+        return bool(settings.ANTHROPIC_API_KEY or openrouter_available)
     if provider == "gemini":
-        return bool(settings.GEMINI_API_KEY)
+        return bool(
+            settings.GEMINI_API_KEY
+            or settings.GOOGLE_API_KEY
+            or openrouter_available
+        )
     if provider == "groq":
-        return bool(settings.GROQ_API_KEY)
+        return bool(settings.GROQ_API_KEY or openrouter_available)
     if provider == "mistral":
-        return bool(settings.MISTRAL_API_KEY)
+        return bool(settings.MISTRAL_API_KEY or openrouter_available)
     return False
 
 
 def list_enabled_models() -> List[ModelInfo]:
-    """Return a list of models that are enabled in config and have their provider keys set."""
+    """Return models reachable directly or through the configured OpenRouter key."""
     enabled_models: List[ModelInfo] = []
     for model in ALL_MODELS:
         if not model.enabled:

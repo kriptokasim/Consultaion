@@ -1,16 +1,18 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from model_gateway import route_llm_call
+from model_gateway import route_llm_call, route_llm_stream
 from model_gateway.adapters import DirectProviderAdapter, OpenRouterAdapter
 from model_gateway.costs import check_credit_and_cost_safety
 from model_gateway.policy import determine_routing_strategy
 from model_gateway.pools import get_model_pool, validate_user_access_to_model
 from model_gateway.types import (
+    GatewayModelCallResult,
     GatewayModelRestrictedError,
     GatewayQuotaExceededError,
     GatewayRequest,
 )
+from parliament.model_registry import get_arena_models
 
 
 def test_model_pool_lookup():
@@ -79,26 +81,117 @@ async def test_route_llm_call_success():
     assert res.model_pool == "free_hosted_pool"
 
 @pytest.mark.anyio
-async def test_route_llm_call_fallback_loop():
+async def test_route_llm_call_fallback_loop(monkeypatch):
     req = GatewayRequest(
         messages=[{"role": "user", "content": "hello"}],
         model_id="gpt4o-deep",
         role="user",
         gateway_policy="fallback",
-        user_plan="pro"
+        user_plan="pro",
     )
-    
-    # We patch determine_routing_strategy to force DirectProviderAdapter as primary,
-    # and mock its call_llm to raise an error. The routing coordinator should catch
-    # the failure and fall back to OpenRouterAdapter.
-    with patch("model_gateway.determine_routing_strategy") as mock_strategy:
-        mock_strategy.return_value = (DirectProviderAdapter, "test-policy")
-        
-        with patch.object(DirectProviderAdapter, "call_llm", side_effect=RuntimeError("Direct Provider Down")):
-            with patch.object(OpenRouterAdapter, "call_llm") as mock_fallback:
-                mock_fallback.return_value = AsyncMock()
-                # Run the route call
-                await route_llm_call(req)
-                
-                # Check that fallback was called
-                mock_fallback.assert_called_once()
+    monkeypatch.setattr("config.settings.OPENROUTER_API_KEY", "test-openrouter-key")
+
+    fallback_result = GatewayModelCallResult(
+        content="fallback answer",
+        model_used="openrouter/openai/gpt-4o",
+        provider="openrouter",
+        success=True,
+        model_pool="fallback_pool",
+        routing_policy="test-policy-fallback",
+    )
+
+    with (
+        patch(
+            "model_gateway.determine_routing_strategy",
+            return_value=(DirectProviderAdapter, "test-policy"),
+        ),
+        patch(
+            "model_gateway.provider_health.is_circuit_open",
+            return_value=False,
+        ),
+        patch.object(
+            DirectProviderAdapter,
+            "call_llm",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("Direct provider down"),
+        ),
+        patch.object(
+            OpenRouterAdapter,
+            "call_llm",
+            new_callable=AsyncMock,
+            return_value=fallback_result,
+        ) as mock_fallback,
+    ):
+        result = await route_llm_call(req)
+
+    assert result.success is True
+    mock_fallback.assert_awaited_once()
+    fallback_kwargs = mock_fallback.await_args.kwargs
+    assert fallback_kwargs["model_id"] == "openai_premium"
+    assert fallback_kwargs["api_key"] == "test-openrouter-key"
+
+
+def test_openrouter_key_enables_full_arena_manifest(monkeypatch):
+    monkeypatch.setattr("config.settings.USE_MOCK", False)
+    monkeypatch.setattr("config.settings.OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setattr("config.settings.OPENAI_API_KEY", None)
+    monkeypatch.setattr("config.settings.ANTHROPIC_API_KEY", None)
+    monkeypatch.setattr("config.settings.GEMINI_API_KEY", None)
+    monkeypatch.setattr("config.settings.GOOGLE_API_KEY", None)
+
+    assert [model.id for model in get_arena_models()] == [
+        "gpt4o-deep",
+        "claude-sonnet",
+        "gemini-2-5-pro",
+        "deepseek-r1",
+    ]
+
+
+@pytest.mark.anyio
+async def test_stream_uses_openrouter_when_direct_key_is_missing(monkeypatch):
+    monkeypatch.setattr("config.settings.OPENAI_API_KEY", None)
+    monkeypatch.setattr("config.settings.OPENROUTER_API_KEY", "test-openrouter-key")
+
+    fallback_result = GatewayModelCallResult(
+        content="routed answer",
+        model_used="openrouter/openai/gpt-4o",
+        provider="openrouter",
+        success=True,
+        model_pool="fallback_pool",
+        routing_policy="stream-openrouter-fallback",
+    )
+
+    async def on_delta(_delta):
+        return None
+
+    with (
+        patch(
+            "model_gateway.provider_health.is_circuit_open",
+            return_value=False,
+        ),
+        patch.object(
+            DirectProviderAdapter,
+            "stream_llm",
+            new_callable=AsyncMock,
+        ) as direct_stream,
+        patch.object(
+            OpenRouterAdapter,
+            "stream_llm",
+            new_callable=AsyncMock,
+            return_value=fallback_result,
+        ) as router_stream,
+    ):
+        result = await route_llm_stream(
+            messages=[{"role": "user", "content": "hello"}],
+            model_id="gpt4o-deep",
+            on_delta=on_delta,
+        )
+
+    direct_stream.assert_not_awaited()
+    router_stream.assert_awaited_once()
+    fallback_kwargs = router_stream.await_args.kwargs
+    assert fallback_kwargs["model_id"] == "openai_premium"
+    assert fallback_kwargs["api_key"] == "test-openrouter-key"
+    assert result.success is True
+    assert result.fallback_used is True
+    assert result.retry_count == 1

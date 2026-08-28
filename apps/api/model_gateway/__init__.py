@@ -15,14 +15,30 @@ from model_gateway.types import (
 
 logger = logging.getLogger("model_gateway")
 
+
+def _server_api_key(provider: str) -> str | None:
+    """Resolve a server credential without relying on LiteLLM global env lookup."""
+    from config import settings
+
+    provider = provider.lower()
+    setting_names = {
+        "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        "google": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    }.get(provider, (f"{provider.upper()}_API_KEY",))
+    for setting_name in setting_names:
+        key = getattr(settings, setting_name, None)
+        if key:
+            return key
+    return None
+
+
 def is_provider_available(provider: str) -> bool:
     from config import settings
+
     if settings.USE_MOCK:
         return True
-    key_name = f"{provider.upper()}_API_KEY"
-    if provider == "gemini":
-        return bool(getattr(settings, "GEMINI_API_KEY", None) or getattr(settings, "GOOGLE_API_KEY", None))
-    return bool(getattr(settings, key_name, None))
+    return bool(_server_api_key(provider))
+
 
 # Removed export_api_keys in PS155.3 in favor of explicit api_key passing
 
@@ -260,6 +276,9 @@ async def route_llm_call(
         if not current_api_key and request.api_key:
             current_api_key = request.api_key
             credential_scope = "user"
+        if not current_api_key:
+            current_api_key = _server_api_key(provider)
+            credential_scope = "server"
 
         try:
             # Use the correct adapter for the resolved provider
@@ -339,9 +358,14 @@ async def route_llm_call(
                 
                 try:
                     fallback_adapter = OpenRouterAdapter()
+                    fallback_model_id = (
+                        "openrouter_fallback"
+                        if _model_uses_openrouter(request.model_id)
+                        else request.model_id
+                    )
                     result = await fallback_adapter.call_llm(
                         messages=request.messages,
-                        model_id="openrouter_fallback",
+                        model_id=fallback_model_id,
                         temperature=request.temperature,
                         max_tokens=request.max_tokens,
                         gateway_policy=request.gateway_policy,
@@ -351,6 +375,7 @@ async def route_llm_call(
                         response_format=request.response_format,
                         tools=request.tools,
                         tool_choice=request.tool_choice,
+                        api_key=_server_api_key("openrouter"),
                     )
                     if result.success:
                         successful_result = result
@@ -407,10 +432,12 @@ async def route_llm_stream(
     user_id: str | None = None,
     api_key: str | None = None,
 ) -> GatewayModelCallResult:
-    """Stream LLM tokens via the gateway, calling on_delta for each chunk.
+    """Stream a model response and fail over to OpenRouter before any text is emitted.
 
-    Simpler than route_llm_call — no quota checks, no fallback chains.
-    Used by the arena streaming path (FH101/FH102).
+    Arena uses this path directly, so it must preserve the same provider fallback
+    guarantee as the non-streaming gateway. A fallback is safe only before the
+    primary provider has emitted user-visible text; otherwise switching providers
+    would splice two unrelated answers into one response buffer.
     """
     from model_gateway.model_target import UnknownModelError, resolve_model_target
     from model_gateway.provider_health import is_circuit_open, record_failure, record_success
@@ -431,16 +458,38 @@ async def route_llm_stream(
 
     provider = target.provider
     canonical_model_id = target.canonical_id
-    adapter_cls: type = OpenRouterAdapter if target.uses_openrouter else DirectProviderAdapter
 
-    # Security assertion & guard: Forbidden provider values
     if provider in {"direct", "unknown", "gateway"}:
         err_msg = f"Invalid resolved provider target '{provider}' for model '{model_id}'"
         logger.error(err_msg)
         raise ValueError(err_msg)
 
+    async def _noop_delta(_delta) -> None:
+        return None
+
+    delta_callback = on_delta or _noop_delta
+    credential_scope = "user" if api_key else "server"
+
+    if user_id and not api_key:
+        try:
+            from database_async import async_session_scope
+            from services.provider_credentials import get_model_api_key_async
+
+            async with async_session_scope() as session:
+                resolved = await get_model_api_key_async(session, user_id, provider)
+                if resolved:
+                    api_key = resolved.key
+                    credential_scope = "user"
+        except Exception as exc:
+            logger.warning("Failed to resolve api key in stream: %s", exc)
+
+    if not api_key:
+        api_key = _server_api_key(provider)
+        credential_scope = "server"
+
+    primary_attempted = False
     if is_circuit_open(provider, canonical_model_id=canonical_model_id):
-        return GatewayModelCallResult(
+        result = GatewayModelCallResult(
             content="",
             model_used=target.litellm_model,
             provider=provider,
@@ -450,50 +499,94 @@ async def route_llm_stream(
             model_pool="default",
             routing_policy="stream",
         )
+    elif not api_key:
+        result = GatewayModelCallResult(
+            content="",
+            model_used=target.litellm_model,
+            provider=provider,
+            success=False,
+            error_message=f"No runtime credential is configured for provider {provider}.",
+            error_code="missing_provider_key",
+            model_pool="default",
+            routing_policy="stream",
+        )
+    else:
+        primary_attempted = True
+        adapter = OpenRouterAdapter() if target.uses_openrouter else DirectProviderAdapter()
+        result = await adapter.stream_llm(
+            messages=messages,
+            model_id=canonical_model_id,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            gateway_policy="auto",
+            model_pool="default",
+            routing_policy="stream",
+            on_delta=delta_callback,
+            user_id=user_id,
+            api_key=api_key,
+        )
 
-    credential_scope = "user" if api_key else "server"
-    if user_id and not api_key:
-        try:
-            from database_async import async_session_scope
-            from services.provider_credentials import get_model_api_key_async
-            async with async_session_scope() as session:
-                resolved = await get_model_api_key_async(session, user_id, provider)
-                if resolved:
-                    api_key = resolved.key
-                    credential_scope = "user"
-        except Exception as e:
-            logger.warning(f"Failed to resolve api key in stream: {e}")
+        if result.success:
+            record_success(
+                provider,
+                canonical_model_id=canonical_model_id,
+                credential_scope=credential_scope,
+            )
+        else:
+            record_failure(
+                provider,
+                result.error_code or "unknown",
+                result.error_message or "",
+                canonical_model_id=canonical_model_id,
+                credential_scope=credential_scope,
+            )
 
-    adapter = adapter_cls()
-    result = await adapter.stream_llm(
+    if result.success or target.uses_openrouter or result.content:
+        return result
+
+    openrouter_key = _server_api_key("openrouter")
+    if not openrouter_key or is_circuit_open("openrouter"):
+        return result
+
+    fallback_reason = (
+        f"Primary provider {provider} failed: "
+        f"{result.error_code or 'unknown'}"
+    )
+    logger.warning(
+        "Streaming route falling back to OpenRouter: model=%s provider=%s "
+        "primary_attempted=%s error_code=%s",
+        canonical_model_id,
+        provider,
+        primary_attempted,
+        result.error_code,
+    )
+
+    fallback = await OpenRouterAdapter().stream_llm(
         messages=messages,
         model_id=canonical_model_id,
         temperature=temperature,
         max_tokens=max_tokens,
-        gateway_policy="auto",
-        model_pool="default",
-        routing_policy="stream",
-        on_delta=on_delta or (lambda d: None),
+        gateway_policy="fallback",
+        model_pool="fallback_pool",
+        routing_policy="stream-openrouter-fallback",
+        on_delta=delta_callback,
         user_id=user_id,
-        api_key=api_key,
+        api_key=openrouter_key,
     )
+    fallback.fallback_used = True
+    fallback.fallback_reason = fallback_reason
+    fallback.retry_count = max(fallback.retry_count, 1)
 
-    if result.success:
-        record_success(
-            provider,
-            canonical_model_id=canonical_model_id,
-            credential_scope=credential_scope,
-        )
+    if fallback.success:
+        record_success("openrouter", canonical_model_id=canonical_model_id)
     else:
         record_failure(
-            provider,
-            result.error_code or "unknown",
-            result.error_message or "",
+            "openrouter",
+            fallback.error_code or "unknown",
+            fallback.error_message or "",
             canonical_model_id=canonical_model_id,
-            credential_scope=credential_scope,
         )
-
-    return result
+    return fallback
 
 
 __all__ = [
