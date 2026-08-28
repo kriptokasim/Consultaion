@@ -1097,6 +1097,7 @@ async def run_debate(
                 prompt=prompt,
                 config=config,
                 channel_id=channel_id,
+                user_id=debate_user_id,
                 model_id=model_id,
                 usage_tracker=usage_tracker,  # Pass the tracker we initialized
                 is_resume=is_resume,

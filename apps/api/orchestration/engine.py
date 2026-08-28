@@ -47,7 +47,7 @@ class DebateRunner:
                 log_event(
                     "debate.perspectives_ready",
                     debate_id=context.debate_id,
-                    user_id=context.config.get("user_id"),
+                    user_id=context.user_id,
                     duration_seconds=duration,
                     status=final_state.status,
                 )
@@ -77,7 +77,7 @@ class DebateRunner:
             log_event(
                 "debate.completed",
                 debate_id=context.debate_id,
-                user_id=context.config.get("user_id"), # Assuming user_id is in config or context
+                user_id=context.user_id,
                 duration_seconds=duration,
                 tokens_total=float(context.usage_tracker.total_tokens),
                 status=final_state.status,
@@ -96,7 +96,7 @@ class DebateRunner:
             log_event(
                 "debate.failed",
                 debate_id=context.debate_id,
-                user_id=context.config.get("user_id"),
+                user_id=context.user_id,
                 duration_seconds=duration,
                 error=str(exc),
                 error_type=type(exc).__name__,

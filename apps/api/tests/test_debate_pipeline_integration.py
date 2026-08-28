@@ -8,6 +8,7 @@ from orchestration.engine import DebateRunner
 from orchestration.interfaces import DebateContext
 from orchestration.pipeline import StandardDebatePipeline
 from orchestration.state import DebateStateManager
+from schemas import AgentConfig, DebateConfig, JudgeConfig
 
 
 @pytest.fixture
@@ -72,10 +73,13 @@ async def test_standard_debate_pipeline_integration(db_session, mock_llm_respons
         mock_generate_report.return_value = mock_report
         
         # Context
-        config = {
-            "agents": [MagicMock(name="Optimist"), MagicMock(name="Pessimist")],
-            "judges": [MagicMock(name="Judge1")]
-        }
+        config = DebateConfig(
+            agents=[
+                AgentConfig(name="Optimist", persona="optimistic", model="gpt-4"),
+                AgentConfig(name="Pessimist", persona="pessimistic", model="gpt-4"),
+            ],
+            judges=[JudgeConfig(name="Judge1", model="gpt-4")],
+        )
         context = DebateContext(
             debate_id=debate_id,
             prompt=prompt,

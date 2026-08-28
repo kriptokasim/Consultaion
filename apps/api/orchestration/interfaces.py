@@ -16,6 +16,7 @@ class DebateContext:
     prompt: str
     config: DebateConfig
     channel_id: str
+    user_id: Optional[str] = None
     model_id: Optional[str] = None
     # Shared resources
     usage_tracker: UsageAccumulator = field(default_factory=UsageAccumulator)
