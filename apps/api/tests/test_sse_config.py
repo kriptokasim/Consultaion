@@ -13,7 +13,7 @@ class TestSSEConfig:
         mock_settings.SSE_CHANNEL_TTL_SECONDS = 900
         mock_settings.SSE_MEMORY_MAX_QUEUE_SIZE = 1000
         mock_settings.SSE_MEMORY_IDLE_TIMEOUT_SECONDS = 3600
-        
+
         backend = create_sse_backend()
         assert isinstance(backend, MemoryChannelBackend)
 
@@ -24,11 +24,11 @@ class TestSSEConfig:
         mock_settings.SSE_REDIS_URL = "redis://localhost:6379"
         mock_settings.REDIS_URL = None
         mock_settings.SSE_CHANNEL_TTL_SECONDS = 900
-        
-        with patch("sse_backend.redis.from_url") as mock_from_url:
+
+        with patch("redis_pool.get_async_redis_client") as mock_get_client:
             backend = create_sse_backend()
             assert isinstance(backend, RedisChannelBackend)
-            mock_from_url.assert_called()
+            mock_get_client.assert_called()
 
     @patch("sse_backend.settings")
     def test_create_backend_redis_fail_fast_prod(self, mock_settings):
@@ -38,7 +38,7 @@ class TestSSEConfig:
         mock_settings.REDIS_URL = None
         mock_settings.IS_LOCAL_ENV = False  # Production
         mock_settings.SSE_REDIS_STRICT = None  # Auto (strict in prod)
-        
+
         with pytest.raises(RuntimeError, match="SSE_BACKEND=redis but URL is invalid or missing"):
             create_sse_backend()
 
@@ -54,15 +54,17 @@ class TestSSEConfig:
         mock_settings.SSE_CHANNEL_TTL_SECONDS = 900
         mock_settings.SSE_MEMORY_MAX_QUEUE_SIZE = 1000
         mock_settings.SSE_MEMORY_IDLE_TIMEOUT_SECONDS = 3600
-        
+
         backend = create_sse_backend()
         assert isinstance(backend, MemoryChannelBackend)
-        mock_logger.warning.assert_called_with("SSE_BACKEND=redis but URL is invalid or missing. Falling back to memory.")
+        mock_logger.warning.assert_called_with(
+            "SSE_BACKEND=redis but URL is invalid or missing. Falling back to memory."
+        )
 
 
 class TestSSEStrictMode:
     """Patchset 75: Tests for SSE_REDIS_STRICT explicit control."""
-    
+
     @patch("sse_backend.settings")
     def test_strict_mode_explicit_true_fails_in_local(self, mock_settings):
         """SSE_REDIS_STRICT=1 should fail even in local env."""
@@ -71,10 +73,10 @@ class TestSSEStrictMode:
         mock_settings.REDIS_URL = None
         mock_settings.IS_LOCAL_ENV = True  # Local env
         mock_settings.SSE_REDIS_STRICT = True  # Explicit strict
-        
+
         with pytest.raises(RuntimeError, match="SSE_BACKEND=redis but URL is invalid or missing"):
             create_sse_backend()
-    
+
     @patch("sse_backend.logger")
     @patch("sse_backend.settings")
     def test_strict_mode_explicit_false_allows_fallback_in_prod(self, mock_settings, mock_logger):
@@ -87,7 +89,7 @@ class TestSSEStrictMode:
         mock_settings.SSE_CHANNEL_TTL_SECONDS = 900
         mock_settings.SSE_MEMORY_MAX_QUEUE_SIZE = 1000
         mock_settings.SSE_MEMORY_IDLE_TIMEOUT_SECONDS = 3600
-        
+
         backend = create_sse_backend()
         assert isinstance(backend, MemoryChannelBackend)
         mock_logger.warning.assert_called()
@@ -98,22 +100,21 @@ class TestSSEStrictMode:
         mock_settings.SSE_REDIS_STRICT = None
         mock_settings.IS_LOCAL_ENV = False
         assert _is_strict() is True
-    
+
     @patch("sse_backend.settings")
     def test_is_strict_auto_local(self, mock_settings):
         """_is_strict() should return False in local when SSE_REDIS_STRICT is None."""
         mock_settings.SSE_REDIS_STRICT = None
         mock_settings.IS_LOCAL_ENV = True
         assert _is_strict() is False
-    
+
     @patch("sse_backend.settings")
     def test_is_strict_explicit_overrides_env(self, mock_settings):
         """SSE_REDIS_STRICT explicit value should override IS_LOCAL_ENV."""
         mock_settings.SSE_REDIS_STRICT = True
         mock_settings.IS_LOCAL_ENV = True  # Should be overridden
         assert _is_strict() is True
-        
+
         mock_settings.SSE_REDIS_STRICT = False
         mock_settings.IS_LOCAL_ENV = False  # Should be overridden
         assert _is_strict() is False
-

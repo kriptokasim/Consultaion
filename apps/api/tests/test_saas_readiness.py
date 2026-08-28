@@ -9,6 +9,11 @@ from sqlmodel import Session, select
 pytestmark = pytest.mark.anyio
 
 
+@pytest.fixture(autouse=True)
+def setup_encryption_key(monkeypatch):
+    monkeypatch.setenv("PROVIDER_KEY_ENCRYPTION_KEY", "test_encryption_key_for_saas_readiness")
+
+
 @pytest.fixture
 async def client():
     transport = ASGITransport(app=app)
@@ -33,14 +38,17 @@ async def test_provider_keys_crud_flow(client: AsyncClient):
     assert len(res.json()) == 0
 
     # 2. Add a new OpenAI provider key with mock validation success
-    with patch("routes.provider_keys.validate_key_with_provider", new_callable=AsyncMock) as mock_validate:
+    with patch(
+        "routes.provider_keys.validate_key_with_provider", new_callable=AsyncMock
+    ) as mock_validate:
         mock_validate.return_value = True
-        
-        payload = {
-            "provider": "openai",
-            "key": "sk-1234567890abcdefghijklmnopqrstuvwxyz"
-        }
-        res = await client.post("/provider-keys", json=payload, headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")})
+
+        payload = {"provider": "openai", "key": "sk-1234567890abcdefghijklmnopqrstuvwxyz"}
+        res = await client.post(
+            "/provider-keys",
+            json=payload,
+            headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")},
+        )
         assert res.status_code == 200
         data = res.json()
         assert data["provider"] == "openai"
@@ -57,19 +65,24 @@ async def test_provider_keys_crud_flow(client: AsyncClient):
     assert keys[0]["masked_key"] == "sk-...wxyz"
 
     # 4. Try validating only (without saving)
-    with patch("routes.provider_keys.validate_key_with_provider", new_callable=AsyncMock) as mock_validate:
+    with patch(
+        "routes.provider_keys.validate_key_with_provider", new_callable=AsyncMock
+    ) as mock_validate:
         mock_validate.return_value = True
-        
-        validate_payload = {
-            "provider": "openai",
-            "key": "sk-newkeytest123"
-        }
-        res = await client.post("/provider-keys/validate", json=validate_payload, headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")})
+
+        validate_payload = {"provider": "openai", "key": "sk-newkeytest123"}
+        res = await client.post(
+            "/provider-keys/validate",
+            json=validate_payload,
+            headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")},
+        )
         assert res.status_code == 200
         assert res.json()["valid"] is True
 
     # 5. Delete the provider key
-    res = await client.delete("/provider-keys/openai", headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")})
+    res = await client.delete(
+        "/provider-keys/openai", headers={"X-CSRF-Token": client.cookies.get("csrf_token", "")}
+    )
     assert res.status_code == 200
     assert res.json() == {"provider": "openai", "deleted": True}
 
@@ -87,21 +100,21 @@ async def test_audit_logs_and_exports(client: AsyncClient, db_session: Session):
     # Find the newly created user in db to insert test audit logs manually
     user = db_session.exec(select(User).where(User.email == email)).first()
     assert user is not None
-    
+
     # Add a couple of mock interactions
     log1 = UserInteraction(
         user_id=user.id,
         interaction_type="run_created",
         debate_id="debate-uuid-1",
         details={"prompt": "Test Prompt 1"},
-        created_at=utcnow()
+        created_at=utcnow(),
     )
     log2 = UserInteraction(
         user_id=user.id,
         interaction_type="key_added",
         debate_id=None,
         details={"provider": "anthropic"},
-        created_at=utcnow()
+        created_at=utcnow(),
     )
     db_session.add(log1)
     db_session.add(log2)
@@ -112,7 +125,7 @@ async def test_audit_logs_and_exports(client: AsyncClient, db_session: Session):
     assert res.status_code == 200
     logs = res.json()
     assert len(logs) == 2
-    
+
     # Assert logs are ordered desc by created_at (log2 is newest/most recently created)
     types = [log["interaction_type"] for log in logs]
     assert "run_created" in types

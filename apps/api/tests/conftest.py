@@ -37,7 +37,7 @@ def anyio_backend(request):
 def test_database_url():
     """
     Create a unique test database for the entire test session.
-    
+
     This fixture:
     1. Generates a unique SQLite database URL
     2. Initializes the database with all tables
@@ -56,27 +56,28 @@ def test_database_url():
 
     from config import settings
     from tests.utils import cleanup_test_database, init_test_database, make_test_database_url
-    
+
     # Generate unique test database URL
     db_url = make_test_database_url("session")
-    
+
     # Initialize the database schema
     init_test_database(db_url)
-    
+
     # Set environment variable and reload settings
     original_db_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = db_url
     settings.reload()
-    
+
     # Reset the global engine to use the test database
     reset_engine()
     reset_async_engine()
-    
+
     # Initialize database (creates tables if needed)
     init_db()
-    
+
     # Seed billing plans
     from database import engine
+
     with Session(engine) as session:
         existing = session.exec(select(BillingPlan).where(BillingPlan.slug == "free")).first()
         if not existing:
@@ -86,9 +87,9 @@ def test_database_url():
                     name="Free",
                     is_default_free=True,
                     limits={
-                        "max_debates_per_month": 5, 
+                        "max_debates_per_month": 5,
                         "exports_enabled": False,
-                        "allowed_model_tiers": ["standard"]
+                        "allowed_model_tiers": ["standard"],
                     },
                 )
             )
@@ -99,22 +100,22 @@ def test_database_url():
                     price_monthly=Decimal("29.00"),
                     currency="USD",
                     limits={
-                        "max_debates_per_month": 100, 
+                        "max_debates_per_month": 100,
                         "exports_enabled": True,
-                        "allowed_model_tiers": ["standard", "advanced"]
+                        "allowed_model_tiers": ["standard", "advanced"],
                     },
                 )
             )
             session.commit()
-    
+
     yield db_url
-    
+
     # Cleanup: restore original DATABASE_URL and clean up test database
     if original_db_url:
         os.environ["DATABASE_URL"] = original_db_url
     else:
         os.environ.pop("DATABASE_URL", None)
-    
+
     settings.reload()
     reset_engine()
     cleanup_test_database(db_url)
@@ -128,7 +129,7 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     - Re-seeds billing plans
     - Clears provider health registry
     - Resets SSE backend
-    
+
     This ensures complete isolation between tests even when application code
     creates its own database sessions.
     """
@@ -141,8 +142,9 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
 
     # Force environment to test mode and clear production flags
     os.environ["ENV"] = "test"
+    os.environ["JWT_SECRET"] = "test-secret"
     os.environ.pop("RENDER", None)
-    
+
     # Force the shared settings/engine to the session database and restore defaults
     os.environ["DATABASE_URL"] = test_database_url
     # Ensure any previous test monkeypatches to ENV are cleared from settings object
@@ -157,6 +159,7 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     from models import UsageCounter, UsageQuota
     from sqlalchemy import delete
     from sqlmodel import Session
+
     with Session(engine) as session:
         session.exec(delete(UsageCounter))
         session.exec(delete(UsageQuota))
@@ -177,15 +180,19 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
     # Flush Redis if configured
     if settings.REDIS_URL and str(settings.REDIS_URL).startswith("redis://"):
         if settings.ENV != "test":
-            raise RuntimeError(f"Refusing to flush Redis DB: ENV is '{settings.ENV}', not 'test'. "
-                               "This is a safety guard against accidental data loss.")
+            raise RuntimeError(
+                f"Refusing to flush Redis DB: ENV is '{settings.ENV}', not 'test'. "
+                "This is a safety guard against accidental data loss."
+            )
         try:
             import redis
+
             r = redis.from_url(str(settings.REDIS_URL))
             r.flushdb()
             r.close()
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Failed to flush Redis test DB: {e}")
 
     yield
@@ -195,7 +202,7 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
 def seed_billing_plans(test_database_url):
     """
     Provide a callable to re-seed billing plans after table truncation.
-    
+
     Args:
         test_database_url: Ensures database is initialized before this fixture
     """
@@ -204,7 +211,7 @@ def seed_billing_plans(test_database_url):
     from billing.models import BillingPlan
     from database import engine
     from sqlmodel import Session, select
-    
+
     def _seed():
         with Session(engine) as session:
             existing = session.exec(select(BillingPlan).where(BillingPlan.slug == "free")).first()
@@ -215,9 +222,9 @@ def seed_billing_plans(test_database_url):
                         name="Free",
                         is_default_free=True,
                         limits={
-                            "max_debates_per_month": 5, 
+                            "max_debates_per_month": 5,
                             "exports_enabled": False,
-                            "allowed_model_tiers": ["standard"]
+                            "allowed_model_tiers": ["standard"],
                         },
                     )
                 )
@@ -228,14 +235,14 @@ def seed_billing_plans(test_database_url):
                         price_monthly=Decimal("29.00"),
                         currency="USD",
                         limits={
-                            "max_debates_per_month": 100, 
+                            "max_debates_per_month": 100,
                             "exports_enabled": True,
-                            "allowed_model_tiers": ["standard", "advanced"]
+                            "allowed_model_tiers": ["standard", "advanced"],
                         },
                     )
                 )
                 session.commit()
-    
+
     # Return the function so it can be called after truncation
     return _seed
 
@@ -244,17 +251,17 @@ def seed_billing_plans(test_database_url):
 def db_session(test_database_url):
     """
     Provide a database session for a test.
-    
+
     Note: We no longer use transaction-based isolation because application code
     creates its own sessions. Instead, we truncate tables between tests.
     """
     from database import engine
     from sqlmodel import Session
-    
+
     session = Session(engine)
-    
+
     yield session
-    
+
     session.close()
 
 
@@ -266,7 +273,7 @@ def setup_test_routes():
     from main import app
 
     from tests.fake_routes import test_router
-    
+
     app.include_router(test_router)
 
 
@@ -275,6 +282,7 @@ def client():
     from fastapi.testclient import TestClient
     from main import app
     from sse_backend import get_sse_backend
+
     # Ensure app.state.sse_backend is set for deps.get_sse_backend dependency
     app.state.sse_backend = get_sse_backend()
     return TestClient(app)
@@ -282,16 +290,16 @@ def client():
 
 @pytest.fixture
 def authenticated_client(client, db_session):
-    from auth import COOKIE_NAME, create_access_token, hash_password
+    from auth import create_access_token, hash_password
+    from config import settings
     from models import User
-    
+
     email = "normal@example.com"
     password = "password"
     user = User(email=email, password_hash=hash_password(password))
     db_session.add(user)
     db_session.commit()
-    
-    access_token = create_access_token(user_id=user.id, email=user.email, role=user.role)
-    client.cookies.set(COOKIE_NAME, access_token)
-    return client
 
+    access_token = create_access_token(user_id=user.id, email=user.email, role=user.role)
+    client.cookies.set(settings.COOKIE_NAME, access_token)
+    return client

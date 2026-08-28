@@ -375,6 +375,7 @@ class MemoryChannelBackend:
             }
 
             from observability.metrics import record_sse_message
+
             record_sse_message()
 
             # Add correlation context if available
@@ -421,6 +422,9 @@ class MemoryChannelBackend:
                                 increment_metric("sse.backpressure.critical_replaced")
                     elif new_priority == 1:
                         # Important event: only drop loss-tolerant
+                        dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
+                    else:
+                        # Loss-tolerant event: drop oldest loss-tolerant event to keep queue fresh
                         dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
 
                     if not dropped and sub_queue.full():
@@ -743,6 +747,7 @@ class RedisChannelBackend:
         }
 
         from observability.metrics import record_sse_message
+
         record_sse_message()
 
         payload_str = json.dumps(envelope)

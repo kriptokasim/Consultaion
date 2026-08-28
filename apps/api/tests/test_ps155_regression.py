@@ -1,4 +1,5 @@
 """PS155.6 — Integration regression tests."""
+
 from __future__ import annotations
 
 import os
@@ -44,15 +45,18 @@ async def test_run_debate_fencing_and_ownership(monkeypatch):
         session.add(debate)
         session.commit()
 
-    with patch("orchestrator.get_sse_backend") as mock_get_backend, \
-         patch("orchestrator._complete_debate_record", new_callable=AsyncMock) as mock_complete:
+    with (
+        patch("orchestrator.get_sse_backend") as mock_get_backend,
+        patch("orchestrator._complete_debate_record", new_callable=AsyncMock) as mock_complete,
+    ):
         mock_backend = AsyncMock()
         mock_get_backend.return_value = mock_backend
 
         # Verify that try_acquire_lease sets execution_owner_id and increments epoch
         from orchestrator import _get_runner_id
+
         runner_id = _get_runner_id()
-        
+
         # Call run_debate which will execute and release the lease cleanly
         await run_debate(d_id, d_prompt, f"debate:{d_id}", d_config)
 
@@ -78,22 +82,47 @@ async def test_run_debate_fencing_and_ownership(monkeypatch):
 def test_sse_stream_coalesced_reduction():
     # Verify delta coalescing reduces total events sent
     coalescer = DeltaCoalescer(flush_interval_ms=5000)
-    
+
     events = [
-        {"type": "model_response_delta", "payload": {"response_id": "r1", "text": "a", "accumulated_chars": 1, "delta_sequence": 1}},
-        {"type": "model_response_delta", "payload": {"response_id": "r1", "text": "b", "accumulated_chars": 2, "delta_sequence": 2}},
-        {"type": "model_response_delta", "payload": {"response_id": "r1", "text": "c", "accumulated_chars": 3, "delta_sequence": 3}},
+        {
+            "type": "model_response_delta",
+            "payload": {
+                "response_id": "r1",
+                "text": "a",
+                "accumulated_chars": 1,
+                "delta_sequence": 1,
+            },
+        },
+        {
+            "type": "model_response_delta",
+            "payload": {
+                "response_id": "r1",
+                "text": "b",
+                "accumulated_chars": 2,
+                "delta_sequence": 2,
+            },
+        },
+        {
+            "type": "model_response_delta",
+            "payload": {
+                "response_id": "r1",
+                "text": "c",
+                "accumulated_chars": 3,
+                "delta_sequence": 3,
+            },
+        },
     ]
-    
+
     emitted = []
     for evt in events:
         emitted.extend(coalescer.ingest(evt))
-        
-    assert len(emitted) == 0  # Buffered in coalescer
-    
+
+    assert len(emitted) == 1  # First delta per response_id is published immediately
+    assert emitted[0]["payload"]["text"] == "a"
+
     flushed = coalescer.flush_all()
-    assert len(flushed) == 1  # Coalesced down to 1 event
-    assert flushed[0]["payload"]["text"] == "abc"
+    assert len(flushed) == 1  # Subsequent deltas coalesced down to 1 event on flush
+    assert flushed[0]["payload"]["text"] == "bc"
     assert flushed[0]["payload"]["accumulated_chars"] == 3
 
 
@@ -109,9 +138,9 @@ async def test_provider_credential_isolation_regression(monkeypatch):
     from agents import resolve_api_key
 
     from config import settings
-    
+
     settings.OPENAI_API_KEY = "test_openai_key"
-    
+
     resolved = resolve_api_key("openai")
     assert resolved == "test_openai_key"
     assert "OPENAI_API_KEY" not in os.environ

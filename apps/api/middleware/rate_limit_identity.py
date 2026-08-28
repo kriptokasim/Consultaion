@@ -14,9 +14,9 @@ import time
 from collections import OrderedDict
 from typing import Optional
 
+import database
 import jwt
 from api_key_utils import extract_prefix, verify_api_key
-from database import engine
 from fastapi import Request
 from models import APIKey
 from sqlmodel import Session, select
@@ -68,14 +68,22 @@ def resolve_identity(request: Request) -> tuple[str, str]:
         return f"wl:user:{user_id}", "user"
 
     # 2. Check for cookie JWT (real signature check)
-    cookie_token = request.cookies.get(settings.COOKIE_NAME) if hasattr(request, "cookies") and request.cookies else None
+    cookie_token = (
+        request.cookies.get(settings.COOKIE_NAME)
+        if hasattr(request, "cookies") and request.cookies
+        else None
+    )
     if cookie_token and isinstance(cookie_token, str):
         uid = _validate_user_jwt(cookie_token)
         if uid:
             return f"wl:user:{uid}", "user"
 
     # 3 & 4. Check for Bearer token in Authorization header
-    auth_header = request.headers.get("Authorization", "") if hasattr(request, "headers") and request.headers else ""
+    auth_header = (
+        request.headers.get("Authorization", "")
+        if hasattr(request, "headers") and request.headers
+        else ""
+    )
     if isinstance(auth_header, str) and auth_header.startswith("Bearer "):
         token = auth_header[7:]
         if token and isinstance(token, str):
@@ -145,7 +153,7 @@ def _validate_api_key(token: str) -> Optional[str]:
 
     try:
         prefix = extract_prefix(token)
-        with Session(engine) as session:
+        with Session(database.engine) as session:
             stmt = select(APIKey).where(
                 APIKey.prefix == prefix,
                 APIKey.revoked.is_(False),
@@ -212,7 +220,11 @@ def _get_trusted_client_ip(request: Request) -> str:
                 break
 
     if is_trusted:
-        forwarded_for = request.headers.get("X-Forwarded-For") if hasattr(request, "headers") and request.headers else None
+        forwarded_for = (
+            request.headers.get("X-Forwarded-For")
+            if hasattr(request, "headers") and request.headers
+            else None
+        )
         if forwarded_for and isinstance(forwarded_for, str):
             # Take the first IP (original client)
             ip = forwarded_for.split(",")[0].strip()

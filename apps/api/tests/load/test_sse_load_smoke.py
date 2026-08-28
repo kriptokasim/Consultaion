@@ -28,10 +28,10 @@ async def test_concurrent_consumer_queue_saturation(backend):
     """Test active concurrent consumer task, queue saturation, and backpressure."""
     channel = "load-test-saturation"
     await backend.create_channel(channel)
-    
+
     sub_count = 50
     publish_count = 100
-    
+
     # 1. Create active concurrent consumer tasks
     async def consumer(sub_id, subscription):
         received = 0
@@ -40,25 +40,25 @@ async def test_concurrent_consumer_queue_saturation(backend):
             if received == publish_count:
                 break
         return received
-        
+
     subs = [backend.subscribe(channel, last_sequence=None) for _ in range(sub_count)]
     consumer_tasks = [asyncio.create_task(consumer(i, sub)) for i, sub in enumerate(subs)]
-    
+
     # 2. Simulate high frequency concurrent publisher load
     async def publisher():
         for i in range(publish_count):
             await backend.publish(channel, {"type": "message", "content": f"msg-{i}"})
             # very small sleep to yield control but still push hard
-            await asyncio.sleep(0.001) 
-            
+            await asyncio.sleep(0.001)
+
     await asyncio.gather(publisher())
-    
+
     # 3. Wait for consumers to drain queue
     results = await asyncio.gather(*consumer_tasks, return_exceptions=True)
-    
+
     for r in results:
         assert r == publish_count, "Consumer dropped messages or failed"
-        
+
     # 4. Lease cleanup and memory validation
     await backend.cleanup()
     assert True
@@ -69,7 +69,7 @@ async def test_slow_subscriber_backpressure(backend):
     """Test slow subscriber dropping logic or backpressure handling."""
     channel = "load-test-slow"
     await backend.create_channel(channel)
-    
+
     events = []
     ready = asyncio.Event()
 
@@ -87,7 +87,7 @@ async def test_slow_subscriber_backpressure(backend):
 
     task = asyncio.create_task(consumer())
     await ready.wait()
-    
+
     # Wait deterministically for the subscriber queue to be registered
     # Fail fast if subscriber registration regresses (no infinite wait)
     async def wait_for_registration() -> None:
@@ -95,33 +95,36 @@ async def test_slow_subscriber_backpressure(backend):
             await asyncio.sleep(0.01)
 
     await asyncio.wait_for(wait_for_registration(), timeout=1.0)
-        
+
     # Check drop metrics
     from metrics import get_metrics_snapshot
+
     before_drop = get_metrics_snapshot().get("sse.backpressure.dropped", 0)
-    
+
     # Publish many loss-tolerant messages instantly to force queue overflow
     for i in range(1500):
-        await backend.publish(channel, {"type": "model_response_delta", "index": i})
-        
+        await backend.publish(
+            channel, {"type": "model_response_delta", "index": i, "_already_coalesced": True}
+        )
+
     # Publish important and critical events
     await backend.publish(channel, {"type": "arena_response", "data": "important"})
     await backend.publish(channel, {"type": "final"})
-        
+
     await asyncio.wait_for(task, timeout=5)
-            
+
     # Assertions
     types = [e.get("payload", {}).get("type") for e in events]
     assert "final" in types, "Critical event was dropped!"
     assert "arena_response" in types, "Important event was dropped!"
-    
+
     # Default queue size is 1000, so we should have received around 1000 events total, not 1500
     assert len(events) <= 1100, "Expected backpressure to drop events, but received too many"
-    
+
     # Check drop metrics increased
     after_drop = get_metrics_snapshot().get("sse.backpressure.dropped", 0)
     assert after_drop > before_drop, "Expected sse.backpressure.dropped metric to increase"
-    
+
     await backend.cleanup()
 
 

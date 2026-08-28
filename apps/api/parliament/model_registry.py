@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional, Set
 
-from database import engine
+import database
 from models import UserProviderKey
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
@@ -13,33 +13,43 @@ class ModelInfo(BaseModel):
     display_name: str = Field(..., description="Human-readable name")
     provider: str = Field(..., description="The provider identifier (e.g. 'openai', 'anthropic')")
     litellm_model: str = Field(..., description="The model string passed to litellm")
-    
+
     # Capabilities
-    capabilities: Set[str] = Field(default_factory=set, description="Set of capabilities like 'chat', 'tools', 'vision'")
-    
+    capabilities: Set[str] = Field(
+        default_factory=set, description="Set of capabilities like 'chat', 'tools', 'vision'"
+    )
+
     # Tiers & Classifications
-    tier: Literal["standard", "advanced"] = Field(default="standard", description="The billing tier for this model")
+    tier: Literal["standard", "advanced"] = Field(
+        default="standard", description="The billing tier for this model"
+    )
     cost_tier: Literal["low", "medium", "high"]
     latency_class: Literal["fast", "normal", "slow"]
     quality_tier: Literal["baseline", "advanced", "flagship"]
     safety_profile: Literal["strict", "normal", "experimental"]
-    
+
     # Status
     enabled: bool = True
     recommended: bool = False
-    
+
     # Legacy/Optional
     tags: Optional[List[str]] = None
-    
+
     # Visual Identity
-    logo_url: Optional[str] = Field(None, description="Path to the model logo (e.g. '/logos/openai.svg')")
-    
+    logo_url: Optional[str] = Field(
+        None, description="Path to the model logo (e.g. '/logos/openai.svg')"
+    )
+
     # Patchset v2.0: Immersive Persona
-    persona_type: Optional[str] = Field(None, description="Personality archetype (e.g., 'The Cold Logician')")
+    persona_type: Optional[str] = Field(
+        None, description="Personality archetype (e.g., 'The Cold Logician')"
+    )
     persona_tagline: Optional[str] = Field(None, description="Short personality tagline")
-    
+
     # UX Polish: Model selection guidance
-    description: Optional[str] = Field(None, description="Why to pick this model (e.g., 'Best for complex reasoning')")
+    description: Optional[str] = Field(
+        None, description="Why to pick this model (e.g., 'Best for complex reasoning')"
+    )
 
 
 # Define the registry
@@ -276,11 +286,12 @@ def list_enabled_models_for_user(user_id: Optional[str] = None) -> List[ModelInf
 
     user_providers = set()
     try:
-        with Session(engine) as session:
+        with Session(database.engine) as session:
             stmt = select(UserProviderKey.provider).where(UserProviderKey.user_id == user_id)
             user_providers = set(session.exec(stmt).all())
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).warning(f"Failed to fetch BYOK for user {user_id}: {e}")
 
     enabled_ids = {m.id for m in enabled_models}
@@ -290,7 +301,7 @@ def list_enabled_models_for_user(user_id: Optional[str] = None) -> List[ModelInf
         if model.id not in enabled_ids and model.provider in user_providers:
             enabled_models.append(model)
             enabled_ids.add(model.id)
-            
+
     return enabled_models
 
 
@@ -315,6 +326,7 @@ def resolve_model_info(model_key: str) -> Optional[ModelInfo]:
         return direct
 
     from model_gateway.model_map import MODEL_MAP, ModelKeyError, resolve_model_key
+
     try:
         canonical_key = resolve_model_key(model_key)
         litellm_model = MODEL_MAP[canonical_key]["litellm_model"]
@@ -335,14 +347,14 @@ def get_default_model() -> ModelInfo:
             return model
     if enabled:
         return enabled[0]
-    
+
     # Fallback if no models enabled (shouldn't happen in valid config)
     raise RuntimeError("No models are enabled; configure at least one provider API key.")
 
 
 def get_model(model_id: str) -> ModelInfo:
     """Get model info by ID, raising ValueError if not found.
-    
+
     This is a helper for backward compatibility and strict lookups.
     """
     info = get_model_info(model_id)

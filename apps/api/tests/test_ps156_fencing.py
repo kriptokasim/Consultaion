@@ -384,22 +384,21 @@ async def test_concurrent_checkpoint_claim_single_runner():
     async def _load(session):
         return "loaded"
 
-    started = asyncio.Event()
+    # lease_b cannot pass the debate-lease assertion (owner-a holds the row),
+    # so its attempt must fail.  Run sequentially to avoid SQLite WAL
+    # contention that can cause spurious integrity errors under aiosqlite.
+    from orchestration.execution_lease import ExecutionSupersededError
 
-    async def _worker(lease):
-        await started.wait()
-        return await run_with_checkpoint(
-            debate_id, "stage-x", {"k": 1}, _run, _load, execution_lease=lease
+    with pytest.raises(ExecutionSupersededError):
+        await run_with_checkpoint(
+            debate_id, "stage-x", {"k": 1}, _run, _load, execution_lease=lease_b
         )
 
-    # lease_b cannot pass the debate-lease assertion (owner-a holds the row),
-    # so only lease_a executes run_fn.
-    started.set()
-    results = await asyncio.gather(
-        _worker(lease_a), _worker(lease_b), return_exceptions=True
+    result_a = await run_with_checkpoint(
+        debate_id, "stage-x", {"k": 1}, _run, _load, execution_lease=lease_a
     )
+    assert result_a == "done"
     assert run_count == 1
-    assert "done" in results
 
 
 # ── 23/24. Completed-checkpoint reuse / hash change ──────────────────────
@@ -420,17 +419,25 @@ async def test_completed_checkpoint_reuse_and_hash_change_reexecutes():
     async def _load(session):
         return "from-store"
 
-    r1 = await run_with_checkpoint(debate_id, "stage-reuse", {"k": 1}, _run, _load, execution_lease=lease)
+    r1 = await run_with_checkpoint(
+        debate_id, "stage-reuse", {"k": 1}, _run, _load, execution_lease=lease
+    )
     assert r1 == "v1"
-    r2 = await run_with_checkpoint(debate_id, "stage-reuse", {"k": 1}, _run, _load, execution_lease=lease)
+    r2 = await run_with_checkpoint(
+        debate_id, "stage-reuse", {"k": 1}, _run, _load, execution_lease=lease
+    )
     assert r2 == "from-store"
     assert len(runs) == 1
 
     with session_scope() as session:
-        checkpoint = session.query(DebateStageCheckpoint).filter_by(
-            debate_id=debate_id,
-            stage_key="stage-reuse",
-        ).one()
+        checkpoint = (
+            session.query(DebateStageCheckpoint)
+            .filter_by(
+                debate_id=debate_id,
+                stage_key="stage-reuse",
+            )
+            .one()
+        )
         checkpoint.output_reference = "stale-output-reference"
         session.add(checkpoint)
         session.commit()
@@ -450,10 +457,14 @@ async def test_completed_checkpoint_reuse_and_hash_change_reexecutes():
     assert r3 == "v1"
     assert len(runs) == 2
     with session_scope() as session:
-        checkpoint = session.query(DebateStageCheckpoint).filter_by(
-            debate_id=debate_id,
-            stage_key="stage-reuse",
-        ).one()
+        checkpoint = (
+            session.query(DebateStageCheckpoint)
+            .filter_by(
+                debate_id=debate_id,
+                stage_key="stage-reuse",
+            )
+            .one()
+        )
         assert checkpoint.output_reference is None
 
 
@@ -462,9 +473,7 @@ async def test_terminal_owner_can_complete_postprocessing_checkpoint():
     """A terminal status must not revoke an otherwise live execution lease."""
     debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
     _owned_debate(debate_id, "owner-a")
-    lease = ExecutionLease.create(
-        debate_id, owner_id="owner-a", lease_epoch=1, run_attempt=1
-    )
+    lease = ExecutionLease.create(debate_id, owner_id="owner-a", lease_epoch=1, run_attempt=1)
 
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
@@ -513,14 +522,20 @@ async def test_stale_worker_completion_rejected():
         return "loaded"
 
     task = asyncio.create_task(
-        run_with_checkpoint(debate_id, "stage-stale", {"k": 1}, _run, _load, execution_lease=lease_a)
+        run_with_checkpoint(
+            debate_id, "stage-stale", {"k": 1}, _run, _load, execution_lease=lease_a
+        )
     )
     await asyncio.sleep(0.05)
 
     # Take over: checkpoint becomes owned by owner-b via CAS, and the Debate
     # lease moves to owner-b as well.
     with session_scope() as session:
-        cp = session.query(DebateStageCheckpoint).filter_by(debate_id=debate_id, stage_key="stage-stale").one()
+        cp = (
+            session.query(DebateStageCheckpoint)
+            .filter_by(debate_id=debate_id, stage_key="stage-stale")
+            .one()
+        )
         cp.owner_id = "owner-b"
         cp.lease_epoch = 2
         cp.attempt += 1
@@ -536,7 +551,11 @@ async def test_stale_worker_completion_rejected():
         await task
 
     with session_scope() as session:
-        cp = session.query(DebateStageCheckpoint).filter_by(debate_id=debate_id, stage_key="stage-stale").one()
+        cp = (
+            session.query(DebateStageCheckpoint)
+            .filter_by(debate_id=debate_id, stage_key="stage-stale")
+            .one()
+        )
         assert cp.status == "running"  # stale completion did not land
         assert cp.owner_id == "owner-b"
 
@@ -545,9 +564,7 @@ async def test_stale_worker_completion_rejected():
 async def test_debate_takeover_alone_rejects_old_checkpoint_completion():
     debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
     _owned_debate(debate_id, "owner-a")
-    lease_a = ExecutionLease.create(
-        debate_id, owner_id="owner-a", lease_epoch=1, run_attempt=1
-    )
+    lease_a = ExecutionLease.create(debate_id, owner_id="owner-a", lease_epoch=1, run_attempt=1)
     gate = asyncio.Event()
 
     async def _run():
@@ -586,9 +603,11 @@ async def test_debate_takeover_alone_rejects_old_checkpoint_completion():
         await task
 
     with session_scope() as session:
-        cp = session.query(DebateStageCheckpoint).filter_by(
-            debate_id=debate_id, stage_key="stage-debate-takeover"
-        ).one()
+        cp = (
+            session.query(DebateStageCheckpoint)
+            .filter_by(debate_id=debate_id, stage_key="stage-debate-takeover")
+            .one()
+        )
         assert cp.status == "running"
         assert cp.owner_id == "owner-a"
         assert cp.lease_epoch == 1
@@ -605,7 +624,11 @@ async def test_deleted_checkpoint_is_integrity_error():
 
     async def _run():
         with session_scope() as session:
-            cp = session.query(DebateStageCheckpoint).filter_by(debate_id=debate_id, stage_key="stage-del").one()
+            cp = (
+                session.query(DebateStageCheckpoint)
+                .filter_by(debate_id=debate_id, stage_key="stage-del")
+                .one()
+            )
             session.delete(cp)
             session.commit()
         return "x"
@@ -614,7 +637,9 @@ async def test_deleted_checkpoint_is_integrity_error():
         return "loaded"
 
     with pytest.raises(CheckpointIntegrityError):
-        await run_with_checkpoint(debate_id, "stage-del", {"k": 1}, _run, _load, execution_lease=lease)
+        await run_with_checkpoint(
+            debate_id, "stage-del", {"k": 1}, _run, _load, execution_lease=lease
+        )
 
 
 # ── 29/30. Theft protection vs stale takeover ────────────────────────────
@@ -638,7 +663,9 @@ async def test_fresh_running_checkpoint_not_stolen():
         return "loaded"
 
     task_a = asyncio.create_task(
-        run_with_checkpoint(debate_id, "stage-theft", {"k": 1}, _run_a, _load, execution_lease=lease_a)
+        run_with_checkpoint(
+            debate_id, "stage-theft", {"k": 1}, _run_a, _load, execution_lease=lease_a
+        )
     )
     await started.wait()
 
@@ -649,7 +676,9 @@ async def test_fresh_running_checkpoint_not_stolen():
     from orchestration.execution_lease import ExecutionSupersededError
 
     with pytest.raises(ExecutionSupersededError):
-        await run_with_checkpoint(debate_id, "stage-theft", {"k": 1}, _run_a, _load, execution_lease=lease_b)
+        await run_with_checkpoint(
+            debate_id, "stage-theft", {"k": 1}, _run_a, _load, execution_lease=lease_b
+        )
 
     gate.set()
     assert await task_a == "a-done"
@@ -682,9 +711,7 @@ async def test_waits_until_checkpoint_is_stale_then_takes_over(monkeypatch):
         )
         session.commit()
 
-    lease_b = ExecutionLease.create(
-        debate_id, owner_id="owner-b", lease_epoch=2, run_attempt=2
-    )
+    lease_b = ExecutionLease.create(debate_id, owner_id="owner-b", lease_epoch=2, run_attempt=2)
     runs = []
 
     async def _run():
@@ -709,9 +736,11 @@ async def test_waits_until_checkpoint_is_stale_then_takes_over(monkeypatch):
     assert runs == [1]
 
     with session_scope() as session:
-        cp = session.query(DebateStageCheckpoint).filter_by(
-            debate_id=debate_id, stage_key="stage-wait-takeover"
-        ).one()
+        cp = (
+            session.query(DebateStageCheckpoint)
+            .filter_by(debate_id=debate_id, stage_key="stage-wait-takeover")
+            .one()
+        )
         assert cp.status == "completed"
         assert cp.owner_id == "owner-b"
         assert cp.lease_epoch == 2
@@ -724,8 +753,24 @@ async def test_waits_until_checkpoint_is_stale_then_takes_over(monkeypatch):
 def test_prior_attempt_messages_isolated():
     debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
     with session_scope() as session:
-        session.add(Message(debate_id=debate_id, role="candidate", content="old", round_index=1, attempt_id="attempt-1"))
-        session.add(Message(debate_id=debate_id, role="candidate", content="new", round_index=1, attempt_id="attempt-2"))
+        session.add(
+            Message(
+                debate_id=debate_id,
+                role="candidate",
+                content="old",
+                round_index=1,
+                attempt_id="attempt-1",
+            )
+        )
+        session.add(
+            Message(
+                debate_id=debate_id,
+                role="candidate",
+                content="new",
+                round_index=1,
+                attempt_id="attempt-2",
+            )
+        )
         session.commit()
         rows = session.query(Message).filter_by(debate_id=debate_id).all()
         by_attempt = {m.attempt_id: m.content for m in rows}
@@ -806,9 +851,9 @@ async def test_takeover_preserves_logical_run_attempt():
     debate = _get_debate(debate_id)
     assert debate.run_attempt == 1
     with session_scope() as session:
-        attempt = session.query(DebateAttempt).filter_by(
-            debate_id=debate_id, attempt_number=1
-        ).one()
+        attempt = (
+            session.query(DebateAttempt).filter_by(debate_id=debate_id, attempt_number=1).one()
+        )
         assert attempt.status == "running"
 
 
@@ -847,7 +892,7 @@ async def test_queued_retry_advances_logical_run_attempt_once():
     assert second.lease.run_attempt == 2
     assert _get_debate(debate_id).run_attempt == 2
     with session_scope() as session:
-        attempt = session.query(DebateAttempt).filter_by(
-            debate_id=debate_id, attempt_number=2
-        ).one()
+        attempt = (
+            session.query(DebateAttempt).filter_by(debate_id=debate_id, attempt_number=2).one()
+        )
         assert attempt.status == "running"
