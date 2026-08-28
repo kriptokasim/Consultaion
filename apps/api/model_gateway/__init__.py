@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 from model_gateway.adapters import DirectProviderAdapter, MockAdapter, OpenRouterAdapter
 from model_gateway.agent_bridge import call_model_via_gateway
@@ -28,7 +29,7 @@ def _server_api_key(provider: str) -> str | None:
     for setting_name in setting_names:
         key = getattr(settings, setting_name, None)
         if key:
-            return key
+            return cast(str, key)
     return None
 
 
@@ -468,6 +469,13 @@ async def route_llm_stream(
         return None
 
     delta_callback = on_delta or _noop_delta
+    primary_emitted_delta = False
+
+    async def _track_primary_delta(delta) -> None:
+        """Remember user-visible output so a failed stream is never spliced."""
+        nonlocal primary_emitted_delta
+        primary_emitted_delta = True
+        await delta_callback(delta)
     credential_scope = "user" if api_key else "server"
 
     if user_id and not api_key:
@@ -521,7 +529,7 @@ async def route_llm_stream(
             gateway_policy="auto",
             model_pool="default",
             routing_policy="stream",
-            on_delta=delta_callback,
+            on_delta=_track_primary_delta,
             user_id=user_id,
             api_key=api_key,
         )
@@ -541,7 +549,7 @@ async def route_llm_stream(
                 credential_scope=credential_scope,
             )
 
-    if result.success or target.uses_openrouter or result.content:
+    if result.success or target.uses_openrouter or result.content or primary_emitted_delta:
         return result
 
     openrouter_key = _server_api_key("openrouter")
