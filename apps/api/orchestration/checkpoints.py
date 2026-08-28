@@ -154,15 +154,26 @@ async def _assert_lease_owner(
         )
 
 
-def _resolve_lease(execution_lease: Optional[ExecutionLease]) -> Optional[ExecutionLease]:
+def _resolve_lease(
+    execution_lease: Optional[ExecutionLease],
+    allow_unfenced: bool = False,
+) -> Optional[ExecutionLease]:
     """Resolve the execution lease for a checkpointed stage.
 
     Track G1: production execution fails closed when no lease context exists;
     local/test execution may run unfenced (legacy behavior) so unit tests and
     offline tooling can exercise stages without a full lease lifecycle.
+
+    ``allow_unfenced`` opts this stage out of the production fail-closed guard.
+    It is reserved for genuinely post-terminal background stages (e.g. the
+    arena divergence analysis) that run after the execution lease is released
+    and therefore never carry a live lease. Active pipeline stages must NOT
+    pass it.
     """
     lease = execution_lease or get_current_execution_lease()
     if lease is None and getattr(settings, "APP_ENV", "local") == "production":
+        if allow_unfenced:
+            return None
         raise RuntimeError(
             "run_with_checkpoint requires an ExecutionLease (pass "
             "execution_lease= or bind one via execution_context)."
@@ -529,18 +540,23 @@ async def run_with_checkpoint(
     *,
     execution_lease: Optional[ExecutionLease] = None,
     long_stage: bool = False,
+    allow_unfenced: bool = False,
 ) -> Any:
     """Execute a pipeline stage inside an owner-fenced checkpoint lifecycle.
 
     ``execution_lease`` may be omitted only when a lease is bound via the
     execution ContextVar. Legacy (owner_id, lease_epoch) pairs are accepted
     for backward compatibility and wrapped into a detached lease object.
+
+    ``allow_unfenced`` should be True only for genuinely post-terminal
+    background stages that never carry a live execution lease (see
+    ``_resolve_lease``).
     """
     if execution_lease is None and owner_id is not None and lease_epoch is not None:
         execution_lease = ExecutionLease.create(
             debate_id, owner_id=owner_id, lease_epoch=lease_epoch, run_attempt=0
         )
-    lease = _resolve_lease(execution_lease)
+    lease = _resolve_lease(execution_lease, allow_unfenced=allow_unfenced)
 
     serialized = json.dumps(input_data, sort_keys=True, default=str)
     input_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()

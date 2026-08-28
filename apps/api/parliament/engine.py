@@ -14,6 +14,7 @@ from orchestration.finalization import FinalizationService
 from parliament_budget_guard import call_llm_for_role_budgeted as call_llm_for_role
 from pydantic import ValidationError
 from schemas import DebateConfig, JudgeConfig, PanelConfig, default_judges, default_panel_config
+from sqlmodel import select
 from sse_backend import get_sse_backend
 
 from config import settings
@@ -465,7 +466,21 @@ async def run_parliament_debate(
         # Persist scores under the same lease fence as the parent Debate.
         with session_scope() as session:
             _lease, attempt_id = _assert_parliament_write(session, debate_id)
+            # Idempotency: a crash-takeover that re-runs judging for the same
+            # attempt must not duplicate Score rows. Mirror the Message
+            # response_id-dedup pattern using the natural key
+            # (debate_id, attempt_id, persona, judge).
             for detail in judge_details:
+                existing = session.exec(
+                    select(Score.id).where(
+                        Score.debate_id == debate_id,
+                        Score.attempt_id == attempt_id,
+                        Score.persona == detail["persona"],
+                        Score.judge == detail["judge"],
+                    )
+                ).first()
+                if existing is not None:
+                    continue
                 session.add(
                     Score(
                         debate_id=debate_id,

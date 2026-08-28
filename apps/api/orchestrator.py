@@ -477,6 +477,20 @@ async def _run_mock_debate(
         },
     )
 
+    # Durable terminal DB commit MUST precede the terminal SSE event so a
+    # reconnect never observes a terminal event for a still-"running" debate.
+    await _complete_debate_record(
+        debate_id,
+        final_content="Fast debate completed.",
+        final_meta={
+            "scores": mock_scores,
+            "ranking": [entry["persona"] for entry in mock_scores],
+            "usage": usage_snapshot,
+        },
+        status="completed",
+        tokens_total=usage_tracker.total_tokens,
+    )
+
     await backend.publish(
         channel_id,
         {
@@ -491,17 +505,6 @@ async def _run_mock_debate(
                 },
             },
         },
-    )
-    await _complete_debate_record(
-        debate_id,
-        final_content="Fast debate completed.",
-        final_meta={
-            "scores": mock_scores,
-            "ranking": [entry["persona"] for entry in mock_scores],
-            "usage": usage_snapshot,
-        },
-        status="completed",
-        tokens_total=usage_tracker.total_tokens,
     )
 
 

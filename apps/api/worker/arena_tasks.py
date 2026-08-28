@@ -220,6 +220,9 @@ async def _execute_divergence_computation(debate_id: str) -> None:
         input_data=checkpoint_input,
         run_fn=run_divergence,
         load_fn=load_divergence,
+        # Divergence runs after the execution lease is released (post-terminal
+        # background analysis), so it intentionally never carries a live lease.
+        allow_unfenced=True,
     )
 
 

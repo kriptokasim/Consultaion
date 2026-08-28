@@ -350,6 +350,18 @@ async def _schedule_retry(
         debate.status = "scheduled"
         debate.updated_at = utcnow()
         debate.credit_reservation_id = reservation_id
+        # When a retry supersedes a prior attempt, the prior attempt's hosted
+        # credit reservation is detached from this debate (either replaced by a
+        # new reservation or cleared). Refund it exactly-once in the same
+        # transaction so the reconciler cannot later quarantine it as an
+        # orphaned `reserved` ledger row and permanently lose the credit.
+        if prior_credit_reservation_id:
+            refund_hosted_credit(
+                session,
+                current_user.id,
+                reservation_id=prior_credit_reservation_id,
+                debate_id=debate_id,
+            )
         session.add(debate)
         session.commit()
     except Exception:

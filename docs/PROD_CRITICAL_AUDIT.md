@@ -367,13 +367,44 @@ Other confirmed-but-not-blocking items from audit:
   treated as API-reachable but not user-facing for this wave; no creation-UI
   change is included.
 
+## Wave 5 — Arena + Debate audit fixes (branch: agent/prod-critical-hardening-final)
+
+### PC-RETRY-001 — Retry supersede leaked hosted credit reservation (P1) — FIXED
+`routes/debates/hardening.py` `_schedule_retry` overwrote
+`debate.credit_reservation_id` with the new reservation without refunding the
+prior one. The reconciler then quarantined the old `reserved` ledger row to
+`reconciliation_pending` (a dead-end that is never refunded), permanently
+losing hosted credit. Fix: refund `prior_credit_reservation_id`
+(`refund_hosted_credit`, exactly-once, idempotent) in the same transaction
+before commit.
+
+### PC-DIVC-001 — Arena divergence failed closed in production (P1) — FIXED
+`worker/arena_tasks.py` divergence called `run_with_checkpoint` with no lease;
+`_resolve_lease` raised `RuntimeError` in production, so divergence never ran
+in production (feature degradation, debate still completes). Fix: added
+`allow_unfenced: bool = False` to `_resolve_lease`/`run_with_checkpoint`; the
+post-terminal divergence stage passes `allow_unfenced=True`. Active pipeline
+stages remain lease-fenced.
+
+### PC-PARL-004 — Parliament judging duplicate Score rows on takeover (P2) — FIXED
+`parliament/engine.py` judging inserted `Score` rows unconditionally; a
+crash-takeover re-running judging for the same attempt duplicated rows. Fix:
+idempotent insert deduped on the natural key (debate_id, attempt_id, persona,
+judge), mirroring the Message response_id-dedup pattern.
+
+### PC-ORCH-003 — Mock debate terminal SSE before durable commit (P2) — FIXED
+`orchestrator.py` `_run_mock_debate` published terminal `final` SSE before the
+durable `_complete_debate_record` commit, inverting the terminal-order
+invariant. Fix: reordered to commit the durable DB state first, then emit the
+terminal event.
+
 ## Gate status (local)
 
 | Gate | Result |
 |---|---|
 | ruff check apps/api | PASS |
 | mypy (targeted critical modules) | no new errors vs BASE (repo-wide noise pre-existing) |
-| pytest (SQLite, targeted Arena/Debate) | 42 passed (0 regressions in scope) |
+| pytest (SQLite, in-scope Arena/Debate/Parliament + retry/divergence/billing) | 92 passed (0 regressions in scope) |
 | vitest | 392 passed (was 391; 1 fixed) |
 | tsc --noEmit | PASS |
 | eslint | PASS |
