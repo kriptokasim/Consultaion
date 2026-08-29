@@ -68,12 +68,6 @@ celery_app = Celery(
     backend=result_backend,
 )
 
-
-# Explicit production task inventory. The worker is launched as
-# ``celery -A worker.celery_app worker``; Celery does not discover arbitrary
-# modules merely because task_routes contain their name prefixes. Every module
-# that owns @celery_app.task registrations must therefore be imported by the
-# worker at boot or queued tasks can be rejected as "unregistered task".
 PRODUCTION_TASK_MODULES: tuple[str, ...] = (
     "worker.billing_tasks",
     "worker.debate_tasks",
@@ -84,13 +78,7 @@ PRODUCTION_TASK_MODULES: tuple[str, ...] = (
 
 
 def configured_worker_queue_names(settings_obj=settings) -> tuple[str, ...]:
-    """Return every queue this worker may receive work on.
-
-    Debate dispatch queue names are configurable, so the worker declaration
-    must be derived from the same settings rather than a hard-coded Compose
-    command. ``dict.fromkeys`` preserves priority while removing aliases.
-    """
-
+    """Return every queue this worker may receive work on."""
     candidates = (
         settings_obj.DEBATE_FAST_QUEUE_NAME,
         settings_obj.DEBATE_DEEP_QUEUE_NAME,
@@ -222,14 +210,16 @@ if hasattr(celery_app, "task"):
 
 _write_worker_heartbeat()
 
-# Keep worker bootstrap limited to guards that must exist before any task-level
-# LLM call. Runtime exception/credential-scope hardening is required before the
-# legacy Agent pre-router path can inspect provider health; heavy terminal
-# accounting remains owned by worker.debate_tasks.
+# Install only guards that must exist before any task starts. Heavy terminal
+# accounting remains owned by worker.debate_tasks, while checkpoint lease
+# semantics and credential-scoped gateway behavior must not depend on Celery's
+# task-module import order.
 try:
+    from checkpoint_runtime_guard import install_checkpoint_runtime_guard
     from model_gateway.runtime_exception_guard import install_runtime_exception_guard
     from sse_terminal_guard import install_terminal_commit_guard
 
+    install_checkpoint_runtime_guard()
     install_runtime_exception_guard()
     install_terminal_commit_guard()
 except Exception:  # pragma: no cover - worker startup must surface this in prod
