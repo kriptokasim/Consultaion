@@ -28,13 +28,16 @@ logger = logging.getLogger(__name__)
 
 
 class ProviderAttemptBudgetBlocked(BaseException):
-    """Control signal for a pre-provider fallback/retry budget rejection.
+    """Control signal for a pre-provider fallback/retry budget rejection."""
+
+
+class ProviderAttemptAccountingUnavailable(BaseException):
+    """Control signal for a pre-provider accounting-infrastructure failure.
 
     The legacy gateway catches broad ``Exception`` around adapter calls and
-    records those exceptions as provider failures. Budget/quota policy is not a
-    provider failure and must bypass that catcher. The outer hardened runtime
-    boundary converts this signal back to ``GatewayQuotaExceededError`` after
-    route state has unwound.
+    records those exceptions as provider failures. Reservation/database failures
+    happen before the provider boundary and must bypass that catcher so they do
+    not trip shared provider circuits.
     """
 
 
@@ -73,9 +76,6 @@ def bind_attempt_context(context: GatewayAttemptContext) -> Token:
 
 
 def reset_attempt_context(token: Token) -> None:
-    # Cancellation/BaseException inside a wrapped adapter can skip the normal
-    # finish callback. Never allow that nested-attempt marker to leak into a
-    # later gateway invocation running in the same asyncio task/context.
     _active_adapter_index.set(None)
     _current_attempt_context.reset(token)
 
@@ -95,14 +95,11 @@ def _result_has_measured_tokens(result: GatewayModelCallResult | None) -> bool:
 
 
 def _record_effective_cost(record: AttemptRecord) -> float:
-    """Cost authority for a finished attempt, retaining unknown reservations."""
     result = record.result
     if result is not None and result.provider == "mock":
         return 0.0
     if result is not None and float(result.cost_usd or 0.0) > 0:
         return max(float(result.cost_usd or 0.0), 0.0)
-    # A successful/failed provider result may still omit cost metadata. Keep the
-    # pre-provider reservation rather than turning unknown real spend into zero.
     return max(float(record.reserved_cost_usd or 0.0), 0.0)
 
 
@@ -268,11 +265,16 @@ async def begin_adapter_attempt(
                     ),
                 )
             except GatewayQuotaExceededError as exc:
-                # Cross the legacy route's broad ``except Exception`` without
-                # being mislabeled as a provider failure/circuit signal. The
-                # hardened outer boundary maps this control signal back to the
-                # public quota exception after route unwinding.
                 raise ProviderAttemptBudgetBlocked(str(exc)) from exc
+            except Exception as exc:
+                logger.exception(
+                    "gateway.fallback_reservation_extension_failed user=%s debate=%s",
+                    context.user_id,
+                    context.debate_id,
+                )
+                raise ProviderAttemptAccountingUnavailable(
+                    "Model usage accounting is temporarily unavailable."
+                ) from exc
 
     context.records.append(
         AttemptRecord(
