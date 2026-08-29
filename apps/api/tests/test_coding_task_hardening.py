@@ -102,8 +102,6 @@ async def test_duplicate_lane_delivery_calls_provider_once(db_session, monkeypat
         )
     )
 
-    # Give the duplicate enough time to observe the live Redis owner. It must
-    # follow the durable result rather than execute a second provider request.
     await asyncio.sleep(0.05)
     assert gateway.await_count == 1
 
@@ -127,6 +125,50 @@ async def test_duplicate_lane_delivery_calls_provider_once(db_session, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_duplicate_parent_turn_delivery_has_one_finalizer(db_session, monkeypatch):
+    import redis_pool
+    import worker.coding_tasks as coding
+    from database import session_scope
+    from models import CodingTurn
+
+    run, turn = _seed_turn(
+        db_session,
+        suffix="duplicate-parent",
+        prompt="Fix parent finalization race",
+    )
+    redis = _FakeRedisLaneLeases()
+    monkeypatch.setattr(redis_pool, "get_async_redis_client", lambda: redis)
+    monkeypatch.setattr(coding, "TURN_FOLLOW_POLL_SECONDS", 0.01)
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def _owned_once(run_id: str, turn_id: str):
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+        with session_scope() as session:
+            stored = session.get(CodingTurn, turn_id)
+            stored.status = "completed"
+            session.add(stored)
+            session.commit()
+
+    monkeypatch.setattr(coding, "_async_execute_turn_owned", _owned_once)
+
+    first = asyncio.create_task(coding._async_execute_turn(run.id, turn.id))
+    await started.wait()
+    second = asyncio.create_task(coding._async_execute_turn(run.id, turn.id))
+    await asyncio.sleep(0.03)
+    assert calls == 1
+
+    release.set()
+    await asyncio.gather(first, second)
+    assert calls == 1
+
+
+@pytest.mark.asyncio
 async def test_all_failed_lanes_mark_turn_and_run_failed(db_session, monkeypatch):
     import redis_pool
     import worker.coding_tasks as coding
@@ -139,8 +181,6 @@ async def test_all_failed_lanes_mark_turn_and_run_failed(db_session, monkeypatch
         prompt="Fix bug " * 50,
     )
 
-    # Local mode is allowed to fall back when Redis is absent; provider failure
-    # should still result in an explicit failed product state.
     monkeypatch.setattr(redis_pool, "get_async_redis_client", lambda: None)
     gateway = AsyncMock(side_effect=RuntimeError("provider unavailable"))
     monkeypatch.setattr(coding, "call_model_via_gateway", gateway)
@@ -191,3 +231,21 @@ async def test_nonlocal_missing_redis_fails_closed_before_provider(db_session, m
     assert result.status == "failed"
     assert "coordination" in (result.error or "").lower()
     assert gateway.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_nonlocal_parent_coordination_unavailable_is_retryable(db_session, monkeypatch):
+    import redis_pool
+    import worker.coding_tasks as coding
+    from config import settings
+
+    run, turn = _seed_turn(
+        db_session,
+        suffix="parent-redis-unavailable",
+        prompt="Do not silently drop parent task",
+    )
+    monkeypatch.setattr(redis_pool, "get_async_redis_client", lambda: None)
+    monkeypatch.setattr(settings, "IS_LOCAL_ENV", False)
+
+    with pytest.raises(coding.LaneCoordinationUnavailable):
+        await coding._async_execute_turn(run.id, turn.id)
