@@ -83,19 +83,33 @@ def install_runtime_exception_guard() -> None:
         )
 
         def _settle_interrupted_attempts(reason: str) -> None:
-            """Settle known/unknown provider work without awaiting cancellation-sensitive I/O."""
+            """Settle known/unknown provider work without cancellation-sensitive awaits."""
             active = attempt_context.reservation
             if active is None or not attempt_context.records:
                 return
+
+            last_known = next(
+                (
+                    record.result
+                    for record in reversed(attempt_context.records)
+                    if record.result is not None
+                ),
+                None,
+            )
             synthetic = GatewayModelCallResult(
                 content="",
-                model_used=model_id,
-                provider="interrupted",
+                model_used=(last_known.model_used if last_known is not None else model_id),
+                provider=(last_known.provider if last_known is not None else "interrupted"),
                 success=False,
                 error_message="Model execution was interrupted before normal completion.",
                 error_code="execution_interrupted",
-                model_pool="runtime_exception",
-                routing_policy="runtime_exception",
+                model_pool=(last_known.model_pool if last_known is not None else "runtime_exception"),
+                routing_policy=(
+                    last_known.routing_policy if last_known is not None else "runtime_exception"
+                ),
+                fallback_used=bool(last_known.fallback_used) if last_known is not None else False,
+                fallback_reason=(last_known.fallback_reason if last_known is not None else None),
+                retry_count=(int(last_known.retry_count or 0) if last_known is not None else 0),
                 user_plan=user_plan,
             )
             accounted = aggregate_accounting_result(synthetic, attempt_context)
@@ -106,22 +120,20 @@ def install_runtime_exception_guard() -> None:
             )
             attempt_context.reservation = None
             logger.warning(
-                "gateway.interrupted_usage_settled user=%s debate=%s reason=%s attempts=%s tokens=%s cost=%s",
+                "gateway.interrupted_usage_settled user=%s debate=%s reason=%s attempts=%s tokens=%s cost=%s provider=%s",
                 user_id,
                 debate_id,
                 reason,
                 len(attempt_context.records),
                 accounted.total_tokens,
                 accounted.cost_usd,
+                accounted.provider,
             )
 
         try:
             try:
                 result = await route_call()
             except ProviderAttemptBudgetBlocked as exc:
-                # The control signal deliberately bypassed the route's broad
-                # provider-error catcher. Earlier attempts may already have
-                # spent money; settle them before exposing the real quota error.
                 try:
                     _settle_interrupted_attempts("provider_attempt_budget_blocked")
                 except Exception:
@@ -133,7 +145,6 @@ def install_runtime_exception_guard() -> None:
                 raise GatewayQuotaExceededError(str(exc)) from exc
             except BaseException as exc:
                 if not attempt_context.records and attempt_context.reservation is not None:
-                    # No provider boundary was crossed: full compensation is safe.
                     try:
                         release_gateway_budget_sync(
                             attempt_context.reservation,
@@ -147,9 +158,6 @@ def install_runtime_exception_guard() -> None:
                             debate_id,
                         )
                 elif attempt_context.records and attempt_context.reservation is not None:
-                    # A cancellation/exception after provider entry may have
-                    # consumed unknown usage. Settle known results and keep the
-                    # reserved slice for unknown attempts instead of orphaning it.
                     try:
                         _settle_interrupted_attempts(type(exc).__name__)
                     except Exception:
@@ -166,8 +174,6 @@ def install_runtime_exception_guard() -> None:
 
         active_reservation = attempt_context.reservation
         if not attempt_context.records and active_reservation is not None:
-            # Friendly circuit/missing-key/validation results also prove that no
-            # adapter ran, so their reservation is compensation-safe.
             release_gateway_budget_sync(
                 active_reservation,
                 reason=result.error_code or "no_provider_attempt",
@@ -179,11 +185,6 @@ def install_runtime_exception_guard() -> None:
 
     runtime_guard._execute_guarded_route = _execute_guarded_route_hardened
 
-    # ``agents._raw_llm_call`` used to inspect shared provider circuits before
-    # it knew which credential the gateway would use. Keeping that gate would
-    # still allow a broken hosted key to block a healthy tenant BYOK key. The
-    # gateway now owns this decision after credential resolution, so make the
-    # legacy pre-router check deliberately permissive.
     try:
         import agents
 
