@@ -79,6 +79,7 @@ PRODUCTION_TASK_MODULES: tuple[str, ...] = (
     "worker.debate_tasks",
     "worker.arena_tasks",
     "worker.coding_tasks",
+    "worker.voting_tasks",
 )
 
 
@@ -221,15 +222,16 @@ if hasattr(celery_app, "task"):
 
 _write_worker_heartbeat()
 
-# The Celery worker does not import the API router, so cross-cutting execution
-# guards must be installed explicitly in worker mode as well.
+# Keep the app bootstrap minimal. Task modules own their execution-specific
+# guards (notably worker.debate_tasks installs terminal accounting). Eagerly
+# importing the entire accounting stack here expands circular-import surface
+# while Celery is still constructing its application. The terminal SSE commit
+# guard is intentionally lightweight and still applies to all worker modes.
 try:
-    from state_terminal_guard import install_terminal_accounting_guard
     from sse_terminal_guard import install_terminal_commit_guard
 
     install_terminal_commit_guard()
-    install_terminal_accounting_guard()
-except Exception:  # pragma: no cover - startup diagnostics cover registration
-    logger.exception("Could not install production execution guards in worker")
+except Exception:  # pragma: no cover - worker startup must surface this in prod
+    logger.exception("Could not install terminal commit guard in worker")
     if settings.APP_ENV in {"production", "staging"}:
         raise
