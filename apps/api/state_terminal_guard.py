@@ -19,6 +19,7 @@ def install_terminal_accounting_guard() -> None:
     # Install cross-cutting runtime guards before execution/cleanup begins.
     # Order matters: terminal reconciliation wraps the already-hardened stale
     # cleanup function installed immediately before it.
+    from checkpoint_runtime_guard import install_checkpoint_runtime_guard
     from cleanup_recovery_guard import install_cleanup_recovery_guard
     from model_gateway.runtime_exception_guard import install_runtime_exception_guard
     from model_gateway.runtime_guard import install_gateway_runtime_guard
@@ -26,6 +27,7 @@ def install_terminal_accounting_guard() -> None:
     from sse_execution_guard import install_sse_execution_guard
     from terminal_accounting_reconciler import install_terminal_accounting_reconciler
 
+    install_checkpoint_runtime_guard()
     install_sse_execution_guard()
     install_gateway_runtime_guard()
     install_runtime_exception_guard()
@@ -72,9 +74,6 @@ def install_terminal_accounting_guard() -> None:
                     raise RuntimeError(
                         "Terminal token accounting lost its durable debate/attempt identity"
                     )
-                # The terminal attempt is the durable source of token quantity.
-                # complete_debate stored max(tokens_total, prior_tokens) before
-                # this callback, so retries cannot shrink the accounted amount.
                 ensure_token_accounting_once(
                     session,
                     debate=debate,
@@ -87,8 +86,6 @@ def install_terminal_accounting_guard() -> None:
                 _record_settle_and_apply_quota,
             )
         except Exception:
-            # Debate/attempt terminal state is already durable. The periodic
-            # reconciler reconstructs both ledger and daily quota from it.
             logger.exception("Failed to finalize token accounting for debate %s", self.debate_id)
 
     DebateStateManager.complete_debate = complete_debate_after_commit  # type: ignore[method-assign]
