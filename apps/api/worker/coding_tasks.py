@@ -36,14 +36,11 @@ LANE_TIMEOUTS = {
     "judge": 45,
 }
 
-# Early exit convergence threshold (similarity)
 CONVERGENCE_THRESHOLD = 0.85
 
 
 @dataclass(frozen=True)
 class LaneExecutionResult:
-    """Detached immutable view returned from one independently-scoped lane."""
-
     lane_name: str
     model_key: str
     status: str
@@ -56,12 +53,6 @@ class _LaneLease:
     key: str | None
     token: str | None
     client: object | None
-
-    @property
-    def acquired(self) -> bool:
-        # Local single-process fallback deliberately has no Redis key/client but
-        # is still considered acquired.
-        return self.key is None or self.client is not None
 
 
 class LaneCoordinationUnavailable(RuntimeError):
@@ -85,7 +76,6 @@ def _load_lane_snapshot(
     *,
     terminal_only: bool = False,
 ) -> LaneExecutionResult | None:
-    """Read one lane in a short-lived Session and detach the scalar result."""
     with session_scope() as db_session:
         record = db_session.exec(
             select(CodingLaneResult).where(
@@ -108,13 +98,6 @@ async def _try_acquire_lane_lease(
     *,
     ttl_seconds: int,
 ) -> _LaneLease | None:
-    """Acquire one distributed lane execution lease.
-
-    Production/staging fail closed when the distributed Redis authority is not
-    available; process-local fallback would allow duplicate Celery workers to
-    call the same provider concurrently. Local development remains usable with
-    the database unique constraint as its single-process fallback.
-    """
     from config import settings
     from redis_pool import get_async_redis_client
 
@@ -152,8 +135,6 @@ async def _release_lane_lease(lease: _LaneLease | None) -> None:
     try:
         await lease.client.eval(script, 1, lease.key, lease.token)
     except Exception:
-        # TTL remains the crash/recovery authority; never delete a possibly newer
-        # owner's lease with a blind fallback.
         logger.warning("Failed to release coding lane lease %s", lease.key, exc_info=True)
 
 
@@ -164,13 +145,10 @@ async def _acquire_or_follow_lane(
     *,
     timeout_seconds: int,
 ) -> tuple[_LaneLease | None, LaneExecutionResult | None]:
-    """Acquire lane ownership or follow the current owner to a durable result."""
     existing = _load_lane_snapshot(run_id, turn_id, lane, terminal_only=True)
     if existing is not None:
         return None, existing
 
-    # Lease exceeds the provider timeout so a healthy owner never expires while
-    # asyncio.wait_for is still allowed to run. A crashed owner recovers by TTL.
     lease_ttl = max(timeout_seconds + 45, 90)
     deadline = time.monotonic() + lease_ttl + 5
 
@@ -182,8 +160,6 @@ async def _acquire_or_follow_lane(
             ttl_seconds=lease_ttl,
         )
         if lease is not None:
-            # Another worker may have completed between our terminal read and
-            # lock acquisition. Prefer the durable result and release unused lock.
             completed = _load_lane_snapshot(run_id, turn_id, lane, terminal_only=True)
             if completed is not None:
                 await _release_lane_lease(lease)
@@ -201,7 +177,6 @@ async def _acquire_or_follow_lane(
 
 
 def compute_similarity(text1: str, text2: str) -> float:
-    """Basic Jaccard-like similarity for convergence check."""
     s1 = set(text1.lower().split())
     s2 = set(text2.lower().split())
     if not s1 and not s2:
@@ -223,9 +198,7 @@ async def _execute_lane(
     """Execute exactly one provider call for a run/turn/lane identity.
 
     Distributed Redis ownership fences duplicate Celery deliveries. Database
-    Sessions are deliberately short-lived and never span provider/network awaits,
-    preventing multi-lane traffic from pinning SQLAlchemy connections for the
-    full LLM latency window.
+    Sessions are short-lived and never span provider/network awaits.
     """
     model_key = LANE_MODELS[lane]
     timeout = LANE_TIMEOUTS[lane]
@@ -254,9 +227,6 @@ async def _execute_lane(
     start_time = datetime.now(timezone.utc)
 
     try:
-        # Claim/recover the durable lane row in a short DB scope. The Redis lease
-        # is the live-owner authority; an existing "running" row may legitimately
-        # be a crashed predecessor and is safe to reuse only after lease acquire.
         with session_scope() as db_session:
             existing = db_session.exec(
                 select(CodingLaneResult).where(
@@ -381,15 +351,12 @@ async def _async_execute_turn(run_id: str, turn_id: str):
         db.add(run)
         db.commit()
 
-        # Snapshot scalar inputs before concurrent work. ORM objects and this
-        # parent Session stay on the coordinating coroutine only.
         prompt = turn.prompt
         run_tier = run.tier
         user_id = run.user_id
         run_pk = run.id
         turn_pk = turn.id
 
-    # Parent DB Session is closed before any lane/provider awaits.
     tasks = []
     for lane in tier_res.active_lanes:
         if lane != "judge":
@@ -413,10 +380,8 @@ async def _async_execute_turn(run_id: str, turn_id: str):
     if "fast" in results_by_lane and "thinking" in results_by_lane:
         fast_res = results_by_lane["fast"]
         think_res = results_by_lane["thinking"]
-
         if fast_res.status == "completed" and think_res.status == "completed":
             sim = compute_similarity(fast_res.content or "", think_res.content or "")
-
             await sse.publish(
                 f"run-{run_pk}",
                 {
@@ -429,7 +394,6 @@ async def _async_execute_turn(run_id: str, turn_id: str):
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
-
             if sim >= CONVERGENCE_THRESHOLD:
                 judge_skipped = True
                 final_content = fast_res.content
@@ -437,13 +401,11 @@ async def _async_execute_turn(run_id: str, turn_id: str):
 
     if not judge_skipped and "judge" in tier_res.active_lanes:
         incr_metric("coding.judge_invoked_count", tags={"tier": run_tier})
-
         judge_prompt = f"Evaluate the following proposals for this task:\n\nTask: {prompt}\n\n"
         for lane, res in results_by_lane.items():
             if res.status == "completed":
                 judge_prompt += f"--- {lane.upper()} PROPOSAL ---\n{res.content}\n\n"
         judge_prompt += "Provide the final unified patch."
-
         judge_res = await _execute_lane(
             run_pk,
             turn_pk,
@@ -456,10 +418,19 @@ async def _async_execute_turn(run_id: str, turn_id: str):
             final_content = judge_res.content
         else:
             fast_fallback = results_by_lane.get("fast")
-            final_content = fast_fallback.content if fast_fallback else None
+            final_content = (
+                fast_fallback.content
+                if fast_fallback and fast_fallback.status == "completed"
+                else None
+            )
 
     if not final_content and "fast" in results_by_lane:
-        final_content = results_by_lane["fast"].content
+        fast_fallback = results_by_lane["fast"]
+        if fast_fallback.status == "completed":
+            final_content = fast_fallback.content
+
+    terminal_status = "completed" if final_content else "failed"
+    completed_at = datetime.now(timezone.utc)
 
     with session_scope() as db:
         run = db.get(CodingRun, run_pk)
@@ -484,10 +455,11 @@ async def _async_execute_turn(run_id: str, turn_id: str):
                 artifact.final_patch = final_content
             db.add(artifact)
 
-        turn.status = "completed"
-        turn.completed_at = datetime.now(timezone.utc)
-        run.status = "completed"
-        run.completed_at = datetime.now(timezone.utc)
+        turn.status = terminal_status
+        turn.completed_at = completed_at
+        run.status = terminal_status
+        run.completed_at = completed_at
+        run.error = None if final_content else "Coding Agent produced no successful patch."
         db.add(turn)
         db.add(run)
         db.commit()
