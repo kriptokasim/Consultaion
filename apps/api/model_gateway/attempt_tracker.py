@@ -27,6 +27,17 @@ from model_gateway.types import GatewayModelCallResult, GatewayQuotaExceededErro
 logger = logging.getLogger(__name__)
 
 
+class ProviderAttemptBudgetBlocked(BaseException):
+    """Control signal for a pre-provider fallback/retry budget rejection.
+
+    The legacy gateway catches broad ``Exception`` around adapter calls and
+    records those exceptions as provider failures. Budget/quota policy is not a
+    provider failure and must bypass that catcher. The outer hardened runtime
+    boundary converts this signal back to ``GatewayQuotaExceededError`` after
+    route state has unwound.
+    """
+
+
 @dataclass
 class AttemptRecord:
     reserved_cost_usd: float
@@ -242,19 +253,26 @@ async def begin_adapter_attempt(
         )
         prior_cost = sum(_record_effective_cost(record) for record in context.records)
         if prior_cost + cost > MAX_COST_PER_RUN_USD:
-            raise GatewayQuotaExceededError(
+            raise ProviderAttemptBudgetBlocked(
                 f"Estimated cumulative run cost (${prior_cost + cost:.4f}) "
                 f"exceeds the safety cap of ${MAX_COST_PER_RUN_USD:.2f}."
             )
         if context.reservation is not None:
-            context.reservation = await asyncio.get_running_loop().run_in_executor(
-                None,
-                lambda: _extend_reservation_sync(
-                    context.reservation,
-                    additional_cost_usd=cost,
-                    additional_tokens=tokens,
-                ),
-            )
+            try:
+                context.reservation = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    lambda: _extend_reservation_sync(
+                        context.reservation,
+                        additional_cost_usd=cost,
+                        additional_tokens=tokens,
+                    ),
+                )
+            except GatewayQuotaExceededError as exc:
+                # Cross the legacy route's broad ``except Exception`` without
+                # being mislabeled as a provider failure/circuit signal. The
+                # hardened outer boundary maps this control signal back to the
+                # public quota exception after route unwinding.
+                raise ProviderAttemptBudgetBlocked(str(exc)) from exc
 
     context.records.append(
         AttemptRecord(
