@@ -7,8 +7,10 @@ adapter boundary, extends the user's conservative reservation before every
 additional provider attempt, and aggregates all attempt usage into the final
 GatewayModelCallResult.
 
-If a failed attempt returns no measurable usage, its conservative reservation
-slice is retained rather than silently assuming zero spend.
+If a provider attempt has incomplete usage/cost metadata, its conservative
+reservation slice is retained for the unknown portion rather than silently
+assuming zero spend. Nested adapter fallbacks (for example stream -> non-stream
+inside one adapter) remain one provider attempt rather than being double-counted.
 """
 
 from __future__ import annotations
@@ -49,6 +51,10 @@ _current_attempt_context: ContextVar[GatewayAttemptContext | None] = ContextVar(
     "gateway_attempt_context",
     default=None,
 )
+_active_adapter_index: ContextVar[int | None] = ContextVar(
+    "gateway_active_adapter_index",
+    default=None,
+)
 
 
 def bind_attempt_context(context: GatewayAttemptContext) -> Token:
@@ -56,11 +62,49 @@ def bind_attempt_context(context: GatewayAttemptContext) -> Token:
 
 
 def reset_attempt_context(token: Token) -> None:
+    # Cancellation/BaseException inside a wrapped adapter can skip the normal
+    # finish callback. Never allow that nested-attempt marker to leak into a
+    # later gateway invocation running in the same asyncio task/context.
+    _active_adapter_index.set(None)
     _current_attempt_context.reset(token)
 
 
 def get_attempt_context() -> GatewayAttemptContext | None:
     return _current_attempt_context.get()
+
+
+def _result_has_measured_tokens(result: GatewayModelCallResult | None) -> bool:
+    if result is None:
+        return False
+    return bool(
+        int(result.total_tokens or 0) > 0
+        or int(result.prompt_tokens or 0) > 0
+        or int(result.completion_tokens or 0) > 0
+    )
+
+
+def _record_effective_cost(record: AttemptRecord) -> float:
+    """Cost authority for a finished attempt, retaining unknown reservations."""
+    result = record.result
+    if result is not None and result.provider == "mock":
+        return 0.0
+    if result is not None and float(result.cost_usd or 0.0) > 0:
+        return max(float(result.cost_usd or 0.0), 0.0)
+    # A successful/failed provider result may still omit cost metadata. Keep the
+    # pre-provider reservation rather than turning unknown real spend into zero.
+    return max(float(record.reserved_cost_usd or 0.0), 0.0)
+
+
+def _record_effective_tokens(record: AttemptRecord) -> int:
+    result = record.result
+    if result is not None and result.provider == "mock":
+        return 0
+    if _result_has_measured_tokens(result) and result is not None:
+        return max(
+            int(result.total_tokens or 0),
+            int(result.prompt_tokens or 0) + int(result.completion_tokens or 0),
+        )
+    return max(int(record.reserved_tokens or 0), 0)
 
 
 def _extend_reservation_sync(
@@ -71,14 +115,23 @@ def _extend_reservation_sync(
 ) -> GatewayBudgetReservation:
     """Atomically extend an existing reservation before another adapter call."""
     from database import session_scope
-    from model_gateway.costs import MAX_MONTHLY_SAFETY_LIMIT_USD, _month_bounds_utc
-    from models import LLMUsageLog, UsageCounter, UsageLedgerEntry, User
+    from model_gateway.costs import (
+        MAX_COST_PER_RUN_USD,
+        MAX_MONTHLY_SAFETY_LIMIT_USD,
+        _month_bounds_utc,
+    )
+    from models import LLMUsageLog, UsageLedgerEntry, User
     from sqlalchemy import func
     from sqlmodel import select
     from usage_limits import QuotaExceededError, check_quota, record_token_usage
 
     extra_cost = max(float(additional_cost_usd or 0.0), 0.0)
     extra_tokens = max(int(additional_tokens or 0), 0)
+    if reservation.reserved_cost_usd + extra_cost > MAX_COST_PER_RUN_USD:
+        raise GatewayQuotaExceededError(
+            f"Estimated cumulative run cost (${reservation.reserved_cost_usd + extra_cost:.4f}) "
+            f"exceeds the safety cap of ${MAX_COST_PER_RUN_USD:.2f}."
+        )
 
     with session_scope() as session:
         user = session.exec(
@@ -155,11 +208,19 @@ async def begin_adapter_attempt(
     model_id: str,
     max_tokens: int,
 ) -> int | None:
-    """Reserve one attempt slice and return its record index."""
+    """Reserve one provider-attempt slice and return its record index.
+
+    ``-1`` is a deliberate nested sentinel: adapters may internally fall back
+    from streaming to their own non-streaming method. That is one provider
+    attempt and must not reserve or aggregate twice.
+    """
     context = get_attempt_context()
     if context is None:
         return None
+    if _active_adapter_index.get() is not None:
+        return -1
 
+    from model_gateway.costs import MAX_COST_PER_RUN_USD
     from model_gateway.runtime_guard import (
         estimate_full_call_cost,
         estimate_full_call_tokens,
@@ -179,6 +240,12 @@ async def begin_adapter_attempt(
             model_id=model_id,
             max_tokens=max_tokens,
         )
+        prior_cost = sum(_record_effective_cost(record) for record in context.records)
+        if prior_cost + cost > MAX_COST_PER_RUN_USD:
+            raise GatewayQuotaExceededError(
+                f"Estimated cumulative run cost (${prior_cost + cost:.4f}) "
+                f"exceeds the safety cap of ${MAX_COST_PER_RUN_USD:.2f}."
+            )
         if context.reservation is not None:
             context.reservation = await asyncio.get_running_loop().run_in_executor(
                 None,
@@ -195,7 +262,9 @@ async def begin_adapter_attempt(
             reserved_tokens=max(int(tokens or 0), 0),
         )
     )
-    return len(context.records) - 1
+    index = len(context.records) - 1
+    _active_adapter_index.set(index)
+    return index
 
 
 def finish_adapter_attempt(
@@ -205,18 +274,20 @@ def finish_adapter_attempt(
     raised: bool = False,
 ) -> None:
     context = get_attempt_context()
-    if context is None or index is None or index >= len(context.records):
+    if context is None or index is None or index < 0 or index >= len(context.records):
         return
     record = context.records[index]
     record.result = result
     record.raised = raised
+    if _active_adapter_index.get() == index:
+        _active_adapter_index.set(None)
 
 
 def aggregate_accounting_result(
     final_result: GatewayModelCallResult,
     context: GatewayAttemptContext,
 ) -> GatewayModelCallResult:
-    """Return final user content with usage aggregated across provider attempts."""
+    """Return final user content with conservative multi-attempt accounting."""
     if not context.records:
         return final_result
 
@@ -228,30 +299,24 @@ def aggregate_accounting_result(
 
     for record in context.records:
         result = record.result
-        measurable = bool(
-            result is not None
-            and (
-                result.success
-                or int(result.total_tokens or 0) > 0
-                or float(result.cost_usd or 0.0) > 0
-            )
-        )
-        if measurable and result is not None:
+        if result is not None and result.provider == "mock":
+            continue
+
+        if result is not None:
             prompt_tokens += max(int(result.prompt_tokens or 0), 0)
             completion_tokens += max(int(result.completion_tokens or 0), 0)
-            total_tokens += max(
-                int(result.total_tokens or 0),
-                int(result.prompt_tokens or 0) + int(result.completion_tokens or 0),
+
+        effective_tokens = _record_effective_tokens(record)
+        effective_cost = _record_effective_cost(record)
+        total_tokens += effective_tokens
+        cost_usd += effective_cost
+        if result is not None and float(result.estimated_cost_usd or 0.0) > 0:
+            estimated_cost += max(
+                float(result.estimated_cost_usd or 0.0),
+                effective_cost,
             )
-            cost_usd += max(float(result.cost_usd or 0.0), 0.0)
-            estimated_cost += max(float(result.estimated_cost_usd or 0.0), 0.0)
         else:
-            # Provider execution may have happened even when its SDK returned no
-            # usage object. Preserve the pre-provider reservation for this
-            # uncertain failed attempt instead of undercounting it as zero.
-            total_tokens += record.reserved_tokens
-            cost_usd += record.reserved_cost_usd
-            estimated_cost += record.reserved_cost_usd
+            estimated_cost += max(float(record.reserved_cost_usd or 0.0), effective_cost)
 
     final_result.prompt_tokens = prompt_tokens
     final_result.completion_tokens = completion_tokens
