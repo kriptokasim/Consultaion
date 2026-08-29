@@ -27,9 +27,6 @@ def _complete_summary_transition(debate_id: str) -> None:
                 TRANSITION_SUMMARY_EMAIL,
             )
     except Exception:
-        # Provider already accepted the email. Failure to mark the local claim
-        # leaves a bounded duplicate-delivery risk after TTL, but must not turn
-        # a delivered email into a debate execution failure.
         logger.warning(
             "Failed to complete summary-email transition for debate %s",
             debate_id,
@@ -40,15 +37,21 @@ def _complete_summary_transition(debate_id: str) -> None:
 async def send_debate_summary_email(
     user_email: str,
     summary: DebateSummary,
-) -> None:
+) -> bool:
+    """Send one summary email and return whether delivery was acknowledged.
+
+    Disabled delivery is treated as a successful no-op. Provider/transport
+    failures return False so maintenance reconciliation can retry a stale claim.
+    """
     if not is_email_summaries_enabled():
         logger.debug("Email summaries disabled; skipping send.")
-        return
+        _complete_summary_transition(summary.debate_id)
+        return True
 
     api_key = settings.RESEND_API_KEY
     if not api_key:
         logger.warning("Email summaries enabled but RESEND_API_KEY missing; skipping send.")
-        return
+        return False
 
     subject = f"[Consultaion] Debate summary – {summary.title}"
     html = f"""
@@ -75,7 +78,7 @@ async def send_debate_summary_email(
         resp.raise_for_status()
         _complete_summary_transition(summary.debate_id)
         logger.info("Sent debate summary email to %s for debate %s", user_email, summary.debate_id)
-    except Exception as exc:  # best-effort only
-        # Keep the claim in ``claimed`` state so a future crash/recovery pass may
-        # reclaim it after the bounded TTL instead of suppressing the email forever.
+        return True
+    except Exception as exc:  # best-effort for caller; reconciler handles retry
         logger.warning("Failed to send debate summary email: %r", exc)
+        return False
