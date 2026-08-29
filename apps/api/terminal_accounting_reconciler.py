@@ -1,26 +1,15 @@
 """Crash-safe terminal accounting reconciliation.
 
-Terminal product state is committed before accounting side effects. That is the
-correct ordering for user-visible durability, but it creates a crash window:
-a worker can die after Debate/DebateAttempt become terminal and before hosted
-credit settlement or daily token accounting is applied.
-
-This module makes those side effects reconstructible and idempotent:
-
-* token usage is keyed by debate+attempt in UsageLedgerEntry;
-* the daily UsageCounter increment and a ``daily_counter_applied`` ledger flag
-  are committed in the same transaction, preventing double-count on retries;
-* reserved hosted-credit rows are settled/refunded from durable Debate or
-  DebateContinuation terminal state;
-* the periodic stale-cleanup loop runs this reconciliation even when there are
-  no stale debates.
+Gateway calls account their returned token usage immediately and exactly once.
+Terminal attempt reconciliation then applies only any remaining aggregate delta
+(for legacy/non-gateway work or a terminalization path that predates per-call
+accounting), while also repairing hosted-credit settlement after crashes.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from database import session_scope
 from models import Debate, DebateAttempt, DebateContinuation, UsageLedgerEntry
@@ -38,16 +27,31 @@ _FAILED_DEBATE_STATUSES = {"failed", "cancelled"}
 _TERMINAL_ATTEMPT_STATUSES = {"completed", "failed", "cancelled"}
 
 
+def _gateway_accounted_tokens(session, attempt_id: str | None) -> int:
+    if not attempt_id:
+        return 0
+    entries = session.exec(
+        select(UsageLedgerEntry).where(
+            UsageLedgerEntry.kind == "gateway_token_usage",
+            UsageLedgerEntry.status == "settled",
+            UsageLedgerEntry.attempt_id == attempt_id,
+        )
+    ).all()
+    return sum(max(int(entry.amount or 0), 0) for entry in entries)
+
+
 def ensure_token_accounting_once(
     session,
     *,
     debate: Debate,
     attempt: DebateAttempt,
 ) -> bool:
-    """Ensure ledger settlement + daily token quota exactly once for an attempt.
+    """Settle aggregate attempt usage and apply only the uncounted daily delta.
 
-    Returns True when this call applied the daily counter, False when it was
-    already accounted or there was nothing to account.
+    Gateway calls already increment the daily counter per call. The aggregate
+    attempt record remains useful as a terminal audit identity; its daily quota
+    contribution is therefore ``max(attempt_total - gateway_accounted, 0)``.
+    The delta and marker are committed in the caller's transaction.
     """
     if not debate.user_id:
         return False
@@ -71,8 +75,6 @@ def ensure_token_accounting_once(
             debate_id=debate.id,
             attempt_id=attempt.id,
         )
-        # settle_token_usage mutates the same identity-map row, but refresh to
-        # make the persisted terminal state explicit before applying metadata.
         session.refresh(entry)
 
     if entry.status != "settled":
@@ -82,27 +84,31 @@ def ensure_token_accounting_once(
     if meta.get("daily_counter_applied") is True:
         return False
 
-    # Crucially, this counter increment and the ledger flag share one DB
-    # transaction. A crash rolls back both; a committed retry sees the flag and
-    # cannot increment a second time.
-    from usage_limits import record_token_usage as apply_daily_token_usage
+    gateway_tokens = _gateway_accounted_tokens(session, attempt.id)
+    delta = max(tokens - gateway_tokens, 0)
+    if delta > 0:
+        from usage_limits import record_token_usage as apply_daily_token_usage
 
-    apply_daily_token_usage(
-        session,
-        debate.user_id,
-        tokens,
-        commit=False,
-    )
+        apply_daily_token_usage(
+            session,
+            debate.user_id,
+            delta,
+            commit=False,
+        )
+
     meta.update(
         {
             "daily_counter_applied": True,
-            "accounted_tokens": tokens,
+            "attempt_tokens": tokens,
+            "gateway_accounted_tokens": gateway_tokens,
+            "aggregate_delta_applied": delta,
         }
     )
     entry.meta = meta
     session.add(entry)
     session.flush()
-    return True
+    # Return whether this call changed the quota counter, not merely metadata.
+    return delta > 0
 
 
 def _settle_credit_entry(session, entry: UsageLedgerEntry) -> str | None:
@@ -149,9 +155,6 @@ def _settle_credit_entry(session, entry: UsageLedgerEntry) -> str | None:
             return "refunded" if changed else None
         return None
 
-    # Full-attempt reservation. Older active reservations are superseded once a
-    # later attempt itself is terminal; refund them rather than consuming two
-    # credits for one logical debate history.
     entry_attempt = int(meta.get("run_attempt", 0) or 0)
     debate_attempt = max(int(debate.run_attempt or 0), 1)
     if entry_attempt > 0 and entry_attempt < debate_attempt and debate.status in (
@@ -238,8 +241,6 @@ async def reconcile_terminal_accounting() -> dict[str, int]:
 
 
 async def _cleanup_with_terminal_reconciliation():
-    # Accounting repair should not be coupled to whether stale-run discovery
-    # succeeds. Run it first, log failures, and always continue cleanup.
     try:
         await reconcile_terminal_accounting()
     except Exception:
