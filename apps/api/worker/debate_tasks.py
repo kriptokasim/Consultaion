@@ -11,7 +11,12 @@ from models import Debate
 from orchestrator import run_debate
 from sse_backend import get_sse_backend
 
+from state_terminal_guard import install_terminal_accounting_guard
 from worker.celery_app import celery_app
+
+# CORE-AUDIT (CE-1): install guard in the worker process too — debate
+# terminal accounting also runs inside Celery task execution.
+install_terminal_accounting_guard()
 
 logger = get_task_logger(__name__)
 module_logger = logging.getLogger(__name__)

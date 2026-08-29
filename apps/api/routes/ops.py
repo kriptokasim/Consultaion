@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -8,6 +9,12 @@ from typing import Any
 
 from auth import get_current_admin, get_current_user
 from checks import check_db_readiness, check_model_registry_readiness, check_sse_readiness
+
+# CORE-AUDIT (CE-2): sync DB/alembic checks block the event loop when run
+# directly inside async routes. Offload to the default executor so slow DB
+# readiness probes cannot freeze the whole worker (incl. /healthz).
+async def _db_readiness_async() -> tuple[bool, dict[str, Any]]:
+    return await asyncio.get_running_loop().run_in_executor(None, check_db_readiness)
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from litellm import acompletion
@@ -57,7 +64,7 @@ async def readyz(response: Response) -> dict[str, Any]:
     Returns 503 if critical dependencies (DB, SSE) are not ready.
     Used by k8s/deployments to know when to send traffic.
     """
-    db_ok, db_info = check_db_readiness()
+    db_ok, db_info = await _db_readiness_async()
     sse_ok, sse_info = await check_sse_readiness()
     registry_ok, registry_info = check_model_registry_readiness()
 
@@ -147,7 +154,7 @@ async def api_status() -> dict[str, Any]:
     and SOTA AI model providers (OpenAI, Anthropic, Gemini, OpenRouter).
     Used by the public status page.
     """
-    db_ok, _ = check_db_readiness()
+    db_ok, _ = await _db_readiness_async()
     sse_ok, _ = await check_sse_readiness()
     
     providers = {
@@ -387,7 +394,7 @@ async def get_debate_diagnostics(
         failures_summary[key] = failures_summary.get(key, 0) + 1
 
     # 4. Schema revision check
-    db_ok, db_info = check_db_readiness()
+    db_ok, db_info = await _db_readiness_async()
     
     # 5. Build response without credentials, prompts, or user emails
     return {

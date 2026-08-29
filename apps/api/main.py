@@ -158,6 +158,11 @@ async def lifespan(app: FastAPI):
         yield
         return
     init_db()
+    # PS157/CORE-AUDIT (CE-1): make product terminal state authoritative
+    # before accounting side effects. The guard existed but was never
+    # installed, so the un-patched complete_debate ordering ran in prod.
+    from state_terminal_guard import install_terminal_accounting_guard
+    install_terminal_accounting_guard()
     # Verify that critical tables exist; retry briefly if DB is warming up
     try:
         from sqlalchemy import inspect
