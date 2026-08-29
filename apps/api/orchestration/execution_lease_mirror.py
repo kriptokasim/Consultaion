@@ -47,12 +47,19 @@ def mirror_value(lease) -> str:
 
 
 def _safe_ttl(seconds: float) -> int:
-    return max(1, int(math.floor(seconds)) - MIRROR_SAFETY_MARGIN_SECONDS)
+    """Return a mirror TTL strictly inside the authoritative DB lease window.
+
+    For very short leases there is no safe positive Redis TTL. Returning zero
+    deliberately disables the mirror so callers use DB verification instead.
+    """
+    return max(0, int(math.floor(seconds)) - MIRROR_SAFETY_MARGIN_SECONDS)
 
 
 async def publish_execution_lease_mirror(lease, *, lease_seconds: float) -> bool:
     """Best-effort publish after DB ownership has already been proven."""
     ttl = _safe_ttl(lease_seconds)
+    if ttl <= 0:
+        return False
     try:
         from redis_pool import get_async_redis_client
 
@@ -62,8 +69,6 @@ async def publish_execution_lease_mirror(lease, *, lease_seconds: float) -> bool
         await client.set(mirror_key(lease.debate_id), mirror_value(lease), ex=ttl)
         return True
     except Exception:
-        # Missing mirror only forces the SSE path back to DB authority; it must
-        # never make a valid DB lease fail merely because Redis restarted.
         logger.warning(
             "execution_lease.mirror_publish_failed debate_id=%s owner=%s epoch=%s",
             lease.debate_id,
@@ -124,8 +129,6 @@ async def delete_execution_lease_mirror(lease) -> None:
             mirror_value(lease),
         )
     except Exception:
-        # TTL is deliberately shorter than DB expiry, so a failed delete cannot
-        # remain authoritative past takeover eligibility.
         logger.warning(
             "execution_lease.mirror_delete_failed debate_id=%s owner=%s epoch=%s",
             lease.debate_id,
