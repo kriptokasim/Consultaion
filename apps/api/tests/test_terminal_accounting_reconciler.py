@@ -83,6 +83,7 @@ def test_reconciler_reconstructs_missing_token_accounting(db_session):
 
     stats = reconcile_terminal_accounting_sync()
 
+    assert stats["token_candidates"] == 1
     assert stats["token_counters_applied"] == 1
     db_session.expire_all()
     counter = db_session.exec(
@@ -93,6 +94,59 @@ def test_reconciler_reconstructs_missing_token_accounting(db_session):
     ).first()
     assert counter is not None
     assert counter.tokens_used == 444
+
+    # Fully-accounted history is eliminated by the anti-join on subsequent
+    # cleanup ticks; reconciliation cost scales with unresolved work.
+    second = reconcile_terminal_accounting_sync()
+    assert second["token_candidates"] == 0
+    assert second["token_counters_applied"] == 0
+
+
+def test_legacy_settled_ledger_without_daily_marker_is_still_reconciled(db_session):
+    from models import UsageCounter, UsageLedgerEntry
+    from sqlmodel import select
+    from terminal_accounting_reconciler import reconcile_terminal_accounting_sync
+
+    user, debate, attempt = _seed_terminal_attempt(
+        db_session,
+        debate_id="legacy-settled-token",
+        tokens=222,
+    )
+    legacy = UsageLedgerEntry(
+        user_id=user.id,
+        kind="token_usage",
+        status="settled",
+        idempotency_key=f"token_usage:{debate.id}:{attempt.id}",
+        amount=222,
+        debate_id=debate.id,
+        attempt_id=attempt.id,
+        meta={},
+    )
+    db_session.add(legacy)
+    db_session.commit()
+
+    stats = reconcile_terminal_accounting_sync()
+    assert stats["token_candidates"] == 1
+    assert stats["token_counters_applied"] == 1
+
+    db_session.expire_all()
+    counter = db_session.exec(
+        select(UsageCounter).where(
+            UsageCounter.user_id == user.id,
+            UsageCounter.period == "day",
+        )
+    ).first()
+    repaired = db_session.exec(
+        select(UsageLedgerEntry).where(
+            UsageLedgerEntry.idempotency_key == f"token_usage:{debate.id}:{attempt.id}"
+        )
+    ).first()
+    assert counter is not None
+    assert counter.tokens_used == 222
+    assert repaired.meta["daily_counter_applied"] is True
+
+    second = reconcile_terminal_accounting_sync()
+    assert second["token_candidates"] == 0
 
 
 def test_terminal_success_settles_reserved_hosted_credit(db_session):
