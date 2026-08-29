@@ -42,12 +42,11 @@ async def run_conversation_debate(
         debate = session.get(Debate, debate_id)
         if not debate:
             raise ValueError(f"Debate {debate_id} not found")
-        
+
         # Eager load/copy fields needed
         prompt = debate.prompt
         panel_payload = debate.panel_config or default_panel_config().model_dump()
-        user_id = debate.user_id
-        
+
     # Load config
     try:
         panel = PanelConfig.model_validate(panel_payload)
@@ -58,13 +57,13 @@ async def run_conversation_debate(
     usage = UsageAccumulator()
     transcript: List[dict] = []
     total_seat_failures = 0
-    
+
     # Configuration
     num_rounds = settings.CONVERSATION_MAX_ROUNDS
     max_tokens = settings.CONVERSATION_MAX_TOTAL_TOKENS
     truncated = False
     truncate_reason = None
-    
+
     # Notify start
     await backend.publish(
         f"debate:{debate_id}",
@@ -84,21 +83,21 @@ async def run_conversation_debate(
             f"debate:{debate_id}",
             {"type": "round_started", "debate_id": str(debate_id), "round": round_idx, "phase": "discussion"}
         )
-        
+
         round_messages = []
 
         for seat in panel.seats:
             # Build context from transcript
             context_text = "\n".join([f"{t['seat']}: {t['content']}" for t in transcript])
-            
+
             messages = [
                 {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
                 {
-                    "role": "user", 
+                    "role": "user",
                     "content": f"Topic: {prompt}\n\nPrevious discussion:\n{context_text}\n\nYour contribution:"
                 }
             ]
-            
+
             try:
                 content, call_usage = await call_llm_for_role(
                     messages,
@@ -148,11 +147,11 @@ async def run_conversation_debate(
                                 }
                             )
                         )
-                
+
                 # Update transcript
                 transcript.append({"seat": seat.display_name, "content": content})
                 round_messages.append({"seat": seat.display_name, "content": content})
-                
+
                 # Emit event
                 await backend.publish(
                     f"debate:{debate_id}",
@@ -175,29 +174,25 @@ async def run_conversation_debate(
             except Exception as e:
                 logger.error(f"Error in conversation round {round_idx} for seat {seat.display_name}: {e}")
                 total_seat_failures += 1
-                # Fallback or continue - for now continue to keep flow going
                 continue
 
-        # Scribe Summary (Optional, but good for context)
-        # For now, we skip explicit scribe step to keep it simple, or we can add it.
-        # The user asked for "Round summary (Scribe)".
-        
+        # Scribe Summary
         summary_messages = [
             {"role": "system", "content": CONVERSATION_SCRIBE_PROMPT},
             {"role": "user", "content": f"Topic: {prompt}\n\nRound {round_idx} Transcript:\n" + "\n".join([f"{m['seat']}: {m['content']}" for m in round_messages])}
         ]
-        
+
         try:
             summary_content, summary_usage = await call_llm_for_role(
                 summary_messages,
                 role="Scribe",
                 temperature=0.3,
-                model_id=model_id, # Use default or specific model
+                model_id=model_id,
                 debate_id=debate_id,
                 extra_tags={"mode": "conversation", "round": round_idx},
             )
             usage.add_call(summary_usage)
-            
+
             await backend.publish(
                 f"debate:{debate_id}",
                 {
@@ -207,10 +202,6 @@ async def run_conversation_debate(
                     "content": summary_content
                 }
             )
-            
-            # Add summary to transcript for next round context?
-            # Maybe just keep full transcript.
-            
         except Exception as e:
             logger.error(f"Error generating summary for round {round_idx}: {e}")
 
@@ -219,7 +210,7 @@ async def run_conversation_debate(
         {"role": "system", "content": CONVERSATION_SYNTHESIS_PROMPT},
         {"role": "user", "content": f"Topic: {prompt}\n\nFull Transcript:\n" + "\n".join([f"{t['seat']}: {t['content']}" for t in transcript])}
     ]
-    
+
     final_content = ""
     try:
         final_content, final_usage = await call_llm_for_role(
@@ -235,9 +226,6 @@ async def run_conversation_debate(
         logger.error(f"Error generating final synthesis: {e}")
         final_content = "Failed to generate synthesis."
 
-    # Return result structure similar to ParliamentResult
-    # We can define a simple object or dict
-    
     final_meta = {
         "rounds": num_rounds,
         "transcript_count": len(transcript),
@@ -288,16 +276,12 @@ async def run_conversation_debate(
         "conversation.truncate_reason": truncate_reason,
         "conversation.mode": "conversation"
     })
-    
-    # Record token usage for quota tracking
-    if user_id:
-        try:
-            from usage_limits import record_token_usage
-            with session_scope() as session:
-                record_token_usage(session, user_id, usage.total_tokens, commit=True)
-        except Exception as e:
-            logger.error(f"Failed to record token usage for conversation {debate_id}: {e}")
-    
+
+    # Do not increment the daily token counter here. Every gateway call reserves
+    # and settles its own token usage before/after provider work, and terminal
+    # accounting applies only any remaining aggregate delta. Re-applying the full
+    # Conversation total here would double-charge quota for the same tokens.
+
     status = "completed"
     err = None
     if synthesis_failed or total_seat_failures:
