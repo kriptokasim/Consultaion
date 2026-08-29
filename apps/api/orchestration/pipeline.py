@@ -72,8 +72,6 @@ class StandardDebatePipeline(DebatePipeline):
                 else:
                     legacy.append(row)
             if by_attempt:
-                # Rows are queried oldest->newest below; the attempt whose rows
-                # contain the latest created item is the most recent source.
                 selected = max(
                     by_attempt.values(),
                     key=lambda group: max(getattr(item, "created_at", None) for item in group),
@@ -84,10 +82,6 @@ class StandardDebatePipeline(DebatePipeline):
         if context.is_resume:
             from models import Message
 
-            # Preload only current-attempt rows. Falling back to a prior attempt
-            # here would cause an explicitly invalidated Draft/Critique stage to
-            # think it already ran and skip execution. Prior-attempt reuse is
-            # performed only by run_with_checkpoint cache-hit load_fn below.
             async with async_session_scope() as session:
                 stmt = select(Message).where(Message.debate_id == context.debate_id)
                 if current_attempt_id:
@@ -219,9 +213,6 @@ class StandardDebatePipeline(DebatePipeline):
                             ),
                             None,
                         )
-                    # Legacy attempt-1 votes predate attempt markers. Use only
-                    # as a fallback when no marked vote matches the selected
-                    # source attempt; never merge multiple vote rows.
                     if vote is None and votes:
                         vote = next(
                             (
@@ -267,7 +258,10 @@ class StandardDebatePipeline(DebatePipeline):
                         .order_by(Message.created_at.desc(), Message.id.desc())
                     )
                     messages = _single_attempt_rows(result.scalars().all())
-                    msg = messages[-1] if messages else None
+                    # Query ordering is newest first. Keep that ordering after
+                    # selecting one attempt and restore the newest synthesis,
+                    # not the oldest duplicate/retry row from that attempt.
+                    msg = messages[0] if messages else None
                     if msg:
                         st.final_content = msg.content
                         if msg.meta and "synthesis_report" in msg.meta:
