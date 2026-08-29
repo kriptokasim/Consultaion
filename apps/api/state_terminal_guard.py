@@ -11,7 +11,7 @@ _original_complete_debate = DebateStateManager.complete_debate
 
 
 def install_terminal_accounting_guard() -> None:
-    """Install terminal ordering, ownership, retry, recovery, and accounting guards."""
+    """Install terminal, ownership, recovery, quota, and gateway accounting guards."""
     global _installed
     if _installed:
         return
@@ -20,11 +20,13 @@ def install_terminal_accounting_guard() -> None:
     # Order matters: terminal reconciliation wraps the already-hardened stale
     # cleanup function installed immediately before it.
     from cleanup_recovery_guard import install_cleanup_recovery_guard
+    from model_gateway.runtime_guard import install_gateway_runtime_guard
     from retry_accounting_guard import install_retry_accounting_guard
     from sse_execution_guard import install_sse_execution_guard
     from terminal_accounting_reconciler import install_terminal_accounting_reconciler
 
     install_sse_execution_guard()
+    install_gateway_runtime_guard()
     install_retry_accounting_guard()
     install_cleanup_recovery_guard()
     install_terminal_accounting_reconciler()
