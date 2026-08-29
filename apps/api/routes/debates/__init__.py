@@ -32,6 +32,7 @@ from routes.debates.exports import export_debate_report, router as _exports_rout
 install_structured_judge_guard()
 install_terminal_commit_guard()
 
+from routes.debates.cancel import cancel_debate_run, router as _cancel_router  # noqa: E402
 from routes.debates.hardening import (  # noqa: E402
     create_debate_hardened as create_debate,
     retry_agent_hardened as retry_agent,
@@ -87,6 +88,7 @@ router.include_router(_config_router)
 router.include_router(_crud_router)
 router.include_router(_execution_router)
 router.include_router(_hardening_router)
+router.include_router(_cancel_router)
 router.include_router(_streaming_router)
 router.include_router(_exports_router)
 router.include_router(_moderation_router)
@@ -111,6 +113,7 @@ __all__ = [
     "update_debate",
     "_champion_for_debate",
     "_members_from_config",
+    "cancel_debate_run",
     "continue_debate_run",
     "get_debate_continuation",
     "resolve_continuation_by_key",
