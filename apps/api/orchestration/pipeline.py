@@ -9,9 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class StandardDebatePipeline(DebatePipeline):
-    """
-    The standard debate flow: Draft -> Critique -> Judge -> Synthesis.
-    """
+    """The standard debate flow: Draft -> Critique -> Judge -> Synthesis."""
+
     def __init__(self, state_manager: DebateStateManager):
         self.stages: List[DebateStage] = [
             DraftStage(state_manager),
@@ -28,11 +27,6 @@ class StandardDebatePipeline(DebatePipeline):
         from sqlmodel import select
 
         state = DebateState()
-
-        # Resolve the current logical attempt once. Retry hydration must never
-        # combine rows from multiple attempts. A completed upstream checkpoint
-        # may intentionally reuse the most recent prior attempt, but invalidated
-        # stages should see only current-attempt state and therefore rerun.
         current_attempt_id: str | None = self.stages[0].state_manager.attempt_id
         lease = get_current_execution_lease()
         current_attempt_number = int(lease.run_attempt) if lease is not None else 1
@@ -49,12 +43,7 @@ class StandardDebatePipeline(DebatePipeline):
                     current_attempt_id = attempt.id
 
         def _single_attempt_rows(rows, *, prefer_current: bool = True):
-            """Return rows from exactly one attempt, never a cross-attempt mix.
-
-            Current-attempt rows win. If a cache-hit upstream stage has no rows
-            in the current attempt, select the newest prior attempt represented
-            in the query result. Legacy NULL-attempt rows are a final fallback.
-            """
+            """Return rows from exactly one attempt, never a cross-attempt mix."""
             rows = list(rows)
             if not rows:
                 return []
@@ -213,7 +202,19 @@ class StandardDebatePipeline(DebatePipeline):
                             ),
                             None,
                         )
-                    if vote is None and votes:
+
+                    # Unmarked Vote rows are legacy attempt-1 data. They may be
+                    # paired only with attempt-1/legacy scores. Falling back to
+                    # one while hydrating attempt 2+ would recreate the exact
+                    # cross-attempt ranking leak this retry isolation prevents.
+                    legacy_vote_allowed = score_attempt_id is None
+                    if score_attempt_id:
+                        source_attempt = await session.get(DebateAttempt, score_attempt_id)
+                        legacy_vote_allowed = bool(
+                            source_attempt is not None
+                            and int(source_attempt.attempt_number or 0) == 1
+                        )
+                    if vote is None and votes and legacy_vote_allowed:
                         vote = next(
                             (
                                 candidate
@@ -258,9 +259,6 @@ class StandardDebatePipeline(DebatePipeline):
                         .order_by(Message.created_at.desc(), Message.id.desc())
                     )
                     messages = _single_attempt_rows(result.scalars().all())
-                    # Query ordering is newest first. Keep that ordering after
-                    # selecting one attempt and restore the newest synthesis,
-                    # not the oldest duplicate/retry row from that attempt.
                     msg = messages[0] if messages else None
                     if msg:
                         st.final_content = msg.content
