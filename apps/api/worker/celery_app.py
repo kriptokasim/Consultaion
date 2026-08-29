@@ -222,16 +222,17 @@ if hasattr(celery_app, "task"):
 
 _write_worker_heartbeat()
 
-# Keep the app bootstrap minimal. Task modules own their execution-specific
-# guards (notably worker.debate_tasks installs terminal accounting). Eagerly
-# importing the entire accounting stack here expands circular-import surface
-# while Celery is still constructing its application. The terminal SSE commit
-# guard is intentionally lightweight and still applies to all worker modes.
+# Keep worker bootstrap limited to guards that must exist before any task-level
+# LLM call. Runtime exception/credential-scope hardening is required before the
+# legacy Agent pre-router path can inspect provider health; heavy terminal
+# accounting remains owned by worker.debate_tasks.
 try:
+    from model_gateway.runtime_exception_guard import install_runtime_exception_guard
     from sse_terminal_guard import install_terminal_commit_guard
 
+    install_runtime_exception_guard()
     install_terminal_commit_guard()
 except Exception:  # pragma: no cover - worker startup must surface this in prod
-    logger.exception("Could not install terminal commit guard in worker")
+    logger.exception("Could not install required worker runtime guards")
     if settings.APP_ENV in {"production", "staging"}:
         raise
