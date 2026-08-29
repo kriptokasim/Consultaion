@@ -11,19 +11,23 @@ _original_complete_debate = DebateStateManager.complete_debate
 
 
 def install_terminal_accounting_guard() -> None:
-    """Install terminal ordering, ownership, retry, and recovery runtime guards."""
+    """Install terminal ordering, ownership, retry, recovery, and accounting guards."""
     global _installed
     if _installed:
         return
 
     # Install cross-cutting runtime guards before execution/cleanup begins.
+    # Order matters: terminal reconciliation wraps the already-hardened stale
+    # cleanup function installed immediately before it.
     from cleanup_recovery_guard import install_cleanup_recovery_guard
     from retry_accounting_guard import install_retry_accounting_guard
     from sse_execution_guard import install_sse_execution_guard
+    from terminal_accounting_reconciler import install_terminal_accounting_reconciler
 
     install_sse_execution_guard()
     install_retry_accounting_guard()
     install_cleanup_recovery_guard()
+    install_terminal_accounting_reconciler()
 
     async def complete_debate_after_commit(
         self: DebateStateManager,
@@ -49,35 +53,39 @@ def install_terminal_accounting_guard() -> None:
             self.user_id = user_id
 
         tokens = max(int(tokens_total), 0)
-        if not user_id or tokens <= 0:
+        if not user_id or tokens <= 0 or not self.attempt_id:
             return
 
-        def _record_and_settle() -> None:
+        def _record_settle_and_apply_quota() -> None:
             from database import session_scope
-            from services.usage_ledger import record_token_usage, settle_token_usage
+            from models import Debate, DebateAttempt
+            from terminal_accounting_reconciler import ensure_token_accounting_once
 
             with session_scope() as session:
-                entry = record_token_usage(
-                    session,
-                    user_id=user_id,
-                    debate_id=self.debate_id,
-                    attempt_id=self.attempt_id,
-                    tokens=tokens,
-                )
-                if entry.status in {"reserved", "settlement_pending", "reconciliation_pending"}:
-                    settle_token_usage(
-                        session,
-                        user_id=user_id,
-                        debate_id=self.debate_id,
-                        attempt_id=self.attempt_id,
+                debate = session.get(Debate, self.debate_id)
+                attempt = session.get(DebateAttempt, self.attempt_id)
+                if debate is None or attempt is None:
+                    raise RuntimeError(
+                        "Terminal token accounting lost its durable debate/attempt identity"
                     )
+                # The terminal attempt is the durable source of token quantity.
+                # complete_debate stored max(tokens_total, prior_tokens) before
+                # this callback, so retries cannot shrink the accounted amount.
+                ensure_token_accounting_once(
+                    session,
+                    debate=debate,
+                    attempt=attempt,
+                )
 
         try:
-            await asyncio.get_running_loop().run_in_executor(None, _record_and_settle)
+            await asyncio.get_running_loop().run_in_executor(
+                None,
+                _record_settle_and_apply_quota,
+            )
         except Exception:
-            # Debate/attempt terminal state is already durable. Reconciliation is
-            # idempotent by (debate_id, attempt_id) and may safely retry later.
-            logger.exception("Failed to settle token usage for debate %s", self.debate_id)
+            # Debate/attempt terminal state is already durable. The periodic
+            # reconciler reconstructs both ledger and daily quota from it.
+            logger.exception("Failed to finalize token accounting for debate %s", self.debate_id)
 
     DebateStateManager.complete_debate = complete_debate_after_commit  # type: ignore[method-assign]
     _installed = True
