@@ -9,6 +9,7 @@ def test_worker_declares_every_production_task_module():
         "worker.debate_tasks",
         "worker.arena_tasks",
         "worker.coding_tasks",
+        "worker.voting_tasks",
     }
     assert required.issubset(set(PRODUCTION_TASK_MODULES))
     assert required.issubset(set(celery_app.conf.imports or ()))
@@ -26,6 +27,7 @@ def test_production_task_modules_register_expected_task_names():
         "debates.run",
         "arena.compute_divergence",
         "coding.execute_turn",
+        "voting.extract_vote_reasons",
         "billing.reconcile_previous_day",
         "billing.reconcile_current_period",
         "billing.reconcile_terminal_hosted_credits",
