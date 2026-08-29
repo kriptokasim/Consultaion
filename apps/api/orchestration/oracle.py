@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from agents import USE_MOCK, _call_llm
 from llm_errors import classify_provider_exception
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -122,18 +123,10 @@ async def generate_reasoning_chain(
             max_tokens=1000
         )
 
-        clean_text = text.strip()
-        if clean_text.startswith("```"):
-            lines = clean_text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            clean_text = "\n".join(lines).strip()
-
-        new_nodes = json.loads(clean_text)
-        if not isinstance(new_nodes, list):
-            new_nodes = []
+        parsed = extract_and_parse_json(text)
+        if parsed is None:
+            raise ValueError("oracle model returned unparseable JSON")
+        new_nodes = parsed if isinstance(parsed, list) else []
 
         # Validate structure of each node
         for node in new_nodes:

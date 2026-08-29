@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from agents import USE_MOCK, _call_llm
 from llm_errors import classify_provider_exception
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -62,17 +63,9 @@ async def run_red_team_analysis(proposal_text: str, lenses: List[str]) -> List[D
                 max_tokens=800
             )
 
-            # Strip markdown if any
-            clean_text = text.strip()
-            if clean_text.startswith("```"):
-                lines = clean_text.splitlines()
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                clean_text = "\n".join(lines).strip()
-
-            parsed = json.loads(clean_text)
+            parsed = extract_and_parse_json(text)
+            if parsed is None:
+                raise ValueError("redteam model returned unparseable JSON")
             if isinstance(parsed, list):
                 for item in parsed:
                     item["lens"] = lens

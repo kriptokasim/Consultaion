@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from agents import USE_MOCK, _call_llm
 from llm_errors import classify_provider_exception
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -74,16 +75,9 @@ async def evaluate_synthesis_challenge(
             max_tokens=1500
         )
 
-        clean_text = text.strip()
-        if clean_text.startswith("```"):
-            lines = clean_text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            clean_text = "\n".join(lines).strip()
-
-        data = json.loads(clean_text)
+        data = extract_and_parse_json(text)
+        if not isinstance(data, dict):
+            raise ValueError("challenge model returned unparseable JSON")
         # Validate keys
         if data.get("decision") not in ["defend", "concede", "revise"]:
             data["decision"] = "defend"
