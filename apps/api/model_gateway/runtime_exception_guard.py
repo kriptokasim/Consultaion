@@ -1,10 +1,16 @@
-"""Exception-path hardening for the gateway reservation boundary.
+"""Exception and credential-scope hardening for the gateway runtime boundary.
 
 The main runtime guard reserves cost/tokens before routing. Any exception or
 cancellation that occurs before the first adapter attempt is therefore known to
 have performed no provider work and must release that reservation. Once an
 adapter attempt exists, accounting intentionally remains fail-closed because the
 provider may already have consumed tokens/cost.
+
+The legacy Agent layer also performed a shared circuit-breaker check before the
+Model Gateway resolved whether the concrete credential was hosted/server or
+user BYOK. That credential-blind gate is disabled here: the gateway route is the
+single circuit authority and evaluates circuit state only after credential scope
+has been resolved.
 """
 
 from __future__ import annotations
@@ -13,11 +19,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 _installed = False
+_original_agent_circuit_check = None
 
 
 def install_runtime_exception_guard() -> None:
-    """Replace ``runtime_guard._execute_guarded_route`` with crash-safe cleanup."""
-    global _installed
+    """Install crash-safe reservation cleanup and credential-scoped circuit authority."""
+    global _installed, _original_agent_circuit_check
     if _installed:
         return
 
@@ -108,4 +115,18 @@ def install_runtime_exception_guard() -> None:
         return aggregated, estimate, active_reservation
 
     runtime_guard._execute_guarded_route = _execute_guarded_route_hardened
+
+    # ``agents._raw_llm_call`` used to inspect shared provider circuits before
+    # it knew which credential the gateway would use. Keeping that gate would
+    # still allow a broken hosted key to block a healthy tenant BYOK key. The
+    # gateway now owns this decision after credential resolution, so make the
+    # legacy pre-router check deliberately permissive.
+    try:
+        import agents
+
+        _original_agent_circuit_check = getattr(agents, "is_circuit_open", None)
+        agents.is_circuit_open = lambda *_args, **_kwargs: False
+    except Exception:
+        logger.warning("Could not disable legacy credential-blind circuit gate", exc_info=True)
+
     _installed = True
