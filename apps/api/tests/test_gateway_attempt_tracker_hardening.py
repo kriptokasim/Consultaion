@@ -76,15 +76,15 @@ async def test_nested_stream_to_nonstream_fallback_is_one_provider_attempt(monke
 
 
 @pytest.mark.anyio
-async def test_cumulative_provider_attempts_cannot_bypass_per_run_cost_cap(monkeypatch):
+async def test_cumulative_provider_attempt_budget_uses_non_provider_control_signal(monkeypatch):
     from model_gateway.attempt_tracker import (
         GatewayAttemptContext,
+        ProviderAttemptBudgetBlocked,
         begin_adapter_attempt,
         bind_attempt_context,
         finish_adapter_attempt,
         reset_attempt_context,
     )
-    from model_gateway.types import GatewayQuotaExceededError
     import model_gateway.runtime_guard as guard
 
     monkeypatch.setattr(guard, "estimate_full_call_cost", lambda **_kwargs: 0.25)
@@ -107,7 +107,10 @@ async def test_cumulative_provider_attempts_cannot_bypass_per_run_cost_cap(monke
         )
         finish_adapter_attempt(first, result=_result(tokens=100, cost=0.30))
 
-        with pytest.raises(GatewayQuotaExceededError, match="cumulative run cost"):
+        # BaseException-derived control signal deliberately bypasses the legacy
+        # route's broad ``except Exception`` so it cannot increment provider
+        # circuit failures. The outer runtime remaps it to public quota error.
+        with pytest.raises(ProviderAttemptBudgetBlocked, match="cumulative run cost"):
             await begin_adapter_attempt(
                 messages=[{"role": "user", "content": "x"}],
                 model_id="model-b",
