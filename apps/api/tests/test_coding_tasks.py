@@ -8,7 +8,7 @@ from worker.coding_tasks import LANE_MODELS, _async_execute_turn, compute_simila
 # Setup mock for gateway
 @pytest.fixture
 def mock_gateway():
-    with patch("apps.api.worker.coding_tasks.call_model_via_gateway", new_callable=AsyncMock) as m:
+    with patch("worker.coding_tasks.call_model_via_gateway", new_callable=AsyncMock) as m:
         # Returns a tuple of (content, usage_mock)
         class MockUsage:
             prompt_tokens = 10

@@ -208,6 +208,12 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
 
     yield
 
+    # A failed request assertion must not leak FastAPI dependency overrides
+    # into every test that follows it.
+    from main import app
+
+    app.dependency_overrides.clear()
+
 
 @pytest.fixture(scope="session")
 def seed_billing_plans(test_database_url):

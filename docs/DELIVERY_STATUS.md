@@ -1,6 +1,6 @@
 # Delivery status
 
-**As of:** 2026-08-28 UTC
+**As of:** 2026-08-29 UTC
 **Branch evidence:** the supplied `work` branch contains `a385c96` followed by the M0/M1 repair in this change. The checkout has no configured Git remote, so its association with GitHub PR #64 cannot be queried locally; this change continues the existing branch and does not create or merge a PR.
 
 ## Incident finding
@@ -53,11 +53,63 @@ Affected selection result: **15 passed, 0 failed** for `tests/test_model_gateway
 |---|---|---|
 | M0 setup/evidence | **Complete except one external blocker** | Runtime auto-selection works; Python/root dependency installation is blocked by DNS/registry access. Existing frontend dependencies validate under Node 20. |
 | M1 provider routing | **Deterministically green; Python 3.11 parity blocked** | 37/37 focused tests pass with mocks; clean 3.11 execution awaits dependency access. |
-| M2 backend/database | **Not claimed** | PostgreSQL, complete backend coverage suite, Alembic upgrade, and schema drift were not run in this pass. |
+| M2 backend/database | **In progress** | Complete backend suite meets coverage but retains 14 deterministic failures; Ruff, CI mypy, one Alembic head, SQLite upgrade, and SQLite schema drift pass. PostgreSQL is unavailable. |
 | M3 frontend/contracts | **Partially verified** | Frontend lint/typecheck/392 tests/build pass under Node 20; root guards are registry-blocked and OpenAPI drift was not run. |
 | M4 packaged runtime | **Not claimed** | Docker and Redis SSE were not verified. |
 | M5 production | **Not claimed** | No real OpenRouter, Render, Vercel, GitHub Actions, or production deployment verification was performed. |
 
 ## Exact external blocker and next executable action
 
-The remaining blocker is outbound dependency-index access: pip receives DNS resolution failures and npm receives HTTP 403 for `https://registry.npmjs.org/tsx`. Once access is restored, rerun `scripts/setup.sh`, then run the documented M1 command from `apps/api/.venv` under Python 3.11 before advancing to M2. No credential, billing, deployment, or production action was attempted.
+The remaining package blocker is outbound dependency-index access: pip receives DNS resolution failures and npm receives HTTP 403 for `https://registry.npmjs.org/tsx`. Once access is restored, rerun `scripts/setup.sh`, then rerun M1 and the complete M2 suite from `apps/api/.venv` under Python 3.11. No credential, billing, deployment, or production action was attempted.
+
+## GitHub pull-request review
+
+On 2026-08-29, the requested review of the most recently opened pull request
+could not be performed from this checkout. The repository has no configured Git
+remote, `gh auth status` reports that no GitHub host is authenticated, and an
+unauthenticated request to
+`https://api.github.com/repos/kriptokasim/Consultaion/pulls?state=open` was
+rejected by the environment's CONNECT proxy with HTTP 403. No pull request was
+inspected or merged, and no mergeability or usefulness claim is made without
+the remote diff and checks. The next executable action is to provide GitHub
+network access plus an authenticated token with read access and, only if the
+reviewed change is useful and green, merge permission.
+
+## M2 backend/database evidence — 2026-08-29
+
+The complete backend command was run with the populated Python 3.14.4 virtual
+environment because the preinstalled Python 3.11.15 runtime has no dependencies
+and package-index access remains blocked. The first run produced **1056 passed,
+78 failed, 6 errors, 17 skipped** with 76.23% coverage. Investigation identified
+test-contract drift and two suite-wide isolation leaks rather than a coverage
+failure. After repairing typed staged-pipeline configuration, coding-worker and
+router patch targets, correlation `ContextVar` token restoration, and FastAPI
+dependency-override cleanup, the widest rerun produced **1126 passed, 14 failed,
+17 skipped** with 78.39% coverage. M2 is not marked green while those 14
+deterministic failures remain.
+
+Commands and outcomes:
+
+- `pytest -q`: 1126 passed, 14 failed, 17 skipped; coverage 78.39% (threshold
+  satisfied). Runtime: Python 3.14.4, which is evidence only—not Python 3.11
+  acceptance.
+- `ruff check apps/api`: passed.
+- the exact CI mypy slice for usage ledger, billing service, Stripe provider,
+  and LLM action guard: passed.
+- `bash ../../scripts/check-alembic-heads.sh` from `apps/api` with the populated
+  virtualenv on `PATH`: one head, passed.
+- `DATABASE_URL=sqlite:////tmp/consultaion_m2.db alembic upgrade head`: passed.
+- schema drift against that migrated SQLite database: passed with no
+  data-bearing table/column drift.
+- M1 focused provider suite: 37 passed, 0 failed.
+- The final affected selection covering staged/coding/router contracts,
+  correlation restoration, in-memory SSE, admin metrics, API-key audit
+  atomicity, public event access, and export override isolation: **95 passed,
+  0 failed**.
+
+PostgreSQL 16 and Docker are not installed (`docker`, `psql`, `postgres`, and
+`pg_ctl` are absent), so the PostgreSQL workflow slice could not run. No
+PostgreSQL, Docker, Redis, or production verification is claimed. Remaining M2
+work is deterministic test repair plus Python 3.11 parity after dependency
+access is restored; the infrastructure blocker for the database-specific slice
+is the absence of both a PostgreSQL 16 service/client and Docker.

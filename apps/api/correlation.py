@@ -80,8 +80,13 @@ def get_correlation_context() -> Optional[CorrelationContext]:
     return _corr_ctx.get(None)
 
 
-def set_correlation_context(ctx: CorrelationContext) -> contextvars.Token:
+def set_correlation_context(ctx: Optional[CorrelationContext]) -> contextvars.Token:
     return _corr_ctx.set(ctx)
+
+
+def reset_correlation_context(token: contextvars.Token) -> None:
+    """Restore the value captured by ``set_correlation_context``."""
+    _corr_ctx.reset(token)
 
 
 def current_correlation() -> CorrelationContext:

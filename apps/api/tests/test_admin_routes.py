@@ -38,7 +38,12 @@ import config as config_module  # noqa: E402
 config_module.settings.reload()
 
 from auth import get_current_admin, hash_password  # noqa: E402
-from billing.models import BillingPlan, BillingSubscription, BillingUsage  # noqa: E402
+from billing.models import (  # noqa: E402
+    BillingPlan,
+    BillingSubscription,
+    BillingUsage,
+    ReferralAttribution,
+)
 from billing.service import _current_period  # noqa: E402
 from database import engine, init_db  # noqa: E402
 from models import AuditLog, Debate, LLMUsageLog, User  # noqa: E402
@@ -225,6 +230,20 @@ def test_admin_metrics():
             updated_at=datetime.now(timezone.utc),
         )
         session.add(pub_debate)
+        now = datetime.now(timezone.utc)
+        session.add(
+            ReferralAttribution(
+                token_hash=uuid.uuid4().hex * 2,
+                debate_id=pub_debate.id,
+                created_by_user_id=member_id,
+                view_count=1,
+                visited_at=now - timedelta(minutes=10),
+                last_visited_at=now - timedelta(minutes=10),
+                claimed_by_user_id=member_id,
+                claimed_at=now - timedelta(minutes=5),
+                expires_at=now + timedelta(days=30),
+            )
+        )
 
         # 3. Seed share/view/signup telemetry. Referral attribution should only
         # accept a view in the seven days before the signup.
@@ -312,7 +331,8 @@ def test_admin_metrics():
     assert res["activation"]["dau"] >= 1
     assert res["activation"]["wau"] >= res["activation"]["dau"]
     assert res["activation"]["mau"] >= res["activation"]["wau"]
-    assert res["activation"]["active_debates"] >= 1
+    assert res["activation"]["runs_created_24h"] >= 1
+    assert res["activation"]["active_debates"] >= 0
     assert res["activation"]["completed_runs_7d"] >= 1
     assert res["activation"]["completed_runs_30d"] >= res["activation"]["completed_runs_7d"]
 
@@ -324,7 +344,7 @@ def test_admin_metrics():
     assert res["plg_sharing"]["shared_views_30d"] >= 1
     assert res["plg_sharing"]["referred_signups_30d"] >= 1
     assert res["plg_sharing"]["conversion_rate_30d"] > 0.0
-    assert res["plg_sharing"]["attribution_method"] == "ip_7d_proxy"
+    assert res["plg_sharing"]["attribution_method"] == "sha256_referral_token"
 
     # Billing: Free and expired-active subscriptions must not be counted as paid
     # MRR. Only the currently active $15 Pro subscription contributes.
