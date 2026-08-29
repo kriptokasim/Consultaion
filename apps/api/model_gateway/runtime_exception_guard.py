@@ -44,7 +44,9 @@ def install_runtime_exception_guard() -> None:
         max_tokens: int,
     ):
         from model_gateway.attempt_tracker import (
+            GatewayAttemptAccountingUnavailable,
             GatewayAttemptContext,
+            ProviderAttemptAccountingUnavailable,
             ProviderAttemptBudgetBlocked,
             aggregate_accounting_result,
             bind_attempt_context,
@@ -143,6 +145,20 @@ def install_runtime_exception_guard() -> None:
                         debate_id,
                     )
                 raise GatewayQuotaExceededError(str(exc)) from exc
+            except ProviderAttemptAccountingUnavailable as exc:
+                # Reservation/database failures occur before the next provider
+                # call and must never be recorded as provider health failures.
+                # Preserve prior-attempt spend where possible, then surface a
+                # retryable accounting-infrastructure error to the caller.
+                try:
+                    _settle_interrupted_attempts("provider_attempt_accounting_unavailable")
+                except Exception:
+                    logger.exception(
+                        "gateway.interrupted_usage_settlement_failed user=%s debate=%s",
+                        user_id,
+                        debate_id,
+                    )
+                raise RuntimeError("Model usage accounting is temporarily unavailable.") from exc
             except BaseException as exc:
                 if not attempt_context.records and attempt_context.reservation is not None:
                     try:
