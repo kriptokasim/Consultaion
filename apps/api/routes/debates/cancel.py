@@ -99,17 +99,6 @@ def _refund_credit_if_reserved(
 
 
 @router.post("/debates/{debate_id}/cancel")
-def _cancel_signature_only():  # pragma: no cover - replaced immediately below
-    raise RuntimeError("route registration placeholder")
-
-
-# Keep the decorator route compact while retaining an async implementation.
-# Replacing the just-registered endpoint avoids introducing a second public
-# path and keeps OpenAPI stable.
-router.routes.pop()
-
-
-@router.post("/debates/{debate_id}/cancel")
 async def cancel_debate_run(
     debate_id: str,
     session: Session = Depends(get_session),
