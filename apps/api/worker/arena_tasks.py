@@ -18,6 +18,8 @@ from worker.celery_app import celery_app
 logger = get_task_logger(__name__)
 module_logger = logging.getLogger(__name__)
 
+DIVERGENCE_TASK_LEASE_TTL_SECONDS = 300
+
 
 def compute_string_similarity(c1: str, c2: str) -> float:
     """Compare claims using lowercase token overlap and SequenceMatcher."""
@@ -37,7 +39,7 @@ async def _extract_claims_from_response(prompt: str, response_content: str, mode
         "Each claim should be a standalone sentence in under 15 words. Do not quote the text. Do not add numbers. "
         'Output strictly as a JSON object of form: {"claims": ["claim 1", "claim 2"]}'
     )
-    
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"Context/Question: {prompt}\n\nModel Response:\n{response_content}"}
@@ -51,16 +53,14 @@ async def _extract_claims_from_response(prompt: str, response_content: str, mode
             max_tokens=300,
             debate_id=debate_id
         )
-        
-        # Try extracting JSON fragment
+
         data = extract_and_parse_json(raw) or {}
         claims = data.get("claims", [])
         if isinstance(claims, list) and all(isinstance(c, str) for c in claims):
             return [c.strip() for c in claims if c.strip()]
     except Exception as exc:
         module_logger.warning("Failed to parse LLM extracted claims for %s: %s", model_display_name, exc)
-    
-    # Fallback parsing (split by sentences or lines)
+
     sentences = [s.strip() for s in re.split(r"[.!?\n]", response_content) if len(s.strip()) > 12]
     claims = [s for s in sentences if not s.startswith("⚠️")][:4]
     if not claims:
@@ -220,17 +220,65 @@ async def _execute_divergence_computation(debate_id: str) -> None:
         input_data=checkpoint_input,
         run_fn=run_divergence,
         load_fn=load_divergence,
-        # Divergence runs after the execution lease is released (post-terminal
-        # background analysis), so it intentionally never carries a live lease.
+        # Divergence runs after the execution lease is released. The Celery
+        # wrapper supplies a separate distributed task lease to keep this
+        # intentionally-unfenced checkpoint single-owner under redelivery.
         allow_unfenced=True,
     )
 
 
-@celery_app.task(name="arena.compute_divergence", bind=True, max_retries=3)
+def _run_divergence_task_once(debate_id: str) -> None:
+    asyncio.run(_execute_divergence_computation(debate_id))
+
+
+@celery_app.task(name="arena.compute_divergence", bind=True, max_retries=12)
 def compute_divergence_task(self, debate_id: str) -> None:
-    """Celery task that computes claim divergence for an Arena debate."""
+    """Run post-terminal divergence exactly once concurrently per debate.
+
+    Celery can redeliver a task after worker/network faults. The main Debate
+    execution lease is intentionally gone by this point, so a renewable Redis
+    task lease fences the expensive semantic-analysis LLM work. Completed
+    checkpoint output remains the durable idempotency layer for later retries.
+    """
+    from config import settings
+    from worker.task_leases import (
+        TaskLeaseAcquireResult,
+        acquire_task_lease,
+        release_task_lease,
+        start_task_lease_renewer,
+    )
+
+    acquire_result, lease = acquire_task_lease(
+        "arena-divergence",
+        debate_id,
+        ttl_seconds=DIVERGENCE_TASK_LEASE_TTL_SECONDS,
+    )
+    if acquire_result is TaskLeaseAcquireResult.HELD:
+        raise self.retry(
+            exc=RuntimeError("Arena divergence task already has a live owner"),
+            countdown=20,
+        )
+    if acquire_result is TaskLeaseAcquireResult.BACKEND_UNAVAILABLE:
+        if settings.IS_LOCAL_ENV:
+            _run_divergence_task_once(debate_id)
+            return
+        raise self.retry(
+            exc=RuntimeError("Arena divergence coordination is unavailable"),
+            countdown=20,
+        )
+    if lease is None:
+        raise self.retry(
+            exc=RuntimeError("Arena divergence lease acquisition returned no owner"),
+            countdown=20,
+        )
+
+    stop_renew, renew_thread = start_task_lease_renewer(lease)
     try:
-        asyncio.run(_execute_divergence_computation(debate_id))
+        _run_divergence_task_once(debate_id)
     except Exception as exc:
         logger.exception("Error while computing divergence for debate %s", debate_id)
         raise self.retry(exc=exc, countdown=10) from exc
+    finally:
+        stop_renew.set()
+        renew_thread.join(timeout=1.0)
+        release_task_lease(lease)
