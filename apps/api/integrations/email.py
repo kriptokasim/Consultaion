@@ -6,8 +6,36 @@ from config import settings
 
 RESEND_API_BASE = "https://api.resend.com"
 
+
 def is_email_summaries_enabled() -> bool:
     return settings.ENABLE_EMAIL_SUMMARIES and bool(settings.RESEND_API_KEY)
+
+
+def _complete_summary_transition(debate_id: str) -> None:
+    """Persist provider acknowledgement for crash-reclaimable email delivery."""
+    try:
+        from database import session_scope
+        from services.terminal_transition import (
+            TRANSITION_SUMMARY_EMAIL,
+            complete_transition_by_key,
+        )
+
+        with session_scope() as session:
+            complete_transition_by_key(
+                session,
+                debate_id,
+                TRANSITION_SUMMARY_EMAIL,
+            )
+    except Exception:
+        # Provider already accepted the email. Failure to mark the local claim
+        # leaves a bounded duplicate-delivery risk after TTL, but must not turn
+        # a delivered email into a debate execution failure.
+        logger.warning(
+            "Failed to complete summary-email transition for debate %s",
+            debate_id,
+            exc_info=True,
+        )
+
 
 async def send_debate_summary_email(
     user_email: str,
@@ -45,6 +73,9 @@ async def send_debate_summary_email(
                 },
             )
         resp.raise_for_status()
+        _complete_summary_transition(summary.debate_id)
         logger.info("Sent debate summary email to %s for debate %s", user_email, summary.debate_id)
     except Exception as exc:  # best-effort only
+        # Keep the claim in ``claimed`` state so a future crash/recovery pass may
+        # reclaim it after the bounded TTL instead of suppressing the email forever.
         logger.warning("Failed to send debate summary email: %r", exc)
