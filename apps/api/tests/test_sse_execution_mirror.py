@@ -116,6 +116,33 @@ async def test_mirror_ttl_is_shorter_than_authoritative_database_lease(monkeypat
 
 
 @pytest.mark.anyio
+async def test_short_database_lease_never_creates_longer_redis_mirror(monkeypatch):
+    import redis_pool
+    from orchestration.execution_context import ExecutionLease
+    from orchestration.execution_lease_mirror import publish_execution_lease_mirror
+
+    class FakeRedis:
+        def __init__(self):
+            self.calls = []
+
+        async def set(self, key, value, *, ex=None):
+            self.calls.append((key, value, ex))
+            return True
+
+    redis = FakeRedis()
+    monkeypatch.setattr(redis_pool, "get_async_redis_client", lambda: redis)
+    lease = ExecutionLease.create(
+        "mirror-short",
+        owner_id="owner-a",
+        lease_epoch=1,
+        run_attempt=1,
+    )
+
+    assert await publish_execution_lease_mirror(lease, lease_seconds=2) is False
+    assert redis.calls == []
+
+
+@pytest.mark.anyio
 async def test_explicit_release_sets_shared_lost_event(db_session):
     from models import Debate, DebateAttempt
     from orchestration.execution_lease import acquire_execution_lease, release_execution_lease
