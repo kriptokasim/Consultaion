@@ -74,6 +74,7 @@ PRODUCTION_TASK_MODULES: tuple[str, ...] = (
     "worker.arena_tasks",
     "worker.coding_tasks",
     "worker.voting_tasks",
+    "worker.terminal_tasks",
 )
 
 
@@ -147,6 +148,10 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
                 "task": "billing.reconcile_terminal_hosted_credits",
                 "schedule": 300.0,
             },
+            "terminal-summary-email-reconcile": {
+                "task": "maintenance.reconcile_terminal_summary_emails",
+                "schedule": 300.0,
+            },
             "worker-heartbeat": {
                 "task": "worker.heartbeat_tick",
                 "schedule": 30.0,
@@ -164,6 +169,10 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
             },
             "billing-reconcile-terminal-hosted-credits": {
                 "task": "billing.reconcile_terminal_hosted_credits",
+                "schedule": 300.0,
+            },
+            "terminal-summary-email-reconcile": {
+                "task": "maintenance.reconcile_terminal_summary_emails",
                 "schedule": 300.0,
             },
             "worker-heartbeat": {
