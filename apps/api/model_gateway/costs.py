@@ -1,4 +1,6 @@
 import logging
+from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -9,6 +11,34 @@ MAX_COST_PER_RUN_USD = 0.50
 MAX_MONTHLY_SAFETY_LIMIT_USD = 50.0
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ActiveCostReservation:
+    user_id: str
+    amount_usd: float
+
+
+_active_cost_reservation: ContextVar[ActiveCostReservation | None] = ContextVar(
+    "active_gateway_cost_reservation",
+    default=None,
+)
+
+
+def bind_cost_reservation(user_id: str, amount_usd: float) -> Token:
+    """Bind the current call's already-persisted cost reservation.
+
+    The legacy gateway performs its own monthly check after the hardened runtime
+    boundary has atomically reserved the conservative full-call estimate. That
+    second check must not count the same reservation twice.
+    """
+    return _active_cost_reservation.set(
+        ActiveCostReservation(user_id=user_id, amount_usd=max(float(amount_usd), 0.0))
+    )
+
+
+def reset_cost_reservation(token: Token) -> None:
+    _active_cost_reservation.reset(token)
 
 
 def _month_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
@@ -31,17 +61,13 @@ async def check_credit_and_cost_safety(
     estimated_cost_usd: float = 0.0,
     db_session = None
 ) -> None:
-    """Verify safety limits and user credit status before triggering LLM calls.
+    """Verify safety limits and user cumulative spend before triggering LLM calls.
 
-    The monthly guard is evaluated against the current UTC calendar month, not
-    lifetime spend. In production/staging it fails closed when accounting
-    cannot be verified; allowing paid provider work while the cost ledger is
-    unreadable defeats the purpose of the safety cap.
-
-    Sync SQLAlchemy/SQLModel Sessions are intentionally executed on the current
-    thread. Sessions are not thread-safe; handing a request-owned Session to a
-    generic executor can race its transaction/connection state. The query is a
-    single indexed aggregate and is preferable to cross-thread Session use.
+    The monthly guard uses the current UTC calendar month and fails closed in
+    production/staging when accounting cannot be verified. When the hardened
+    gateway runtime has already persisted a conservative reservation for this
+    exact call, the reservation amount is subtracted from the aggregate before
+    the legacy gateway adds its own estimate, preventing self-double-counting.
     """
     if estimated_cost_usd > MAX_COST_PER_RUN_USD:
         raise GatewayQuotaExceededError(
@@ -71,6 +97,10 @@ async def check_credit_and_cost_safety(
                 result = db_session.execute(spend_query, params).scalar()
 
             total_spent = float(result or 0.0)
+            reservation = _active_cost_reservation.get()
+            if reservation is not None and reservation.user_id == user_id:
+                total_spent = max(0.0, total_spent - reservation.amount_usd)
+
             if total_spent + estimated_cost_usd > MAX_MONTHLY_SAFETY_LIMIT_USD:
                 raise GatewayQuotaExceededError(
                     f"User has reached the monthly safety limit of ${MAX_MONTHLY_SAFETY_LIMIT_USD:.2f}."
