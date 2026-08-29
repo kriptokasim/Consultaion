@@ -13,7 +13,7 @@ class FinalizationService:
     """
     Helper service for finalization logic (ranking, voting, billing).
     """
-    
+
     @staticmethod
     def compute_rankings(scores: Sequence[Dict[str, Any]]) -> Tuple[List[str], Dict[str, Any]]:
         """
@@ -57,8 +57,23 @@ class FinalizationService:
         return ranking, details
 
     @staticmethod
-    async def persist_vote(state_manager: DebateStateManager, ranking: List[str], details: Dict[str, Any]):
+    async def persist_vote(
+        state_manager: DebateStateManager,
+        ranking: List[str],
+        details: Dict[str, Any],
+    ):
+        """Persist one vote result stamped with its logical attempt identity.
+
+        ``Vote`` predates ``DebateAttempt`` and has no dedicated ``attempt_id``
+        column. Store the attempt marker inside ``result`` so retry hydration can
+        select exactly one attempt rather than accidentally mixing a previous
+        ranking into the current run. API-facing callers strip this private key.
         """
-        Persist the vote result using the state manager.
-        """
-        await state_manager.save_vote(method="borda+condorcet", ranking=ranking, details=details)
+        payload = dict(details)
+        if state_manager.attempt_id:
+            payload["_attempt_id"] = state_manager.attempt_id
+        await state_manager.save_vote(
+            method="borda+condorcet",
+            ranking=ranking,
+            details=payload,
+        )

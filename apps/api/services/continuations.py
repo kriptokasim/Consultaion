@@ -4,14 +4,14 @@ from typing import List, Optional
 
 from database_async import async_session_scope
 from exceptions import ContinuationTransitionError
-from models import DebateContinuation
+from models import Debate, DebateContinuation
 from sqlmodel import Session, select
 
 logger = logging.getLogger(__name__)
 
 ALLOWED_CONTINUATION_TRANSITIONS = {
     "requested": {"preflight_passed", "failed", "cancelled"},
-    # Inline dispatch moves directly into the orchestrator.  There is no
+    # Inline dispatch moves directly into the orchestrator. There is no
     # durable queue hand-off to represent with ``dispatched``, so the runner
     # may claim a preflight-passed continuation directly as ``running``.
     # This also lets a Celery task recover if it was durably enqueued but the
@@ -24,6 +24,16 @@ ALLOWED_CONTINUATION_TRANSITIONS = {
     "failed": set(),
     "cancelled": set(),
 }
+
+# Older Compare/Conversation callers used these failure codes for every
+# non-"completed" result. ``completed_with_warnings`` is a successful terminal
+# product state, so persisting one of these continuations as failed creates an
+# accounting contradiction: hosted-credit settlement keys off continuation
+# status and would refund a run the product successfully delivered.
+_PARTIAL_SUCCESS_FAILURE_CODES = frozenset({
+    "compare_run_failed",
+    "conversation_run_failed",
+})
 
 
 def _validate_transition(current_status: str, target_status: str) -> None:
@@ -41,6 +51,50 @@ def _validate_transition(current_status: str, target_status: str) -> None:
                 f"Allowed targets from '{current_status}': {allowed or '(none — terminal state)'}"
             ),
         )
+
+
+def _reconcile_partial_success_target_sync(
+    session: Session,
+    continuation: DebateContinuation,
+    target_status: str,
+    failure_code: Optional[str],
+    failure_detail_safe: Optional[str],
+) -> tuple[str, Optional[str], Optional[str]]:
+    if target_status != "failed" or failure_code not in _PARTIAL_SUCCESS_FAILURE_CODES:
+        return target_status, failure_code, failure_detail_safe
+
+    debate = session.get(Debate, continuation.debate_id)
+    if debate and debate.status == "completed_with_warnings":
+        logger.warning(
+            "continuation.partial_success_reconciled continuation_id=%s debate_id=%s failure_code=%s",
+            continuation.id,
+            continuation.debate_id,
+            failure_code,
+        )
+        return "completed", None, None
+    return target_status, failure_code, failure_detail_safe
+
+
+async def _reconcile_partial_success_target_async(
+    session,
+    continuation: DebateContinuation,
+    target_status: str,
+    failure_code: Optional[str],
+    failure_detail_safe: Optional[str],
+) -> tuple[str, Optional[str], Optional[str]]:
+    if target_status != "failed" or failure_code not in _PARTIAL_SUCCESS_FAILURE_CODES:
+        return target_status, failure_code, failure_detail_safe
+
+    debate = await session.get(Debate, continuation.debate_id)
+    if debate and debate.status == "completed_with_warnings":
+        logger.warning(
+            "continuation.partial_success_reconciled continuation_id=%s debate_id=%s failure_code=%s",
+            continuation.id,
+            continuation.debate_id,
+            failure_code,
+        )
+        return "completed", None, None
+    return target_status, failure_code, failure_detail_safe
 
 
 def transition_continuation_sync(
@@ -84,6 +138,14 @@ def transition_continuation_sync(
                 f"current status '{continuation.status}' not in expected {expected_statuses}"
             ),
         )
+
+    target_status, failure_code, failure_detail_safe = _reconcile_partial_success_target_sync(
+        session,
+        continuation,
+        target_status,
+        failure_code,
+        failure_detail_safe,
+    )
 
     original_status = continuation.status
     _validate_transition(original_status, target_status)
@@ -143,6 +205,14 @@ async def transition_continuation_async(
                 ),
             )
 
+        target_status, failure_code, failure_detail_safe = await _reconcile_partial_success_target_async(
+            session,
+            continuation,
+            target_status,
+            failure_code,
+            failure_detail_safe,
+        )
+
         original_status = continuation.status
         _validate_transition(original_status, target_status)
 
@@ -176,6 +246,11 @@ def _apply_continuation_updates(
         continuation.paused_at = now
     elif status == "completed":
         continuation.completed_at = now
+        # A successful terminal state must not retain stale failure metadata
+        # from a caller that was normalized from partial success.
+        continuation.failure_code = None
+        continuation.failure_detail_safe = None
+        continuation.failed_at = None
     elif status == "failed":
         continuation.failed_at = now
         continuation.failure_code = failure_code

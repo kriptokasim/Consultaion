@@ -56,14 +56,14 @@ async def route_llm_call(
 
             from models import User
             from sqlalchemy.ext.asyncio import AsyncSession
-            
+
             if isinstance(db_session, AsyncSession):
                 user = await db_session.get(User, request.user_id)
             else:
                 def _get_user():
                     return db_session.get(User, request.user_id)
                 user = await asyncio.get_running_loop().run_in_executor(None, _get_user)
-                
+
             if user:
                 limit = getattr(user, "hosted_credits_limit", 10)
                 used = getattr(user, "hosted_credits_used", 0)
@@ -121,23 +121,23 @@ async def route_llm_call(
 
     # 1b. Validate plan restriction
     validate_user_access_to_model(request.model_id, request.user_plan, has_credits=has_credits)
-    
+
     # 2. Estimate run cost (e.g., standard estimation: 0.015 per 1k input/output tokens)
     # Assume 1000 input, 1000 output tokens for credit check
     estimated_cost_usd = 0.00003 * (len(str(request.messages)) // 4)
     await check_credit_and_cost_safety(request.user_id, request.user_plan, estimated_cost_usd, db_session)
-    
+
     # 3. Determine routing strategy
     adapter_cls, routing_policy = determine_routing_strategy(request)
     model_pool = get_model_pool(request.model_id)
-    
+
     # Patchset 136: Gateway call started metric
     try:
         from metrics import incr_metric
         incr_metric("model_gateway.call.started")
     except Exception:
         pass
-    
+
     # Log gateway decision
     from model_gateway.observability import log_gateway_call_metrics, log_gateway_decision
     from model_gateway.types import GatewayDecision
@@ -150,7 +150,7 @@ async def route_llm_call(
         fallback_enabled=(request.gateway_policy in ("auto", "fallback")),
     )
     log_gateway_decision(decision, user_id=request.user_id)
-    
+
     # If using MockAdapter (testing environment), bypass loop
     if adapter_cls == MockAdapter:
         try:
@@ -188,7 +188,7 @@ async def route_llm_call(
     # Resolve all direct models to try in the pool
     # First: the requested model itself
     models_to_try = [request.model_id]
-    
+
     # Second: other direct models in the same pool
     from model_gateway.model_map import MODEL_MAP
     pool_models = []
@@ -196,14 +196,16 @@ async def route_llm_call(
     pools = config.get("pools", {})
     if model_pool in pools:
         pool_models = pools[model_pool].get("models", [])
-        
+
     for m in pool_models:
         # Check if it is a direct provider (i.e. mapped in MODEL_MAP and provider != "openrouter")
         if m in MODEL_MAP and MODEL_MAP[m]["provider"] != "openrouter":
             if m not in models_to_try:
                 models_to_try.append(m)
-                
-    # Pass all candidates to the adapter loop; BYOK resolution or server key checks will happen there.
+
+    # Circuit eligibility cannot be decided until the concrete credential scope
+    # is known. A shared hosted/server key may be rate-limited or invalid while
+    # the user's BYOK credential for the same provider remains healthy.
     available_direct_models = models_to_try
 
     last_error = None
@@ -213,27 +215,10 @@ async def route_llm_call(
     retry_count = 0
     successful_result = None
 
-    # Filter out models with open circuits
     from model_gateway.policy import _model_uses_openrouter
     from model_gateway.provider_health import is_circuit_open, record_failure, record_success
-    filtered_direct_models = []
-    for m in available_direct_models:
-        # Resolve provider
-        provider = "unknown"
-        if _model_uses_openrouter(m) or m.startswith("openrouter/"):
-            provider = "openrouter"
-        elif m in MODEL_MAP:
-            provider = MODEL_MAP[m]["provider"]
-        elif "-" in m:
-            provider = m.split("-")[0]
-            
-        if is_circuit_open(provider):
-            last_error = f"Circuit open for provider: {provider}"
-            last_error_code = "no_healthy_provider_route"
-        else:
-            filtered_direct_models.append(m)
 
-    for idx, model_to_call in enumerate(filtered_direct_models):
+    for idx, model_to_call in enumerate(available_direct_models):
         # Resolve provider
         provider = "unknown"
         if _model_uses_openrouter(model_to_call) or model_to_call.startswith("openrouter/"):
@@ -243,14 +228,8 @@ async def route_llm_call(
         elif "-" in model_to_call:
             provider = model_to_call.split("-")[0]
 
-        # Patchset 136: Provider attempted metric
-        try:
-            from metrics import incr_metric
-            incr_metric("model_gateway.provider.attempted", tags={"provider": provider})
-        except Exception:
-            pass
-
-        # Resolve user BYOK credential specifically for this provider
+        # Resolve user BYOK credential specifically for this provider BEFORE
+        # consulting circuit state; shared circuits apply only to hosted keys.
         current_api_key = None
         credential_scope = "server"
         if db_session and request.user_id:
@@ -266,7 +245,7 @@ async def route_llm_call(
                     def _get_key(p=provider):
                         return get_model_api_key(db_session, request.user_id, p)
                     resolved = await asyncio.get_running_loop().run_in_executor(None, _get_key)
-                
+
                 if resolved and resolved.source == "user":
                     current_api_key = resolved.key
                     credential_scope = "user"
@@ -280,6 +259,23 @@ async def route_llm_call(
         if not current_api_key:
             current_api_key = _server_api_key(provider)
             credential_scope = "server"
+
+        if is_circuit_open(
+            provider,
+            canonical_model_id=model_to_call,
+            credential_scope=credential_scope,
+        ):
+            last_error = f"Circuit open for provider: {provider}"
+            last_error_code = "no_healthy_provider_route"
+            continue
+
+        # Patchset 136: Provider attempted metric — only after credential-scoped
+        # circuit eligibility says this call can actually reach the adapter.
+        try:
+            from metrics import incr_metric
+            incr_metric("model_gateway.provider.attempted", tags={"provider": provider})
+        except Exception:
+            pass
 
         try:
             # Use the correct adapter for the resolved provider
@@ -303,7 +299,11 @@ async def route_llm_call(
             )
             if result.success:
                 successful_result = result
-                record_success(provider, credential_scope=credential_scope)
+                record_success(
+                    provider,
+                    canonical_model_id=model_to_call,
+                    credential_scope=credential_scope,
+                )
                 # Patchset 136: Provider success metric
                 try:
                     from metrics import incr_metric
@@ -322,6 +322,7 @@ async def route_llm_call(
                     provider,
                     result.error_code or "unknown",
                     result.error_message or "",
+                    canonical_model_id=model_to_call,
                     credential_scope=credential_scope,
                 )
                 # Patchset 136: Provider failed metric
@@ -339,6 +340,7 @@ async def route_llm_call(
                 provider,
                 "unknown",
                 str(e),
+                canonical_model_id=model_to_call,
                 credential_scope=credential_scope,
             )
             retry_count += 1
@@ -346,7 +348,7 @@ async def route_llm_call(
     # Check if we should fall back to OpenRouter
     if not successful_result and (request.gateway_policy in ("auto", "fallback")):
         if is_provider_available("openrouter"):
-            if is_circuit_open("openrouter"):
+            if is_circuit_open("openrouter", credential_scope="server"):
                 last_error = "OpenRouter circuit is open. Fallback route bypassed."
                 last_error_code = "no_healthy_provider_route"
             else:
@@ -356,7 +358,7 @@ async def route_llm_call(
                 )
                 fallback_used = True
                 fallback_reason = f"All direct models failed. Last error: {last_error}"
-                
+
                 try:
                     fallback_adapter = OpenRouterAdapter()
                     fallback_model_id = (
@@ -383,17 +385,27 @@ async def route_llm_call(
                         successful_result.fallback_used = True
                         successful_result.fallback_reason = fallback_reason
                         successful_result.retry_count = retry_count
-                        record_success("openrouter")
+                        record_success("openrouter", credential_scope="server")
                     else:
                         last_error = result.error_message
                         last_error_code = result.error_code
-                        record_failure("openrouter", result.error_code or "unknown", result.error_message or "")
+                        record_failure(
+                            "openrouter",
+                            result.error_code or "unknown",
+                            result.error_message or "",
+                            credential_scope="server",
+                        )
                         _last_error_reason = f"Direct failed ({last_error}) and Fallback failed ({result.error_message})"
                 except Exception as fallback_error:
                     logger.error(f"Fallback model gateway route also failed: {fallback_error}")
                     last_error = f"Direct failed ({last_error}) and Fallback failed ({fallback_error})"
                     last_error_code = "unknown"
-                    record_failure("openrouter", "unknown", str(fallback_error))
+                    record_failure(
+                        "openrouter",
+                        "unknown",
+                        str(fallback_error),
+                        credential_scope="server",
+                    )
 
     # Handle completion or friendly error
     if successful_result:
@@ -496,7 +508,11 @@ async def route_llm_stream(
         credential_scope = "server"
 
     primary_attempted = False
-    if is_circuit_open(provider, canonical_model_id=canonical_model_id):
+    if is_circuit_open(
+        provider,
+        canonical_model_id=canonical_model_id,
+        credential_scope=credential_scope,
+    ):
         result = GatewayModelCallResult(
             content="",
             model_used=target.litellm_model,
@@ -553,7 +569,7 @@ async def route_llm_stream(
         return result
 
     openrouter_key = _server_api_key("openrouter")
-    if not openrouter_key or is_circuit_open("openrouter"):
+    if not openrouter_key or is_circuit_open("openrouter", credential_scope="server"):
         return result
 
     fallback_reason = (
@@ -586,13 +602,18 @@ async def route_llm_stream(
     fallback.retry_count = max(fallback.retry_count, 1)
 
     if fallback.success:
-        record_success("openrouter", canonical_model_id=canonical_model_id)
+        record_success(
+            "openrouter",
+            canonical_model_id=canonical_model_id,
+            credential_scope="server",
+        )
     else:
         record_failure(
             "openrouter",
             fallback.error_code or "unknown",
             fallback.error_message or "",
             canonical_model_id=canonical_model_id,
+            credential_scope="server",
         )
     return fallback
 

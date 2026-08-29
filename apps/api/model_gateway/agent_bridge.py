@@ -23,16 +23,23 @@ async def call_model_via_gateway(
     tool_choice: Optional[Dict[str, Any]] = None,
     api_key: Optional[str] = None,
 ) -> Tuple[str, Any]:
-    """
-    Unified entry point from Agent execution paths to the central Model Gateway.
-    
-    Transforms the request parameters into a GatewayRequest, routes the call through
-    the policy engine, resolves adapters, measures performance/cost metrics,
-    maps successful results to agents.UsageCall, and maps access/quota errors to TransientLLMError
-    for graceful runner degradation and UI-facing fail-safes.
+    """Unified Agent → Model Gateway entry point with mandatory runtime accounting.
+
+    The runtime guards are installed here as well as API/debate-worker startup so
+    worker modules that are loaded independently (notably Coding Agent and
+    post-terminal Arena analysis) cannot bypass cost persistence, daily-token
+    accounting, or pre-provider reservation compensation.
     """
     from agents import UsageCall
     from llm_errors import TransientLLMError
+    from model_gateway.runtime_exception_guard import install_runtime_exception_guard
+    from model_gateway.runtime_guard import (
+        install_gateway_runtime_guard,
+        mark_usage_call_persisted,
+    )
+
+    install_gateway_runtime_guard()
+    install_runtime_exception_guard()
 
     from model_gateway import route_llm_call
     from model_gateway.types import (
@@ -61,7 +68,7 @@ async def call_model_via_gateway(
                 resolved_user_plan = await asyncio.get_running_loop().run_in_executor(None, _get_plan)
         except Exception as e:
             logger.warning(f"Failed to lookup user plan via billing service: {e}")
-    
+
     if not resolved_user_plan:
         resolved_user_plan = "free"
 
@@ -92,8 +99,6 @@ async def call_model_via_gateway(
                 gw_res = await route_llm_call(req, db_session=session)
     except (GatewayQuotaExceededError, GatewayModelRestrictedError) as e:
         logger.error(f"Gateway access control blocked call: {e}")
-        # Map to TransientLLMError so the orchestrator marks the debate as failed
-        # and displays the direct access constraint message on the UI.
         raise TransientLLMError(str(e), cause=e) from e
     except Exception as e:
         logger.error(f"Gateway execution encountered unexpected exception: {e}")
@@ -123,5 +128,8 @@ async def call_model_via_gateway(
         estimated_cost_usd=gw_res.estimated_cost_usd,
         retry_count=gw_res.retry_count,
     )
+    # route_llm_call returned through the guarded accounting boundary, so the
+    # historical agents.persist_usage_log task must not write this call again.
+    mark_usage_call_persisted(call_usage)
 
     return gw_res.content, call_usage

@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from typing import Any, Dict, List
 
@@ -8,6 +7,7 @@ from llm_errors import classify_provider_exception
 from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
+
 
 async def run_red_team_analysis(proposal_text: str, lenses: List[str]) -> List[Dict[str, Any]]:
     """
@@ -66,20 +66,36 @@ async def run_red_team_analysis(proposal_text: str, lenses: List[str]) -> List[D
             parsed = extract_and_parse_json(text)
             if parsed is None:
                 raise ValueError("redteam model returned unparseable JSON")
-            if isinstance(parsed, list):
-                for item in parsed:
-                    item["lens"] = lens
-                    # Normalize severity
-                    sev = str(item.get("severity", "medium")).lower()
-                    if sev not in ["high", "medium", "low"]:
-                        sev = "medium"
-                    item["severity"] = sev
-                return parsed
-            else:
-                logger.warning(f"RedTeam {lens} returned JSON that is not a list: {clean_text}")
-                return []
+            if not isinstance(parsed, list):
+                logger.warning(
+                    "RedTeam %s returned JSON with unexpected shape: %s",
+                    lens,
+                    type(parsed).__name__,
+                )
+                raise ValueError("redteam model returned JSON that is not a list")
+
+            normalized: List[Dict[str, Any]] = []
+            for raw_item in parsed:
+                if not isinstance(raw_item, dict):
+                    logger.warning(
+                        "RedTeam %s returned a non-object list item: %s",
+                        lens,
+                        type(raw_item).__name__,
+                    )
+                    continue
+                item = dict(raw_item)
+                item["lens"] = lens
+                sev = str(item.get("severity", "medium")).lower()
+                if sev not in ["high", "medium", "low"]:
+                    sev = "medium"
+                item["severity"] = sev
+                normalized.append(item)
+
+            if not normalized and parsed:
+                raise ValueError("redteam model returned no valid issue objects")
+            return normalized
         except Exception as exc:
-            # CORE-AUDIT (CE-3): safe message only — raw error stays server-side.
+            # Safe message only — raw error stays server-side.
             logger.error("Failed red team evaluation for lens %s: %s", lens, exc)
             safe = classify_provider_exception(exc)
             return [{
@@ -92,7 +108,7 @@ async def run_red_team_analysis(proposal_text: str, lenses: List[str]) -> List[D
 
     tasks = [_evaluate_lens(lens) for lens in lenses]
     results = await asyncio.gather(*tasks)
-    
+
     # Flatten the list of lists
     flat_issues = []
     for res_list in results:

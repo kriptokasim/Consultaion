@@ -39,8 +39,23 @@ def get_failures_key(provider: str, canonical_model_id: str | None = None) -> st
     return f"provider:health:{provider}:failures"
 
 
-def is_circuit_open(provider: str, canonical_model_id: str | None = None) -> bool:
-    """Check if the circuit is open for the given provider and optional model."""
+def is_circuit_open(
+    provider: str,
+    canonical_model_id: str | None = None,
+    *,
+    credential_scope: str = "server",
+) -> bool:
+    """Check shared hosted-provider circuit state for this credential scope.
+
+    Shared circuit keys describe server/hosted credentials. User-owned BYOK
+    credentials are an independent failure domain: a server key can be invalid,
+    rate-limited, or out of balance while the user's own key is healthy. BYOK
+    calls therefore bypass shared circuit state just as their successes/failures
+    never mutate that state.
+    """
+    if credential_scope == "user":
+        return False
+
     redis_client = get_redis()
     if not redis_client:
         return False

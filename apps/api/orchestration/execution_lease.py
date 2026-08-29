@@ -14,6 +14,9 @@ database; there is no read-then-write anywhere in the lease lifecycle.
   ownership was lost — it is never treated as success.
 - Release is conditional on the same identity triple, so a stale worker can
   never clear a newer owner's lease.
+- A short-lived Redis mirror of owner+epoch is maintained only as a fast SSE
+  read path. The database remains authoritative; missing mirror state falls
+  back to DB verification rather than becoming ownership proof.
 """
 
 from __future__ import annotations
@@ -33,8 +36,7 @@ from orchestration.execution_context import ExecutionLease, new_owner_id
 
 logger = logging.getLogger(__name__)
 
-#: Statuses that must never receive a new normal execution lease (Track C3).
-TERMINAL_STATUSES = ("completed", "completed_with_warnings", "cancelled")
+TERMINAL_STATUSES = ("completed", "completed_with_warnings", "failed", "cancelled")
 
 
 class LeaseRenewResult(Enum):
@@ -43,10 +45,7 @@ class LeaseRenewResult(Enum):
 
 
 class ExecutionSupersededError(Exception):
-    """A newer execution owner took over; this worker must stop immediately.
-
-    Carries no retry semantics — the newer owner is responsible for the Run.
-    """
+    """A newer execution owner took over; this worker must stop immediately."""
 
 
 class LeaseInfrastructureError(Exception):
@@ -73,17 +72,7 @@ async def acquire_execution_lease(
     owner_id: Optional[str] = None,
     lease_seconds: int,
 ) -> LeaseAcquireResult:
-    """Atomically acquire execution ownership without inventing a new run.
-
-    ``lease_epoch`` is an ownership/fencing counter and advances for every
-    successful owner acquisition, including crash takeover. ``run_attempt`` is
-    a logical product-run identity and advances only when a newer queued
-    :class:`DebateAttempt` has already been durably prepared by create/retry.
-
-    The Debate UPDATE takes the row lock first. Attempt selection and the
-    optional run_attempt transition then happen in the same transaction, so a
-    concurrent worker cannot claim a different logical attempt underneath us.
-    """
+    """Atomically acquire execution ownership without inventing a new run."""
     owner = owner_id or new_owner_id()
     now = _now()
     expires = now + timedelta(seconds=lease_seconds)
@@ -139,8 +128,6 @@ async def acquire_execution_lease(
                 queued_attempt.status = "running"
                 session.add(queued_attempt)
             elif current_attempt <= 0:
-                # Compatibility for legacy rows created before DebateAttempt was
-                # mandatory. New runs normally arrive with queued attempt #1.
                 target_attempt = 1
                 current_result = await session.execute(
                     sa.select(DebateAttempt)
@@ -164,8 +151,6 @@ async def acquire_execution_lease(
                     current_record.status = "running"
                     session.add(current_record)
             else:
-                # Crash takeover / staged continuation: preserve the same
-                # logical attempt and its already-durable model artifacts.
                 current_result = await session.execute(
                     sa.select(DebateAttempt)
                     .where(
@@ -208,6 +193,22 @@ async def acquire_execution_lease(
         lease_epoch=lease_epoch,
         run_attempt=target_attempt,
     )
+
+    # DB is authoritative. The mirror is deliberately best-effort: failure
+    # merely makes SSE delta publication fall back to DB verification.
+    try:
+        from orchestration.execution_lease_mirror import publish_execution_lease_mirror
+
+        await publish_execution_lease_mirror(lease, lease_seconds=lease_seconds)
+    except Exception:
+        logger.warning(
+            "debate.lease.mirror_init_failed debate_id=%s owner=%s epoch=%s",
+            debate_id,
+            owner,
+            lease_epoch,
+            exc_info=True,
+        )
+
     increment_metric("debate.lease.acquired")
     logger.info(
         "debate.lease.acquired debate_id=%s owner=%s epoch=%s attempt=%s",
@@ -221,14 +222,7 @@ async def renew_execution_lease(
     *,
     lease_seconds: int,
 ) -> LeaseRenewResult:
-    """Conditionally extend the lease. Zero rows updated ⇒ ownership lost.
-
-    The fencing identity, rather than ``Debate.status``, defines ownership.
-    Finalization can set ``completed`` or ``perspectives_ready`` before the
-    owner finishes SSE publication and continuation bookkeeping; keeping the
-    lease alive across that transition prevents those tasks from being
-    cancelled as a false takeover.
-    """
+    """Conditionally extend the lease. Zero rows updated ⇒ ownership lost."""
     now = _now()
     stmt = (
         sa.update(Debate)
@@ -245,9 +239,22 @@ async def renew_execution_lease(
         await session.commit()
 
     if result.rowcount == 1:
+        try:
+            from orchestration.execution_lease_mirror import publish_execution_lease_mirror
+
+            await publish_execution_lease_mirror(lease, lease_seconds=lease_seconds)
+        except Exception:
+            logger.warning(
+                "debate.lease.mirror_renew_failed debate_id=%s owner=%s epoch=%s",
+                lease.debate_id,
+                lease.owner_id,
+                lease.lease_epoch,
+                exc_info=True,
+            )
         increment_metric("debate.lease.heartbeat_success")
         return LeaseRenewResult.RENEWED
 
+    lease.lease_lost_event.set()
     increment_metric("debate.lease.ownership_lost")
     logger.warning(
         "debate.lease.ownership_lost debate_id=%s owner=%s epoch=%s",
@@ -257,7 +264,7 @@ async def renew_execution_lease(
 
 
 async def release_execution_lease(lease: ExecutionLease) -> bool:
-    """Conditionally clear the lease. Never clears a newer owner's lease."""
+    """Conditionally clear the lease and invalidate the fast SSE mirror."""
     stmt = (
         sa.update(Debate)
         .where(Debate.id == lease.debate_id)
@@ -270,6 +277,21 @@ async def release_execution_lease(lease: ExecutionLease) -> bool:
         await session.commit()
 
     if result.rowcount == 1:
+        # Child task contexts share this Event object; setting it closes any
+        # stale in-process delta publisher immediately after explicit release.
+        lease.lease_lost_event.set()
+        try:
+            from orchestration.execution_lease_mirror import delete_execution_lease_mirror
+
+            await delete_execution_lease_mirror(lease)
+        except Exception:
+            logger.warning(
+                "debate.lease.mirror_release_failed debate_id=%s owner=%s epoch=%s",
+                lease.debate_id,
+                lease.owner_id,
+                lease.lease_epoch,
+                exc_info=True,
+            )
         increment_metric("debate.lease.release_success")
         return True
     increment_metric("debate.lease.release_mismatch")
@@ -288,12 +310,7 @@ async def heartbeat_loop(
     failure_threshold: int,
     stop_event,
 ) -> None:
-    """Renew the lease until stopped; set ``lease.lease_lost_event`` on loss.
-
-    - A definite rowcount-zero mismatch aborts immediately.
-    - Consecutive transport/infrastructure failures abort once the configured
-      threshold is reached (before the lease would expire).
-    """
+    """Renew the lease until stopped; set ``lease.lease_lost_event`` on loss."""
     from metrics import increment_metric as _inc
 
     consecutive_failures = 0
@@ -308,7 +325,7 @@ async def heartbeat_loop(
             result = await renew_execution_lease(lease, lease_seconds=lease_seconds)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # infrastructure failure — retry until threshold
+        except Exception as exc:
             consecutive_failures += 1
             _inc("debate.lease.heartbeat_failure")
             logger.warning(
