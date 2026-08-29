@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from auth import get_current_user
 from billing.service import refund_hosted_credit
-from database import get_session
+from deps import get_session, get_sse_backend
 from fastapi import APIRouter, Depends, HTTPException, status
 from models import (
     Debate,
@@ -26,7 +26,6 @@ from models import (
 )
 from routes.common import require_debate_mutation_access, require_schema_current
 from sqlmodel import Session, select
-from sse_backend import get_sse_backend
 
 from config import settings
 
@@ -102,8 +101,8 @@ async def cancel_debate_run(
     debate_id: str,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
-    _schema_ok: None = Depends(require_schema_current),
 ):
+    require_schema_current(session)
     now = datetime.now(timezone.utc)
 
     # Lock the product row so cancellation is atomic with any concurrent
