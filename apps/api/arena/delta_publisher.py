@@ -6,7 +6,8 @@ Managed lifecycle per model call:
 - later deltas coalesced per response_id
 - flush forced before lifecycle boundaries
 - bounded memory: flush (never drop) when max items/chars hit
-- publish failures never abort provider generation
+- publish ordering is serialized so frontend delta_sequence guards can never
+  discard an earlier chunk that arrived late at the transport
 - close() flushes pending then stops timer
 """
 
@@ -23,9 +24,15 @@ logger = logging.getLogger(__name__)
 
 PublishFn = Callable[[dict], Union[None, Awaitable[None]]]
 
+# The browser already frame-batches streamed text and the publisher also
+# coalesces by character count. Keeping the server flush inside this bound
+# makes output feel continuously typed even if an old deployment still carries
+# the historical 150 ms ARENA_DELTA_FLUSH_MS setting.
+MAX_INTERACTIVE_FLUSH_MS = 50
+
 
 class ArenaDeltaPublisher:
-    """Managed delta publisher for a single arena model call."""
+    """Managed, ordered delta publisher for a single arena model call."""
 
     def __init__(
         self,
@@ -42,7 +49,8 @@ class ArenaDeltaPublisher:
         self._publish_fn = publish_fn
         self._response_id = response_id
         self._model_id = model_id
-        self._flush_interval_ms = flush_interval_ms
+        requested_flush_ms = int(flush_interval_ms or 30)
+        self._flush_interval_ms = min(max(requested_flush_ms, 1), MAX_INTERACTIVE_FLUSH_MS)
         self._max_chars = max_chars
         self._max_items = max_items
         self._event_type = event_type
@@ -52,7 +60,11 @@ class ArenaDeltaPublisher:
         self._first = True
         self._closed = False
         self._flush_task: Optional[asyncio.Task] = None
-        self._publish_tasks: set[asyncio.Task] = set()
+        # Transport publishes must be ordered. Previously each publish was put
+        # into an independent background task; a later batch could reach Redis
+        # before the first token. The frontend correctly rejects stale
+        # delta_sequence values, so that race could permanently lose text.
+        self._publish_lock = asyncio.Lock()
 
     async def start(self) -> None:
         if self._flush_task is not None:
@@ -80,17 +92,12 @@ class ArenaDeltaPublisher:
         self._pending.append(delta)
         self._total_chars += len(delta.text)
 
-        if (
-            len(self._pending) >= self._max_items
-            or self._total_chars >= self._max_chars
-        ):
+        if len(self._pending) >= self._max_items or self._total_chars >= self._max_chars:
             await self._flush()
 
     async def flush(self) -> None:
         if self._pending:
             await self._flush()
-        if self._publish_tasks:
-            await asyncio.gather(*tuple(self._publish_tasks), return_exceptions=True)
 
     async def close(self) -> None:
         self._closed = True
@@ -124,22 +131,14 @@ class ArenaDeltaPublisher:
             **self._extra_payload,
         }
         try:
-            result = self._publish_fn(event)
+            async with self._publish_lock:
+                await self._call_publish(event)
         except Exception:
+            # Publication is best-effort for provider availability. Execution
+            # fencing sets lease_lost_event before raising, so the orchestrator
+            # still cancels stale work even though transport failure itself is
+            # not allowed to turn a healthy provider response into a model error.
             logger.warning("Delta publish failed (non-fatal)", exc_info=True)
-            return
-        if not inspect.isawaitable(result):
-            return
-
-        async def _background_publish() -> None:
-            try:
-                await result
-            except Exception:
-                logger.warning("Delta publish failed (non-fatal)", exc_info=True)
-
-        task = asyncio.create_task(_background_publish())
-        self._publish_tasks.add(task)
-        task.add_done_callback(self._publish_tasks.discard)
 
     async def _flush(self) -> None:
         if not self._pending:
