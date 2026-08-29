@@ -43,12 +43,14 @@ def install_runtime_exception_guard() -> None:
     ):
         from model_gateway.attempt_tracker import (
             GatewayAttemptContext,
+            ProviderAttemptBudgetBlocked,
             aggregate_accounting_result,
             bind_attempt_context,
             reset_attempt_context,
         )
         from model_gateway.costs import bind_cost_reservation, reset_cost_reservation
         from model_gateway.reservations import release_gateway_budget_sync
+        from model_gateway.types import GatewayQuotaExceededError
 
         estimate, token_estimate, reservation = await runtime_guard._reserve_budget(
             user_id=user_id,
@@ -78,6 +80,12 @@ def install_runtime_exception_guard() -> None:
         try:
             try:
                 result = await route_call()
+            except ProviderAttemptBudgetBlocked as exc:
+                # The control signal deliberately bypassed the route's broad
+                # provider-error catcher. Prior attempts may have spent budget,
+                # so retain their conservative reservation and expose the real
+                # user quota/cost reason without mutating provider health.
+                raise GatewayQuotaExceededError(str(exc)) from exc
             except BaseException as exc:
                 # No adapter record means no provider boundary was crossed. Do
                 # the compensation synchronously before propagating even a
