@@ -8,10 +8,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sse_backend import (
-    IMPORTANT_EVENT_TYPES,
-    MemoryChannelBackend,
-)
+from sse_backend import MemoryChannelBackend
 
 
 class TestBackpressureBlockedSubscriber:
@@ -74,9 +71,15 @@ class TestBackpressureBlockedSubscriber:
             while not subscriber.empty():
                 events.append(subscriber.get_nowait())
 
-            important = [e for e in events if e.get("payload", {}).get("type") in IMPORTANT_EVENT_TYPES]
+            preserved_types = {
+                e.get("payload", {}).get("type") for e in events
+            }
             deltas = [e for e in events if e.get("payload", {}).get("type") in ("model_response_delta",)]
-            assert len(important) == 3, f"Expected 3 important events, got {len(important)}"
+            assert preserved_types == {
+                "arena_response",
+                "model_response_completed",
+                "stage_checkpoint",
+            }
             assert len(deltas) == 0, f"Expected 0 deltas in queue, got {len(deltas)}"
         finally:
             await backend.stop()
@@ -116,8 +119,10 @@ class TestBackpressureBlockedSubscriber:
                 event for event in events
                 if event.get("payload", {}).get("type") == "model_response_delta"
             ]
-            assert len(deltas) == 1
-            assert deltas[0]["payload"]["text"] == "".join(
+            # The first delta is intentionally low-latency; later fragments
+            # are coalesced into one follow-up envelope.
+            assert len(deltas) == 2
+            assert "".join(delta["payload"]["text"] for delta in deltas) == "".join(
                 f"chunk-{index}" for index in range(5)
             )
         finally:

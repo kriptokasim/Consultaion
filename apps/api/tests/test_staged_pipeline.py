@@ -8,6 +8,7 @@ from orchestration.engine import DebateRunner
 from orchestration.interfaces import DebateContext
 from orchestration.pipeline import StandardDebatePipeline
 from orchestration.state import DebateStateManager
+from schemas import AgentConfig, DebateConfig, JudgeConfig
 
 
 @pytest.fixture
@@ -29,10 +30,13 @@ async def test_staged_debate_pipeline_pause_and_resume(db_session, mock_llm_resp
     db_session.commit()
     
     # Context config
-    config = {
-        "agents": [MagicMock(name="Optimist"), MagicMock(name="Pessimist")],
-        "judges": [MagicMock(name="Judge1")]
-    }
+    config = DebateConfig(
+        agents=[
+            AgentConfig(name="Optimist", persona="optimistic", model="gpt-4"),
+            AgentConfig(name="Pessimist", persona="pessimistic", model="gpt-4"),
+        ],
+        judges=[JudgeConfig(name="Judge1", model="gpt-4")],
+    )
 
     # First Pass: STAGED_DECISION_PIPELINE = True, is_resume = False
     with patch("orchestration.stages.produce_candidate") as mock_produce, \

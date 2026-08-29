@@ -309,11 +309,11 @@ def test_get_debate_events_includes_pairwise_votes():
         if existing:
             session.delete(existing)
         session.add(
-            Debate(
-                id=debate_id,
-                prompt="Pairwise prompt",
-                status="completed",
-                config=default_debate_config().model_dump(),
+                Debate(
+                    id=debate_id,
+                    prompt="Pairwise prompt",
+                    status="completed",
+                    config={**default_debate_config().model_dump(), "is_public": True},
                 panel_config=default_panel_config().model_dump(),
                 engine_version="parliament-v1",
             )

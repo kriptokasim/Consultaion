@@ -40,7 +40,7 @@ def mock_registry(monkeypatch):
         )
     ]
     
-    def mock_list():
+    def mock_list(_user_id=None):
         return models
         
     def mock_get(name):
@@ -49,7 +49,7 @@ def mock_registry(monkeypatch):
                 return m
         return None
         
-    monkeypatch.setattr("parliament.router_v2.list_enabled_models", mock_list)
+    monkeypatch.setattr("parliament.router_v2.list_enabled_models_for_user", mock_list)
     monkeypatch.setattr("parliament.router_v2.get_model_info", mock_get)
     return models
 

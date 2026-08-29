@@ -65,7 +65,11 @@ def test_database_url():
 
     # Set environment variable and reload settings
     original_db_url = os.environ.get("DATABASE_URL")
+    original_async_db_url = os.environ.get("DATABASE_URL_ASYNC")
     os.environ["DATABASE_URL"] = db_url
+    os.environ["DATABASE_URL_ASYNC"] = db_url.replace(
+        "sqlite:", "sqlite+aiosqlite:", 1
+    )
     settings.reload()
 
     # Reset the global engine to use the test database
@@ -115,6 +119,10 @@ def test_database_url():
         os.environ["DATABASE_URL"] = original_db_url
     else:
         os.environ.pop("DATABASE_URL", None)
+    if original_async_db_url:
+        os.environ["DATABASE_URL_ASYNC"] = original_async_db_url
+    else:
+        os.environ.pop("DATABASE_URL_ASYNC", None)
 
     settings.reload()
     reset_engine()
@@ -147,6 +155,9 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
 
     # Force the shared settings/engine to the session database and restore defaults
     os.environ["DATABASE_URL"] = test_database_url
+    os.environ["DATABASE_URL_ASYNC"] = test_database_url.replace(
+        "sqlite:", "sqlite+aiosqlite:", 1
+    )
     # Ensure any previous test monkeypatches to ENV are cleared from settings object
     settings.reload()
     reset_engine()
@@ -196,6 +207,12 @@ def reset_global_state(request, test_database_url, seed_billing_plans):
             logging.getLogger(__name__).warning(f"Failed to flush Redis test DB: {e}")
 
     yield
+
+    # A failed request assertion must not leak FastAPI dependency overrides
+    # into every test that follows it.
+    from main import app
+
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="session")
@@ -291,8 +308,9 @@ def client():
 @pytest.fixture
 def authenticated_client(client, db_session):
     from auth import create_access_token, hash_password
-    from config import settings
     from models import User
+
+    from config import settings
 
     email = "normal@example.com"
     password = "password"

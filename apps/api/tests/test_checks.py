@@ -35,7 +35,7 @@ def test_check_db_readiness_failure(monkeypatch):
     # Simulate DB connection failure
     # We can patch engine.connect to raise
     
-    with patch("checks.engine.connect", side_effect=Exception("DB Down")):
+    with patch("checks.database.engine.connect", side_effect=Exception("DB Down")):
         ok, details = check_db_readiness()
         assert ok is False
         assert "DB Down" in details["error"]
@@ -46,9 +46,11 @@ async def test_check_sse_readiness_success():
     # conftest resets backend to Memory
     ok, details = await check_sse_readiness()
     assert ok is True
-    assert details["backend"] == "MemoryRateLimiterBackend" or details["backend"] == "MemoryChannelBackend"
-    # Actually SSEBackend is likely MemoryChannelBackend.
-    # checks.py calls type(backend).__name__
+    assert details["backend"] in {
+        "MemoryRateLimiterBackend",
+        "MemoryChannelBackend",
+    }
+    assert details.get("wrappers") == ["TerminalCommitGuard"]
 
 @pytest.mark.anyio
 async def test_check_sse_readiness_failure():

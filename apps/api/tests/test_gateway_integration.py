@@ -147,13 +147,15 @@ def test_pro_user_not_blocked_by_credits(authenticated_client: TestClient, db_se
 @pytest.mark.anyio
 async def test_failed_run_refunds_credits(db_session: Session):
     """Verify that a failed debate runner triggers a hosted credit refund for free users."""
+    from billing.service import reserve_hosted_credit
     from orchestrator import run_debate
     
     with settings_context(FAST_DEBATE="1"):
-        # 1. Setup a unique free user with 1 used credit
+        # 1. Setup a unique free user. Production accounting increments the
+        # counter only through a durable reservation.
         import uuid
         email = f"free_refund_{uuid.uuid4().hex[:8]}@example.com"
-        user = User(email=email, password_hash="hash", plan="free", hosted_credits_limit=5, hosted_credits_used=1)
+        user = User(email=email, password_hash="hash", plan="free", hosted_credits_limit=5, hosted_credits_used=0)
         db_session.add(user)
         db_session.commit()
         db_session.refresh(user)
@@ -170,6 +172,19 @@ async def test_failed_run_refunds_credits(db_session: Session):
         )
         db_session.add(debate)
         db_session.commit()
+
+        reservation_id = reserve_hosted_credit(
+            db_session,
+            user.id,
+            debate_id=debate.id,
+            run_attempt=0,
+        )
+        assert reservation_id is not None
+        debate.credit_reservation_id = reservation_id
+        db_session.add(debate)
+        db_session.commit()
+        db_session.refresh(user)
+        assert user.hosted_credits_used == 1
         
         # 3. Trigger run_debate, forcing an exception inside the mock run execution
         # to test refund triggering
@@ -260,4 +275,3 @@ async def test_used_equals_limit_gateway_block(db_session: Session):
     with pytest.raises(GatewayModelRestrictedError) as exc_info:
         await route_llm_call(req, db_session=db_session)
     assert "restricted" in str(exc_info.value).lower()
-

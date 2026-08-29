@@ -86,9 +86,10 @@ async def test_stream_events_uses_backend():
         debate = session.get(Debate, debate_id)
         if not debate:
             session.add(
-                Debate(
-                    id=debate_id,
-                    prompt="Stream prompt",
+                    Debate(
+                        id=debate_id,
+                        user_id=user.id,
+                        prompt="Stream prompt",
                     status="queued",
                     config=default_debate_config().model_dump(),
                 )
@@ -158,9 +159,10 @@ async def test_replay_endpoint():
         debate = session.get(Debate, debate_id)
         if not debate:
             session.add(
-                Debate(
-                    id=debate_id,
-                    prompt="Replay prompt",
+                    Debate(
+                        id=debate_id,
+                        user_id=user.id,
+                        prompt="Replay prompt",
                     status="queued",
                     config=default_debate_config().model_dump(),
                 )

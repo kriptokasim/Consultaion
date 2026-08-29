@@ -44,7 +44,8 @@ async def test_anonymous_stats_exclude_private_debates(db_session):
     detail = await get_model_detail("model-a", limit=50, session=db_session, current_user=None)
     detail_ids = {item["debate_id"] for item in detail.recent_debates}
     assert private.id not in detail_ids
-    assert detail_ids == {public.id, ownerless.id}
+    assert ownerless.id not in detail_ids
+    assert detail_ids == {public.id}
 
     hall = await get_hall_of_fame_stats(
         limit=50,
@@ -55,11 +56,11 @@ async def test_anonymous_stats_exclude_private_debates(db_session):
         session=db_session,
         current_user=None,
     )
-    assert {item.id for item in hall.items} == {public.id, ownerless.id}
+    assert {item.id for item in hall.items} == {public.id}
     assert all(item.prompt != "private prompt" for item in hall.items)
 
     leaderboard = await get_model_leaderboard_stats(session=db_session, current_user=None)
-    assert leaderboard[0].total_debates == 2
+    assert leaderboard[0].total_debates == 1
 
 
 @pytest.mark.anyio

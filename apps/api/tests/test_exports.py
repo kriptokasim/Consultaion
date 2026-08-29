@@ -39,8 +39,8 @@ def test_export_scores_csv(db_session, reset_global_state):
     session.commit()
     
     # Mock user auth
-    from routes.auth import get_current_user
-    app.dependency_overrides[get_current_user] = lambda: MagicMock(id="user-123")
+    from auth import get_current_user_flexible
+    app.dependency_overrides[get_current_user_flexible] = lambda: MagicMock(id="user-123")
     
     response = client.get(f"/debates/{debate.id}/scores.csv")
     assert response.status_code == 200

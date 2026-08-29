@@ -162,8 +162,8 @@ def test_create_api_key_returns_secret_on_success(client, db_session):
     assert "prefix" in data
 
 
-def test_create_api_key_audit_log_failure_does_not_rollback(client, db_session, monkeypatch):
-    """Test that audit log failure doesn't prevent API key creation."""
+def test_create_api_key_audit_log_failure_rejects_untracked_credential(client, db_session, monkeypatch):
+    """Credential creation is atomic with its mandatory lifecycle audit."""
     from auth import hash_password
     from sqlalchemy.exc import SQLAlchemyError
     
@@ -190,25 +190,20 @@ def test_create_api_key_audit_log_failure_does_not_rollback(client, db_session, 
     import routes.api_keys
     monkeypatch.setattr(routes.api_keys, "record_audit", mock_record_audit)
     
-    # Create API key - should succeed despite audit failure
-    response = client.post(
-        "/keys",
-        json={"name": "Test Key With Audit Failure"},
-    )
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert "secret" in data
-    assert data["secret"].startswith("pk_")
+    with pytest.raises(SQLAlchemyError, match="Simulated audit log failure"):
+        client.post(
+            "/keys",
+            json={"name": "Test Key With Audit Failure"},
+        )
+
+    db_session.rollback()
     
     # Verify the key was actually created in the database
     from sqlmodel import select
     stmt = select(APIKey).where(APIKey.user_id == user.id)
     created_key = db_session.exec(stmt).first()
     
-    assert created_key is not None
-    assert created_key.name == "Test Key With Audit Failure"
-    assert created_key.revoked is False
+    assert created_key is None
 
 
 def test_api_key_expiration(client, db_session):
@@ -392,5 +387,4 @@ async def test_api_key_rotation_reminder(db_session):
     assert key_expiring_soon.rotation_reminder_sent is True
     assert key_expiring_later.rotation_reminder_sent is False
     assert key_already_expired.rotation_reminder_sent is False
-
 

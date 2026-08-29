@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import database
 from alembic import config as alembic_config, script
 from alembic.runtime import migration
-from database import engine
 from sqlalchemy import text
 from sse_backend import get_sse_backend
 
@@ -16,7 +16,7 @@ def _check_schema_integrity() -> dict[str, Any]:
     """Check required tables and columns exist."""
     from services.migration_safety import verify_critical_columns, verify_required_tables
 
-    with engine.connect() as conn:
+    with database.engine.connect() as conn:
         from sqlmodel import Session
         session = Session(bind=conn)
         missing_tables = verify_required_tables(session)
@@ -36,9 +36,9 @@ def check_db_readiness() -> tuple[bool, dict[str, Any]]:
     Returns:
         (ok, details_dict)
     """
-    result = {"ok": False, "error": None}
+    result: dict[str, Any] = {"ok": False, "error": None}
     try:
-        with engine.connect() as conn:
+        with database.engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         result["ping"] = True
         
@@ -46,7 +46,7 @@ def check_db_readiness() -> tuple[bool, dict[str, Any]]:
         script_dir = script.ScriptDirectory.from_config(alembic_cfg)
         head = script_dir.get_current_head()
         
-        with engine.connect() as conn:
+        with database.engine.connect() as conn:
             context = migration.MigrationContext.configure(conn)
             current = context.get_current_revision()
             
@@ -72,7 +72,7 @@ def check_db_readiness() -> tuple[bool, dict[str, Any]]:
         result["error"] = str(e)
         logger.error(f"Readiness DB check failed: {e}")
         
-    return result["ok"], result
+    return bool(result["ok"]), result
 
 
 async def check_sse_readiness() -> tuple[bool, dict[str, Any]]:
@@ -82,10 +82,22 @@ async def check_sse_readiness() -> tuple[bool, dict[str, Any]]:
     Returns:
         (ok, details_dict)
     """
-    result = {"ok": False, "backend": "unknown"}
+    result: dict[str, Any] = {"ok": False, "backend": "unknown"}
     try:
         backend = get_sse_backend()
-        result["backend"] = type(backend).__name__
+        wrappers: list[str] = []
+        transport = backend
+        seen: set[int] = set()
+        # Operational readiness should identify the actual channel transport;
+        # policy decorators such as TerminalCommitGuard do not change whether
+        # Redis or the in-process backend is healthy.
+        while "_backend" in vars(transport) and id(transport) not in seen:
+            seen.add(id(transport))
+            wrappers.append(type(transport).__name__)
+            transport = transport._backend
+        result["backend"] = type(transport).__name__
+        if wrappers:
+            result["wrappers"] = wrappers
         
         # Ping returns bool
         is_ok = await backend.ping()
@@ -97,7 +109,7 @@ async def check_sse_readiness() -> tuple[bool, dict[str, Any]]:
         result["error"] = str(e)
         logger.error(f"Readiness SSE check failed: {e}")
 
-    return result["ok"], result
+    return bool(result["ok"]), result
 
 
 def check_model_registry_readiness() -> tuple[bool, dict[str, Any]]:
@@ -107,7 +119,11 @@ def check_model_registry_readiness() -> tuple[bool, dict[str, Any]]:
     Returns:
         (ok, details_dict)
     """
-    result = {"ok": False, "registry_initialized": False, "enabled_count": 0}
+    result: dict[str, Any] = {
+        "ok": False,
+        "registry_initialized": False,
+        "enabled_count": 0,
+    }
     try:
         from parliament.model_registry import list_enabled_models
 
@@ -123,4 +139,4 @@ def check_model_registry_readiness() -> tuple[bool, dict[str, Any]]:
         result["registry_initialized"] = False
         logger.error("Readiness model registry check failed: %s", exc)
 
-    return result["ok"], result
+    return bool(result["ok"]), result

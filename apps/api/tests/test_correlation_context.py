@@ -4,6 +4,7 @@ from correlation import (
     current_correlation,
     ensure_correlation,
     get_correlation_context,
+    reset_correlation_context,
     set_correlation_context,
 )
 
@@ -60,7 +61,7 @@ def test_contextvar_roundtrip():
         assert ctx is not None
         assert ctx.user_id == "u1"
     finally:
-        set_correlation_context(token)
+        reset_correlation_context(token)
 
 
 def test_current_correlation_creates_if_missing():
@@ -71,7 +72,7 @@ def test_current_correlation_creates_if_missing():
         assert ctx is not None
         assert ctx.request_id.startswith("req-")
     finally:
-        set_correlation_context(token)
+        reset_correlation_context(token)
 
 
 def test_ensure_correlation_preserves_existing():
@@ -81,7 +82,7 @@ def test_ensure_correlation_preserves_existing():
         ctx = ensure_correlation(user_id="new_user")
         assert ctx.user_id == "existing"
     finally:
-        set_correlation_context(token)
+        reset_correlation_context(token)
 
 
 def test_ensure_correlation_sets_user_when_missing():
@@ -91,7 +92,7 @@ def test_ensure_correlation_sets_user_when_missing():
         ctx = ensure_correlation(user_id="u1")
         assert ctx.user_id == "u1"
     finally:
-        set_correlation_context(token)
+        reset_correlation_context(token)
 
 
 def test_create_child_context_merges_parent():
@@ -105,7 +106,7 @@ def test_create_child_context_merges_parent():
         assert child.debate_id == "d1"
         assert child.task_id == "t1"
     finally:
-        set_correlation_context(token)
+        reset_correlation_context(token)
 
 
 def test_create_child_context_without_parent():
@@ -116,4 +117,4 @@ def test_create_child_context_without_parent():
         assert child.user_id == "u1"
         assert child.trace_id.startswith("trace-")
     finally:
-        set_correlation_context(token)
+        reset_correlation_context(token)
