@@ -25,19 +25,21 @@ async def call_model_via_gateway(
 ) -> Tuple[str, Any]:
     """Unified Agent → Model Gateway entry point with mandatory runtime accounting.
 
-    The runtime guard is installed here as well as API/debate-worker startup so
+    The runtime guards are installed here as well as API/debate-worker startup so
     worker modules that are loaded independently (notably Coding Agent and
-    post-terminal Arena analysis) cannot bypass cost persistence or daily-token
-    accounting simply because they never imported the debate worker bootstrap.
+    post-terminal Arena analysis) cannot bypass cost persistence, daily-token
+    accounting, or pre-provider reservation compensation.
     """
     from agents import UsageCall
     from llm_errors import TransientLLMError
+    from model_gateway.runtime_exception_guard import install_runtime_exception_guard
     from model_gateway.runtime_guard import (
         install_gateway_runtime_guard,
         mark_usage_call_persisted,
     )
 
     install_gateway_runtime_guard()
+    install_runtime_exception_guard()
 
     from model_gateway import route_llm_call
     from model_gateway.types import (
