@@ -69,12 +69,25 @@ celery_app = Celery(
 )
 
 
+# Explicit production task inventory. The worker is launched as
+# ``celery -A worker.celery_app worker``; Celery does not discover arbitrary
+# modules merely because task_routes contain their name prefixes. Every module
+# that owns @celery_app.task registrations must therefore be imported by the
+# worker at boot or queued tasks can be rejected as "unregistered task".
+PRODUCTION_TASK_MODULES: tuple[str, ...] = (
+    "worker.billing_tasks",
+    "worker.debate_tasks",
+    "worker.arena_tasks",
+    "worker.coding_tasks",
+)
+
+
 def configured_worker_queue_names(settings_obj=settings) -> tuple[str, ...]:
     """Return every queue this worker may receive work on.
 
     Debate dispatch queue names are configurable, so the worker declaration
     must be derived from the same settings rather than a hard-coded Compose
-    command.  ``dict.fromkeys`` preserves priority while removing aliases.
+    command. ``dict.fromkeys`` preserves priority while removing aliases.
     """
 
     candidates = (
@@ -110,6 +123,7 @@ def _write_worker_heartbeat():
             "git_sha": _GIT_SHA,
             "worker_id": _WORKER_ID,
             "queue_names": list(WORKER_QUEUE_NAMES),
+            "task_modules": list(PRODUCTION_TASK_MODULES),
             "providers": {
                 "openai": bool(settings.OPENAI_API_KEY),
                 "anthropic": bool(settings.ANTHROPIC_API_KEY),
@@ -183,7 +197,7 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
         timezone="UTC",
         enable_utc=True,
         task_track_started=True,
-        imports=("worker.billing_tasks",),
+        imports=PRODUCTION_TASK_MODULES,
         beat_schedule=beat_schedule,
         task_queues=declared_queues,
         task_routes={
@@ -199,22 +213,23 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
     )
 
 
-# Register heartbeat task
 if hasattr(celery_app, "task"):
     @celery_app.task(name="worker.heartbeat_tick", bind=False)
     def heartbeat_tick():
         _write_worker_heartbeat()
 
-# Write initial heartbeat on import
+
 _write_worker_heartbeat()
 
-# The Celery worker does not import the API router, so the terminal-commit
-# guard installed in routes/debates/__init__.py is absent here. Install it
-# explicitly so a premature child-engine terminal event can never leak before
-# the durable terminal DB commit in worker (Celery) execution mode.
+# The Celery worker does not import the API router, so cross-cutting execution
+# guards must be installed explicitly in worker mode as well.
 try:
+    from state_terminal_guard import install_terminal_accounting_guard
     from sse_terminal_guard import install_terminal_commit_guard
 
     install_terminal_commit_guard()
-except Exception:  # pragma: no cover - guard is best-effort hardening
-    logger.warning("Could not install terminal commit guard in worker", exc_info=True)
+    install_terminal_accounting_guard()
+except Exception:  # pragma: no cover - startup diagnostics cover registration
+    logger.exception("Could not install production execution guards in worker")
+    if settings.APP_ENV in {"production", "staging"}:
+        raise
