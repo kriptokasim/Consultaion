@@ -11,10 +11,17 @@ _original_complete_debate = DebateStateManager.complete_debate
 
 
 def install_terminal_accounting_guard() -> None:
-    """Make product terminal state authoritative before accounting side effects."""
+    """Install terminal accounting ordering and execution-fenced SSE runtime guards."""
     global _installed
     if _installed:
         return
+
+    # Install the transport-side ownership fence before any engine obtains the
+    # canonical SSE backend. This closes commit→publish takeover races across
+    # Arena, Compare, Conversation, and Parliament from one boundary.
+    from sse_execution_guard import install_sse_execution_guard
+
+    install_sse_execution_guard()
 
     async def complete_debate_after_commit(
         self: DebateStateManager,
@@ -24,9 +31,9 @@ def install_terminal_accounting_guard() -> None:
         tokens_total: float = 0.0,
     ) -> None:
         user_id = self.user_id
-        # The original implementation commits Debate + DebateAttempt correctly,
-        # but performs token-ledger work before that commit. Suppress only that
-        # internal side effect; preserve all state/checkpoint logic unchanged.
+        # Keep terminal product state authoritative before accounting side
+        # effects. Suppress the original method's ledger side effect while
+        # preserving its Debate/Attempt/checkpoint transaction.
         self.user_id = None
         try:
             await _original_complete_debate(
