@@ -20,14 +20,13 @@ from typing import Any
 
 from llm_errors import classify_provider_exception
 from model_gateway.adapters import DirectProviderAdapter, OpenRouterAdapter
+from model_gateway.free_model_runtime import install_current_free_model_targets
 from model_gateway.model_map import MODEL_MAP
 
 logger = logging.getLogger("model_gateway.provider_diagnostics")
 
-# Keep this list intentionally aligned with traffic-bearing Arena providers plus
-# Mistral (configured in production but not currently part of arena_primary_pool)
-# and a couple of OpenRouter candidates. Each call asks for only a handful of
-# tokens to minimize cost.
+# Probe the traffic-bearing direct providers plus current free OpenRouter seats.
+# Calls are intentionally tiny to minimize cost and quota usage.
 PROBE_MATRIX: tuple[tuple[str, str], ...] = (
     ("openai", "openai_fast"),
     ("anthropic", "anthropic_reasoning"),
@@ -35,8 +34,9 @@ PROBE_MATRIX: tuple[tuple[str, str], ...] = (
     ("groq", "groq_fast"),
     ("mistral", "mistral_large"),
     ("openrouter", "openrouter_fallback"),
-    ("openrouter", "llama-3-free"),
-    ("openrouter", "mimo-v2-free"),
+    ("openrouter", "openrouter_gpt_oss_free"),
+    ("openrouter", "openrouter_glm_free"),
+    ("openrouter", "openrouter_nemotron_free"),
 )
 
 
@@ -61,8 +61,6 @@ def _server_key(provider: str) -> str | None:
 def _safe_failure(exc: Exception) -> tuple[str, str]:
     failure = classify_provider_exception(exc)
     code = failure.code.value if hasattr(failure.code, "value") else str(failure.code)
-    # Classifier output is expected to be sanitized; cap it anyway so provider
-    # bodies cannot flood logs.
     message = str(failure.message or "Provider probe failed")[:300]
     return code, message
 
@@ -138,16 +136,18 @@ def _routing_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     by_model = {row["model_id"]: row for row in results}
     arena_order = ["openai_fast", "anthropic_reasoning", "gemini_general", "groq_fast"]
     healthy_arena = [mid for mid in arena_order if by_model.get(mid, {}).get("success")]
-    healthy_openrouter = [
-        mid
-        for mid in ("openrouter_fallback", "llama-3-free", "mimo-v2-free")
-        if by_model.get(mid, {}).get("success")
+    openrouter_candidates = [
+        "openrouter_fallback",
+        "openrouter_gpt_oss_free",
+        "openrouter_glm_free",
+        "openrouter_nemotron_free",
     ]
+    healthy_openrouter = [mid for mid in openrouter_candidates if by_model.get(mid, {}).get("success")]
     healthy_mistral = bool(by_model.get("mistral_large", {}).get("success"))
     return {
         "arena_primary_order": arena_order,
         "healthy_arena_primary": healthy_arena,
-        "openrouter_candidates": ["openrouter_fallback", "llama-3-free", "mimo-v2-free"],
+        "openrouter_candidates": openrouter_candidates,
         "healthy_openrouter_candidates": healthy_openrouter,
         "mistral_configured_but_not_in_arena_primary": True,
         "mistral_probe_success": healthy_mistral,
@@ -157,6 +157,7 @@ def _routing_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 async def run_provider_matrix_diagnostic() -> dict[str, Any]:
     """Probe providers concurrently and emit one secret-free structured report."""
+    install_current_free_model_targets()
     rows = await asyncio.gather(*(_probe_one(provider, model_id) for provider, model_id in PROBE_MATRIX))
     report = {
         "event": "provider_matrix_diagnostic",
