@@ -11,17 +11,19 @@ _original_complete_debate = DebateStateManager.complete_debate
 
 
 def install_terminal_accounting_guard() -> None:
-    """Install terminal ordering, execution fencing, and retry accounting guards."""
+    """Install terminal ordering, ownership, retry, and recovery runtime guards."""
     global _installed
     if _installed:
         return
 
-    # Install cross-cutting runtime guards before execution begins.
+    # Install cross-cutting runtime guards before execution/cleanup begins.
+    from cleanup_recovery_guard import install_cleanup_recovery_guard
     from retry_accounting_guard import install_retry_accounting_guard
     from sse_execution_guard import install_sse_execution_guard
 
     install_sse_execution_guard()
     install_retry_accounting_guard()
+    install_cleanup_recovery_guard()
 
     async def complete_debate_after_commit(
         self: DebateStateManager,
