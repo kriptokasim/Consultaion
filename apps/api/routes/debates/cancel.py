@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from auth import get_current_user
 from billing.service import refund_hosted_credit
 from database import get_session
-from db_schema_guard import require_schema_current
 from fastapi import APIRouter, Depends, HTTPException, status
 from models import (
     Debate,
@@ -25,7 +24,7 @@ from models import (
     DebateStageCheckpoint,
     User,
 )
-from routes.common import require_debate_mutation_access
+from routes.common import require_debate_mutation_access, require_schema_current
 from sqlmodel import Session, select
 from sse_backend import get_sse_backend
 
