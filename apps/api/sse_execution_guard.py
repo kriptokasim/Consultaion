@@ -3,17 +3,13 @@
 These guards close cross-cutting ownership and transport gaps without
 replicating checks inside every engine:
 
-1. Durable debate SSE events are fenced immediately before publication so a
-   worker that loses ownership between DB commit and transport publish cannot
-   leak stale lifecycle/final events.
+1. Every debate SSE event is ownership-fenced. Lifecycle/final events verify
+   directly against the DB; hot streamed deltas verify a short-lived Redis
+   owner+epoch mirror and fall back to DB when the mirror is absent.
 2. Redis Pub/Sub is treated as a notification transport, not the durability
-   authority. If a Pub/Sub delivery is missed after the event was committed to
-   Redis history, heartbeat-time high-watermark reconciliation replays the
-   missing sequence into the existing live stream.
+   authority. Missed deliveries are repaired from durable Redis history.
 3. Multi-instance SSE concurrency leases fail closed when Redis is the expected
-   authority but becomes unavailable. Process-local memory is not a valid
-   substitute for a global production concurrency limit unless fail-open is
-   explicitly enabled.
+   authority but becomes unavailable.
 4. Staging follows the same fail-closed checkpoint lease rules as production.
 """
 
@@ -47,10 +43,26 @@ _STREAM_TERMINAL_EVENTS = frozenset({
 })
 
 
-async def _assert_live_publish_ownership(lease) -> None:
+def _reject_stale_publish(lease, *, source: str) -> None:
+    lease.lease_lost_event.set()
+    logger.warning(
+        "sse.execution_publish_rejected debate_id=%s owner=%s epoch=%s source=%s",
+        lease.debate_id,
+        lease.owner_id,
+        lease.lease_epoch,
+        source,
+    )
+    raise ExecutionSupersededError(
+        f"Debate {lease.debate_id}: SSE publication rejected because execution "
+        f"lease {lease.lease_epoch} is no longer owned by {lease.owner_id}."
+    )
+
+
+async def _assert_live_publish_ownership(lease) -> datetime:
+    """Verify DB ownership and opportunistically repair the fast Redis mirror."""
     now = datetime.now(timezone.utc)
     stmt = (
-        sa.select(Debate.id)
+        sa.select(Debate.lease_expires_at)
         .where(Debate.id == lease.debate_id)
         .where(Debate.runner_id == lease.owner_id)
         .where(Debate.lease_epoch == lease.lease_epoch)
@@ -59,20 +71,48 @@ async def _assert_live_publish_ownership(lease) -> None:
     )
     async with async_session_scope() as session:
         result = await session.execute(stmt)
-        if result.first() is not None:
-            return
+        expiry = result.scalar_one_or_none()
 
-    lease.lease_lost_event.set()
-    logger.warning(
-        "sse.execution_publish_rejected debate_id=%s owner=%s epoch=%s",
-        lease.debate_id,
-        lease.owner_id,
-        lease.lease_epoch,
+    if expiry is None:
+        _reject_stale_publish(lease, source="database")
+
+    try:
+        from orchestration.execution_lease_mirror import publish_execution_lease_mirror_until
+
+        await publish_execution_lease_mirror_until(lease, expiry)
+    except Exception:
+        # DB ownership is already proven. A mirror repair failure only means hot
+        # events will repeat the DB fallback until Redis is healthy again.
+        logger.warning(
+            "sse.execution_mirror_repair_failed debate_id=%s owner=%s epoch=%s",
+            lease.debate_id,
+            lease.owner_id,
+            lease.lease_epoch,
+            exc_info=True,
+        )
+    return expiry
+
+
+async def _assert_hot_publish_ownership(lease) -> None:
+    """Fence a high-frequency delta without putting the DB on the token hot path.
+
+    A Redis MISMATCH is definitive because a new owner writes its incremented
+    epoch after DB acquisition. MATCH is safe because mirror TTL is deliberately
+    shorter than the authoritative DB lease, so it cannot survive into takeover
+    eligibility. UNKNOWN (Redis restart/outage/near-expiry) falls back to DB and
+    repairs the mirror from the verified absolute expiry.
+    """
+    from orchestration.execution_lease_mirror import (
+        MirrorVerification,
+        verify_execution_lease_mirror,
     )
-    raise ExecutionSupersededError(
-        f"Debate {lease.debate_id}: SSE publication rejected because execution "
-        f"lease {lease.lease_epoch} is no longer owned by {lease.owner_id}."
-    )
+
+    verification = await verify_execution_lease_mirror(lease)
+    if verification is MirrorVerification.MATCH:
+        return
+    if verification is MirrorVerification.MISMATCH:
+        _reject_stale_publish(lease, source="redis_mirror")
+    await _assert_live_publish_ownership(lease)
 
 
 def _is_terminal_envelope(envelope: dict) -> bool:
@@ -83,14 +123,7 @@ def _is_terminal_envelope(envelope: dict) -> bool:
 
 
 def _is_unfenced_run_start_notice(channel_id: str, event: dict, lease) -> bool:
-    """Identify the legacy notice emitted by run_debate before lease acquisition.
-
-    A duplicate Celery delivery used to publish this user-visible event and only
-    then discover that another worker owned the debate. Until the call site is
-    structurally moved behind acquisition, the transport boundary suppresses
-    exactly this unfenced lifecycle notice. Real engine lifecycle events are
-    emitted after the execution ContextVar is bound.
-    """
+    """Identify the legacy notice emitted by run_debate before lease acquisition."""
     if lease is not None or not channel_id.startswith("debate:"):
         return False
     if str(event.get("type") or "") != "notice":
@@ -116,28 +149,16 @@ class ExecutionFencedSSEBackend:
             return
         if lease is not None and channel_id == f"debate:{lease.debate_id}":
             if lease.lease_lost_event.is_set():
-                raise ExecutionSupersededError(
-                    f"Debate {lease.debate_id}: stale execution attempted SSE publication."
-                )
+                _reject_stale_publish(lease, source="local_event")
             event_type = str(event.get("type") or "")
-            if event_type not in _HIGH_FREQUENCY_EVENTS:
+            if event_type in _HIGH_FREQUENCY_EVENTS:
+                await _assert_hot_publish_ownership(lease)
+            else:
                 await _assert_live_publish_ownership(lease)
         await self._backend.publish(channel_id, event)
 
     async def subscribe(self, channel_id: str, last_sequence: int | None = None):
-        """Bridge Redis history gaps into a still-open Pub/Sub stream.
-
-        RedisChannelBackend persists an event in ``sse:history:*`` before
-        publishing it. Pub/Sub may fail independently; historically the live
-        subscriber then received only heartbeats forever, and the frontend's
-        heartbeat-aware silence watchdog never entered polling fallback.
-
-        On each Redis heartbeat we first compare the durable sequence counter
-        with the highest sequence actually observed by this subscriber. A gap
-        triggers replay of only unseen events. Duplicate Pub/Sub delivery after
-        replay is suppressed by sequence, preserving monotonic exactly-once
-        presentation at this wrapper boundary.
-        """
+        """Bridge Redis history gaps into a still-open Pub/Sub stream."""
         seen_sequence = max(int(last_sequence or 0), 0)
         redis_client = getattr(self._backend, "_redis", None)
 
@@ -152,9 +173,6 @@ class ExecutionFencedSSEBackend:
                     current_raw = await redis_client.get(f"sse:seq:{channel_id}")
                     current_sequence = int(current_raw or 0)
                 except Exception as exc:
-                    # Keep the connection alive; readiness/lease guards handle
-                    # a broader Redis outage. This reconciliation is a gap-repair
-                    # path and must not fabricate a terminal error.
                     logger.warning(
                         "sse.history_highwater_check_failed channel=%s error=%s",
                         channel_id,
