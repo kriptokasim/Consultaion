@@ -1,16 +1,13 @@
 """Production runtime hardening for the model gateway.
 
-The gateway is the authoritative accounting boundary for every routed provider
-call. It enforces conservative cost preflight, persists actual spend, accounts
-returned tokens in the daily quota ledger, and applies the same controls to
-streaming Arena calls.
+This module turns cost/token enforcement into a reservation-based closed loop.
+Parallel Arena calls can no longer all observe the same remaining allowance:
+each user-scoped call atomically reserves a conservative full-call cost and
+input+max-output token budget before provider work, then settles that durable
+reservation to actual usage.
 
-Legacy agent code also schedules a historical ``persist_usage_log`` task after
-``call_model_via_gateway`` returns. Once this guard is installed that would
-write the same provider call a second time and double monthly spend. The guard
-therefore marks gateway-persisted UsageCall objects and suppresses only that
-legacy duplicate path while preserving legacy persistence for genuinely
-non-gateway calls.
+It also owns actual LLMUsageLog persistence, daily token accounting, streaming
+parity, and deduplication of the historical Agent fire-and-forget usage logger.
 """
 
 from __future__ import annotations
@@ -19,7 +16,12 @@ import asyncio
 import logging
 from typing import Any
 
-from model_gateway.types import GatewayModelCallResult, GatewayRequest
+from model_gateway.types import (
+    GatewayModelCallResult,
+    GatewayModelRestrictedError,
+    GatewayQuotaExceededError,
+    GatewayRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,6 @@ def gateway_runtime_guard_installed() -> bool:
 
 
 def mark_usage_call_persisted(call_usage: Any) -> None:
-    """Mark an Agent UsageCall as already persisted by this gateway boundary."""
     try:
         setattr(call_usage, "_gateway_usage_persisted", True)
     except Exception:
@@ -54,18 +55,31 @@ def _resolved_litellm_model(model_id: str) -> str:
         return model_id
 
 
+def estimate_full_call_tokens(
+    *,
+    messages: list[dict[str, Any]],
+    model_id: str,
+    max_tokens: int,
+) -> int:
+    """Conservative pre-provider token reservation: input + full output cap."""
+    output_budget = max(int(max_tokens or 0), 0)
+    model = _resolved_litellm_model(model_id)
+    try:
+        from litellm import token_counter
+
+        input_tokens = max(int(token_counter(model=model, messages=messages) or 0), 0)
+    except Exception:
+        input_tokens = max(1, len(str(messages)) // 4)
+    return input_tokens + output_budget
+
+
 def estimate_full_call_cost(
     *,
     messages: list[dict[str, Any]],
     model_id: str,
     max_tokens: int,
 ) -> float:
-    """Estimate worst-case call cost before provider execution.
-
-    LiteLLM pricing is preferred. If model pricing/tokenization is unavailable,
-    fall back to a deliberately conservative $30 / 1M-token assumption for
-    both input and the full configured output budget.
-    """
+    """Estimate worst-case call cost using input plus full output budget."""
     model = _resolved_litellm_model(model_id)
     output_budget = max(int(max_tokens or 0), 0)
     try:
@@ -83,41 +97,13 @@ def estimate_full_call_cost(
     except Exception:
         logger.debug("Gateway pricing estimate unavailable for %s", model, exc_info=True)
 
-    approx_chars = len(str(messages))
-    input_tokens = max(1, approx_chars // 4)
-    return 0.00003 * float(input_tokens + output_budget)
-
-
-async def _preflight_cost(
-    *,
-    user_id: str | None,
-    user_plan: str | None,
-    messages: list[dict[str, Any]],
-    model_id: str,
-    max_tokens: int,
-) -> float:
-    estimate = estimate_full_call_cost(
-        messages=messages,
-        model_id=model_id,
-        max_tokens=max_tokens,
-    )
-    if not user_id:
-        from model_gateway.costs import check_credit_and_cost_safety
-
-        await check_credit_and_cost_safety(None, user_plan, estimate, None)
-        return estimate
-
-    from database_async import async_session_scope
-    from model_gateway.costs import check_credit_and_cost_safety
-
-    async with async_session_scope() as session:
-        await check_credit_and_cost_safety(
-            user_id,
-            user_plan,
-            estimate,
-            session,
+    return 0.00003 * float(
+        estimate_full_call_tokens(
+            messages=messages,
+            model_id=model_id,
+            max_tokens=max_tokens,
         )
-    return estimate
+    )
 
 
 def _safe_error_message(result: GatewayModelCallResult) -> str | None:
@@ -168,6 +154,7 @@ def _persist_gateway_usage_sync(
     user_plan: str | None,
     preflight_estimate: float,
 ) -> None:
+    """Legacy/unreserved persistence path used when no user reservation exists."""
     from database import session_scope
     from models import LLMUsageLog, UsageLedgerEntry
 
@@ -231,8 +218,53 @@ def _persist_gateway_usage_sync(
         session.commit()
 
 
-async def persist_gateway_usage(
+async def _reserve_budget(
     *,
+    user_id: str | None,
+    debate_id: str | None,
+    model_id: str,
+    role: str | None,
+    user_plan: str | None,
+    messages: list[dict[str, Any]],
+    max_tokens: int,
+):
+    estimate = estimate_full_call_cost(
+        messages=messages,
+        model_id=model_id,
+        max_tokens=max_tokens,
+    )
+    token_estimate = estimate_full_call_tokens(
+        messages=messages,
+        model_id=model_id,
+        max_tokens=max_tokens,
+    )
+
+    if not user_id:
+        from model_gateway.costs import check_credit_and_cost_safety
+
+        await check_credit_and_cost_safety(None, user_plan, estimate, None)
+        return estimate, None
+
+    from model_gateway.reservations import reserve_gateway_budget_sync
+
+    reservation = await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: reserve_gateway_budget_sync(
+            user_id=user_id,
+            debate_id=debate_id,
+            model_id=model_id,
+            role=role,
+            user_plan=user_plan,
+            estimated_cost_usd=estimate,
+            estimated_tokens=token_estimate,
+        ),
+    )
+    return estimate, reservation
+
+
+async def _settle_or_persist(
+    *,
+    reservation,
     result: GatewayModelCallResult,
     user_id: str | None,
     debate_id: str | None,
@@ -240,7 +272,19 @@ async def persist_gateway_usage(
     user_plan: str | None,
     preflight_estimate: float,
 ) -> None:
-    """Persist cost and per-call token quota in a fresh owned sync Session."""
+    if reservation is not None:
+        from model_gateway.reservations import settle_gateway_budget_sync
+
+        await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: settle_gateway_budget_sync(
+                reservation,
+                result=result,
+                safe_error_message=_safe_error_message(result),
+            ),
+        )
+        return
+
     if result.provider == "mock":
         return
     await asyncio.get_running_loop().run_in_executor(
@@ -256,28 +300,59 @@ async def persist_gateway_usage(
     )
 
 
-async def guarded_route_llm_call(request: GatewayRequest, db_session=None) -> GatewayModelCallResult:
-    """Cost-guard and persist a non-streaming gateway call."""
-    from sqlalchemy.ext.asyncio import AsyncSession
+async def _release_preprovider_reservation(reservation, exc: Exception) -> None:
+    if reservation is None:
+        return
+    from model_gateway.reservations import release_gateway_budget_sync
 
-    estimate = await _preflight_cost(
+    await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: release_gateway_budget_sync(
+            reservation,
+            reason=type(exc).__name__,
+        ),
+    )
+
+
+async def guarded_route_llm_call(request: GatewayRequest, db_session=None) -> GatewayModelCallResult:
+    """Reserve → call → actual-settle a non-streaming gateway invocation."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from model_gateway.costs import bind_cost_reservation, reset_cost_reservation
+
+    estimate, reservation = await _reserve_budget(
         user_id=request.user_id,
+        debate_id=request.debate_id,
+        model_id=request.model_id,
+        role=request.role,
         user_plan=request.user_plan,
         messages=request.messages,
-        model_id=request.model_id,
         max_tokens=request.max_tokens,
     )
 
-    if db_session is not None and isinstance(db_session, AsyncSession):
-        result = await _original_route_call(request, db_session=db_session)
-    else:
-        from database_async import async_session_scope
+    cost_token = (
+        bind_cost_reservation(request.user_id, reservation.reserved_cost_usd)
+        if reservation is not None and request.user_id
+        else None
+    )
+    try:
+        try:
+            if db_session is not None and isinstance(db_session, AsyncSession):
+                result = await _original_route_call(request, db_session=db_session)
+            else:
+                from database_async import async_session_scope
 
-        async with async_session_scope() as session:
-            result = await _original_route_call(request, db_session=session)
+                async with async_session_scope() as session:
+                    result = await _original_route_call(request, db_session=session)
+        except (GatewayQuotaExceededError, GatewayModelRestrictedError) as exc:
+            await _release_preprovider_reservation(reservation, exc)
+            raise
+    finally:
+        if cost_token is not None:
+            reset_cost_reservation(cost_token)
 
     try:
-        await persist_gateway_usage(
+        await _settle_or_persist(
+            reservation=reservation,
             result=result,
             user_id=request.user_id,
             debate_id=request.debate_id,
@@ -288,7 +363,7 @@ async def guarded_route_llm_call(request: GatewayRequest, db_session=None) -> Ga
     except Exception as exc:
         from config import settings
 
-        logger.exception("gateway.usage_persistence_failed")
+        logger.exception("gateway.usage_settlement_failed")
         if settings.APP_ENV in {"production", "staging"}:
             raise RuntimeError("Model usage accounting is temporarily unavailable.") from exc
     return result
@@ -305,7 +380,9 @@ async def guarded_route_llm_stream(
     user_id: str | None = None,
     api_key: str | None = None,
 ) -> GatewayModelCallResult:
-    """Apply cumulative cost enforcement and persistence to Arena streaming."""
+    """Reserve → stream → actual-settle with identical cost/quota semantics."""
+    from model_gateway.costs import bind_cost_reservation, reset_cost_reservation
+
     user_plan: str | None = None
     if user_id:
         try:
@@ -318,27 +395,43 @@ async def guarded_route_llm_stream(
         except Exception:
             logger.warning("Failed to resolve stream user plan", exc_info=True)
 
-    estimate = await _preflight_cost(
+    estimate, reservation = await _reserve_budget(
         user_id=user_id,
+        debate_id=debate_id,
+        model_id=model_id,
+        role="arena_stream",
         user_plan=user_plan,
         messages=messages,
-        model_id=model_id,
         max_tokens=max_tokens,
     )
 
-    result = await _original_route_stream(
-        messages=messages,
-        model_id=model_id,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        on_delta=on_delta,
-        debate_id=debate_id,
-        user_id=user_id,
-        api_key=api_key,
+    cost_token = (
+        bind_cost_reservation(user_id, reservation.reserved_cost_usd)
+        if reservation is not None and user_id
+        else None
     )
+    try:
+        try:
+            result = await _original_route_stream(
+                messages=messages,
+                model_id=model_id,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                on_delta=on_delta,
+                debate_id=debate_id,
+                user_id=user_id,
+                api_key=api_key,
+            )
+        except (GatewayQuotaExceededError, GatewayModelRestrictedError) as exc:
+            await _release_preprovider_reservation(reservation, exc)
+            raise
+    finally:
+        if cost_token is not None:
+            reset_cost_reservation(cost_token)
 
     try:
-        await persist_gateway_usage(
+        await _settle_or_persist(
+            reservation=reservation,
             result=result,
             user_id=user_id,
             debate_id=debate_id,
@@ -349,14 +442,13 @@ async def guarded_route_llm_stream(
     except Exception as exc:
         from config import settings
 
-        logger.exception("gateway.stream_usage_persistence_failed")
+        logger.exception("gateway.stream_usage_settlement_failed")
         if settings.APP_ENV in {"production", "staging"}:
             raise RuntimeError("Model usage accounting is temporarily unavailable.") from exc
     return result
 
 
 async def _dedupe_legacy_usage_persist(call_usage, **kwargs) -> None:
-    """Suppress only the historical duplicate for already-persisted gateway calls."""
     if getattr(call_usage, "_gateway_usage_persisted", False):
         return
     if _original_legacy_usage_persist is not None:
@@ -376,10 +468,6 @@ def install_gateway_runtime_guard() -> None:
     model_gateway.route_llm_call = guarded_route_llm_call
     model_gateway.route_llm_stream = guarded_route_llm_stream
 
-    # agents imports agent_bridge, and agent_bridge imports route_llm_call only
-    # inside execution, so this late import is safe in normal runtime. If agents
-    # is already loaded, replacing the module global also updates the name used
-    # by its later fire-and-forget persistence task.
     try:
         import agents
 
