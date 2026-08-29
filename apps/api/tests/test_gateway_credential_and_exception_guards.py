@@ -165,3 +165,86 @@ async def test_preprovider_cancellation_releases_reservation(db_session, monkeyp
     assert log.cost_usd == 0
     assert ledger.status == "refunded"
     assert counter.tokens_used == 0
+
+
+@pytest.mark.anyio
+async def test_postprovider_cancellation_settles_known_actual_usage(db_session, monkeypatch):
+    import model_gateway.runtime_exception_guard as exception_guard
+    import model_gateway.runtime_guard as runtime_guard
+    from model_gateway.attempt_tracker import begin_adapter_attempt, finish_adapter_attempt
+    from model_gateway.reservations import reserve_gateway_budget_sync
+    from model_gateway.types import GatewayModelCallResult
+    from models import LLMUsageLog, UsageCounter, UsageLedgerEntry
+    from sqlmodel import select
+
+    user, debate = _seed_identity(db_session, suffix="postprovider-cancel")
+    reservation = reserve_gateway_budget_sync(
+        user_id=user.id,
+        debate_id=debate.id,
+        model_id="model-a",
+        role="producer",
+        user_plan="free",
+        estimated_cost_usd=0.01,
+        estimated_tokens=100,
+    )
+
+    async def fake_reserve_budget(**_kwargs):
+        return 0.01, 100, reservation
+
+    monkeypatch.setattr(runtime_guard, "_reserve_budget", fake_reserve_budget)
+    monkeypatch.setattr(exception_guard, "_installed", False)
+    exception_guard.install_runtime_exception_guard()
+
+    async def cancel_after_adapter():
+        index = await begin_adapter_attempt(
+            messages=[{"role": "user", "content": "x"}],
+            model_id="model-a",
+            max_tokens=100,
+        )
+        finish_adapter_attempt(
+            index,
+            result=GatewayModelCallResult(
+                content="",
+                model_used="model-a",
+                provider="openai",
+                prompt_tokens=25,
+                completion_tokens=15,
+                total_tokens=40,
+                cost_usd=0.004,
+                estimated_cost_usd=0.004,
+                success=False,
+                error_message="provider returned then task cancelled",
+                model_pool="test",
+                routing_policy="test",
+            ),
+        )
+        raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await runtime_guard._execute_guarded_route(
+            route_call=cancel_after_adapter,
+            user_id=user.id,
+            debate_id=debate.id,
+            model_id="model-a",
+            role="producer",
+            user_plan="free",
+            messages=[{"role": "user", "content": "x"}],
+            max_tokens=100,
+        )
+
+    db_session.expire_all()
+    log = db_session.get(LLMUsageLog, reservation.usage_log_id)
+    ledger = db_session.get(UsageLedgerEntry, reservation.token_ledger_id)
+    counter = db_session.exec(
+        select(UsageCounter).where(
+            UsageCounter.user_id == user.id,
+            UsageCounter.period == "day",
+        )
+    ).first()
+
+    assert log.provider == "openai"
+    assert log.total_tokens == 40
+    assert log.cost_usd == pytest.approx(0.004)
+    assert ledger.status == "settled"
+    assert ledger.amount == 40
+    assert counter.tokens_used == 40
