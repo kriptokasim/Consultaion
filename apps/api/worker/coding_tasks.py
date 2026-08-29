@@ -37,6 +37,8 @@ LANE_TIMEOUTS = {
 }
 
 CONVERGENCE_THRESHOLD = 0.85
+TURN_LEASE_TTL_SECONDS = 180
+TURN_FOLLOW_POLL_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -56,7 +58,7 @@ class _LaneLease:
 
 
 class LaneCoordinationUnavailable(RuntimeError):
-    """Distributed lane ownership cannot be verified in a multi-worker env."""
+    """Distributed Coding Agent ownership cannot be verified."""
 
 
 def _lane_snapshot(record: CodingLaneResult) -> LaneExecutionResult:
@@ -91,10 +93,18 @@ def _load_lane_snapshot(
         return _lane_snapshot(record)
 
 
-async def _try_acquire_lane_lease(
-    run_id: str,
-    turn_id: str,
-    lane: str,
+def _turn_is_terminal(run_id: str, turn_id: str) -> bool:
+    """Return whether the durable turn already reached a terminal product state."""
+    with session_scope() as db_session:
+        run = db_session.get(CodingRun, run_id)
+        turn = db_session.get(CodingTurn, turn_id)
+        if run is None or turn is None:
+            return True
+        return turn.status in {"completed", "failed", "cancelled"}
+
+
+async def _try_acquire_redis_lease(
+    key: str,
     *,
     ttl_seconds: int,
 ) -> _LaneLease | None:
@@ -106,23 +116,35 @@ async def _try_acquire_lane_lease(
         if getattr(settings, "IS_LOCAL_ENV", False):
             return _LaneLease(key=None, token=None, client=None)
         raise LaneCoordinationUnavailable(
-            "Coding lane coordination is temporarily unavailable."
+            "Coding Agent coordination is temporarily unavailable."
         )
 
-    key = f"coding:lane:lease:{run_id}:{turn_id}:{lane}"
     token = str(uuid.uuid4())
     try:
         acquired = await client.set(key, token, ex=ttl_seconds, nx=True)
     except Exception as exc:
         if getattr(settings, "IS_LOCAL_ENV", False):
-            logger.warning("Coding lane Redis lease unavailable locally: %s", exc)
+            logger.warning("Coding Agent Redis lease unavailable locally: %s", exc)
             return _LaneLease(key=None, token=None, client=None)
         raise LaneCoordinationUnavailable(
-            "Coding lane coordination is temporarily unavailable."
+            "Coding Agent coordination is temporarily unavailable."
         ) from exc
     if not acquired:
         return None
     return _LaneLease(key=key, token=token, client=client)
+
+
+async def _try_acquire_lane_lease(
+    run_id: str,
+    turn_id: str,
+    lane: str,
+    *,
+    ttl_seconds: int,
+) -> _LaneLease | None:
+    return await _try_acquire_redis_lease(
+        f"coding:lane:lease:{run_id}:{turn_id}:{lane}",
+        ttl_seconds=ttl_seconds,
+    )
 
 
 async def _release_lane_lease(lease: _LaneLease | None) -> None:
@@ -135,7 +157,42 @@ async def _release_lane_lease(lease: _LaneLease | None) -> None:
     try:
         await lease.client.eval(script, 1, lease.key, lease.token)
     except Exception:
-        logger.warning("Failed to release coding lane lease %s", lease.key, exc_info=True)
+        # The TTL is the crash-recovery authority. Never blind-delete a key
+        # after an ownership mismatch because it may belong to a newer worker.
+        logger.warning("Failed to release Coding Agent lease %s", lease.key, exc_info=True)
+
+
+async def _acquire_or_follow_turn(run_id: str, turn_id: str) -> _LaneLease | None:
+    """Own one parent turn or follow the current owner until durable completion.
+
+    Lane-level leases prevent duplicate provider calls, but duplicate Celery
+    deliveries can still race at judge/artifact/finalization boundaries. This
+    parent lease makes the entire run/turn identity single-owner. A crashed owner
+    recovers after TTL; the next owner reuses durable terminal lane rows.
+    """
+    if _turn_is_terminal(run_id, turn_id):
+        return None
+
+    key = f"coding:turn:lease:{run_id}:{turn_id}"
+    deadline = time.monotonic() + TURN_LEASE_TTL_SECONDS + 10
+    while True:
+        lease = await _try_acquire_redis_lease(
+            key,
+            ttl_seconds=TURN_LEASE_TTL_SECONDS,
+        )
+        if lease is not None:
+            if _turn_is_terminal(run_id, turn_id):
+                await _release_lane_lease(lease)
+                return None
+            return lease
+
+        if _turn_is_terminal(run_id, turn_id):
+            return None
+        if time.monotonic() >= deadline:
+            raise LaneCoordinationUnavailable(
+                "Coding turn is already executing and did not reach a durable result."
+            )
+        await asyncio.sleep(TURN_FOLLOW_POLL_SECONDS)
 
 
 async def _acquire_or_follow_lane(
@@ -195,11 +252,7 @@ async def _execute_lane(
     run_tier: int,
     user_id: str,
 ) -> LaneExecutionResult:
-    """Execute exactly one provider call for a run/turn/lane identity.
-
-    Distributed Redis ownership fences duplicate Celery deliveries. Database
-    Sessions are short-lived and never span provider/network awaits.
-    """
+    """Execute exactly one provider call for a run/turn/lane identity."""
     model_key = LANE_MODELS[lane]
     timeout = LANE_TIMEOUTS[lane]
     lease: _LaneLease | None = None
@@ -227,6 +280,8 @@ async def _execute_lane(
     start_time = datetime.now(timezone.utc)
 
     try:
+        # Database claims/finalization are short-lived. No SQLAlchemy Session is
+        # held across the provider/network await below.
         with session_scope() as db_session:
             existing = db_session.exec(
                 select(CodingLaneResult).where(
@@ -336,14 +391,16 @@ async def _execute_lane(
         await _release_lane_lease(lease)
 
 
-async def _async_execute_turn(run_id: str, turn_id: str):
-    """Async implementation of the turn execution."""
+async def _async_execute_turn_owned(run_id: str, turn_id: str) -> None:
+    """Execute a turn after parent ownership has been established."""
     sse = get_sse_backend()
 
     with session_scope() as db:
         run = db.get(CodingRun, run_id)
         turn = db.get(CodingTurn, turn_id)
         if not run or not turn:
+            return
+        if turn.status in {"completed", "failed", "cancelled"}:
             return
 
         tier_res = classify_tier(run.file_paths or [], turn.prompt)
@@ -432,10 +489,14 @@ async def _async_execute_turn(run_id: str, turn_id: str):
     terminal_status = "completed" if final_content else "failed"
     completed_at = datetime.now(timezone.utc)
 
+    # Parent lease guarantees one finalizer, but keep artifact creation idempotent
+    # so crash recovery may safely re-enter after all lanes are durable.
     with session_scope() as db:
         run = db.get(CodingRun, run_pk)
         turn = db.get(CodingTurn, turn_pk)
         if not run or not turn:
+            return
+        if turn.status in {"completed", "failed", "cancelled"}:
             return
 
         if final_content:
@@ -463,6 +524,25 @@ async def _async_execute_turn(run_id: str, turn_id: str):
         db.add(turn)
         db.add(run)
         db.commit()
+
+
+async def _async_execute_turn(run_id: str, turn_id: str):
+    """Single-owner parent entrypoint for one Coding Agent turn identity."""
+    try:
+        lease = await _acquire_or_follow_turn(run_id, turn_id)
+    except LaneCoordinationUnavailable as exc:
+        incr_metric("coding.turn_failure_count", tags={"reason": "coordination"})
+        logger.error("Coding turn coordination failed run=%s turn=%s: %s", run_id, turn_id, exc)
+        return
+
+    if lease is None:
+        # Missing rows or a terminal/followed turn are idempotent no-ops.
+        return
+
+    try:
+        await _async_execute_turn_owned(run_id, turn_id)
+    finally:
+        await _release_lane_lease(lease)
 
 
 @celery_app.task(name="coding.execute_turn")
