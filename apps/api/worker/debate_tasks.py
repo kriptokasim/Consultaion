@@ -8,14 +8,15 @@ from channels import debate_channel_id
 from database import session_scope
 from metrics import incr_metric
 from models import Debate
+from orchestration.execution_lease import ExecutionSupersededError
 from orchestrator import run_debate
 from sse_backend import get_sse_backend
 
 from state_terminal_guard import install_terminal_accounting_guard
 from worker.celery_app import celery_app
 
-# CORE-AUDIT (CE-1): install guard in the worker process too — debate
-# terminal accounting also runs inside Celery task execution.
+# Install guard in the worker process too — debate terminal accounting also runs
+# inside Celery task execution.
 install_terminal_accounting_guard()
 
 logger = get_task_logger(__name__)
@@ -30,7 +31,6 @@ async def _execute_debate_run(
     is_resume: bool = False,
     continuation_id: str | None = None,
 ) -> None:
-    # Patchset 136: Log worker start with structured fields
     module_logger.info(
         "Worker starting debate execution",
         extra={
@@ -84,7 +84,12 @@ def run_debate_task(
     is_resume: bool = False,
     continuation_id: str | None = None,
 ) -> None:
-    """Celery task that executes a debate orchestration by ID."""
+    """Celery task that executes a debate orchestration by ID.
+
+    Ownership supersession is a successful hand-off to a newer worker, not a
+    transient task failure. Retrying a superseded task can resurrect stale work
+    after the newer owner releases its lease, so it must exit without retry.
+    """
     try:
         from observability.tracing import traced_span
         with traced_span("pipeline.run", {"debate_id": debate_id, "is_resume": str(is_resume)}):
@@ -96,6 +101,9 @@ def run_debate_task(
                     continuation_id=continuation_id,
                 )
             )
+    except ExecutionSupersededError:
+        logger.info("Debate %s task superseded by a newer execution owner; not retrying", debate_id)
+        return
     except Exception as exc:  # pragma: no cover - Celery handles retries/logging
         logger.exception("Error while running debate %s", debate_id)
         raise self.retry(exc=exc, countdown=10) from exc
