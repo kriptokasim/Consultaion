@@ -4,6 +4,11 @@ Gateway calls reserve daily tokens before provider work and settle that
 reservation to actual usage on return. Terminal attempt reconciliation applies
 only any remaining aggregate delta (legacy/non-gateway work), while also
 repairing hosted-credit settlement after crashes.
+
+Traffic-readiness invariant: periodic reconciliation must scale with unresolved
+work, not with the entire historical DebateAttempt table. Candidate discovery
+therefore anti-joins already-settled aggregate token ledger rows and processes a
+bounded batch on every cleanup tick.
 """
 
 from __future__ import annotations
@@ -11,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import sqlalchemy as sa
 from database import session_scope
 from models import Debate, DebateAttempt, DebateContinuation, UsageLedgerEntry
 from sqlmodel import select
@@ -25,6 +31,7 @@ _CREDIT_PENDING = {"reserved", "settlement_pending"}
 _SUCCESS_DEBATE_STATUSES = {"completed", "completed_with_warnings"}
 _FAILED_DEBATE_STATUSES = {"failed", "cancelled"}
 _TERMINAL_ATTEMPT_STATUSES = {"completed", "failed", "cancelled"}
+_RECONCILE_BATCH_SIZE = 500
 
 
 def _gateway_accounted_tokens(session, attempt_id: str | None) -> int:
@@ -186,22 +193,47 @@ def _settle_credit_entry(session, entry: UsageLedgerEntry) -> str | None:
     return None
 
 
+def _unresolved_terminal_attempts(session) -> list[DebateAttempt]:
+    """Return only terminal attempts lacking a settled aggregate token ledger.
+
+    A settled ``token_usage`` row is the durable marker that this attempt no
+    longer needs periodic reconstruction. Pending/missing rows remain eligible.
+    Joining Debate filters orphan/anonymous rows that cannot be user-accounted.
+    The batch limit prevents a backlog from monopolizing the cleanup worker.
+    """
+    stmt = (
+        select(DebateAttempt)
+        .join(Debate, Debate.id == DebateAttempt.debate_id)
+        .outerjoin(
+            UsageLedgerEntry,
+            sa.and_(
+                UsageLedgerEntry.attempt_id == DebateAttempt.id,
+                UsageLedgerEntry.kind == "token_usage",
+                UsageLedgerEntry.status == "settled",
+            ),
+        )
+        .where(DebateAttempt.status.in_(_TERMINAL_ATTEMPT_STATUSES))
+        .where(DebateAttempt.tokens_used > 0)
+        .where(Debate.user_id.is_not(None))
+        .where(UsageLedgerEntry.id.is_(None))
+        .limit(_RECONCILE_BATCH_SIZE)
+    )
+    return list(session.exec(stmt).all())
+
+
 def reconcile_terminal_accounting_sync() -> dict[str, int]:
-    """Repair reconstructible terminal accounting drift in one transaction."""
+    """Repair reconstructible accounting drift in bounded unresolved batches."""
     stats = {
+        "token_candidates": 0,
         "token_counters_applied": 0,
+        "credit_candidates": 0,
         "credits_settled": 0,
         "credits_refunded": 0,
     }
 
     with session_scope() as session:
-        attempts = list(
-            session.exec(
-                select(DebateAttempt)
-                .where(DebateAttempt.status.in_(_TERMINAL_ATTEMPT_STATUSES))
-                .where(DebateAttempt.tokens_used > 0)
-            ).all()
-        )
+        attempts = _unresolved_terminal_attempts(session)
+        stats["token_candidates"] = len(attempts)
         for attempt in attempts:
             debate = session.get(Debate, attempt.debate_id)
             if debate is None:
@@ -218,8 +250,10 @@ def reconcile_terminal_accounting_sync() -> dict[str, int]:
                 select(UsageLedgerEntry)
                 .where(UsageLedgerEntry.kind == "credit_reservation")
                 .where(UsageLedgerEntry.status.in_(_CREDIT_PENDING))
+                .limit(_RECONCILE_BATCH_SIZE)
             ).all()
         )
+        stats["credit_candidates"] = len(credit_entries)
         for entry in credit_entries:
             outcome = _settle_credit_entry(session, entry)
             if outcome == "settled":
@@ -227,7 +261,7 @@ def reconcile_terminal_accounting_sync() -> dict[str, int]:
             elif outcome == "refunded":
                 stats["credits_refunded"] += 1
 
-    if any(stats.values()):
+    if stats["token_counters_applied"] or stats["credits_settled"] or stats["credits_refunded"]:
         logger.warning("terminal_accounting.reconciled stats=%s", stats)
     return stats
 
