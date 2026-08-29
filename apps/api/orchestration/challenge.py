@@ -4,6 +4,7 @@ import logging
 from typing import Any, Dict
 
 from agents import USE_MOCK, _call_llm
+from llm_errors import classify_provider_exception
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +94,11 @@ async def evaluate_synthesis_challenge(
 
         return data
     except Exception as exc:
-        logger.error(f"Synthesis challenge evaluation failed: {exc}")
+        # CORE-AUDIT (CE-3): safe message only — raw error stays server-side.
+        logger.error("Synthesis challenge evaluation failed: %s", exc)
+        safe = classify_provider_exception(exc)
         return {
             "decision": "defend",
-            "reasoning": f"Could not process challenge: {exc}",
+            "reasoning": f"Could not process challenge ({safe.code.value}); the current synthesis was kept.",
             "revised_synthesis": current_synthesis
         }
