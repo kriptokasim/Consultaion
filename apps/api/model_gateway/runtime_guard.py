@@ -1,20 +1,16 @@
 """Production runtime hardening for the model gateway.
 
-The gateway previously logged cost metrics only to application logs while the
-monthly safety guard queried ``llm_usage_log``. No production call site wrote
-that table, so cumulative cost enforcement effectively always saw zero. Arena
-streaming also bypassed ``check_credit_and_cost_safety`` entirely.
+The gateway is the authoritative accounting boundary for every routed provider
+call. It enforces conservative cost preflight, persists actual spend, accounts
+returned tokens in the daily quota ledger, and applies the same controls to
+streaming Arena calls.
 
-This guard makes provider accounting a closed loop:
-
-* estimate the full call (input + maximum output) conservatively before work;
-* run the existing gateway with an AsyncSession even when a caller supplied a
-  synchronous SQLModel Session, avoiding cross-thread Session use;
-* persist the actual GatewayModelCallResult to LLMUsageLog after every call,
-  including failed streams that consumed tokens/cost;
-* account every returned token total immediately in the daily quota counter
-  with a per-call settled UsageLedgerEntry, so failed provider calls count too;
-* apply the same preflight/persistence path to streaming Arena calls.
+Legacy agent code also schedules a historical ``persist_usage_log`` task after
+``call_model_via_gateway`` returns. Once this guard is installed that would
+write the same provider call a second time and double monthly spend. The guard
+therefore marks gateway-persisted UsageCall objects and suppresses only that
+legacy duplicate path while preserving legacy persistence for genuinely
+non-gateway calls.
 """
 
 from __future__ import annotations
@@ -30,6 +26,19 @@ logger = logging.getLogger(__name__)
 _installed = False
 _original_route_call = None
 _original_route_stream = None
+_original_legacy_usage_persist = None
+
+
+def gateway_runtime_guard_installed() -> bool:
+    return _installed
+
+
+def mark_usage_call_persisted(call_usage: Any) -> None:
+    """Mark an Agent UsageCall as already persisted by this gateway boundary."""
+    try:
+        setattr(call_usage, "_gateway_usage_persisted", True)
+    except Exception:
+        pass
 
 
 def _resolved_litellm_model(model_id: str) -> str:
@@ -194,9 +203,6 @@ def _persist_gateway_usage_sync(
         session.flush()
 
         if user_id and total_tokens > 0:
-            # Per-call ledger identity is generated from the already-durable
-            # usage-log identity. The quota increment and settled ledger row are
-            # part of the same transaction, so retry cannot double-count.
             token_entry = UsageLedgerEntry(
                 user_id=user_id,
                 kind="gateway_token_usage",
@@ -262,9 +268,6 @@ async def guarded_route_llm_call(request: GatewayRequest, db_session=None) -> Ga
         max_tokens=request.max_tokens,
     )
 
-    # Existing route logic reads plan/BYOK/credit state from db_session. Never
-    # let it move a synchronous request-owned Session into executor threads;
-    # provide a fresh AsyncSession instead.
     if db_session is not None and isinstance(db_session, AsyncSession):
         result = await _original_route_call(request, db_session=db_session)
     else:
@@ -352,9 +355,17 @@ async def guarded_route_llm_stream(
     return result
 
 
+async def _dedupe_legacy_usage_persist(call_usage, **kwargs) -> None:
+    """Suppress only the historical duplicate for already-persisted gateway calls."""
+    if getattr(call_usage, "_gateway_usage_persisted", False):
+        return
+    if _original_legacy_usage_persist is not None:
+        await _original_legacy_usage_persist(call_usage, **kwargs)
+
+
 def install_gateway_runtime_guard() -> None:
-    """Patch the canonical module-level gateway routes exactly once."""
-    global _installed, _original_route_call, _original_route_stream
+    """Patch canonical gateway routes and dedupe legacy Agent usage persistence."""
+    global _installed, _original_route_call, _original_route_stream, _original_legacy_usage_persist
     if _installed:
         return
 
@@ -364,4 +375,17 @@ def install_gateway_runtime_guard() -> None:
     _original_route_stream = model_gateway.route_llm_stream
     model_gateway.route_llm_call = guarded_route_llm_call
     model_gateway.route_llm_stream = guarded_route_llm_stream
+
+    # agents imports agent_bridge, and agent_bridge imports route_llm_call only
+    # inside execution, so this late import is safe in normal runtime. If agents
+    # is already loaded, replacing the module global also updates the name used
+    # by its later fire-and-forget persistence task.
+    try:
+        import agents
+
+        _original_legacy_usage_persist = agents.persist_usage_log
+        agents.persist_usage_log = _dedupe_legacy_usage_persist
+    except Exception:
+        logger.warning("Could not install legacy usage persistence dedupe", exc_info=True)
+
     _installed = True
