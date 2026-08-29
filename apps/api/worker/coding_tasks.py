@@ -157,19 +157,11 @@ async def _release_lane_lease(lease: _LaneLease | None) -> None:
     try:
         await lease.client.eval(script, 1, lease.key, lease.token)
     except Exception:
-        # The TTL is the crash-recovery authority. Never blind-delete a key
-        # after an ownership mismatch because it may belong to a newer worker.
         logger.warning("Failed to release Coding Agent lease %s", lease.key, exc_info=True)
 
 
 async def _acquire_or_follow_turn(run_id: str, turn_id: str) -> _LaneLease | None:
-    """Own one parent turn or follow the current owner until durable completion.
-
-    Lane-level leases prevent duplicate provider calls, but duplicate Celery
-    deliveries can still race at judge/artifact/finalization boundaries. This
-    parent lease makes the entire run/turn identity single-owner. A crashed owner
-    recovers after TTL; the next owner reuses durable terminal lane rows.
-    """
+    """Own one parent turn or follow the current owner until durable completion."""
     if _turn_is_terminal(run_id, turn_id):
         return None
 
@@ -280,8 +272,6 @@ async def _execute_lane(
     start_time = datetime.now(timezone.utc)
 
     try:
-        # Database claims/finalization are short-lived. No SQLAlchemy Session is
-        # held across the provider/network await below.
         with session_scope() as db_session:
             existing = db_session.exec(
                 select(CodingLaneResult).where(
@@ -489,8 +479,6 @@ async def _async_execute_turn_owned(run_id: str, turn_id: str) -> None:
     terminal_status = "completed" if final_content else "failed"
     completed_at = datetime.now(timezone.utc)
 
-    # Parent lease guarantees one finalizer, but keep artifact creation idempotent
-    # so crash recovery may safely re-enter after all lanes are durable.
     with session_scope() as db:
         run = db.get(CodingRun, run_pk)
         turn = db.get(CodingTurn, turn_pk)
@@ -528,15 +516,8 @@ async def _async_execute_turn_owned(run_id: str, turn_id: str) -> None:
 
 async def _async_execute_turn(run_id: str, turn_id: str):
     """Single-owner parent entrypoint for one Coding Agent turn identity."""
-    try:
-        lease = await _acquire_or_follow_turn(run_id, turn_id)
-    except LaneCoordinationUnavailable as exc:
-        incr_metric("coding.turn_failure_count", tags={"reason": "coordination"})
-        logger.error("Coding turn coordination failed run=%s turn=%s: %s", run_id, turn_id, exc)
-        return
-
+    lease = await _acquire_or_follow_turn(run_id, turn_id)
     if lease is None:
-        # Missing rows or a terminal/followed turn are idempotent no-ops.
         return
 
     try:
@@ -545,7 +526,21 @@ async def _async_execute_turn(run_id: str, turn_id: str):
         await _release_lane_lease(lease)
 
 
-@celery_app.task(name="coding.execute_turn")
-def execute_turn(run_id: str, turn_id: str):
-    """Celery task entrypoint."""
-    asyncio.run(_async_execute_turn(run_id, turn_id))
+@celery_app.task(name="coding.execute_turn", bind=True, max_retries=3)
+def execute_turn(self, run_id: str, turn_id: str):
+    """Celery task entrypoint with bounded retry for coordination/runtime faults."""
+    try:
+        asyncio.run(_async_execute_turn(run_id, turn_id))
+    except LaneCoordinationUnavailable as exc:
+        incr_metric("coding.turn_failure_count", tags={"reason": "coordination"})
+        logger.warning(
+            "Coding turn coordination unavailable run=%s turn=%s; retrying: %s",
+            run_id,
+            turn_id,
+            exc,
+        )
+        raise self.retry(exc=exc, countdown=10) from exc
+    except Exception as exc:
+        incr_metric("coding.turn_failure_count", tags={"reason": "runtime"})
+        logger.exception("Coding turn failed run=%s turn=%s", run_id, turn_id)
+        raise self.retry(exc=exc, countdown=10) from exc
