@@ -18,7 +18,9 @@ from worker.celery_app import celery_app
 logger = get_task_logger(__name__)
 module_logger = logging.getLogger(__name__)
 
-DIVERGENCE_TASK_LEASE_TTL_SECONDS = 300
+# 12 held-owner retries × 20s = 240s, intentionally longer than this TTL so a
+# follower can recover a crashed owner's orphaned lock before exhausting retry.
+DIVERGENCE_TASK_LEASE_TTL_SECONDS = 180
 
 
 def compute_string_similarity(c1: str, c2: str) -> float:
@@ -220,9 +222,6 @@ async def _execute_divergence_computation(debate_id: str) -> None:
         input_data=checkpoint_input,
         run_fn=run_divergence,
         load_fn=load_divergence,
-        # Divergence runs after the execution lease is released. The Celery
-        # wrapper supplies a separate distributed task lease to keep this
-        # intentionally-unfenced checkpoint single-owner under redelivery.
         allow_unfenced=True,
     )
 
@@ -233,13 +232,7 @@ def _run_divergence_task_once(debate_id: str) -> None:
 
 @celery_app.task(name="arena.compute_divergence", bind=True, max_retries=12)
 def compute_divergence_task(self, debate_id: str) -> None:
-    """Run post-terminal divergence exactly once concurrently per debate.
-
-    Celery can redeliver a task after worker/network faults. The main Debate
-    execution lease is intentionally gone by this point, so a renewable Redis
-    task lease fences the expensive semantic-analysis LLM work. Completed
-    checkpoint output remains the durable idempotency layer for later retries.
-    """
+    """Run post-terminal divergence exactly once concurrently per debate."""
     from config import settings
     from worker.task_leases import (
         TaskLeaseAcquireResult,
