@@ -5,18 +5,21 @@ monthly safety guard queried ``llm_usage_log``. No production call site wrote
 that table, so cumulative cost enforcement effectively always saw zero. Arena
 streaming also bypassed ``check_credit_and_cost_safety`` entirely.
 
-This guard makes cost control a closed loop:
+This guard makes provider accounting a closed loop:
 
 * estimate the full call (input + maximum output) conservatively before work;
 * run the existing gateway with an AsyncSession even when a caller supplied a
   synchronous SQLModel Session, avoiding cross-thread Session use;
 * persist the actual GatewayModelCallResult to LLMUsageLog after every call,
   including failed streams that consumed tokens/cost;
+* account every returned token total immediately in the daily quota counter
+  with a per-call settled UsageLedgerEntry, so failed provider calls count too;
 * apply the same preflight/persistence path to streaming Arena calls.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -90,7 +93,6 @@ async def _preflight_cost(
         max_tokens=max_tokens,
     )
     if not user_id:
-        # Per-run safety remains relevant even without user-scoped monthly data.
         from model_gateway.costs import check_credit_and_cost_safety
 
         await check_credit_and_cost_safety(None, user_plan, estimate, None)
@@ -120,6 +122,109 @@ def _safe_error_message(result: GatewayModelCallResult) -> str | None:
         return "Model provider call failed."
 
 
+def _resolve_attempt_id_sync(session, debate_id: str | None) -> str | None:
+    if not debate_id:
+        return None
+
+    from models import Debate, DebateAttempt
+    from orchestration.execution_context import get_current_execution_lease
+    from sqlmodel import select
+
+    lease = get_current_execution_lease()
+    attempt_number: int | None = None
+    if lease is not None and lease.debate_id == debate_id:
+        attempt_number = max(int(lease.run_attempt or 0), 1)
+    else:
+        debate = session.get(Debate, debate_id)
+        if debate is not None:
+            attempt_number = max(int(debate.run_attempt or 0), 1)
+
+    if attempt_number is None:
+        return None
+    attempt = session.exec(
+        select(DebateAttempt).where(
+            DebateAttempt.debate_id == debate_id,
+            DebateAttempt.attempt_number == attempt_number,
+        )
+    ).first()
+    return attempt.id if attempt is not None else None
+
+
+def _persist_gateway_usage_sync(
+    *,
+    result: GatewayModelCallResult,
+    user_id: str | None,
+    debate_id: str | None,
+    role: str | None,
+    user_plan: str | None,
+    preflight_estimate: float,
+) -> None:
+    from database import session_scope
+    from models import LLMUsageLog, UsageLedgerEntry
+
+    total_tokens = max(int(result.total_tokens or 0), 0)
+    with session_scope() as session:
+        attempt_id = _resolve_attempt_id_sync(session, debate_id)
+        usage_log = LLMUsageLog(
+            debate_id=debate_id,
+            user_id=user_id,
+            provider=result.provider or "unknown",
+            model=result.model_used or "unknown",
+            prompt_tokens=max(int(result.prompt_tokens or 0), 0),
+            completion_tokens=max(int(result.completion_tokens or 0), 0),
+            total_tokens=total_tokens,
+            cost_usd=max(float(result.cost_usd or 0.0), 0.0),
+            gateway=result.gateway,
+            model_pool=result.model_pool,
+            routing_policy=result.routing_policy,
+            fallback_used=bool(result.fallback_used),
+            fallback_reason=(result.fallback_reason or "")[:500] or None,
+            user_plan=user_plan or result.user_plan,
+            estimated_cost_usd=max(
+                float(result.estimated_cost_usd or 0.0),
+                float(preflight_estimate or 0.0),
+            ),
+            retry_count=max(int(result.retry_count or 0), 0),
+            role=role,
+            latency_ms=max(float(result.latency_ms or 0.0), 0.0),
+            success=bool(result.success),
+            error_message=_safe_error_message(result),
+        )
+        session.add(usage_log)
+        session.flush()
+
+        if user_id and total_tokens > 0:
+            # Per-call ledger identity is generated from the already-durable
+            # usage-log identity. The quota increment and settled ledger row are
+            # part of the same transaction, so retry cannot double-count.
+            token_entry = UsageLedgerEntry(
+                user_id=user_id,
+                kind="gateway_token_usage",
+                status="settled",
+                idempotency_key=f"gateway_token:{usage_log.id}",
+                amount=total_tokens,
+                debate_id=debate_id,
+                attempt_id=attempt_id,
+                meta={
+                    "llm_usage_log_id": usage_log.id,
+                    "provider": result.provider,
+                    "model": result.model_used,
+                    "success": bool(result.success),
+                },
+            )
+            session.add(token_entry)
+
+            from usage_limits import record_token_usage as apply_daily_token_usage
+
+            apply_daily_token_usage(
+                session,
+                user_id,
+                total_tokens,
+                commit=False,
+            )
+        session.commit()
+
+
 async def persist_gateway_usage(
     *,
     result: GatewayModelCallResult,
@@ -129,43 +234,20 @@ async def persist_gateway_usage(
     user_plan: str | None,
     preflight_estimate: float,
 ) -> None:
-    """Persist one completed provider/gateway call as cost-control authority."""
-    # Mock calls are intentionally excluded from production spend accounting.
+    """Persist cost and per-call token quota in a fresh owned sync Session."""
     if result.provider == "mock":
         return
-
-    from database_async import async_session_scope
-    from models import LLMUsageLog
-
-    async with async_session_scope() as session:
-        session.add(
-            LLMUsageLog(
-                debate_id=debate_id,
-                user_id=user_id,
-                provider=result.provider or "unknown",
-                model=result.model_used or "unknown",
-                prompt_tokens=max(int(result.prompt_tokens or 0), 0),
-                completion_tokens=max(int(result.completion_tokens or 0), 0),
-                total_tokens=max(int(result.total_tokens or 0), 0),
-                cost_usd=max(float(result.cost_usd or 0.0), 0.0),
-                gateway=result.gateway,
-                model_pool=result.model_pool,
-                routing_policy=result.routing_policy,
-                fallback_used=bool(result.fallback_used),
-                fallback_reason=(result.fallback_reason or "")[:500] or None,
-                user_plan=user_plan or result.user_plan,
-                estimated_cost_usd=max(
-                    float(result.estimated_cost_usd or 0.0),
-                    float(preflight_estimate or 0.0),
-                ),
-                retry_count=max(int(result.retry_count or 0), 0),
-                role=role,
-                latency_ms=max(float(result.latency_ms or 0.0), 0.0),
-                success=bool(result.success),
-                error_message=_safe_error_message(result),
-            )
-        )
-        await session.commit()
+    await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: _persist_gateway_usage_sync(
+            result=result,
+            user_id=user_id,
+            debate_id=debate_id,
+            role=role,
+            user_plan=user_plan,
+            preflight_estimate=preflight_estimate,
+        ),
+    )
 
 
 async def guarded_route_llm_call(request: GatewayRequest, db_session=None) -> GatewayModelCallResult:
@@ -205,10 +287,6 @@ async def guarded_route_llm_call(request: GatewayRequest, db_session=None) -> Ga
 
         logger.exception("gateway.usage_persistence_failed")
         if settings.APP_ENV in {"production", "staging"}:
-            # Provider work may already have happened, but continuing to accept
-            # calls without writing the cost authority would make the monthly
-            # cap unenforceable. Fail this request visibly and block subsequent
-            # calls while persistence remains broken.
             raise RuntimeError("Model usage accounting is temporarily unavailable.") from exc
     return result
 
@@ -225,8 +303,6 @@ async def guarded_route_llm_stream(
     api_key: str | None = None,
 ) -> GatewayModelCallResult:
     """Apply cumulative cost enforcement and persistence to Arena streaming."""
-    # Stream API currently has no explicit plan argument; resolve the canonical
-    # active plan from billing when a user is known.
     user_plan: str | None = None
     if user_id:
         try:
