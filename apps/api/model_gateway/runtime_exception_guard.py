@@ -1,10 +1,12 @@
 """Exception and credential-scope hardening for the gateway runtime boundary.
 
-The main runtime guard reserves cost/tokens before routing. Any exception or
-cancellation that occurs before the first adapter attempt is therefore known to
-have performed no provider work and must release that reservation. Once an
-adapter attempt exists, accounting intentionally remains fail-closed because the
-provider may already have consumed tokens/cost.
+Reservations are created before provider routing. Before any adapter boundary,
+an exception is known to have incurred no provider spend and the reservation is
+released. After at least one adapter attempt, interruption is different: provider
+work may already have consumed tokens/cost. In that case the durable reservation
+is settled from known attempt results, retaining the conservative slice for any
+attempt whose usage metadata is unavailable. This avoids both silent spend loss
+and permanently orphaned ``reserved`` quota after cancellation/fallback blocks.
 
 The legacy Agent layer also performed a shared circuit-breaker check before the
 Model Gateway resolved whether the concrete credential was hosted/server or
@@ -49,8 +51,11 @@ def install_runtime_exception_guard() -> None:
             reset_attempt_context,
         )
         from model_gateway.costs import bind_cost_reservation, reset_cost_reservation
-        from model_gateway.reservations import release_gateway_budget_sync
-        from model_gateway.types import GatewayQuotaExceededError
+        from model_gateway.reservations import (
+            release_gateway_budget_sync,
+            settle_gateway_budget_sync,
+        )
+        from model_gateway.types import GatewayModelCallResult, GatewayQuotaExceededError
 
         estimate, token_estimate, reservation = await runtime_guard._reserve_budget(
             user_id=user_id,
@@ -77,20 +82,58 @@ def install_runtime_exception_guard() -> None:
             else None
         )
 
+        def _settle_interrupted_attempts(reason: str) -> None:
+            """Settle known/unknown provider work without awaiting cancellation-sensitive I/O."""
+            active = attempt_context.reservation
+            if active is None or not attempt_context.records:
+                return
+            synthetic = GatewayModelCallResult(
+                content="",
+                model_used=model_id,
+                provider="interrupted",
+                success=False,
+                error_message="Model execution was interrupted before normal completion.",
+                error_code="execution_interrupted",
+                model_pool="runtime_exception",
+                routing_policy="runtime_exception",
+                user_plan=user_plan,
+            )
+            accounted = aggregate_accounting_result(synthetic, attempt_context)
+            settle_gateway_budget_sync(
+                active,
+                result=accounted,
+                safe_error_message="Model execution was interrupted before normal completion.",
+            )
+            attempt_context.reservation = None
+            logger.warning(
+                "gateway.interrupted_usage_settled user=%s debate=%s reason=%s attempts=%s tokens=%s cost=%s",
+                user_id,
+                debate_id,
+                reason,
+                len(attempt_context.records),
+                accounted.total_tokens,
+                accounted.cost_usd,
+            )
+
         try:
             try:
                 result = await route_call()
             except ProviderAttemptBudgetBlocked as exc:
                 # The control signal deliberately bypassed the route's broad
-                # provider-error catcher. Prior attempts may have spent budget,
-                # so retain their conservative reservation and expose the real
-                # user quota/cost reason without mutating provider health.
+                # provider-error catcher. Earlier attempts may already have
+                # spent money; settle them before exposing the real quota error.
+                try:
+                    _settle_interrupted_attempts("provider_attempt_budget_blocked")
+                except Exception:
+                    logger.exception(
+                        "gateway.interrupted_usage_settlement_failed user=%s debate=%s",
+                        user_id,
+                        debate_id,
+                    )
                 raise GatewayQuotaExceededError(str(exc)) from exc
             except BaseException as exc:
-                # No adapter record means no provider boundary was crossed. Do
-                # the compensation synchronously before propagating even a
-                # CancelledError; cancellation must not orphan a user charge.
                 if not attempt_context.records and attempt_context.reservation is not None:
+                    # No provider boundary was crossed: full compensation is safe.
                     try:
                         release_gateway_budget_sync(
                             attempt_context.reservation,
@@ -100,6 +143,18 @@ def install_runtime_exception_guard() -> None:
                     except Exception:
                         logger.exception(
                             "gateway.preprovider_reservation_release_failed user=%s debate=%s",
+                            user_id,
+                            debate_id,
+                        )
+                elif attempt_context.records and attempt_context.reservation is not None:
+                    # A cancellation/exception after provider entry may have
+                    # consumed unknown usage. Settle known results and keep the
+                    # reserved slice for unknown attempts instead of orphaning it.
+                    try:
+                        _settle_interrupted_attempts(type(exc).__name__)
+                    except Exception:
+                        logger.exception(
+                            "gateway.interrupted_usage_settlement_failed user=%s debate=%s",
                             user_id,
                             debate_id,
                         )
