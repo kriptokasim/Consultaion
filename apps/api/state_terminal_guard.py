@@ -11,17 +11,17 @@ _original_complete_debate = DebateStateManager.complete_debate
 
 
 def install_terminal_accounting_guard() -> None:
-    """Install terminal accounting ordering and execution-fenced SSE runtime guards."""
+    """Install terminal ordering, execution fencing, and retry accounting guards."""
     global _installed
     if _installed:
         return
 
-    # Install the transport-side ownership fence before any engine obtains the
-    # canonical SSE backend. This closes commit→publish takeover races across
-    # Arena, Compare, Conversation, and Parliament from one boundary.
+    # Install cross-cutting runtime guards before execution begins.
+    from retry_accounting_guard import install_retry_accounting_guard
     from sse_execution_guard import install_sse_execution_guard
 
     install_sse_execution_guard()
+    install_retry_accounting_guard()
 
     async def complete_debate_after_commit(
         self: DebateStateManager,
