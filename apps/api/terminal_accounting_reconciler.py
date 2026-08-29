@@ -7,8 +7,8 @@ repairing hosted-credit settlement after crashes.
 
 Traffic-readiness invariant: periodic reconciliation must scale with unresolved
 work, not with the entire historical DebateAttempt table. Candidate discovery
-therefore anti-joins already-settled aggregate token ledger rows and processes a
-bounded batch on every cleanup tick.
+therefore anti-joins only *fully accounted* aggregate token ledger rows and
+processes a bounded batch on every cleanup tick.
 """
 
 from __future__ import annotations
@@ -194,24 +194,24 @@ def _settle_credit_entry(session, entry: UsageLedgerEntry) -> str | None:
 
 
 def _unresolved_terminal_attempts(session) -> list[DebateAttempt]:
-    """Return only terminal attempts lacking a settled aggregate token ledger.
+    """Return only terminal attempts without a fully-applied aggregate ledger.
 
-    A settled ``token_usage`` row is the durable marker that this attempt no
-    longer needs periodic reconstruction. Pending/missing rows remain eligible.
-    Joining Debate filters orphan/anonymous rows that cannot be user-accounted.
-    The batch limit prevents a backlog from monopolizing the cleanup worker.
+    Historical deployments may already contain ``token_usage`` rows whose
+    status is ``settled`` but which predate the atomic ``daily_counter_applied``
+    marker. Those rows are still reconciliation candidates. SQLAlchemy's JSON
+    comparator compiles the boolean path appropriately for both PostgreSQL and
+    SQLite, preserving migration/test parity.
     """
+    fully_accounted = sa.and_(
+        UsageLedgerEntry.attempt_id == DebateAttempt.id,
+        UsageLedgerEntry.kind == "token_usage",
+        UsageLedgerEntry.status == "settled",
+        UsageLedgerEntry.meta["daily_counter_applied"].as_boolean().is_(True),
+    )
     stmt = (
         select(DebateAttempt)
         .join(Debate, Debate.id == DebateAttempt.debate_id)
-        .outerjoin(
-            UsageLedgerEntry,
-            sa.and_(
-                UsageLedgerEntry.attempt_id == DebateAttempt.id,
-                UsageLedgerEntry.kind == "token_usage",
-                UsageLedgerEntry.status == "settled",
-            ),
-        )
+        .outerjoin(UsageLedgerEntry, fully_accounted)
         .where(DebateAttempt.status.in_(_TERMINAL_ATTEMPT_STATUSES))
         .where(DebateAttempt.tokens_used > 0)
         .where(Debate.user_id.is_not(None))
