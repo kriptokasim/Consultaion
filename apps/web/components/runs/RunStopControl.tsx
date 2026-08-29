@@ -127,11 +127,7 @@ export function RunStopControl({ enabled = true }: { enabled?: boolean }) {
   if (status === "cancelled") {
     return (
       <div
-        className="fixed right-4 z-50 flex min-h-10 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-2 text-xs font-semibold text-muted-foreground shadow-lg backdrop-blur sm:right-6"
-        style={{
-          bottom:
-            "calc(var(--mobile-bottom-nav-height, 0px) + env(safe-area-inset-bottom) + 1rem)",
-        }}
+        className="fixed bottom-[calc(var(--mobile-bottom-nav-height,0px)+env(safe-area-inset-bottom)+1rem)] right-4 z-50 flex min-h-10 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-2 text-xs font-semibold text-muted-foreground shadow-lg backdrop-blur sm:bottom-6 sm:right-6"
         role="status"
         aria-live="polite"
       >
@@ -144,13 +140,7 @@ export function RunStopControl({ enabled = true }: { enabled?: boolean }) {
   if (!STOPPABLE_STATUSES.has(status)) return null;
 
   return (
-    <div
-      className="fixed right-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 sm:right-6"
-      style={{
-        bottom:
-          "calc(var(--mobile-bottom-nav-height, 0px) + env(safe-area-inset-bottom) + 1rem)",
-      }}
-    >
+    <div className="fixed bottom-[calc(var(--mobile-bottom-nav-height,0px)+env(safe-area-inset-bottom)+1rem)] right-4 z-50 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 sm:bottom-6 sm:right-6">
       {error ? (
         <div
           className="max-w-xs rounded-xl border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-lg backdrop-blur"
