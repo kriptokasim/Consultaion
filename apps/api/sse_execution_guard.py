@@ -82,6 +82,27 @@ def _is_terminal_envelope(envelope: dict) -> bool:
     return event_type in _STREAM_TERMINAL_EVENTS or payload_type in _STREAM_TERMINAL_EVENTS
 
 
+def _is_unfenced_run_start_notice(channel_id: str, event: dict, lease) -> bool:
+    """Identify the legacy notice emitted by run_debate before lease acquisition.
+
+    A duplicate Celery delivery used to publish this user-visible event and only
+    then discover that another worker owned the debate. Until the call site is
+    structurally moved behind acquisition, the transport boundary suppresses
+    exactly this unfenced lifecycle notice. Real engine lifecycle events are
+    emitted after the execution ContextVar is bound.
+    """
+    if lease is not None or not channel_id.startswith("debate:"):
+        return False
+    if str(event.get("type") or "") != "notice":
+        return False
+    payload = event.get("payload")
+    return bool(
+        isinstance(payload, dict)
+        and payload.get("note") == "plan"
+        and payload.get("message") == "Debate run started"
+    )
+
+
 class ExecutionFencedSSEBackend:
     """Transparent backend decorator enforcing execution and replay invariants."""
 
@@ -90,6 +111,9 @@ class ExecutionFencedSSEBackend:
 
     async def publish(self, channel_id: str, event: dict) -> None:
         lease = get_current_execution_lease()
+        if _is_unfenced_run_start_notice(channel_id, event, lease):
+            logger.info("sse.prelease_run_start_suppressed channel=%s", channel_id)
+            return
         if lease is not None and channel_id == f"debate:{lease.debate_id}":
             if lease.lease_lost_event.is_set():
                 raise ExecutionSupersededError(
