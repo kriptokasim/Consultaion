@@ -5,6 +5,7 @@ import { Loader2, Square } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { apiRequest, ApiClientError } from "@/lib/apiClient";
+import { useI18n } from "@/lib/i18n/client";
 
 const STOPPABLE_STATUSES = new Set([
   "queued",
@@ -45,9 +46,33 @@ export function RunStopControl({ enabled = true }: { enabled?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { locale } = useI18n();
+  const isTurkish = locale === "tr";
   const [status, setStatus] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const copy = useMemo(
+    () =>
+      isTurkish
+        ? {
+            confirm:
+              "Bu Run durdurulsun mu? Bu ana kadar oluşmuş provider kullanımı kayıtlarda kalacaktır.",
+            genericError: "Run durdurulamadı. Lütfen tekrar deneyin.",
+            stopped: "Run durduruldu",
+            stop: "Run'ı Durdur",
+            stopping: "Durduruluyor…",
+          }
+        : {
+            confirm:
+              "Stop this Run? Generated provider usage up to this point will remain recorded.",
+            genericError: "The Run could not be stopped. Please try again.",
+            stopped: "Run stopped",
+            stop: "Stop Run",
+            stopping: "Stopping…",
+          },
+    [isTurkish],
+  );
 
   const runId = useMemo(() => {
     if (!enabled) return null;
@@ -93,10 +118,7 @@ export function RunStopControl({ enabled = true }: { enabled?: boolean }) {
 
   const stopRun = useCallback(async () => {
     if (!runId || stopping) return;
-    const confirmed = window.confirm(
-      "Stop this Run? Generated provider usage up to this point will remain recorded.",
-    );
-    if (!confirmed) return;
+    if (!window.confirm(copy.confirm)) return;
 
     setStopping(true);
     setError(null);
@@ -112,15 +134,13 @@ export function RunStopControl({ enabled = true }: { enabled?: boolean }) {
       router.refresh();
     } catch (err) {
       const message =
-        err instanceof ApiClientError
-          ? err.toUserMessage()
-          : "The Run could not be stopped. Please try again.";
+        err instanceof ApiClientError ? err.toUserMessage() : copy.genericError;
       setError(message);
       void refreshStatus();
     } finally {
       setStopping(false);
     }
-  }, [refreshStatus, router, runId, stopping]);
+  }, [copy.confirm, copy.genericError, refreshStatus, router, runId, stopping]);
 
   if (!runId || !enabled || status === null) return null;
 
@@ -132,7 +152,7 @@ export function RunStopControl({ enabled = true }: { enabled?: boolean }) {
         aria-live="polite"
       >
         <Square className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
-        Run stopped
+        {copy.stopped}
       </div>
     );
   }
@@ -154,14 +174,14 @@ export function RunStopControl({ enabled = true }: { enabled?: boolean }) {
         onClick={stopRun}
         disabled={stopping}
         className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-destructive/30 bg-background/95 px-4 py-2 text-sm font-semibold text-destructive shadow-lg backdrop-blur transition hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 disabled:cursor-not-allowed disabled:opacity-60"
-        aria-label="Stop Run"
+        aria-label={copy.stop}
       >
         {stopping ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         ) : (
           <Square className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
         )}
-        {stopping ? "Stopping…" : "Stop Run"}
+        {stopping ? copy.stopping : copy.stop}
       </button>
     </div>
   );
