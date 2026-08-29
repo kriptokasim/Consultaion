@@ -34,7 +34,10 @@ from orchestration.execution_context import ExecutionLease, new_owner_id
 logger = logging.getLogger(__name__)
 
 #: Statuses that must never receive a new normal execution lease (Track C3).
-TERMINAL_STATUSES = ("completed", "completed_with_warnings", "cancelled")
+#: A failed debate is terminal too. Retry endpoints must first prepare a newer
+#: queued DebateAttempt and move the Debate back to a dispatchable state; a
+#: duplicate/stale task must never resurrect the failed logical attempt.
+TERMINAL_STATUSES = ("completed", "completed_with_warnings", "failed", "cancelled")
 
 
 class LeaseRenewResult(Enum):
