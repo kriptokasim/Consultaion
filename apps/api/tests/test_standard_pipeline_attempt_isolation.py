@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 
@@ -32,14 +34,40 @@ async def test_retry_cache_hits_never_mix_attempt_rows(db_session, monkeypatch):
     db_session.add(a2)
     db_session.commit()
 
+    now = datetime.now(timezone.utc)
     db_session.add_all(
         [
             Message(debate_id=debate.id, attempt_id=a1.id, round_index=1, role="candidate", persona="Old", content="old candidate"),
             Message(debate_id=debate.id, attempt_id=a2.id, round_index=1, role="candidate", persona="New", content="new candidate"),
             Message(debate_id=debate.id, attempt_id=a1.id, round_index=2, role="revised", persona="Old", content="old revised"),
             Message(debate_id=debate.id, attempt_id=a2.id, round_index=2, role="revised", persona="New", content="new revised"),
-            Message(debate_id=debate.id, attempt_id=a1.id, round_index=4, role="synthesizer", persona="Synth", content="old synthesis"),
-            Message(debate_id=debate.id, attempt_id=a2.id, round_index=4, role="synthesizer", persona="Synth", content="new synthesis"),
+            Message(
+                debate_id=debate.id,
+                attempt_id=a1.id,
+                round_index=4,
+                role="synthesizer",
+                persona="Synth",
+                content="old attempt synthesis",
+                created_at=now - timedelta(minutes=3),
+            ),
+            Message(
+                debate_id=debate.id,
+                attempt_id=a2.id,
+                round_index=4,
+                role="synthesizer",
+                persona="Synth",
+                content="earlier current synthesis",
+                created_at=now - timedelta(minutes=2),
+            ),
+            Message(
+                debate_id=debate.id,
+                attempt_id=a2.id,
+                round_index=4,
+                role="synthesizer",
+                persona="Synth",
+                content="newest current synthesis",
+                created_at=now - timedelta(minutes=1),
+            ),
             Score(debate_id=debate.id, attempt_id=a1.id, persona="Old", judge="J", score=1.0, rationale="old"),
             Score(debate_id=debate.id, attempt_id=a2.id, persona="New", judge="J", score=9.0, rationale="new"),
             Vote(
@@ -80,7 +108,7 @@ async def test_retry_cache_hits_never_mix_attempt_rows(db_session, monkeypatch):
     assert [item["persona"] for item in state.scores] == ["New"]
     assert state.ranking == ["New"]
     assert state.vote_details.get("_attempt_id") is None
-    assert state.final_content == "new synthesis"
+    assert state.final_content == "newest current synthesis"
 
 
 @pytest.mark.anyio
@@ -120,8 +148,6 @@ async def test_retry_cache_hit_reuses_one_prior_attempt_when_current_has_no_upst
         load_fn,
         **_kwargs,
     ):
-        # Only Draft is a completed upstream cache hit in this scenario. Stop
-        # after proving its single-source fallback rather than invoking LLMs.
         if stage_key == "draft":
             from database_async import async_session_scope
             async with async_session_scope() as session:
@@ -145,8 +171,3 @@ async def test_retry_cache_hit_reuses_one_prior_attempt_when_current_has_no_upst
 
     with pytest.raises(RuntimeError, match="stop-after-draft"):
         await pipeline.execute(context)
-
-    # Draft cache hit reused exactly attempt 1; the current-attempt preloader
-    # did not incorrectly cause DraftStage to skip before checkpoint handling.
-    # The state assertion is indirectly covered by input generation for the
-    # next stage in the pipeline; the explicit no-mix behavior is tested above.
