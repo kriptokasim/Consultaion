@@ -1,10 +1,10 @@
-"""Opt-in process-start provider diagnostics.
+"""Process-start compatibility and opt-in provider diagnostics.
 
-Python imports ``sitecustomize`` automatically when this repository root is on
-``sys.path`` (Render starts the API from ``apps/api``). Keeping the hook here
-avoids coupling diagnostics to FastAPI routes or administrator authentication.
-
-Nothing happens unless PROVIDER_SELF_TEST_ON_STARTUP is explicitly true.
+Render starts the API from ``apps/api``, so Python imports ``sitecustomize``
+automatically. We use this boundary for two narrowly-scoped purposes:
+1) refresh fast-moving free provider model slugs while preserving Consultaion's
+   stable persisted model IDs;
+2) optionally run a low-cost provider matrix self-test.
 """
 
 from __future__ import annotations
@@ -12,6 +12,19 @@ from __future__ import annotations
 import os
 import threading
 import time
+
+try:
+    from model_gateway.free_model_runtime import install_current_free_model_targets
+
+    install_current_free_model_targets()
+except Exception as exc:
+    # Model-target installation must be visible if packaging/import order ever
+    # changes, but avoid printing secrets/provider bodies at interpreter start.
+    print(
+        "FREE_MODEL_RUNTIME_INSTALL_FAILED "
+        f"error_type={type(exc).__name__}",
+        flush=True,
+    )
 
 
 def _enabled() -> bool:
@@ -39,8 +52,6 @@ def _run() -> None:
             flush=True,
         )
     except Exception as exc:
-        # Never expose provider response bodies or secrets from this bootstrap
-        # boundary. Detailed safe per-provider errors are logged by the harness.
         print(
             "PROVIDER_SELF_TEST_BOOTSTRAP_FAILED "
             f"error_type={type(exc).__name__}",
