@@ -1,9 +1,9 @@
 """Crash-safe terminal accounting reconciliation.
 
-Gateway calls account their returned token usage immediately and exactly once.
-Terminal attempt reconciliation then applies only any remaining aggregate delta
-(for legacy/non-gateway work or a terminalization path that predates per-call
-accounting), while also repairing hosted-credit settlement after crashes.
+Gateway calls reserve daily tokens before provider work and settle that
+reservation to actual usage on return. Terminal attempt reconciliation applies
+only any remaining aggregate delta (legacy/non-gateway work), while also
+repairing hosted-credit settlement after crashes.
 """
 
 from __future__ import annotations
@@ -28,12 +28,18 @@ _TERMINAL_ATTEMPT_STATUSES = {"completed", "failed", "cancelled"}
 
 
 def _gateway_accounted_tokens(session, attempt_id: str | None) -> int:
+    """Return quota already charged by gateway reservations for this attempt.
+
+    ``reserved`` entries count too: the daily counter was incremented when the
+    reservation was created. Ignoring an unresolved reservation after a worker
+    crash would make terminal reconciliation add the same tokens again.
+    """
     if not attempt_id:
         return 0
     entries = session.exec(
         select(UsageLedgerEntry).where(
             UsageLedgerEntry.kind == "gateway_token_usage",
-            UsageLedgerEntry.status == "settled",
+            UsageLedgerEntry.status.in_(["reserved", "settled"]),
             UsageLedgerEntry.attempt_id == attempt_id,
         )
     ).all()
@@ -46,13 +52,7 @@ def ensure_token_accounting_once(
     debate: Debate,
     attempt: DebateAttempt,
 ) -> bool:
-    """Settle aggregate attempt usage and apply only the uncounted daily delta.
-
-    Gateway calls already increment the daily counter per call. The aggregate
-    attempt record remains useful as a terminal audit identity; its daily quota
-    contribution is therefore ``max(attempt_total - gateway_accounted, 0)``.
-    The delta and marker are committed in the caller's transaction.
-    """
+    """Settle aggregate attempt usage and apply only the uncounted daily delta."""
     if not debate.user_id:
         return False
     tokens = max(int(attempt.tokens_used or 0), 0)
@@ -107,7 +107,6 @@ def ensure_token_accounting_once(
     entry.meta = meta
     session.add(entry)
     session.flush()
-    # Return whether this call changed the quota counter, not merely metadata.
     return delta > 0
 
 
