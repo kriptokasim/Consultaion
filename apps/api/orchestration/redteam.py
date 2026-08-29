@@ -4,6 +4,8 @@ import logging
 from typing import Any, Dict, List
 
 from agents import USE_MOCK, _call_llm
+from llm_errors import classify_provider_exception
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +63,9 @@ async def run_red_team_analysis(proposal_text: str, lenses: List[str]) -> List[D
                 max_tokens=800
             )
 
-            # Strip markdown if any
-            clean_text = text.strip()
-            if clean_text.startswith("```"):
-                lines = clean_text.splitlines()
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                clean_text = "\n".join(lines).strip()
-
-            parsed = json.loads(clean_text)
+            parsed = extract_and_parse_json(text)
+            if parsed is None:
+                raise ValueError("redteam model returned unparseable JSON")
             if isinstance(parsed, list):
                 for item in parsed:
                     item["lens"] = lens
@@ -85,14 +79,15 @@ async def run_red_team_analysis(proposal_text: str, lenses: List[str]) -> List[D
                 logger.warning(f"RedTeam {lens} returned JSON that is not a list: {clean_text}")
                 return []
         except Exception as exc:
-            logger.error(f"Failed red team evaluation for lens {lens}: {exc}")
-            # Fallback single issue
+            # CORE-AUDIT (CE-3): safe message only — raw error stays server-side.
+            logger.error("Failed red team evaluation for lens %s: %s", lens, exc)
+            safe = classify_provider_exception(exc)
             return [{
                 "lens": lens,
                 "title": f"Incomplete {lens.capitalize()} review",
                 "severity": "medium",
-                "description": f"The adversarial review for this lens encountered a parser error: {exc}",
-                "remediation": "Review proposal manual controls for standard security compliance."
+                "description": f"The adversarial review for this lens failed ({safe.code.value}); treat this lens as not yet reviewed.",
+                "remediation": "Retry the review for this lens; if it keeps failing, inspect provider configuration."
             }]
 
     tasks = [_evaluate_lens(lens) for lens in lenses]

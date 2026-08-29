@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from agents import USE_MOCK, _call_llm
+from llm_errors import classify_provider_exception
+from utils.json_utils import extract_and_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -121,18 +123,10 @@ async def generate_reasoning_chain(
             max_tokens=1000
         )
 
-        clean_text = text.strip()
-        if clean_text.startswith("```"):
-            lines = clean_text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            clean_text = "\n".join(lines).strip()
-
-        new_nodes = json.loads(clean_text)
-        if not isinstance(new_nodes, list):
-            new_nodes = []
+        parsed = extract_and_parse_json(text)
+        if parsed is None:
+            raise ValueError("oracle model returned unparseable JSON")
+        new_nodes = parsed if isinstance(parsed, list) else []
 
         # Validate structure of each node
         for node in new_nodes:
@@ -160,13 +154,15 @@ async def generate_reasoning_chain(
         else:
             return new_nodes
     except Exception as exc:
-        logger.error(f"Oracle reasoning generation failed: {exc}")
-        # Return fallback
+        # CORE-AUDIT (CE-3): never surface raw provider exception text to
+        # users — classify and emit a safe code; keep detail in server logs.
+        logger.error("Oracle reasoning generation failed: %s", exc)
+        safe = classify_provider_exception(exc)
         fallback = [{
             "id": f"node_{str(uuid4())[:8]}",
             "title": "Reasoning Error",
             "type": "uncertainty",
-            "content": f"Failed to complete the logical chain: {exc}"
+            "content": f"Reasoning step failed ({safe.code.value}). Please retry."
         }]
         if preceding_nodes:
             return preceding_nodes + fallback

@@ -4,7 +4,7 @@ Implements the multi-lane routing, early exit, and SSE broadcasting.
 """
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from coding_agent.lane_router import classify_tier
 from database import session_scope
@@ -67,7 +67,7 @@ async def _execute_lane(
             "lane_name": lane,
             "model_key": model_key,
             "tier": run.tier,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
     )
     
@@ -96,7 +96,7 @@ async def _execute_lane(
         db_session.commit()
     
     # Execute through gateway with FREE_ONLY_MODE guard
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
     try:
         # Send thinking/planning start event
         await sse.publish(
@@ -108,7 +108,7 @@ async def _execute_lane(
                 "phase": "planning",
                 "text": "Starting analysis...",
                 "sequence": 1,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
         )
 
@@ -142,7 +142,7 @@ async def _execute_lane(
             incr_metric("coding.free_only_block_count", tags={"lane": lane, "model": model_key})
         incr_metric("coding.lane_failure_count", tags={"lane": lane, "reason": "error"})
         
-    result_record.completed_at = datetime.utcnow()
+    result_record.completed_at = datetime.now(timezone.utc)
     latency_ms = (result_record.completed_at - start_time).total_seconds() * 1000
     result_record.latency_ms = latency_ms
     db_session.commit()
@@ -195,7 +195,7 @@ async def _async_execute_turn(run_id: str, turn_id: str):
                         "early_exit": sim >= CONVERGENCE_THRESHOLD,
                         "judge_skipped": sim >= CONVERGENCE_THRESHOLD,
                         "source": "fast_vs_thinking",
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(timezone.utc).isoformat()
                     }
                 )
                 
@@ -235,9 +235,9 @@ async def _async_execute_turn(run_id: str, turn_id: str):
             db.add(artifact)
             
         turn.status = "completed"
-        turn.completed_at = datetime.utcnow()
+        turn.completed_at = datetime.now(timezone.utc)
         run.status = "completed"
-        run.completed_at = datetime.utcnow()
+        run.completed_at = datetime.now(timezone.utc)
         db.commit()
 
 
