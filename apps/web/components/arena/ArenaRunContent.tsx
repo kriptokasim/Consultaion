@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Square } from "lucide-react";
 import type { DebateDetail, PersistedModelResponse, DebateEvent } from "@/lib/api/types";
 import type { StreamingModelBuffer } from "@/lib/streaming/types";
 import type { SSEStatus } from "@/lib/sse";
@@ -9,6 +9,7 @@ import type { ResponsesState, TimelineState } from "@/hooks/useRunWorkspace";
 import type { WorkspaceStage } from "@/lib/workspace/types";
 import type { DebateSummary } from "@/lib/api/types";
 import type { SynthesisStreamingState } from "@/lib/workspace/synthesisReducer";
+import { isTerminalRunStatus } from "@/lib/runStatus";
 import ArenaRunView from "./ArenaRunView";
 import { RecentRunsRail } from "./RecentRunsRail";
 
@@ -69,22 +70,42 @@ export function ArenaRunContent({
   onNewRun,
   failure,
 }: ArenaRunContentProps) {
+  // The durable Debate status is authoritative. In particular, a user-cancelled
+  // Run must not keep skeletons/auto-continue behavior merely because an older
+  // caller passed isTerminal based on success-only status semantics.
+  const effectiveTerminal = isTerminal || isTerminalRunStatus(debate.status);
+  const isCancelled = debate.status === "cancelled";
+
   // Track F: Auto-continue on perspectives_ready for live surface
   const autoContinuedRunRef = useRef<string | null>(null);
   useEffect(() => {
     if (surface !== "live") return;
-    if (isTerminal || isContinuing) return;
+    if (effectiveTerminal || isContinuing) return;
     if (workspaceStage !== "perspectives_ready") return;
     if (!onContinue) return;
     if (autoContinuedRunRef.current === debate.id) return;
     autoContinuedRunRef.current = debate.id;
     onContinue();
-  }, [surface, isTerminal, isContinuing, workspaceStage, onContinue, debate.id]);
+  }, [surface, effectiveTerminal, isContinuing, workspaceStage, onContinue, debate.id]);
 
   return (
     <div className="flex flex-col gap-6 pb-8">
+      {isCancelled && (
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4" role="status">
+          <div className="mt-0.5 rounded-lg bg-muted p-2 text-muted-foreground">
+            <Square className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Run stopped</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Execution was cancelled. Responses already generated before Stop remain available below.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Polling fallback indicator */}
-      {isPollingFallback && (
+      {isPollingFallback && !effectiveTerminal && (
         <div className="flex items-center gap-2 px-4 py-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 rounded-lg">
           <Loader2 className="h-3 w-3 animate-spin" />
           <span>Connection interrupted — using polling fallback</span>
@@ -92,7 +113,7 @@ export function ArenaRunContent({
       )}
 
       {/* Track H: Inline failure banner */}
-      {failure && (
+      {failure && !isCancelled && (
         <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4">
           <div className="flex items-start gap-3">
             <div className="shrink-0 rounded-lg bg-red-100 dark:bg-red-800/50 p-2 text-red-600 dark:text-red-400">
@@ -122,9 +143,9 @@ export function ArenaRunContent({
 
       {/* Run status bar */}
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="capitalize">{workspaceStage.replace(/_/g, " ")}</span>
+        <span className="capitalize">{isCancelled ? "cancelled" : workspaceStage.replace(/_/g, " ")}</span>
         <span>{elapsedSeconds}s</span>
-        {surface === "live" && (
+        {surface === "live" && !effectiveTerminal && (
           <span className={sseStatus === "connected" ? "text-emerald-600" : "text-amber-600"}>
             {sseStatus === "connected" ? "Live" : "Reconnecting..."}
           </span>
@@ -141,7 +162,7 @@ export function ArenaRunContent({
             responses={responses}
             streamingBuffers={streamingBuffers}
             synthesisState={synthesisState}
-            isTerminal={isTerminal}
+            isTerminal={effectiveTerminal}
             responsesState={responsesState}
             responsesError={responsesError}
             timelineState={timelineState}
