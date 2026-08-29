@@ -68,6 +68,7 @@ async def test_cancel_run_terminalizes_attempt_and_invalidates_execution(monkeyp
     async def fake_tombstone(run_id: str, epoch: int) -> None:
         tombstones.append((run_id, epoch))
 
+    monkeypatch.setattr(cancel_module, "require_schema_current", lambda _session: None)
     monkeypatch.setattr(cancel_module, "get_sse_backend", lambda: fake_backend)
     monkeypatch.setattr(cancel_module, "_publish_cancel_tombstone", fake_tombstone)
 
@@ -77,7 +78,6 @@ async def test_cancel_run_terminalizes_attempt_and_invalidates_execution(monkeyp
             debate_id,
             session=session,
             current_user=user,
-            _schema_ok=None,
         )
 
     assert result["status"] == "cancelled"
@@ -115,6 +115,7 @@ async def test_cancel_run_terminalizes_attempt_and_invalidates_execution(monkeyp
 async def test_cancel_run_is_idempotent(monkeypatch):
     user_id, debate_id = _make_user_and_run(status="cancelled")
     fake_backend = _FakeBackend()
+    monkeypatch.setattr(cancel_module, "require_schema_current", lambda _session: None)
     monkeypatch.setattr(cancel_module, "get_sse_backend", lambda: fake_backend)
 
     with session_scope() as session:
@@ -123,7 +124,6 @@ async def test_cancel_run_is_idempotent(monkeypatch):
             debate_id,
             session=session,
             current_user=user,
-            _schema_ok=None,
         )
 
     assert result == {
@@ -135,8 +135,9 @@ async def test_cancel_run_is_idempotent(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_completed_run_cannot_be_cancelled():
+async def test_completed_run_cannot_be_cancelled(monkeypatch):
     user_id, debate_id = _make_user_and_run(status="completed")
+    monkeypatch.setattr(cancel_module, "require_schema_current", lambda _session: None)
 
     with session_scope() as session:
         user = session.get(User, user_id)
@@ -145,7 +146,6 @@ async def test_completed_run_cannot_be_cancelled():
                 debate_id,
                 session=session,
                 current_user=user,
-                _schema_ok=None,
             )
 
     assert exc_info.value.status_code == 409
