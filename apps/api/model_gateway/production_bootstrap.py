@@ -17,29 +17,30 @@ _started = False
 
 
 def start_production_model_bootstrap() -> None:
-    """Install free model aliases and optionally run one real free smoke test."""
+    """Schedule runtime installation after Python's import graph settles."""
     global _started
     if _started:
         return
     _started = True
 
-    try:
-        from model_gateway.free_model_runtime import install_current_free_model_targets
-        install_current_free_model_targets()
-        logger.warning("FREE_MODEL_RUNTIME_BOOTSTRAPPED source=application_import")
-    except Exception as exc:
-        logger.exception("FREE_MODEL_RUNTIME_BOOTSTRAP_FAILED error_type=%s", type(exc).__name__)
-        return
-
-    # Always smoke-test the real free hosted route in production. This is a
-    # single minimal request, bounded to 15s, and never touches paid providers.
-    app_env = os.getenv("APP_ENV", os.getenv("ENV", "production")).lower()
-    enabled = os.getenv("PROVIDER_SELF_TEST_ON_STARTUP", "").strip().lower() in {"1", "true", "yes", "on"}
-    if app_env not in {"production", "staging"} and not enabled:
-        return
-
     def _worker() -> None:
+        # adapters imports llm_errors, so bootstrap must never run synchronously
+        # from llm_errors itself. Five seconds is intentionally conservative and
+        # still happens before normal user traffic in a healthy Render boot.
         time.sleep(5)
+        try:
+            from model_gateway.free_model_runtime import install_current_free_model_targets
+            install_current_free_model_targets()
+            logger.warning("FREE_MODEL_RUNTIME_BOOTSTRAPPED source=application_import")
+        except Exception as exc:
+            logger.exception("FREE_MODEL_RUNTIME_BOOTSTRAP_FAILED error_type=%s", type(exc).__name__)
+            return
+
+        app_env = os.getenv("APP_ENV", os.getenv("ENV", "production")).lower()
+        enabled = os.getenv("PROVIDER_SELF_TEST_ON_STARTUP", "").strip().lower() in {"1", "true", "yes", "on"}
+        if app_env not in {"production", "staging"} and not enabled:
+            return
+
         try:
             from model_gateway.provider_diagnostics import run_provider_matrix_diagnostic
             report = asyncio.run(run_provider_matrix_diagnostic())
@@ -51,4 +52,4 @@ def start_production_model_bootstrap() -> None:
         except Exception as exc:
             logger.exception("PROVIDER_SELF_TEST_BOOTSTRAP_FAILED error_type=%s", type(exc).__name__)
 
-    threading.Thread(target=_worker, name="provider-self-test", daemon=True).start()
+    threading.Thread(target=_worker, name="provider-runtime-bootstrap", daemon=True).start()
