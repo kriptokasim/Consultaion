@@ -28,7 +28,7 @@ ALL_MODELS: List[ModelInfo] = [
     ModelInfo(id="router-smart", display_name="Free Smart Router (OpenRouter)", provider="openrouter", litellm_model="openrouter/openrouter/free", capabilities={"chat","routing","tools"}, tier="standard", cost_tier="low", latency_class="fast", quality_tier="advanced", safety_profile="normal", recommended=True, logo_url="/logos/openrouter.svg"),
     ModelInfo(id="router-deep", display_name="GLM 5.2 Free (OpenRouter)", provider="openrouter", litellm_model="openrouter/z-ai/glm-5.2:free", capabilities={"chat","routing","reasoning","tools"}, tier="advanced", cost_tier="low", latency_class="normal", quality_tier="advanced", safety_profile="normal", logo_url="/logos/openrouter.svg"),
     ModelInfo(id="gpt4o-mini", display_name="GPT-4o Mini (OpenAI)", provider="openai", litellm_model="openai/gpt-4o-mini", capabilities={"chat","tools","vision"}, tier="standard", cost_tier="low", latency_class="fast", quality_tier="baseline", safety_profile="strict", logo_url="/logos/openai.svg"),
-    ModelInfo(id="gpt4o-deep", display_name="GPT-4o (OpenAI)", provider="openai", litellm_model="openai/gpt-4o", capabilities={"chat","tools","vision","reasoning"}, tier="advanced", cost_tier="high", latency_class="normal", quality_tier="flagship", safety_profile="strict", logo_url="/logos/openai.svg", persona_type="The Methodical Analyst", persona_tagline="Precision through structured reasoning", description="Best for complex reasoning, coding, and multi-step analysis"),
+    ModelInfo(id="gpt4o-deep", display_name="GPT-4o (OpenAI)", provider="openai", litellm_model="openai/gpt-4o", capabilities={"chat","tools","vision","reasoning"}, tier="advanced", cost_tier="high", latency_class="normal", quality_tier="flagship", safety_profile="strict", logo_url="/logos/openai.svg", persona_type="The Methodical Analyst", persona_tagline="Precision through structured reasoning", description="Legacy durable preset; runtime health decides availability"),
     ModelInfo(id="claude-sonnet", display_name="Claude 3.5 Sonnet (Anthropic)", provider="anthropic", litellm_model="anthropic/claude-3-5-sonnet-20240620", capabilities={"chat","tools","vision","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="strict", logo_url="/logos/claude.svg", persona_type="The Thoughtful Mentor", persona_tagline="Nuanced insight with ethical care", description="Legacy durable preset; runtime health decides availability"),
     ModelInfo(id="claude-haiku", display_name="Claude 3 Haiku (Anthropic)", provider="anthropic", litellm_model="anthropic/claude-3-haiku-20240307", capabilities={"chat","tools"}, tier="standard", cost_tier="low", latency_class="fast", quality_tier="baseline", safety_profile="strict", logo_url="/logos/claude.svg"),
     ModelInfo(id="gemini-2-flash", display_name="Gemini 3.7 Flash", provider="gemini", litellm_model="gemini/gemini-3.7-flash", capabilities={"chat","tools","vision","long_context"}, tier="standard", cost_tier="low", latency_class="fast", quality_tier="advanced", safety_profile="normal", logo_url="/logos/googlegemini.svg", description="Current Gemini workhorse model; account pricing/limits apply"),
@@ -39,19 +39,23 @@ ALL_MODELS: List[ModelInfo] = [
     ModelInfo(id="openrouter-nemotron-free", display_name="Nemotron 3 Super (OpenRouter Free)", provider="openrouter", litellm_model="openrouter/nvidia/nemotron-3-super-120b-a12b:free", capabilities={"chat","tools","reasoning"}, tier="advanced", cost_tier="low", latency_class="normal", quality_tier="advanced", safety_profile="normal", logo_url="/logos/openrouter.svg"),
     ModelInfo(id="mistral-large", display_name="Mistral Large", provider="mistral", litellm_model="mistral/mistral-large-latest", capabilities={"chat","tools","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/mistralai.svg", persona_type="The European Pragmatist", persona_tagline="Efficient solutions, minimal waste"),
     ModelInfo(id="deepseek-r1", display_name="DeepSeek R1", provider="openrouter", litellm_model="openrouter/deepseek/deepseek-r1", capabilities={"chat","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/deepseek.svg", persona_type="The Deep Thinker", persona_tagline="Chain-of-thought reasoning at scale"),
+    # Current SOTA roster. These are routed through OpenRouter so Consultaion can
+    # compare frontier models without coupling the Arena to one vendor SDK.
+    ModelInfo(id="sota-gpt", display_name="GPT-5.6 Sol", provider="openrouter", litellm_model="openrouter/openai/gpt-5.6-sol", capabilities={"chat","tools","vision","reasoning"}, tier="advanced", cost_tier="high", latency_class="normal", quality_tier="flagship", safety_profile="strict", recommended=True, logo_url="/logos/openai.svg", persona_type="The Systems Architect", persona_tagline="Frontier reasoning and synthesis"),
+    ModelInfo(id="sota-claude", display_name="Claude Opus 4.6", provider="openrouter", litellm_model="openrouter/anthropic/claude-opus-4.6", capabilities={"chat","tools","vision","reasoning"}, tier="advanced", cost_tier="high", latency_class="normal", quality_tier="flagship", safety_profile="strict", logo_url="/logos/claude.svg", persona_type="The Critical Thinker", persona_tagline="Deep analysis and nuanced judgment"),
+    ModelInfo(id="sota-gemini", display_name="Gemini 3.1 Pro", provider="openrouter", litellm_model="openrouter/google/gemini-3.1-pro-preview", capabilities={"chat","tools","vision","reasoning","long_context"}, tier="advanced", cost_tier="high", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/googlegemini.svg", persona_type="The Context Engine", persona_tagline="Long-context multimodal analysis"),
+    ModelInfo(id="sota-grok", display_name="Grok 4.5", provider="openrouter", litellm_model="openrouter/x-ai/grok-4.5", capabilities={"chat","tools","reasoning"}, tier="advanced", cost_tier="high", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/xai.svg", persona_type="The Contrarian", persona_tagline="Alternative hypotheses and adversarial reasoning"),
+    ModelInfo(id="sota-glm", display_name="GLM-5", provider="openrouter", litellm_model="openrouter/z-ai/glm-5", capabilities={"chat","tools","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/zai.svg", persona_type="The Open-Weight Strategist", persona_tagline="Strong reasoning with efficient inference"),
+    ModelInfo(id="sota-kimi", display_name="Kimi K2.5", provider="openrouter", litellm_model="openrouter/moonshotai/kimi-k2.5", capabilities={"chat","tools","vision","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/moonshot.svg", persona_type="The Researcher", persona_tagline="Broad synthesis and technical exploration"),
 ]
 
-# Free-first Arena: every default seat can execute through OpenRouter without
-# requiring a paid OpenAI/Anthropic/Gemini balance. Provider-specific free keys
-# can still be used by selecting a direct provider model or BYOK.
-ARENA_MODELS: List[str] = ["router-smart", "router-deep", "llama-3-free", "openrouter-nemotron-free"]
+FREE_ARENA_MODELS: List[str] = ["router-smart", "router-deep", "llama-3-free", "openrouter-nemotron-free"]
+SOTA_ARENA_MODELS: List[str] = ["sota-gpt", "sota-claude", "sota-gemini", "sota-grok", "sota-glm", "sota-kimi"]
+ARENA_MODELS: List[str] = FREE_ARENA_MODELS
 
 def _provider_enabled(provider: str) -> bool:
     if settings.USE_MOCK:
         return True
-    # A key for OpenRouter does NOT make a direct OpenAI/Anthropic/Gemini/Groq
-    # provider available. Treating it that way caused phantom models to appear
-    # enabled and then fail at the direct adapter before fallback.
     provider_keys = {
         "openrouter": ("OPENROUTER_API_KEY",),
         "openai": ("OPENAI_API_KEY",),
@@ -117,5 +121,9 @@ def get_model(model_id: str) -> ModelInfo:
     return info
 
 def get_arena_models() -> List[ModelInfo]:
+    # Free-only remains the safety switch for deployments without paid credit.
+    # Otherwise Arena showcases frontier SOTA models, with gateway fallback to
+    # the verified free roster when a paid model is unavailable.
+    roster = FREE_ARENA_MODELS if getattr(settings, "FREE_ONLY_MODE", False) else SOTA_ARENA_MODELS
     enabled = {m.id for m in list_enabled_models()}
-    return [info for model_id in ARENA_MODELS if (info := get_model_info(model_id)) and model_id in enabled]
+    return [info for model_id in roster if (info := get_model_info(model_id)) and model_id in enabled]
