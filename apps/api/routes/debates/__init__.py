@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from models import Debate, Message, PairwiseVote, Score  # re-export for backward compat
 from sse_terminal_guard import install_terminal_commit_guard
 from structured_judge_guard import install_structured_judge_guard
+from sse_terminal_contract import install_cancelled_terminal_event
 
 from routes.debates.config_routes import (
     get_default_config,
@@ -27,10 +28,9 @@ from routes.debates.execution import (
 )
 from routes.debates.exports import export_debate_report, router as _exports_router
 
-# Install cross-cutting guards before the hardened router captures the legacy
-# create callable. The judge guard rewrites that callable in-place.
 install_structured_judge_guard()
 install_terminal_commit_guard()
+install_cancelled_terminal_event()
 
 from routes.debates.hardening import (  # noqa: E402
     create_debate_hardened as create_debate,
@@ -38,6 +38,7 @@ from routes.debates.hardening import (  # noqa: E402
     retry_debate_run_hardened as retry_debate_run,
     router as _hardening_router,
 )
+from routes.debates.cancel import router as _cancel_router  # noqa: E402
 from routes.debates.moderation import (  # noqa: E402
     get_argument_tree,
     moderate_debate,
@@ -76,8 +77,6 @@ def _drop_post_route(source_router: APIRouter, path: str) -> None:
     ]
 
 
-# Legacy modules remain importable for internal compatibility, but these three
-# product mutations have a single hardened runtime authority.
 _drop_post_route(_crud_router, "/debates")
 _drop_post_route(_execution_router, "/debates/{debate_id}/retry")
 _drop_post_route(_execution_router, "/debates/{debate_id}/retry-agent")
@@ -87,6 +86,7 @@ router.include_router(_config_router)
 router.include_router(_crud_router)
 router.include_router(_execution_router)
 router.include_router(_hardening_router)
+router.include_router(_cancel_router)
 router.include_router(_streaming_router)
 router.include_router(_exports_router)
 router.include_router(_moderation_router)
