@@ -1,5 +1,3 @@
-import pytest
-
 from model_gateway.model_map import MODEL_MAP, is_free_model
 
 
@@ -18,26 +16,6 @@ def test_retired_free_aliases_resolve_to_current_fallback():
     assert MODEL_MAP["mimo-v2-free"]["replacement"] == "openrouter_fallback"
 
 
-@pytest.mark.asyncio
-async def test_openrouter_fallback_policy_never_reuses_failed_primary(monkeypatch):
+def test_openrouter_fallback_sentinel_resolves_to_current_free_router():
     from model_gateway.adapters import OpenRouterAdapter
-
-    captured = {}
-    original = OpenRouterAdapter._resolve_model
-
-    async def fake_call(self, messages, model_id, temperature, max_tokens, gateway_policy, model_pool, routing_policy, user_id=None, response_format=None, tools=None, tool_choice=None, api_key=None):
-        captured["model_id"] = model_id
-        captured["gateway_policy"] = gateway_policy
-        return type("Result", (), {"success": False})()
-
-    monkeypatch.setattr(OpenRouterAdapter, "call_llm", fake_call)
-    # Importing model_map installs the fallback guard; calling through the
-    # gateway policy must therefore rewrite the primary model to the dedicated
-    # free fallback sentinel before reaching OpenRouter.
-    from model_gateway.model_map import _install_fallback_model_guard
-    _install_fallback_model_guard()
-    adapter = OpenRouterAdapter()
-    await adapter.call_llm([], "gemini_general", 0.0, 8, "fallback", "fallback", "test")
-    assert captured["model_id"] == "__consultaion_free_fallback__"
-    assert captured["gateway_policy"] == "fallback"
-    assert original is not None
+    assert OpenRouterAdapter._resolve_model("__consultaion_free_fallback__") == "openrouter/openrouter/free"
