@@ -13,6 +13,7 @@ class TransientLLMError(Exception):
         self.error_code = error_code
         self.cause = cause
 
+
 class ProviderFailureCode(str, Enum):
     INVALID_CREDENTIALS = "invalid_credentials"
     INSUFFICIENT_BALANCE = "insufficient_balance"
@@ -21,76 +22,50 @@ class ProviderFailureCode(str, Enum):
     API_ERROR = "api_error"
     UNKNOWN = "unknown"
 
+
 @dataclass
 class ProviderCallFailure:
     code: ProviderFailureCode
     message: str
     raw_error: str
 
+
 def classify_provider_exception(e: Exception) -> ProviderCallFailure:
     err_str = str(e)
     lower = err_str.lower()
-    
-    # Check LiteLLM specific exception types first
+
     if isinstance(e, litellm.AuthenticationError):
-        return ProviderCallFailure(
-            code=ProviderFailureCode.INVALID_CREDENTIALS,
-            message="Invalid or expired API key.",
-            raw_error=err_str
-        )
+        return ProviderCallFailure(ProviderFailureCode.INVALID_CREDENTIALS, "Invalid or expired API key.", err_str)
     elif isinstance(e, litellm.BudgetExceededError):
-        return ProviderCallFailure(
-            code=ProviderFailureCode.INSUFFICIENT_BALANCE,
-            message="Provider account/credits balance is too low.",
-            raw_error=err_str
-        )
+        return ProviderCallFailure(ProviderFailureCode.INSUFFICIENT_BALANCE, "Provider account/credits balance is too low.", err_str)
     elif isinstance(e, litellm.RateLimitError):
-        return ProviderCallFailure(
-            code=ProviderFailureCode.RATE_LIMIT_EXCEEDED,
-            message="Provider rate limit exceeded.",
-            raw_error=err_str
-        )
+        return ProviderCallFailure(ProviderFailureCode.RATE_LIMIT_EXCEEDED, "Provider rate limit exceeded.", err_str)
     elif isinstance(e, asyncio.TimeoutError) or "timeout" in lower or "timed out" in lower:
-        return ProviderCallFailure(
-            code=ProviderFailureCode.MODEL_TIMEOUT,
-            message="Provider request timed out.",
-            raw_error=err_str
-        )
-    
-    # Generic content checks (very robust for OpenRouter, proxy adapters, etc.)
+        return ProviderCallFailure(ProviderFailureCode.MODEL_TIMEOUT, "Provider request timed out.", err_str)
+
     if "credit balance is too low" in lower or "insufficient" in lower or "requires more credits" in lower:
-        return ProviderCallFailure(
-            code=ProviderFailureCode.INSUFFICIENT_BALANCE,
-            message="Provider account/credits balance is too low.",
-            raw_error=err_str
-        )
+        return ProviderCallFailure(ProviderFailureCode.INSUFFICIENT_BALANCE, "Provider account/credits balance is too low.", err_str)
     elif "api key not valid" in lower or "invalid api key" in lower or "authentication" in lower or "unauthorized" in lower:
-        return ProviderCallFailure(
-            code=ProviderFailureCode.INVALID_CREDENTIALS,
-            message="Invalid or expired API key.",
-            raw_error=err_str
-        )
+        return ProviderCallFailure(ProviderFailureCode.INVALID_CREDENTIALS, "Invalid or expired API key.", err_str)
     elif "rate limit" in lower or "429" in lower or "too many requests" in lower:
-        return ProviderCallFailure(
-            code=ProviderFailureCode.RATE_LIMIT_EXCEEDED,
-            message="Provider rate limit exceeded.",
-            raw_error=err_str
-        )
+        return ProviderCallFailure(ProviderFailureCode.RATE_LIMIT_EXCEEDED, "Provider rate limit exceeded.", err_str)
     elif "timeout" in lower or "timed out" in lower:
-        return ProviderCallFailure(
-            code=ProviderFailureCode.MODEL_TIMEOUT,
-            message="Provider request timed out.",
-            raw_error=err_str
-        )
+        return ProviderCallFailure(ProviderFailureCode.MODEL_TIMEOUT, "Provider request timed out.", err_str)
     elif "api_error" in lower or "bad request" in lower or "500" in lower or "internal server error" in lower:
-        return ProviderCallFailure(
-            code=ProviderFailureCode.API_ERROR,
-            message="Provider API returned an error.",
-            raw_error=err_str
-        )
-        
-    return ProviderCallFailure(
-        code=ProviderFailureCode.UNKNOWN,
-        message="An unknown provider error occurred.",
-        raw_error=err_str
-    )
+        return ProviderCallFailure(ProviderFailureCode.API_ERROR, "Provider API returned an error.", err_str)
+
+    return ProviderCallFailure(ProviderFailureCode.UNKNOWN, "An unknown provider error occurred.", err_str)
+
+
+# Normal application imports reach llm_errors before the provider adapters are
+# fully initialized. Defer bootstrap until the import graph has settled so the
+# runtime patch cannot create a circular import. This also avoids relying on
+# sitecustomize, which is not guaranteed by Render's uvicorn invocation.
+try:
+    from model_gateway.production_bootstrap import start_production_model_bootstrap
+
+    start_production_model_bootstrap()
+except Exception:
+    # Provider bootstrap must never prevent the API from starting; the bootstrap
+    # itself emits a structured failure if it cannot initialize.
+    pass
