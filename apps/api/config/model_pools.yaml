@@ -2,26 +2,28 @@ pools:
   test_pool:
     models:
       - mock
-      - groq_fast
-      - deepinfra_reasoning
+      - router-smart
+      - router-deep
     policies:
       - auto
       - direct
   free_hosted_pool:
     models:
+      - router-smart
+      - router-deep
+      - llama-3-free
+      - openrouter-nemotron-free
       - groq_fast
-      - deepinfra_reasoning
-      - together_general
-      - fireworks_general
     policies:
       - auto
       - direct
+      - fallback
   arena_primary_pool:
     models:
-      - openai_fast
-      - anthropic_reasoning
-      - gemini_general
-      - groq_fast
+      - router-smart
+      - router-deep
+      - llama-3-free
+      - openrouter-nemotron-free
     policies:
       - auto
       - direct
