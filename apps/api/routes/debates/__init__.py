@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from models import Debate, Message, PairwiseVote, Score  # re-export for backward compat
 from sse_terminal_guard import install_terminal_commit_guard
 from structured_judge_guard import install_structured_judge_guard
+from sse_terminal_contract import install_cancelled_terminal_event
 
 from routes.debates.config_routes import (
     get_default_config,
@@ -29,6 +30,7 @@ from routes.debates.exports import export_debate_report, router as _exports_rout
 
 install_structured_judge_guard()
 install_terminal_commit_guard()
+install_cancelled_terminal_event()
 
 from routes.debates.hardening import (  # noqa: E402
     create_debate_hardened as create_debate,
