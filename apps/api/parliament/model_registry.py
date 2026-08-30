@@ -41,22 +41,32 @@ ALL_MODELS: List[ModelInfo] = [
     ModelInfo(id="deepseek-r1", display_name="DeepSeek R1", provider="openrouter", litellm_model="openrouter/deepseek/deepseek-r1", capabilities={"chat","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/deepseek.svg", persona_type="The Deep Thinker", persona_tagline="Chain-of-thought reasoning at scale"),
 ]
 
-# Default Arena is deliberately free-first. Paid presets remain selectable when
-# their credentials are healthy, but the default experience must not require a
-# paid OpenAI/Anthropic balance just to answer a user.
-ARENA_MODELS: List[str] = ["groq-llama-3-3", "router-smart", "router-deep", "llama-3-free"]
+# Free-first Arena: every default seat can execute through OpenRouter without
+# requiring a paid OpenAI/Anthropic/Gemini balance. Provider-specific free keys
+# can still be used by selecting a direct provider model or BYOK.
+ARENA_MODELS: List[str] = ["router-smart", "router-deep", "llama-3-free", "openrouter-nemotron-free"]
 
 def _provider_enabled(provider: str) -> bool:
     if settings.USE_MOCK:
         return True
-    openrouter_available = bool(settings.OPENROUTER_API_KEY)
-    if provider == "openrouter": return openrouter_available
-    if provider == "openai": return bool(settings.OPENAI_API_KEY or openrouter_available)
-    if provider == "anthropic": return bool(settings.ANTHROPIC_API_KEY or openrouter_available)
-    if provider == "gemini": return bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY or openrouter_available)
-    if provider == "groq": return bool(settings.GROQ_API_KEY or openrouter_available)
-    if provider == "mistral": return bool(settings.MISTRAL_API_KEY or openrouter_available)
-    return False
+    # A key for OpenRouter does NOT make a direct OpenAI/Anthropic/Gemini/Groq
+    # provider available. Treating it that way caused phantom models to appear
+    # enabled and then fail at the direct adapter before fallback.
+    provider_keys = {
+        "openrouter": ("OPENROUTER_API_KEY",),
+        "openai": ("OPENAI_API_KEY",),
+        "anthropic": ("ANTHROPIC_API_KEY",),
+        "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        "groq": ("GROQ_API_KEY",),
+        "mistral": ("MISTRAL_API_KEY",),
+        "perplexity": ("PERPLEXITY_API_KEY",),
+        "xai": ("XAI_API_KEY",),
+        "deepinfra": ("DEEPINFRA_API_KEY",),
+        "together": ("TOGETHERAI_API_KEY", "TOGETHER_API_KEY"),
+        "fireworks": ("FIREWORKS_API_KEY",),
+    }
+    names = provider_keys.get(provider, (f"{provider.upper()}_API_KEY",))
+    return any(bool(getattr(settings, name, None)) for name in names)
 
 def list_enabled_models() -> List[ModelInfo]:
     return [m for m in ALL_MODELS if m.enabled and _provider_enabled(m.provider)]
