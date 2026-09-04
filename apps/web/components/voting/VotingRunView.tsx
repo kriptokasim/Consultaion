@@ -11,6 +11,7 @@ import { PredictionLock } from "./PredictionLock";
 import { PredictionAggregate } from "./PredictionAggregate";
 import { VoteReasonCard } from "./VoteReasonCard";
 import { API_ORIGIN } from "@/lib/config/runtime";
+import type { StreamingModelBuffer } from "@/lib/streaming/types";
 
 interface VotingRunViewProps {
     debate: DebateDetail;
@@ -21,6 +22,7 @@ interface VotingRunViewProps {
     scores?: any[];
     vote?: any;
     connectionStatus?: any;
+    streamingBuffers?: Map<string, StreamingModelBuffer>;
 }
 
 export function VotingRunView({
@@ -31,7 +33,8 @@ export function VotingRunView({
     judgeVotes = [],
     scores = [],
     vote,
-    connectionStatus = "idle"
+    connectionStatus = "idle",
+    streamingBuffers,
 }: VotingRunViewProps) {
     const [revealData, setRevealData] = useState<any>(null);
     const [isRevealed, setIsRevealed] = useState(false);
@@ -141,6 +144,7 @@ export function VotingRunView({
                         debate={debate}
                         events={events as any}
                         connectionStatus={connectionStatus}
+                        streamingBuffers={streamingBuffers}
                     />
                 </div>
             </div>

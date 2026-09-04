@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Activity, Download, Gavel, RefreshCcw, Terminal, Users } from "lucide-react";
 import type { TimelineEvent } from "@/lib/timeline/types";
 import type { SSEStatus } from "@/lib/sse";
+import type { StreamingModelBuffer } from "@/lib/streaming/types";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/client";
 import { ModeratorConsole, ArgumentTree } from "./InteractiveDeliberation";
@@ -48,6 +49,7 @@ interface DebateArenaProps {
   logs?: ArenaRuntimeLog[];
   connectionStatus?: SSEStatus;
   reportUrl?: string;
+  streamingBuffers?: Map<string, StreamingModelBuffer>;
 }
 
 const statusColors: Record<SSEStatus, string> = {
@@ -86,9 +88,20 @@ export default function DebateArena({
   logs = [],
   connectionStatus = "idle",
   reportUrl,
+  streamingBuffers,
 }: DebateArenaProps) {
   const [activeTab, setActiveTab] = useState<"transcript" | "tree">("transcript");
   const { t } = useI18n();
+
+  // Seats whose model call is still in flight get rendered here, live,
+  // token-by-token, from the delta buffers — otherwise a seat's turn only
+  // appears once the full response has finished generating.
+  const liveStreamingSeats = streamingBuffers
+    ? Array.from(streamingBuffers.values()).filter(
+        (buf) =>
+          buf.state !== "completed" && buf.state !== "failed" && buf.accumulatedText,
+      )
+    : [];
   const statusLabel: Record<SSEStatus, string> = {
     idle: t("arena.status.idle"),
     connecting: t("arena.status.connecting"),
@@ -253,7 +266,7 @@ export default function DebateArena({
 
           {activeTab === "transcript" ? (
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-              {transcriptEvents.length === 0 ? (
+              {transcriptEvents.length === 0 && liveStreamingSeats.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Awaiting debate events…</p>
               ) : (
                 transcriptEvents.map((event, idx) => {
@@ -291,6 +304,23 @@ export default function DebateArena({
                   )
                 })
               )}
+              {liveStreamingSeats.map((buf) => (
+                <article
+                  key={buf.responseId}
+                  className="rounded-2xl border border-accent-secondary/30 bg-accent-secondary/5 px-4 py-3 shadow-inner"
+                >
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      {buf.displayName || buf.modelId}
+                      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-accent-secondary animate-pulse" />
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wide text-accent-secondary">
+                      {t("arena.state.streaming")}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-foreground/80 whitespace-pre-wrap">{buf.accumulatedText}</p>
+                </article>
+              ))}
             </div>
           ) : (
             <div className="max-h-[600px] overflow-y-auto pr-1">

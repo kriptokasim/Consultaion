@@ -86,6 +86,60 @@ def _int_setting(name: str, default: int) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else default
 
 
+# Top-level DecisionReport fields the critic's revise pass is expected to
+# rewrite. If the revised JSON omits one of these, Pydantic silently
+# defaults it to an empty list/string and the content is lost — e.g. caveats
+# present in the initial draft vanishing from the final report because the
+# revision LLM call didn't bother repeating them. We backfill any such field
+# from the draft when the revised value is empty, so the model merely *not
+# repeating* content doesn't erase it.
+_REVISION_MANAGED_FIELDS = frozenset(
+    {
+        "title",
+        "executive_summary",
+        "verdict",
+        "key_findings",
+        "options_considered",
+        "model_positions",
+        "risks_and_assumptions",
+        "recommendation_table",
+        "next_actions",
+        "caveats",
+        "dissenting_views",
+        "unique_insights",
+        "context_needed",
+    }
+)
+
+
+def _is_empty_field_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, (str, list, dict)):
+        return len(value) == 0
+    return False
+
+
+def _backfill_empty_fields_from_draft(
+    revised: DecisionReport, draft: DecisionReport
+) -> DecisionReport:
+    """Restore fields the revision pass left empty but the draft had populated.
+
+    Only touches fields in ``_REVISION_MANAGED_FIELDS``. Never overwrites a
+    non-empty revised value; this only fills gaps left by an LLM that didn't
+    repeat unchanged content in its revised JSON output.
+    """
+    for field_name in _REVISION_MANAGED_FIELDS:
+        revised_value = getattr(revised, field_name, None)
+        if not _is_empty_field_value(revised_value):
+            continue
+        draft_value = getattr(draft, field_name, None)
+        if _is_empty_field_value(draft_value):
+            continue
+        setattr(revised, field_name, draft_value)
+    return revised
+
+
 async def run_semantic_claims_analysis(
     prompt: str,
     responses: List[Dict[str, Any]],
@@ -638,7 +692,9 @@ async def generate_decision_report(
                 {
                     "role": "system",
                     "content": system_prompt
-                    + "\n\nCRITICAL: Revise the draft JSON according to the verifier feedback. Fix any hallucinations, add missing critical evidence/dissenting views, and correct inaccuracies. Output strictly valid JSON.",
+                    + "\n\nCRITICAL: Revise the draft JSON according to the verifier feedback. Fix any hallucinations, add missing critical evidence/dissenting views, and correct inaccuracies. "
+                    "You MUST include every top-level field from the draft in your output, even fields the feedback did not ask you to change (e.g. caveats, unique_insights, context_needed, next_actions) — "
+                    "carry them over unchanged unless the feedback specifically says to fix or remove them. Do not omit a field just because it is unaffected. Output strictly valid JSON.",
                 },
                 {
                     "role": "user",
@@ -659,7 +715,12 @@ async def generate_decision_report(
                     usage.add_call(call_usage)
                 data = extract_and_parse_json(revised_raw) or {}
                 revised_json = json.dumps(data)
-                final_report = DecisionReport.model_validate(data)
+                revised_report = DecisionReport.model_validate(data)
+                # Belt-and-suspenders: the prompt asks the model to carry over
+                # unaffected fields, but LLMs don't always comply. Backfill
+                # anything left empty in the revision from the pre-revision
+                # draft so real content (like caveats) never silently vanishes.
+                final_report = _backfill_empty_fields_from_draft(revised_report, draft_report)
                 # Check revised report integrity
                 ok, problems = validate_report_integrity(final_report)
                 if not ok:

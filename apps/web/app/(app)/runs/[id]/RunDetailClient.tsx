@@ -271,10 +271,17 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
   }, []);
 
   // FH92: Canonical flattened events — never use `as unknown as DebateEvent[]`
+  // Both `/debates/{id}/events` (resultsEvents) and `/debates/{id}/timeline`
+  // (events, flattened here) reconstruct the same underlying Message/Score/
+  // Vote rows independently. They should usually agree, but if one of them
+  // comes back partial (e.g. missing seat/model transcript turns) we must
+  // not silently prefer it just because it returned *some* rows — that was
+  // hiding messages on history replay while the report still rendered fine
+  // from separate state. Prefer whichever reconstruction is more complete.
   const normalizedResultsEvents = useMemo<DebateEvent[]>(() => {
-    if (resultsEvents.length > 0) return resultsEvents;
-    // Fall back to flattening timeline events via the canonical function
-    return timelineEventsToDebateEvents(events);
+    const timelineDerived = timelineEventsToDebateEvents(events);
+    if (resultsEvents.length >= timelineDerived.length) return resultsEvents;
+    return timelineDerived;
   }, [resultsEvents, events]);
 
   const { scores, judgeVotes, vote } = useMemo(() => {
@@ -888,6 +895,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
           events={liveEvents as any}
           isCompleted={false}
           connectionStatus={sseStatus}
+          streamingBuffers={streamingState.buffers}
         />
       </div>
     );
@@ -939,6 +947,7 @@ export default function RunDetailClient({ runId, surface = "standalone", recentR
         debate={debate}
         events={events}
         connectionStatus={sseStatus}
+        streamingBuffers={streamingState.buffers}
       />
     </div>
   );

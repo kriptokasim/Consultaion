@@ -9,9 +9,23 @@ class MockEventSource {
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   close = vi.fn();
+  private listeners = new Map<string, Set<(event: Event) => void>>();
 
   constructor(public url: string, public options?: EventSourceInit) {
     MockEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: (event: Event) => void) {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type)!.add(listener);
+  }
+
+  removeEventListener(type: string, listener: (event: Event) => void) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  dispatch(type: string, event: Event) {
+    this.listeners.get(type)?.forEach((listener) => listener(event));
   }
 }
 
