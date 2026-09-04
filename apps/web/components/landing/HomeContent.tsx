@@ -129,13 +129,13 @@ export default function HomeContent() {
               )}
             </div>
 
-            {/* Right: supplied interactive chamber, kept at the existing hero footprint */}
+            {/* Right: supplied interactive chamber, same footprint with a slight zoom */}
             <Reveal delay={200} direction="right" className="hidden lg:block">
               <div className="relative aspect-video w-full overflow-hidden rounded-[24px] border border-slate-200/80 bg-[#f3f2f2] shadow-xl shadow-slate-900/10 dark:border-slate-700/60 dark:bg-slate-900 dark:shadow-black/20">
                 <iframe
                   title="Consultaion Parliament Chamber"
                   src="/embeds/consultaion-chamber.html"
-                  className="absolute inset-0 h-full w-full border-0"
+                  className="absolute left-[-6%] top-[-6%] h-[112%] w-[112%] border-0"
                   loading="eager"
                   aria-label="Interactive Consultaion Parliament Chamber"
                 />
