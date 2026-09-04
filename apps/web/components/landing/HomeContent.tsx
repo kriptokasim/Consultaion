@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Github } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { trackEvent } from "@/lib/analytics";
 import { API_ORIGIN } from "@/lib/config/runtime";
@@ -175,23 +174,41 @@ export default function HomeContent() {
 
         <footer className="mt-4 flex flex-col items-center gap-6">
           <div className="flex flex-wrap justify-center gap-6 border-t border-slate-200 pt-6 dark:border-slate-800">
-            <Link href="/docs" className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400" onClick={() => trackEvent("landing_docs_clicked")}>
+            <Link
+              href="/docs"
+              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400"
+              onClick={() => trackEvent("landing_docs_clicked")}
+            >
               <BookOpen className="h-4 w-4" />
               {t("landing.devs.docs")}
             </Link>
-            <a href="https://github.com/kriptokasim/Consultaion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400" onClick={() => trackEvent("landing_github_clicked")}>
+            <a
+              href="https://github.com/kriptokasim/Consultaion"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400"
+              onClick={() => trackEvent("landing_github_clicked")}
+            >
               <Github className="h-4 w-4" />
               {t("landing.devs.github")}
             </a>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-4 pb-8 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {marketingLinks.map((item) => (
-              <Link key={item.href} href={item.href} className="transition hover:text-amber-600">
+              <Link
+                key={item.href}
+                href={item.href}
+                className="transition hover:text-amber-600"
+              >
                 {item.label}
               </Link>
             ))}
-            <Link href="/terms" className="transition hover:text-amber-600">{t("footer.terms")}</Link>
-            <Link href="/privacy" className="transition hover:text-amber-600">{t("footer.privacy")}</Link>
+            <Link href="/terms" className="transition hover:text-amber-600">
+              {t("footer.terms")}
+            </Link>
+            <Link href="/privacy" className="transition hover:text-amber-600">
+              {t("footer.privacy")}
+            </Link>
           </div>
         </footer>
       </div>
