@@ -173,7 +173,7 @@ async def test_reveal_prediction_and_reasons(authenticated_client, db_session, m
     monkeypatch.setattr("worker.voting_tasks.call_llm_for_role", mock_call_llm)
 
     # Call reveal route
-    resp = authenticated_client.get(f"/api/v1/voting/{debate_id}/reveal")
+    resp = authenticated_client.post(f"/api/v1/voting/{debate_id}/reveal")
     assert resp.status_code == 200
     data = resp.json()
     

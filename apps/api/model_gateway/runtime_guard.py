@@ -485,13 +485,19 @@ async def guarded_route_llm_stream(
     """Streaming path with the same per-attempt reservation/accounting contract."""
     user_plan: str | None = None
     if user_id:
-        try:
+        def _resolve_user_plan() -> str | None:
             from billing.service import get_active_plan
             from database import session_scope
 
             with session_scope() as session:
                 plan = get_active_plan(session, user_id)
-                user_plan = plan.slug if plan else None
+                return plan.slug if plan else None
+
+        try:
+            user_plan = await asyncio.get_running_loop().run_in_executor(
+                None,
+                _resolve_user_plan,
+            )
         except Exception:
             logger.warning("Failed to resolve stream user plan", exc_info=True)
 

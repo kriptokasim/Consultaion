@@ -89,7 +89,7 @@ class ChallengeCreate(BaseModel):
     debate_id: str = Field(..., description="The ID of the completed debate to challenge")
 
 class ChallengeRoundSubmit(BaseModel):
-    pushback_text: str = Field(..., min_length=5, description="The critique or pushback on the synthesis")
+    pushback_text: str = Field(..., min_length=5, max_length=5000, description="The critique or pushback on the synthesis")
 
 
 @router.post("")

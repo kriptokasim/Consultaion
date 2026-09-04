@@ -269,6 +269,18 @@ async def route_llm_call(
             last_error_code = "no_healthy_provider_route"
             continue
 
+        if not current_api_key:
+            # Calling an unconfigured provider only produces an auth failure that
+            # then counts against shared provider health. Skip it instead.
+            logger.warning(
+                "Skipping model %s: no runtime credential configured for provider %s",
+                model_to_call,
+                provider,
+            )
+            last_error = f"No runtime credential is configured for provider {provider}."
+            last_error_code = "missing_provider_key"
+            continue
+
         # Patchset 136: Provider attempted metric — only after credential-scoped
         # circuit eligibility says this call can actually reach the adapter.
         try:

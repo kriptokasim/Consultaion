@@ -159,7 +159,7 @@ class TestGuardWiring:
 
         # This will trigger the guard (no divergence report exists, debate is completed)
         # The LLM call itself may fail, but the guard should be called
-        response = authenticated_client.get("/arena/test-div-guard/divergence")
+        response = authenticated_client.post("/arena/test-div-guard/divergence")
         # Guard should have been called
         mock_guard.assert_called_once()
         call_kwargs = mock_guard.call_args[1]

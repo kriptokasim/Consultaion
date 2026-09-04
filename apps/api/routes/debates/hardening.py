@@ -191,6 +191,12 @@ def _clone_arena_perspectives(
     target_attempt: int,
     target_attempt_id: str,
 ) -> int:
+    """Carry the previous attempt's usable responses into the new attempt.
+
+    Only successful rows are cloned. A failed row would still count as a
+    completed model in ``run_perspectives_fn``, so the retry would dispatch no
+    provider call for it and re-present the same error card on a re-billed run.
+    """
     rows = list(
         session.exec(
             select(Message)
@@ -204,6 +210,8 @@ def _clone_arena_perspectives(
     for row in rows:
         meta = row.meta or {}
         if int(meta.get("run_attempt", 1) or 1) != source_attempt:
+            continue
+        if not meta.get("success", True):
             continue
         model_id = str(meta.get("model_id") or row.persona or "").strip()
         if not model_id:

@@ -56,11 +56,54 @@ async def healthz() -> dict[str, str]:
     }
 
 
+def _probe_error_category(error: str) -> str:
+    """Classify a probe failure without echoing the raw exception text.
+
+    /readyz is unauthenticated and raw driver errors carry the DSN — host,
+    port and username — so only the category crosses the boundary.
+    """
+    lowered = error.lower()
+    if "pending migrations" in lowered:
+        return "pending_migrations"
+    if "schema integrity" in lowered:
+        return "schema_integrity_failed"
+    if "ping failed" in lowered:
+        return "backend_ping_failed"
+    if "no models enabled" in lowered:
+        return "no_models_enabled"
+    return "dependency_unavailable"
+
+
+def _sanitize_probe_info(probe: str, info: dict[str, Any]) -> dict[str, Any]:
+    """Log the full probe error server-side, expose only its category."""
+    error = info.get("error")
+    if not error:
+        return info
+    logger.error("readiness_probe_failed probe=%s error=%s", probe, error)
+    sanitized = dict(info)
+    sanitized["error"] = _probe_error_category(str(error))
+    return sanitized
+
+
+def _schema_readiness() -> dict[str, Any]:
+    """Reflect schema capabilities. Blocking — call via the default executor."""
+    from database import SessionLocal
+    from services.schema_capabilities import get_registry, get_schema_capabilities
+
+    with SessionLocal() as session:
+        caps = get_schema_capabilities(session, get_registry())
+        return {
+            "status": "ok" if caps.is_at_alembic_head else "behind_head",
+            "at_head": caps.is_at_alembic_head,
+            "missing_capabilities": caps.missing_capabilities,
+        }
+
+
 @router.get("/readyz")
 async def readyz(response: Response) -> dict[str, Any]:
     """
     Readiness probe.
-    
+
     Returns 503 if critical dependencies (DB, SSE) are not ready.
     Used by k8s/deployments to know when to send traffic.
     """
@@ -68,27 +111,22 @@ async def readyz(response: Response) -> dict[str, Any]:
     sse_ok, sse_info = await check_sse_readiness()
     registry_ok, registry_info = check_model_registry_readiness()
 
-    schema_info = {"status": "unknown"}
+    schema_info: dict[str, Any] = {"status": "unknown"}
     if settings.ENV == "test":
         schema_info["status"] = "test_bypass"
     else:
         try:
-            from database import SessionLocal
-            from services.schema_capabilities import get_registry, get_schema_capabilities
-            with SessionLocal() as session:
-                caps = get_schema_capabilities(session, get_registry())
-                schema_info = {
-                    "at_head": caps.is_at_alembic_head,
-                    "missing_capabilities": caps.missing_capabilities,
-                }
-                if not caps.is_at_alembic_head:
-                    schema_info["status"] = "behind_head"
-                    db_ok = False
-                else:
-                    schema_info["status"] = "ok"
+            schema_info = await asyncio.get_running_loop().run_in_executor(
+                None, _schema_readiness
+            )
+            if not schema_info["at_head"]:
+                db_ok = False
         except Exception as exc:
-            schema_info["status"] = "error"
-            schema_info["error"] = str(exc)
+            logger.error("readiness_probe_failed probe=schema error=%s", exc)
+            schema_info = {
+                "status": "error",
+                "error": _probe_error_category(str(exc)),
+            }
             db_ok = False
 
     status_code = status.HTTP_200_OK
@@ -99,10 +137,10 @@ async def readyz(response: Response) -> dict[str, Any]:
     return {
         "status": "ready" if status_code == 200 else "not_ready",
         "details": {
-            "db": db_info,
-            "sse": sse_info,
+            "db": _sanitize_probe_info("db", db_info),
+            "sse": _sanitize_probe_info("sse", sse_info),
             "schema": schema_info,
-            "models": registry_info,
+            "models": _sanitize_probe_info("models", registry_info),
         },
         "meta": {
             "env": settings.ENV,

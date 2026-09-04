@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -9,6 +10,8 @@ import sqlalchemy as sa
 from agents import call_llm_for_role as _call_llm_for_role
 from database_async import async_session_scope
 from models import Debate, LLMUsageLog
+
+from config import settings
 
 _state_lock = threading.Lock()
 
@@ -26,19 +29,44 @@ class _BudgetState:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
-_states: dict[str, _BudgetState | None] = {}
+# Bounded on purpose: a long-lived worker touches an unbounded number of
+# debates, so the cache is evicted on terminal state and LRU-capped as a
+# backstop against a run that never reaches its terminal path.
+_states: OrderedDict[str, _BudgetState | None] = OrderedDict()
 _init_locks: dict[str, asyncio.Lock] = {}
+
+
+def _max_tracked_states() -> int:
+    return max(1, int(getattr(settings, "PARLIAMENT_BUDGET_STATE_MAX_ENTRIES", 512) or 512))
+
+
+def _remember_state(debate_id: str, state: _BudgetState | None) -> None:
+    """Store a budget state under ``_state_lock`` and enforce the LRU cap."""
+    _states[debate_id] = state
+    _states.move_to_end(debate_id)
+    cap = _max_tracked_states()
+    while len(_states) > cap:
+        _states.popitem(last=False)
+
+
+def clear_state(debate_id: str) -> None:
+    """Drop cached budget accounting once a debate has reached a terminal state."""
+    with _state_lock:
+        _states.pop(debate_id, None)
+        _init_locks.pop(debate_id, None)
 
 
 async def _load_state(debate_id: str) -> _BudgetState | None:
     with _state_lock:
         if debate_id in _states:
+            _states.move_to_end(debate_id)
             return _states[debate_id]
         init_lock = _init_locks.setdefault(debate_id, asyncio.Lock())
 
     async with init_lock:
         with _state_lock:
             if debate_id in _states:
+                _states.move_to_end(debate_id)
                 return _states[debate_id]
 
         async with async_session_scope() as session:
@@ -72,7 +100,7 @@ async def _load_state(debate_id: str) -> _BudgetState | None:
                 )
 
         with _state_lock:
-            _states[debate_id] = state
+            _remember_state(debate_id, state)
             _init_locks.pop(debate_id, None)
         return state
 
@@ -82,6 +110,23 @@ def _assert_headroom(state: _BudgetState) -> None:
         raise ParliamentBudgetExceeded("token_budget_exceeded")
     if state.max_cost_usd is not None and state.cost_usd >= state.max_cost_usd:
         raise ParliamentBudgetExceeded("cost_budget_exceeded")
+
+
+async def budget_exhausted_reason(debate_id: str) -> str | None:
+    """Return the exhaustion reason for a debate, or ``None`` while headroom remains.
+
+    Lets the engine own budget exhaustion as a terminal outcome instead of
+    discovering it as a provider-call exception inside a seat/chair/judge.
+    """
+    state = await _load_state(str(debate_id))
+    if state is None:
+        return None
+    with state.lock:
+        try:
+            _assert_headroom(state)
+        except ParliamentBudgetExceeded as exc:
+            return str(exc)
+    return None
 
 
 async def call_llm_for_role_budgeted(*args: Any, **kwargs: Any):

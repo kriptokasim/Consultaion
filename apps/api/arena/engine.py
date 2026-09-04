@@ -34,11 +34,33 @@ logger = logging.getLogger(__name__)
 MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS = 2
 
 
+def _is_execution_ownership_error(exc: BaseException) -> bool:
+    """Ownership loss is authoritative — it aborts, it is never logged away."""
+    from orchestration.checkpoints import (
+        CheckpointIntegrityError,
+        CheckpointOwnershipLostError,
+    )
+    from orchestration.execution_lease import ExecutionSupersededError
+
+    return isinstance(
+        exc,
+        (ExecutionSupersededError, CheckpointOwnershipLostError, CheckpointIntegrityError),
+    )
+
+
 async def _publish_lifecycle_best_effort(backend, channel: str, event: dict) -> None:
-    """Lifecycle telemetry must never cancel model execution."""
+    """Lifecycle telemetry must never cancel model execution.
+
+    The fenced SSE backend rejects a publish from a superseded worker, and that
+    rejection is the cheapest ownership signal this engine gets — it fires on
+    every lifecycle event. Swallowing it would keep a dead run calling
+    providers, so it propagates while transport failures stay best-effort.
+    """
     try:
         await backend.publish(channel, event)
-    except Exception:
+    except Exception as exc:
+        if _is_execution_ownership_error(exc):
+            raise
         logger.warning(
             "arena.lifecycle_publish_failed channel=%s type=%s",
             channel,
@@ -140,6 +162,38 @@ def _resolve_arena_models_from_panel(panel_config: dict | None):
             "Persisted Arena panel contains unresolved model seats: " + ", ".join(unresolved)
         )
     return resolved
+
+
+def _resolve_min_required(panel_config: dict | None, model_count: int) -> int:
+    """Resolve the synthesis quorum, honouring the panel's own override.
+
+    ``PanelConfig.min_required_seats`` is the user's stored tolerance contract
+    (the same override Parliament honours); the global setting is only the
+    default. The quorum can never exceed the resolved execution manifest, which
+    deduplicates seats.
+    """
+    from config import settings
+
+    min_required = int(
+        getattr(
+            settings,
+            "MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS",
+            MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS,
+        )
+    )
+    if isinstance(panel_config, dict):
+        override = panel_config.get("min_required_seats")
+        if isinstance(override, int) and not isinstance(override, bool) and override >= 1:
+            min_required = override
+
+    if model_count and min_required > model_count:
+        logger.warning(
+            "arena.min_required_clamped requested=%s model_count=%s",
+            min_required,
+            model_count,
+        )
+        min_required = model_count
+    return max(1, min_required)
 
 
 def _select_arena_execution_models(panel_config: dict | None):
@@ -673,7 +727,8 @@ async def persist_and_publish_arena_response(
         # Concurrent insert of same (debate_id, response_id) — durable duplicate
         return False
 
-    # Post-commit SSE is best-effort — never abort model fan-out
+    # Post-commit SSE is best-effort — never abort model fan-out, except when
+    # the publish proves this worker no longer owns the run.
     try:
         await _publish_lifecycle_best_effort(
             backend,
@@ -697,7 +752,9 @@ async def persist_and_publish_arena_response(
                 "retry_generation": response.retry_generation,
             },
         )
-    except Exception:
+    except Exception as exc:
+        if _is_execution_ownership_error(exc):
+            raise
         logger.warning(
             "arena_response.sse_publish_failed debate_id=%s response_id=%s",
             debate_id,
@@ -1045,13 +1102,7 @@ async def run_arena(
     backend = get_sse_backend()
     usage = UsageAccumulator()
     model_order = {model.id: index for index, model in enumerate(arena_models)}
-    min_required = int(
-        getattr(
-            settings,
-            "MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS",
-            MIN_SUCCESSFUL_RESPONSES_FOR_SYNTHESIS,
-        )
-    )
+    min_required = _resolve_min_required(panel_config, len(arena_models))
     progressive_enabled = getattr(
         settings, "ARENA_PROGRESSIVE_SYNTHESIS_ENABLED", False
     ) is True and not (settings.STAGED_DECISION_PIPELINE and not continue_pipeline)
@@ -1420,6 +1471,10 @@ async def run_arena(
                     result = await _call_model(model_info, response_id, deadline, _timing, lifecycle_payload)
                 response, call_usage = result
             except Exception as exc:
+                # Ownership loss is not a provider failure; it must abort the
+                # fan-out instead of becoming a failed model card.
+                if _is_execution_ownership_error(exc):
+                    raise
                 logger.error(f"Arena model task exception for {model_info.id}: {exc}")
 
                 from llm_errors import ProviderFailureCode, classify_provider_exception
@@ -1499,9 +1554,7 @@ async def run_arena(
             except Exception as persist_exc:
                 # P2 #10: Even persistence failures must not escape — the parent
                 # loop should see every model task complete normally.
-                from orchestration.execution_lease import ExecutionSupersededError
-
-                if isinstance(persist_exc, ExecutionSupersededError):
+                if _is_execution_ownership_error(persist_exc):
                     raise
                 logger.error(
                     "Arena response persistence failed for %s: %s",
@@ -1648,12 +1701,16 @@ async def run_arena(
                         quorum_reached_at=reached_at,
                     )
                 except asyncio.CancelledError:
+                    # Absorbing the cancellation here would let the checkpoint
+                    # be finished as completed against a snapshot that is
+                    # already obsolete, so a later takeover would reuse an empty
+                    # revision instead of recomputing it.
                     logger.info(
                         "arena.provisional_synthesis_superseded " "debate_id=%s input_hash=%s",
                         debate_id,
                         snapshot_hash,
                     )
-                    return None
+                    raise
 
             return await run_with_checkpoint(
                 debate_id,

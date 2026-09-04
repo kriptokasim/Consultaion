@@ -53,4 +53,7 @@ def test_readyz_failure_sse(mock_sse, mock_db, client):
     response = client.get("/readyz")
     assert response.status_code == 503
     assert response.json()["status"] == "not_ready"
-    assert response.json()["details"]["sse"]["error"] == "redis down"
+    # The probe is unauthenticated, so it reports a category rather than the
+    # raw dependency error, which can carry hostnames and credentials.
+    assert response.json()["details"]["sse"]["error"] == "dependency_unavailable"
+    assert "redis down" not in response.text

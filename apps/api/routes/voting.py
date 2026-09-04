@@ -131,17 +131,7 @@ async def cast_prediction(
     }
 
 
-@router.get("/{debate_id}/reveal")
-async def reveal_prediction_and_reasons(
-    debate_id: str,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-    request: Request = None,
-):
-    """
-    Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.
-    Resolves predictions on-the-fly if the debate is completed.
-    """
+def _load_debate_for_reveal(debate_id: str, current_user: User, session: Session) -> Debate:
     debate = session.get(Debate, debate_id)
     if not debate:
         raise HTTPException(status_code=404, detail="Debate not found.")
@@ -149,6 +139,13 @@ async def reveal_prediction_and_reasons(
     # Enforce access control for private debates
     if not can_access_debate(debate, current_user, session):
         raise HTTPException(status_code=404, detail="Debate not found.")
+
+    return debate
+
+
+def _build_reveal_payload(debate: Debate, current_user: User, session: Session) -> dict:
+    """Assemble the reveal response from already-persisted state only."""
+    debate_id = debate.id
 
     # 1. Fetch current user's prediction
     user_id = current_user.id if current_user else None
@@ -180,23 +177,6 @@ async def reveal_prediction_and_reasons(
                     session.add(prediction)
                     session.commit()
                     session.refresh(prediction)
-
-        # Trigger vote reasons LLM extraction if not pre-computed
-        if not debate.final_meta or "vote_reasons" not in debate.final_meta:
-            await require_llm_action_allowed(
-                user=current_user,
-                action="voting_prediction",
-                session=session,
-                debate_id=debate_id,
-                ip_address=request.client.host if request.client else "unknown",
-            )
-            from worker.voting_tasks import _execute_vote_reasons_extraction
-            try:
-                # Execute synchronously on-the-fly
-                await _execute_vote_reasons_extraction(debate_id)
-                session.refresh(debate)
-            except Exception as exc:
-                logger.warning("Failed on-the-fly vote reasons extraction for %s: %s", debate_id, exc)
 
     # 3. Get community aggregates
     total_predictions = session.scalar(
@@ -234,3 +214,53 @@ async def reveal_prediction_and_reasons(
         "aggregates": aggregates,
         "vote_reasons": debate.final_meta.get("vote_reasons") if debate.final_meta else None
     }
+
+
+@router.get("/{debate_id}/reveal")
+async def reveal_prediction_and_reasons(
+    debate_id: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.
+
+    Read-only: vote reasons are returned only when already extracted. Use the
+    POST variant to run the extraction, which spends credits.
+    """
+    debate = _load_debate_for_reveal(debate_id, current_user, session)
+    return _build_reveal_payload(debate, current_user, session)
+
+
+@router.post("/{debate_id}/reveal")
+async def compute_reveal_prediction_and_reasons(
+    debate_id: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    request: Request = None,
+):
+    """
+    Extract judges' vote highlights/drawbacks if not pre-computed, then return
+    the same payload as the GET variant. Charges the caller for the extraction.
+    """
+    debate = _load_debate_for_reveal(debate_id, current_user, session)
+
+    if debate.status in ("completed", "completed_budget"):
+        # Trigger vote reasons LLM extraction if not pre-computed
+        if not debate.final_meta or "vote_reasons" not in debate.final_meta:
+            await require_llm_action_allowed(
+                user=current_user,
+                action="voting_prediction",
+                session=session,
+                debate_id=debate_id,
+                ip_address=request.client.host if request.client else "unknown",
+            )
+            from worker.voting_tasks import _execute_vote_reasons_extraction
+            try:
+                # Execute synchronously on-the-fly
+                await _execute_vote_reasons_extraction(debate_id)
+                session.refresh(debate)
+            except Exception as exc:
+                logger.warning("Failed on-the-fly vote reasons extraction for %s: %s", debate_id, exc)
+
+    return _build_reveal_payload(debate, current_user, session)

@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/oracle", tags=["oracle"])
 
 class OracleCreate(BaseModel):
-    prompt: str = Field(..., min_length=5, description="The query to analyze")
+    prompt: str = Field(..., min_length=5, max_length=5000, description="The query to analyze")
 
 class OracleFork(BaseModel):
     parent_branch_id: str = Field(..., description="The ID of the parent branch to fork from")
     fork_node_id: str = Field(..., description="The node ID in the parent branch after which to fork")
-    assumption_text: str = Field(..., min_length=3, description="The custom counter-assumption or text to inject at the fork point")
+    assumption_text: str = Field(..., min_length=3, max_length=5000, description="The custom counter-assumption or text to inject at the fork point")
 
 
 async def run_base_reasoning_task(session_id: str, branch_id: str, prompt: str):

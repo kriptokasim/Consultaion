@@ -344,7 +344,9 @@ async def checkpoint_heartbeat(lease: ExecutionLease, stage_key: str, attempt: i
     """Long-stage liveness: refresh heartbeat_at while ownership holds (I).
 
     A zero-row update means ownership moved — abort by setting the lease-lost
-    event; the completion CAS will fail closed as well.
+    event; the completion CAS will fail closed as well. A beat that lands after
+    our own stage legitimately finished is not ownership loss: the row is still
+    ours, it simply left ``running``.
     """
     now = _now()
     stmt = (
@@ -361,11 +363,29 @@ async def checkpoint_heartbeat(lease: ExecutionLease, stage_key: str, attempt: i
     async with async_session_scope() as session:
         result = await session.execute(stmt)
         await session.commit()
-    if result.rowcount == 0:
-        lease.lease_lost_event.set()
-        raise CheckpointOwnershipLostError(
-            f"Debate {lease.debate_id}: lost checkpoint ownership for {stage_key}."
+    if result.rowcount:
+        return
+
+    async with async_session_scope() as session:
+        cp = await _get_checkpoint(session, lease.debate_id, stage_key)
+
+    if (
+        cp is not None
+        and cp.status in {"completed", "failed"}
+        and cp.owner_id == lease.owner_id
+        and cp.lease_epoch == lease.lease_epoch
+        and cp.attempt == attempt
+    ):
+        logger.debug(
+            "checkpoint.heartbeat_after_finish debate_id=%s stage=%s attempt=%s status=%s",
+            lease.debate_id, stage_key, attempt, cp.status,
         )
+        return
+
+    lease.lease_lost_event.set()
+    raise CheckpointOwnershipLostError(
+        f"Debate {lease.debate_id}: lost checkpoint ownership for {stage_key}."
+    )
 
 
 async def _conditional_finish(
@@ -544,18 +564,34 @@ async def run_with_checkpoint(
 ) -> Any:
     """Execute a pipeline stage inside an owner-fenced checkpoint lifecycle.
 
-    ``execution_lease`` may be omitted only when a lease is bound via the
-    execution ContextVar. Legacy (owner_id, lease_epoch) pairs are accepted
-    for backward compatibility and wrapped into a detached lease object.
+    Ownership is resolved in strict precedence order: the explicit
+    ``execution_lease``, then the lease bound to this task context, and only
+    then a legacy (owner_id, lease_epoch) pair. The context lease must win over
+    reconstruction because it carries the live ``lease_lost_event`` the
+    orchestration body races against; a reconstructed lease would own a fresh
+    Event that nobody observes.
 
     ``allow_unfenced`` should be True only for genuinely post-terminal
     background stages that never carry a live execution lease (see
     ``_resolve_lease``).
     """
-    if execution_lease is None and owner_id is not None and lease_epoch is not None:
-        execution_lease = ExecutionLease.create(
-            debate_id, owner_id=owner_id, lease_epoch=lease_epoch, run_attempt=0
-        )
+    if execution_lease is None:
+        ambient = get_current_execution_lease()
+        if ambient is not None and ambient.debate_id == debate_id:
+            if owner_id is not None and (
+                ambient.owner_id != owner_id or ambient.lease_epoch != lease_epoch
+            ):
+                logger.warning(
+                    "checkpoint.lease_identity_mismatch debate_id=%s stage=%s "
+                    "passed_owner=%s passed_epoch=%s bound_owner=%s bound_epoch=%s",
+                    debate_id, stage_key, owner_id, lease_epoch,
+                    ambient.owner_id, ambient.lease_epoch,
+                )
+            execution_lease = ambient
+        elif owner_id is not None and lease_epoch is not None:
+            execution_lease = ExecutionLease.create(
+                debate_id, owner_id=owner_id, lease_epoch=lease_epoch, run_attempt=0
+            )
     lease = _resolve_lease(execution_lease, allow_unfenced=allow_unfenced)
 
     serialized = json.dumps(input_data, sort_keys=True, default=str)
@@ -618,8 +654,25 @@ async def run_with_checkpoint(
 
         heartbeat_task = asyncio.create_task(_beat())
 
+    async def _stop_heartbeat() -> None:
+        nonlocal heartbeat_task
+        if heartbeat_task is None:
+            return
+        task, heartbeat_task = heartbeat_task, None
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, CheckpointOwnershipLostError):
+            pass
+
     try:
-        result = await run_fn()
+        try:
+            result = await run_fn()
+        finally:
+            # The heartbeat and the finish CAS are independent writers on the
+            # same row. Retiring the beat before either transition runs is what
+            # makes their ordering deterministic.
+            await _stop_heartbeat()
 
         output_ref = None
         if (
@@ -646,9 +699,4 @@ async def run_with_checkpoint(
         )
         raise
     finally:
-        if heartbeat_task is not None:
-            heartbeat_task.cancel()
-            try:
-                await heartbeat_task
-            except (asyncio.CancelledError, CheckpointOwnershipLostError):
-                pass
+        await _stop_heartbeat()

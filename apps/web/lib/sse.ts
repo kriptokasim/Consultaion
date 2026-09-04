@@ -2,18 +2,51 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type SSEStatus = "idle" | "connecting" | "connected" | "reconnecting" | "closed";
+export type SSEStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "closed"
+  | "unavailable";
 
 export type UseEventSourceOptions<T> = {
   enabled?: boolean;
   withCredentials?: boolean;
   parseJson?: boolean;
   retryDelays?: number[];
+  /** Reconnect attempts before the stream is declared unavailable. */
+  maxRetries?: number;
   onEvent?: (data: T, event: MessageEvent) => void;
   onError?: (event: Event) => void;
 };
 
 const DEFAULT_RETRY = [2000, 4000, 8000, 15000];
+const DEFAULT_MAX_RETRIES = 6;
+const MAX_RETRY_AFTER_MS = 300000;
+
+/**
+ * The backend refuses excess concurrent streams with a named `stream_unavailable`
+ * event carrying `retry_after` seconds. Named events never reach `onmessage`, so
+ * it needs its own listener; the payload is the only backpressure signal an
+ * EventSource can observe (a 503 surfaces as a bare `onerror`).
+ */
+function parseRetryAfterMs(raw: unknown): number | null {
+  if (typeof raw !== "string") return null;
+  try {
+    const parsed = JSON.parse(raw) as { retry_after?: unknown };
+    const seconds =
+      typeof parsed.retry_after === "number"
+        ? parsed.retry_after
+        : typeof parsed.retry_after === "string"
+          ? Number(parsed.retry_after)
+          : NaN;
+    if (!Number.isFinite(seconds) || seconds <= 0) return null;
+    return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
+  } catch {
+    return null;
+  }
+}
 
 export function useEventSource<T = unknown>(
   url: string | null,
@@ -24,15 +57,18 @@ export function useEventSource<T = unknown>(
     withCredentials = false,
     parseJson = true,
     retryDelays = DEFAULT_RETRY,
+    maxRetries = DEFAULT_MAX_RETRIES,
     onEvent,
     onError,
   } = options;
   const [status, setStatus] = useState<SSEStatus>(!url || !enabled ? "idle" : "connecting");
   const [lastError, setLastError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [retryAfterMs, setRetryAfterMs] = useState<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attemptsRef = useRef(0);
+  const retryAfterMsRef = useRef<number | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
   const onEventRef = useRef(onEvent);
   const onErrorRef = useRef(onError);
@@ -64,7 +100,9 @@ export function useEventSource<T = unknown>(
   useEffect(() => {
     lastEventIdRef.current = null;
     setRetryCount(0);
+    setRetryAfterMs(null);
     attemptsRef.current = 0;
+    retryAfterMsRef.current = null;
   }, [url]);
 
   useEffect(() => {
@@ -96,6 +134,37 @@ export function useEventSource<T = unknown>(
       const source = new EventSource(finalUrl, { withCredentials });
       eventSourceRef.current = source;
 
+      // Both `onerror` and `stream_unavailable` can fire for the same
+      // connection; only the first may schedule a retry.
+      let retryScheduled = false;
+      const scheduleRetry = (explicitDelay?: number) => {
+        if (cancelled || retryScheduled) return;
+        retryScheduled = true;
+
+        source.close();
+        if (eventSourceRef.current === source) {
+          eventSourceRef.current = null;
+        }
+
+        attemptsRef.current += 1;
+        setRetryCount(attemptsRef.current);
+
+        if (attemptsRef.current > maxRetries) {
+          clearRetryTimer();
+          setStatus("unavailable");
+          return;
+        }
+
+        const delay =
+          explicitDelay ??
+          retryDelays[Math.min(attemptsRef.current - 1, retryDelays.length - 1)];
+
+        clearRetryTimer();
+        retryTimerRef.current = setTimeout(() => {
+          connect();
+        }, delay);
+      };
+
       source.onopen = () => {
         if (cancelled) {
           source.close();
@@ -103,10 +172,21 @@ export function useEventSource<T = unknown>(
         }
         performance.mark?.("sse_open");
         attemptsRef.current = 0;
+        retryAfterMsRef.current = null;
         setRetryCount(0);
+        setRetryAfterMs(null);
         setStatus("connected");
         setLastError(null);
       };
+
+      source.addEventListener("stream_unavailable", (event) => {
+        if (cancelled) return;
+        const delay = parseRetryAfterMs((event as MessageEvent).data);
+        retryAfterMsRef.current = delay;
+        setRetryAfterMs(delay);
+        setLastError("stream_unavailable");
+        scheduleRetry(delay ?? undefined);
+      });
 
       let _firstEvent = true;
       source.onmessage = (event) => {
@@ -128,23 +208,14 @@ export function useEventSource<T = unknown>(
 
       source.onerror = (errorEvent) => {
         if (cancelled) return;
-        setLastError("stream_error");
+        if (!retryScheduled) {
+          setLastError("stream_error");
+        }
         onErrorRef.current?.(errorEvent);
 
-        // Close current source before scheduling retry
-        source.close();
-        if (eventSourceRef.current === source) {
-          eventSourceRef.current = null;
-        }
-
-        attemptsRef.current += 1;
-        setRetryCount(attemptsRef.current);
-        const delay = retryDelays[Math.min(attemptsRef.current - 1, retryDelays.length - 1)];
-
-        clearRetryTimer();
-        retryTimerRef.current = setTimeout(() => {
-          connect();
-        }, delay);
+        // A 503 refusal carries `Retry-After` the EventSource cannot read, so
+        // fall back to the ladder and let the attempt cap end the storm.
+        scheduleRetry(retryAfterMsRef.current ?? undefined);
       };
     };
 
@@ -154,13 +225,23 @@ export function useEventSource<T = unknown>(
       cancelled = true;
       close();
     };
-  }, [url, enabled, parseJson, retryDelays, withCredentials, close, clearRetryTimer]);
+  }, [
+    url,
+    enabled,
+    parseJson,
+    retryDelays,
+    maxRetries,
+    withCredentials,
+    close,
+    clearRetryTimer,
+  ]);
 
   return {
     status,
     error: lastError,
     close,
     retryCount,
+    retryAfterMs,
   };
 }
 

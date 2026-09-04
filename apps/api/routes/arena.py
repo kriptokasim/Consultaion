@@ -34,14 +34,7 @@ class UserVotePayload(BaseModel):
     claim_text: str = Field(..., description="The claim content the user voted on")
 
 
-@router.get("/{debate_id}/divergence")
-async def get_divergence_report(
-    debate_id: str,
-    current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-    request: Request = None,
-) -> Dict[str, Any]:
-    """Retrieve claims divergence report. Computes it on the fly if missing on a completed run."""
+def _load_debate_for_divergence(debate_id: str, current_user: User, session: Session) -> Debate:
     debate = session.get(Debate, debate_id)
     if not debate:
         raise HTTPException(status_code=404, detail="Debate not found")
@@ -49,20 +42,77 @@ async def get_divergence_report(
     if not can_access_debate(debate, current_user, session):
         raise HTTPException(status_code=404, detail="Debate not found")
 
-    report = session.exec(
+    return debate
+
+
+def _load_divergence_report(debate_id: str, session: Session) -> DivergenceReport | None:
+    return session.exec(
         select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
     ).first()
 
+
+def _pending_divergence_payload(debate_id: str, debate_status: str) -> Dict[str, Any]:
+    return {
+        "debate_id": debate_id,
+        "status": debate_status,
+        "divergence_score": 0.0,
+        "consensus_claims": {"claims": []},
+        "contested_claims": {"claims": []},
+        "ready": False
+    }
+
+
+def _divergence_payload(report: DivergenceReport) -> Dict[str, Any]:
+    return {
+        "id": report.id,
+        "debate_id": report.debate_id,
+        "divergence_score": report.divergence_score,
+        "consensus_claims": report.consensus_claims or {"claims": []},
+        "contested_claims": report.contested_claims or {"claims": []},
+        "created_at": report.created_at.isoformat(),
+        "ready": True
+    }
+
+
+@router.get("/{debate_id}/divergence")
+async def get_divergence_report(
+    debate_id: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    """Retrieve claims divergence report.
+
+    Read-only: an un-computed report reports `ready: false`. Use the POST
+    variant to compute it, which spends credits.
+    """
+    debate = _load_debate_for_divergence(debate_id, current_user, session)
+
+    report = _load_divergence_report(debate_id, session)
+    if not report:
+        return _pending_divergence_payload(debate_id, debate.status)
+
+    return _divergence_payload(report)
+
+
+@router.post("/{debate_id}/divergence")
+async def compute_divergence_report(
+    debate_id: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+    request: Request = None,
+) -> Dict[str, Any]:
+    """Compute the claims divergence report on the fly for a completed run.
+
+    Charges the caller for the computation; returns the cached report if one
+    already exists.
+    """
+    debate = _load_debate_for_divergence(debate_id, current_user, session)
+
+    report = _load_divergence_report(debate_id, session)
+
     if not report:
         if debate.status != "completed":
-            return {
-                "debate_id": debate_id,
-                "status": debate.status,
-                "divergence_score": 0.0,
-                "consensus_claims": {"claims": []},
-                "contested_claims": {"claims": []},
-                "ready": False
-            }
+            return _pending_divergence_payload(debate_id, debate.status)
 
         await require_llm_action_allowed(
             user=current_user,
@@ -74,9 +124,7 @@ async def get_divergence_report(
 
         try:
             await _execute_divergence_computation(debate_id)
-            report = session.exec(
-                select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
-            ).first()
+            report = _load_divergence_report(debate_id, session)
         except Exception as exc:
             logger.warning("divergence_computation_failed debate_id=%s error=%s", debate_id, exc)
             raise HTTPException(
@@ -87,15 +135,7 @@ async def get_divergence_report(
     if not report:
         raise HTTPException(status_code=404, detail="Divergence report not found")
 
-    return {
-        "id": report.id,
-        "debate_id": report.debate_id,
-        "divergence_score": report.divergence_score,
-        "consensus_claims": report.consensus_claims or {"claims": []},
-        "contested_claims": report.contested_claims or {"claims": []},
-        "created_at": report.created_at.isoformat(),
-        "ready": True
-    }
+    return _divergence_payload(report)
 
 
 @router.post("/{debate_id}/user-vote")

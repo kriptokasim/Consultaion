@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import agents
@@ -25,15 +26,23 @@ from config import settings
 
 
 class _FlakyLLM:
-    def __init__(self, fail_on_calls):
+    def __init__(self, fail_on_calls, judge_personas=None):
         self.calls = 0
         self.fail_on_calls = set(fail_on_calls)
+        self.judge_personas = list(judge_personas or [])
 
     async def __call__(self, *args, **kwargs):
         self.calls += 1
         if self.calls in self.fail_on_calls:
             raise RuntimeError("seat failed")
-        return '{"content":"ok","stance":"support"}', UsageCall(provider="mock", model="mock-model", total_tokens=5)
+        usage = UsageCall(provider="mock", model="mock-model", total_tokens=5)
+        if str(kwargs.get("role", "")).startswith("Judge:"):
+            scores = [
+                {"persona": name, "score": 7.0, "rationale": "ok"}
+                for name in self.judge_personas
+            ]
+            return json.dumps({"scores": scores}), usage
+        return '{"content":"ok","stance":"support"}', usage
 
 
 @pytest.mark.anyio("asyncio")
@@ -56,7 +65,10 @@ async def test_parliament_tolerance_allows_minor_failures(db_session: Session, m
     backend = get_sse_backend()
     await backend.create_channel(f"debate:{debate_id}")
 
-    flaky = _FlakyLLM(fail_on_calls={3})  # one failure out of three seats
+    flaky = _FlakyLLM(
+        fail_on_calls={3},  # one failure out of three seats
+        judge_personas=[seat.display_name for seat in panel.seats],
+    )
     monkeypatch.setattr(agents, "call_llm_for_role", flaky)
     monkeypatch.setattr("parliament.engine.call_llm_for_role", flaky)
     token, _reset = await _bind_live_lease(debate.id)

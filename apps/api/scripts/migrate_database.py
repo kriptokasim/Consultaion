@@ -79,15 +79,24 @@ def main() -> None:
     engine = create_engine(database_url, pool_pre_ping=True)
 
     from services.migration_safety import (
+        MultipleRevisionRowsError,
         ensure_alembic_version_table,
         get_all_revisions,
         get_current_revisions,
         get_migration_heads,
+        require_single_revision,
         verify_critical_columns,
         verify_required_tables,
         widen_version_column,
     )
     from sqlmodel import Session
+
+    def single_revision(revisions: list[str], phase: str) -> str | None:
+        try:
+            return require_single_revision(revisions, phase)
+        except MultipleRevisionRowsError as exc:
+            logger.error("%s", exc)
+            sys.exit(1)
 
     with Session(engine) as session:
         # ---------- Phase 1: Version-table safety ----------
@@ -96,6 +105,7 @@ def main() -> None:
 
         # ---------- Phase 2: Read current state ----------
         current_revisions = get_current_revisions(session)
+        current_revision = single_revision(current_revisions, "pre-upgrade read")
         all_revisions = get_all_revisions()
         heads = get_migration_heads()
 
@@ -136,7 +146,7 @@ def main() -> None:
                 )
                 sys.exit(1)
 
-            actual_current = current_revisions[0] if current_revisions else None
+            actual_current = current_revision
             if actual_current != args.expected_current:
                 logger.error(
                     "Current revision %s does not match expected %s — aborting stamp",
@@ -166,8 +176,9 @@ def main() -> None:
             # Re-verify after stamp
             session.commit()
             post_stamps = get_current_revisions(session)
-            if post_stamps and post_stamps[0] == args.stamp:
-                logger.info("Post-stamp verification passed: %s", post_stamps[0])
+            post_stamp = single_revision(post_stamps, "post-stamp verification")
+            if post_stamp == args.stamp:
+                logger.info("Post-stamp verification passed: %s", post_stamp)
             else:
                 logger.error(
                     "Post-stamp verification failed: got %s, expected %s",
@@ -181,11 +192,11 @@ def main() -> None:
         # ---------- Phase 4: Check-only mode ----------
         if args.check:
             exit_code = 0
-            if current_revisions:
-                head_match = current_revisions[0] == expected_head
+            if current_revision:
+                head_match = current_revision == expected_head
                 logger.info(
                     "CHECK: current=%s expected=%s match=%s",
-                    current_revisions[0], expected_head, head_match,
+                    current_revision, expected_head, head_match,
                 )
                 if not head_match:
                     logger.error("CHECK FAILED: revision mismatch")
@@ -215,7 +226,7 @@ def main() -> None:
             sys.exit(exit_code)
 
         # ---------- Phase 5: Execute upgrade ----------
-        if current_revisions and current_revisions[0] == expected_head:
+        if current_revision == expected_head:
             logger.info("Already at head revision %s — no upgrade needed", expected_head)
         else:
             logger.info("Running alembic upgrade head")
@@ -240,11 +251,11 @@ def main() -> None:
     # Reconnect with fresh engine to get post-migration state
     with Session(create_engine(database_url, pool_pre_ping=True)) as session:
         post_revisions = get_current_revisions(session)
-        if not post_revisions:
+        post_rev = single_revision(post_revisions, "post-upgrade verification")
+        if not post_rev:
             logger.error("No revision found after upgrade")
             sys.exit(1)
 
-        post_rev = post_revisions[0]
         if post_rev != expected_head:
             logger.error(
                 "Post-upgrade revision %s does not match expected head %s",

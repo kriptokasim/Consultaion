@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,40 @@ from llm_errors import classify_provider_exception
 from model_gateway.types import GatewayModelCallResult, ModelDelta, OnDeltaCallback
 
 logger = logging.getLogger("model_gateway.adapters")
+
+_SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Query-string credentials. Gemini passes its key as ?key=..., so a single
+    # 4xx would otherwise print the server key into the log stream verbatim.
+    (re.compile(r"(?i)\b((?:api[-_]?key|access[-_]?token|auth[-_]?token|key)=)[^&\s\"'<>]+"), r"\1[REDACTED]"),
+    # JSON/header style: "api_key": "...", authorization: "..."
+    (re.compile(r"(?i)([\"']?(?:api[-_]?key|authorization)[\"']?\s*[:=]\s*[\"'])[^\"']+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)\b(Bearer\s+)[A-Za-z0-9._\-]{8,}"), r"\1[REDACTED]"),
+    (re.compile(r"\bAIza[0-9A-Za-z._\-]{10,}"), "[REDACTED]"),
+    (re.compile(r"\bsk-[A-Za-z0-9._\-]{8,}"), "[REDACTED]"),
+    (re.compile(r"\bgsk_[A-Za-z0-9._\-]{8,}"), "[REDACTED]"),
+)
+
+
+def _redact_secrets(text: Any) -> str:
+    """Strip provider credentials out of raw error text before it reaches logs."""
+    value = "" if text is None else str(text)
+    for pattern, replacement in _SECRET_PATTERNS:
+        value = pattern.sub(replacement, value)
+    return value
+
+
+def _provider_call_timeout_seconds() -> float:
+    """Wall-clock cap for a non-streaming provider call.
+
+    Streaming has its own ARENA_* stall/total budgets. Without an equivalent here
+    a stalled upstream pins a Celery worker until the socket eventually dies.
+    """
+    from config import settings
+
+    try:
+        return max(float(getattr(settings, "PROVIDER_CALL_TIMEOUT_SECONDS", 120)), 1.0)
+    except (TypeError, ValueError):
+        return 120.0
 
 
 def _usage_value(usage: Any, name: str) -> int:
@@ -370,12 +405,15 @@ class DirectProviderAdapter(BaseAdapter):
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                timeout=_provider_call_timeout_seconds(),
                 **kwargs
             )
         except Exception as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             failure = classify_provider_exception(e)
-            logger.warning(f"DirectProviderAdapter error calling {target_model}: {failure.raw_error}")
+            logger.warning(
+                f"DirectProviderAdapter error calling {target_model}: {_redact_secrets(failure.raw_error)}"
+            )
             return GatewayModelCallResult(
                 content="",
                 model_used=target_model,
@@ -673,12 +711,15 @@ class OpenRouterAdapter(BaseAdapter):
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                timeout=_provider_call_timeout_seconds(),
                 **kwargs
             )
         except Exception as e:
             latency_ms = (time.monotonic() - start_ts) * 1000
             failure = classify_provider_exception(e)
-            logger.warning(f"OpenRouterAdapter error calling {target_model}: {failure.raw_error}")
+            logger.warning(
+                f"OpenRouterAdapter error calling {target_model}: {_redact_secrets(failure.raw_error)}"
+            )
             return GatewayModelCallResult(
                 content="",
                 model_used=target_model,

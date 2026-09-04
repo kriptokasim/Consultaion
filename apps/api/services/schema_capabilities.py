@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import inspect, text
+from sqlalchemy.engine.reflection import Inspector
 from sqlmodel import Session
 
 API_ROOT = Path(__file__).resolve().parents[1]
@@ -65,13 +66,11 @@ def _build_cache_key(session: Session) -> str:
         return "default"
 
 
-def _check_table_exists(session: Session, table_name: str) -> bool:
-    inspector = inspect(session.get_bind())
+def _check_table_exists(inspector: Inspector, table_name: str) -> bool:
     return table_name in inspector.get_table_names()
 
 
-def _check_column_exists(session: Session, table_name: str, column_name: str) -> bool:
-    inspector = inspect(session.get_bind())
+def _check_column_exists(inspector: Inspector, table_name: str, column_name: str) -> bool:
     try:
         columns = [c["name"] for c in inspector.get_columns(table_name)]
         return column_name in columns
@@ -112,25 +111,29 @@ def get_schema_capabilities(
             return cached
 
     try:
-        has_checkpoint_table = _check_table_exists(session, "debate_stage_checkpoint")
+        # One Inspector per run: its info_cache collapses the repeated catalog
+        # reflection below into a single round trip per table.
+        inspector = inspect(session.get_bind())
+
+        has_checkpoint_table = _check_table_exists(inspector, "debate_stage_checkpoint")
         has_checkpoint_attempt = False
         if has_checkpoint_table:
             has_checkpoint_attempt = _check_column_exists(
-                session, "debate_stage_checkpoint", "attempt"
+                inspector, "debate_stage_checkpoint", "attempt"
             )
 
         caps = SchemaCapabilities(
             has_stage_checkpoint_table=has_checkpoint_table,
             has_stage_checkpoint_attempt_column=has_checkpoint_attempt,
-            has_continuation_table=_check_table_exists(session, "debate_continuation"),
-            has_pairwise_vote_table=_check_table_exists(session, "pairwise_vote"),
-            has_score_table=_check_table_exists(session, "score"),
-            has_message_table=_check_table_exists(session, "message"),
+            has_continuation_table=_check_table_exists(inspector, "debate_continuation"),
+            has_pairwise_vote_table=_check_table_exists(inspector, "pairwise_vote"),
+            has_score_table=_check_table_exists(inspector, "score"),
+            has_message_table=_check_table_exists(inspector, "message"),
             has_message_response_id=_check_column_exists(
-                session, "message", "response_id"
+                inspector, "message", "response_id"
             ),
             has_debate_credit_reservation_id=_check_column_exists(
-                session, "debate", "credit_reservation_id"
+                inspector, "debate", "credit_reservation_id"
             ),
             is_at_alembic_head=_check_alembic_head(session),
             inspection_succeeded=True,

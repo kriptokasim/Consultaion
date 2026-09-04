@@ -302,6 +302,15 @@ async def lifespan(app: FastAPI):
             logger.error("Redis connectivity check failed: %s", exc)
             raise RuntimeError(f"Redis is required in production but unreachable: {exc}") from exc
 
+    # Install the free-model catalog before the first request is served; the
+    # background bootstrap thread only lands seconds later, and until it does
+    # model aliases resolve to paid upstreams.
+    try:
+        from model_gateway.production_bootstrap import install_production_model_targets_now
+        install_production_model_targets_now()
+    except Exception as exc:
+        logger.error("FREE_MODEL_RUNTIME_STARTUP_INSTALL_FAILED error=%s", exc, exc_info=exc)
+
     try:
         models = list_enabled_models()
         if not models:
@@ -476,6 +485,10 @@ async def _metrics_depends(
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
+# Routers registered above must not expose a route that resolves to "/metrics"
+# (directly or under the /api/v1 mount): Starlette returns on the first full
+# match, so any earlier handler would shadow this one and hand the Prometheus
+# scraper a non-exposition payload without auth.
 @app.get("/metrics", response_class=PlainTextResponse, include_in_schema=False)
 async def prometheus_metrics(_: None = Depends(_metrics_depends)):
     from observability.metrics import get_metrics_bytes, get_metrics_content_type

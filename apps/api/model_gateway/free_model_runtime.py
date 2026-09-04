@@ -1,6 +1,11 @@
 """Runtime compatibility layer for fast-moving provider model catalogs."""
 from __future__ import annotations
 
+import logging
+from typing import Any
+
+logger = logging.getLogger("model_gateway.free_model_runtime")
+
 _installed = False
 
 
@@ -14,6 +19,82 @@ FREE_OPENROUTER_CANDIDATES = (
 )
 
 
+# Patches applied to entries the static catalog is expected to already define.
+# Every key here is required: a rename upstream must fail the install loudly
+# instead of leaving the catalog half-migrated onto paid upstreams.
+_RUNTIME_MODEL_PATCHES: dict[str, dict[str, Any]] = {
+    "gemini_general": {
+        "provider_model_id": "gemini-3.7-flash",
+        "litellm_model": "gemini/gemini-3.7-flash",
+        "cost_class": "paid",
+        "last_verified_at": "2026-08-30",
+        "free_tier_verified_at": None,
+        "free_tier_source": "Google Gemini API",
+        "free_tier_limit_notes": "Current production model; account pricing and limits apply.",
+    },
+    "groq_fast": {
+        "provider_model_id": "openai/gpt-oss-20b",
+        "litellm_model": "groq/openai/gpt-oss-20b",
+        "cost_class": "free",
+        "last_verified_at": "2026-08-30",
+        "free_tier_verified_at": "2026-08-30",
+        "free_tier_source": "Groq free-plan limits",
+        "free_tier_limit_notes": "Current developer/free-plan rate limits apply.",
+    },
+    "openrouter_fallback": {
+        "provider_model_id": "openrouter/free",
+        "litellm_model": "openrouter/openrouter/free",
+        "cost_class": "free",
+        "last_verified_at": "2026-08-30",
+        "free_tier_verified_at": "2026-08-30",
+        "free_tier_source": "OpenRouter Free Models Router",
+        "free_tier_limit_notes": "Zero token price; free-account rate limits apply.",
+    },
+}
+
+_RUNTIME_MODEL_ADDITIONS: dict[str, dict[str, Any]] = {
+    "openrouter_gpt_oss_free": {
+        "provider": "openrouter", "provider_model_id": "openai/gpt-oss-20b:free",
+        "litellm_model": "openrouter/openai/gpt-oss-20b:free", "cost_class": "free",
+        "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
+        "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
+        "free_tier_limit_notes": "Free endpoint; rate limited.",
+    },
+    "openrouter_glm_free": {
+        "provider": "openrouter", "provider_model_id": "z-ai/glm-5.2:free",
+        "litellm_model": "openrouter/z-ai/glm-5.2:free", "cost_class": "free",
+        "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
+        "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
+        "free_tier_limit_notes": "Free endpoint; rate limited.",
+    },
+    "openrouter_nemotron_free": {
+        "provider": "openrouter", "provider_model_id": "nvidia/nemotron-3-ultra:free",
+        "litellm_model": "openrouter/nvidia/nemotron-3-ultra:free", "cost_class": "free",
+        "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
+        "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
+        "free_tier_limit_notes": "Free endpoint; rate limited.",
+    },
+}
+
+_RUNTIME_ALIASES: dict[str, str] = {
+    "gemini/gemini-3.7-flash": "gemini_general",
+    "groq/openai/gpt-oss-20b": "groq_fast",
+    "openrouter/openrouter/free": "openrouter_fallback",
+    "openrouter/openai/gpt-oss-20b:free": "openrouter_gpt_oss_free",
+    "openrouter/z-ai/glm-5.2:free": "openrouter_glm_free",
+    "openrouter/nvidia/nemotron-3-ultra:free": "openrouter_nemotron_free",
+}
+
+
+class FreeModelRuntimeInstallError(RuntimeError):
+    """Raised when the static catalog no longer matches this runtime patch set."""
+
+
+def is_installed() -> bool:
+    """Whether the runtime free-model targets are live in this process."""
+    return _installed
+
+
 def install_current_free_model_targets() -> None:
     global _installed
     if _installed:
@@ -21,70 +102,26 @@ def install_current_free_model_targets() -> None:
 
     from model_gateway.model_map import MODEL_ALIASES, MODEL_MAP
 
-    MODEL_MAP["gemini_general"].update(
-        {
-            "provider_model_id": "gemini-3.7-flash",
-            "litellm_model": "gemini/gemini-3.7-flash",
-            "cost_class": "paid",
-            "last_verified_at": "2026-08-30",
-            "free_tier_verified_at": None,
-            "free_tier_source": "Google Gemini API",
-            "free_tier_limit_notes": "Current production model; account pricing and limits apply.",
-        }
-    )
-    MODEL_MAP["groq_fast"].update(
-        {
-            "provider_model_id": "openai/gpt-oss-20b",
-            "litellm_model": "groq/openai/gpt-oss-20b",
-            "cost_class": "free",
-            "last_verified_at": "2026-08-30",
-            "free_tier_verified_at": "2026-08-30",
-            "free_tier_source": "Groq free-plan limits",
-            "free_tier_limit_notes": "Current developer/free-plan rate limits apply.",
-        }
-    )
-    MODEL_MAP["openrouter_fallback"].update(
-        {
-            "provider_model_id": "openrouter/free",
-            "litellm_model": "openrouter/openrouter/free",
-            "cost_class": "free",
-            "last_verified_at": "2026-08-30",
-            "free_tier_verified_at": "2026-08-30",
-            "free_tier_source": "OpenRouter Free Models Router",
-            "free_tier_limit_notes": "Zero token price; free-account rate limits apply.",
-        }
-    )
+    missing = sorted(key for key in _RUNTIME_MODEL_PATCHES if key not in MODEL_MAP)
+    if missing:
+        logger.error(
+            "FREE_MODEL_RUNTIME_CATALOG_MISMATCH missing_model_keys=%s known_model_keys=%s",
+            missing,
+            sorted(MODEL_MAP.keys()),
+        )
+        raise FreeModelRuntimeInstallError(
+            f"MODEL_MAP is missing required model key(s) {missing}; "
+            "free-model runtime targets were not installed."
+        )
 
-    MODEL_MAP["openrouter_gpt_oss_free"] = {
-        "provider": "openrouter", "provider_model_id": "openai/gpt-oss-20b:free",
-        "litellm_model": "openrouter/openai/gpt-oss-20b:free", "cost_class": "free",
-        "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
-        "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
-        "free_tier_limit_notes": "Free endpoint; rate limited.",
-    }
-    MODEL_MAP["openrouter_glm_free"] = {
-        "provider": "openrouter", "provider_model_id": "z-ai/glm-5.2:free",
-        "litellm_model": "openrouter/z-ai/glm-5.2:free", "cost_class": "free",
-        "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
-        "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
-        "free_tier_limit_notes": "Free endpoint; rate limited.",
-    }
-    MODEL_MAP["openrouter_nemotron_free"] = {
-        "provider": "openrouter", "provider_model_id": "nvidia/nemotron-3-ultra:free",
-        "litellm_model": "openrouter/nvidia/nemotron-3-ultra:free", "cost_class": "free",
-        "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
-        "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
-        "free_tier_limit_notes": "Free endpoint; rate limited.",
-    }
+    # Nothing above mutates shared state, so the catalog is either fully patched
+    # here or left untouched for the caller to retry.
+    for key, patch in _RUNTIME_MODEL_PATCHES.items():
+        MODEL_MAP[key].update(patch)
+    for key, record in _RUNTIME_MODEL_ADDITIONS.items():
+        MODEL_MAP[key] = dict(record)
 
-    MODEL_ALIASES.update({
-        "gemini/gemini-3.7-flash": "gemini_general",
-        "groq/openai/gpt-oss-20b": "groq_fast",
-        "openrouter/openrouter/free": "openrouter_fallback",
-        "openrouter/openai/gpt-oss-20b:free": "openrouter_gpt_oss_free",
-        "openrouter/z-ai/glm-5.2:free": "openrouter_glm_free",
-        "openrouter/nvidia/nemotron-3-ultra:free": "openrouter_nemotron_free",
-    })
+    MODEL_ALIASES.update(_RUNTIME_ALIASES)
 
     from model_gateway.adapters import OpenRouterAdapter
 

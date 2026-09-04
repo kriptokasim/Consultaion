@@ -10,16 +10,35 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from guards.llm_action_guard import require_llm_action_allowed
 from models import RedTeamSession, User, UserInteraction
 from orchestration.redteam import run_red_team_analysis
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/redteam", tags=["redteam"])
 
+# Risk lenses the product offers; each one costs a provider call per session.
+KNOWN_LENSES = ("security", "scaling", "compliance", "financial", "operations")
+
+
 class RedTeamCreate(BaseModel):
-    proposal_text: str = Field(..., min_length=10, description="The proposal text to review")
-    lenses: List[str] = Field(default_factory=lambda: ["security", "scaling", "compliance"], description="The risk lenses to evaluate")
+    proposal_text: str = Field(..., min_length=10, max_length=5000, description="The proposal text to review")
+    lenses: List[str] = Field(
+        default_factory=lambda: ["security", "scaling", "compliance"],
+        min_length=1,
+        max_length=8,
+        description="The risk lenses to evaluate",
+    )
+
+    @field_validator("lenses")
+    @classmethod
+    def validate_lenses(cls, value: List[str]) -> List[str]:
+        for lens in value:
+            if len(lens) > 32:
+                raise ValueError("Lens names must be at most 32 characters")
+            if lens not in KNOWN_LENSES:
+                raise ValueError(f"Unknown risk lens '{lens}'; expected one of {', '.join(KNOWN_LENSES)}")
+        return value
 
 
 async def run_analysis_task(session_id: str, proposal_text: str, lenses: List[str]):
@@ -130,8 +149,14 @@ async def get_red_team_session(
 
     issues = []
     status = "processing"
-    if rt_session.critique_matrix and "issues" in rt_session.critique_matrix:
-        issues = rt_session.critique_matrix["issues"]
+    error = None
+    matrix = rt_session.critique_matrix
+    if matrix and matrix.get("error"):
+        # The analysis crashed; an empty issue list here means "unknown", not "no risks".
+        error = matrix["error"]
+        status = "failed"
+    elif matrix and "issues" in matrix:
+        issues = matrix["issues"]
         status = "completed"
 
     return {
@@ -140,6 +165,7 @@ async def get_red_team_session(
         "lenses": rt_session.lenses.get("list", []) if rt_session.lenses else [],
         "status": status,
         "issues": issues,
+        "error": error,
         "created_at": rt_session.created_at
     }
 

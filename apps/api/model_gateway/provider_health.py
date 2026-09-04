@@ -15,6 +15,7 @@ if CIRCUIT_FAILURE_THRESHOLD > 10:
 COOLDOWN_SECONDS = getattr(settings, "PROVIDER_HEALTH_COOLDOWN_SECONDS", 60)
 
 
+
 def get_redis():
     try:
         return get_sync_redis_client()
@@ -37,6 +38,10 @@ def get_failures_key(provider: str, canonical_model_id: str | None = None) -> st
     if canonical_model_id:
         return f"provider:health:{provider}:{canonical_model_id}:failures"
     return f"provider:health:{provider}:failures"
+
+
+def get_global_failures_key(provider: str) -> str:
+    return f"provider:health:{provider}:global:failures"
 
 
 def is_circuit_open(
@@ -104,6 +109,11 @@ def record_success(
         if canonical_model_id:
             pipe.delete(get_status_key(provider, None))
             pipe.delete(get_failures_key(provider, None))
+        # A working credential is proof the provider-global terminal condition
+        # (invalid key / empty balance) is over. Without this the hour-long
+        # global circuit has no recovery path other than its TTL.
+        pipe.delete(get_global_status_key(provider))
+        pipe.delete(get_global_failures_key(provider))
         pipe.execute()
     except Exception as e:
         logger.error(f"Error resetting provider health in Redis for {provider}: {e}")
@@ -136,14 +146,15 @@ def record_failure(
         return
 
     try:
-        # 1. Non-transient terminal errors (invalid keys / billing issues) -> Fast-trip global provider circuit!
+        # 1. Non-transient terminal errors (invalid keys / billing issues) -> Fast-trip
+        # global provider circuit. record_success and reset_provider_circuit clear it;
+        # the TTL is the backstop, not the only way out.
         if failure_code in (
             ProviderFailureCode.INVALID_CREDENTIALS.value,
             ProviderFailureCode.INSUFFICIENT_BALANCE.value,
         ):
-            global_key = get_global_status_key(provider)
             logger.error(f"Terminal failure ({failure_code}) for provider {provider}. Fast-tripping global provider circuit.")
-            redis_client.set(global_key, "open", ex=3600)  # Open for 1 hour
+            redis_client.set(get_global_status_key(provider), "open", ex=3600)  # Open for 1 hour
             return
 
         status_key = get_status_key(provider, canonical_model_id)
@@ -170,3 +181,35 @@ def record_failure(
             redis_client.set(status_key, "open", ex=COOLDOWN_SECONDS)
     except Exception as e:
         logger.error(f"Error updating provider failure in Redis for {provider}: {e}")
+
+
+def reset_provider_circuit(provider: str) -> int:
+    """Clear every circuit key for a provider and return how many were removed.
+
+    Operator recovery hook: once a credential or balance problem is fixed there
+    is no need to wait out the provider-global TTL. Model-scoped keys are matched
+    by prefix because their canonical model ids are not known here.
+    """
+    redis_client = get_redis()
+    if not redis_client:
+        return 0
+
+    removed = 0
+    try:
+        for key in redis_client.scan_iter(match=f"provider:health:{provider}:*", count=500):
+            removed += int(redis_client.delete(key) or 0)
+        removed += int(
+            redis_client.delete(
+                get_global_status_key(provider),
+                get_global_failures_key(provider),
+                get_status_key(provider, None),
+                get_failures_key(provider, None),
+            )
+            or 0
+        )
+    except Exception as e:
+        logger.error(f"Error resetting provider circuit in Redis for {provider}: {e}")
+        return removed
+
+    logger.warning("Provider circuit reset for %s: %s key(s) cleared.", provider, removed)
+    return removed

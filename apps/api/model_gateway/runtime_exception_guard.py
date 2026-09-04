@@ -17,6 +17,7 @@ has been resolved.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
@@ -83,8 +84,14 @@ def install_runtime_exception_guard() -> None:
             else None
         )
 
-        def _settle_interrupted_attempts(reason: str) -> None:
-            """Settle known/unknown provider work without cancellation-sensitive awaits."""
+        async def _settle_interrupted_attempts(reason: str) -> None:
+            """Settle known/unknown provider work off the event loop.
+
+            Settlement takes ``SELECT ... FOR UPDATE`` on the User row, so it
+            runs in an executor rather than blocking the loop under lock
+            contention. The work is submitted before the await, so it still
+            completes if this coroutine is cancelled while waiting on it.
+            """
             active = attempt_context.reservation
             if active is None or not attempt_context.records:
                 return
@@ -114,10 +121,13 @@ def install_runtime_exception_guard() -> None:
                 user_plan=user_plan,
             )
             accounted = aggregate_accounting_result(synthetic, attempt_context)
-            settle_gateway_budget_sync(
-                active,
-                result=accounted,
-                safe_error_message="Model execution was interrupted before normal completion.",
+            await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: settle_gateway_budget_sync(
+                    active,
+                    result=accounted,
+                    safe_error_message="Model execution was interrupted before normal completion.",
+                ),
             )
             attempt_context.reservation = None
             logger.warning(
@@ -136,7 +146,7 @@ def install_runtime_exception_guard() -> None:
                 result = await route_call()
             except ProviderAttemptBudgetBlocked as exc:
                 try:
-                    _settle_interrupted_attempts("provider_attempt_budget_blocked")
+                    await _settle_interrupted_attempts("provider_attempt_budget_blocked")
                 except Exception:
                     logger.exception(
                         "gateway.interrupted_usage_settlement_failed user=%s debate=%s",
@@ -146,7 +156,7 @@ def install_runtime_exception_guard() -> None:
                 raise GatewayQuotaExceededError(str(exc)) from exc
             except ProviderAttemptAccountingUnavailable as exc:
                 try:
-                    _settle_interrupted_attempts("provider_attempt_accounting_unavailable")
+                    await _settle_interrupted_attempts("provider_attempt_accounting_unavailable")
                 except Exception:
                     logger.exception(
                         "gateway.interrupted_usage_settlement_failed user=%s debate=%s",
@@ -157,9 +167,14 @@ def install_runtime_exception_guard() -> None:
             except BaseException as exc:
                 if not attempt_context.records and attempt_context.reservation is not None:
                     try:
-                        release_gateway_budget_sync(
-                            attempt_context.reservation,
-                            reason=type(exc).__name__,
+                        pending_reservation = attempt_context.reservation
+                        release_reason = type(exc).__name__
+                        await asyncio.get_running_loop().run_in_executor(
+                            None,
+                            lambda: release_gateway_budget_sync(
+                                pending_reservation,
+                                reason=release_reason,
+                            ),
                         )
                         attempt_context.reservation = None
                     except Exception:
@@ -170,7 +185,7 @@ def install_runtime_exception_guard() -> None:
                         )
                 elif attempt_context.records and attempt_context.reservation is not None:
                     try:
-                        _settle_interrupted_attempts(type(exc).__name__)
+                        await _settle_interrupted_attempts(type(exc).__name__)
                     except Exception:
                         logger.exception(
                             "gateway.interrupted_usage_settlement_failed user=%s debate=%s",
@@ -185,9 +200,12 @@ def install_runtime_exception_guard() -> None:
 
         active_reservation = attempt_context.reservation
         if not attempt_context.records and active_reservation is not None:
-            release_gateway_budget_sync(
-                active_reservation,
-                reason=result.error_code or "no_provider_attempt",
+            await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: release_gateway_budget_sync(
+                    active_reservation,
+                    reason=result.error_code or "no_provider_attempt",
+                ),
             )
             return result, estimate, None
 

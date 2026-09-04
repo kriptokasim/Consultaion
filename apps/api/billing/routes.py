@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from types import SimpleNamespace
@@ -27,6 +28,7 @@ from .service import (
     get_active_plan,
     get_or_create_usage,
 )
+from utils.async_bridge import run_blocking
 
 
 def csrf_exempt(func):
@@ -267,22 +269,29 @@ async def billing_webhook(
         sig = inspect.signature(provider.handle_webhook)
 
         from database import session_scope
-        with session_scope() as tx_session:
-            try:
+
+        def _handle_in_transaction() -> None:
+            with session_scope() as tx_session:
                 if "db_session" in sig.parameters:
                     provider.handle_webhook(payload or {}, headers, db_session=tx_session)
                 else:
                     provider.handle_webhook(payload or {}, headers)
-            except Exception as exc:
-                logger.error(
-                    "Webhook handler failed (transaction rolled back): provider=%s event_type=%s error=%s",
-                    provider_name,
-                    (payload or {}).get("type", "unknown"),
-                    exc,
-                )
-                from observability.metrics import record_billing_webhook
-                record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "error")
-                raise
+
+        # The handler is fully synchronous (idempotency lookups, subscription
+        # upserts, ledger writes); running it inline would pin the event loop
+        # for the duration of a Stripe replay burst.
+        try:
+            await run_blocking(_handle_in_transaction)
+        except Exception as exc:
+            logger.error(
+                "Webhook handler failed (transaction rolled back): provider=%s event_type=%s error=%s",
+                provider_name,
+                (payload or {}).get("type", "unknown"),
+                exc,
+            )
+            from observability.metrics import record_billing_webhook
+            record_billing_webhook(provider_name, (payload or {}).get("type", "unknown"), "error")
+            raise
 
         _emit_post_commit_events(payload or {})
 

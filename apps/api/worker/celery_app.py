@@ -195,6 +195,12 @@ if hasattr(celery_app, "conf") and hasattr(celery_app.conf, "update"):
         timezone="UTC",
         enable_utc=True,
         task_track_started=True,
+        # Recycle worker processes periodically. Long-lived children accumulate
+        # per-debate in-process state (budget accounting, provider clients) that
+        # no single run owns.
+        worker_max_tasks_per_child=max(
+            1, int(getattr(settings, "CELERY_MAX_TASKS_PER_CHILD", 200) or 200)
+        ),
         imports=PRODUCTION_TASK_MODULES,
         beat_schedule=beat_schedule,
         task_queues=declared_queues,

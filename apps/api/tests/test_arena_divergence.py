@@ -156,8 +156,8 @@ def test_get_divergence_report_on_the_fly(authenticated_client, db_session, monk
             
     monkeypatch.setattr("routes.arena._execute_divergence_computation", mock_compute)
     
-    # Request GET report
-    resp = authenticated_client.get(f"/api/v1/arena/{debate_id}/divergence")
+    # Computing on demand is a POST: the GET is a pure cached read.
+    resp = authenticated_client.post(f"/api/v1/arena/{debate_id}/divergence")
     assert resp.status_code == 200
     data = resp.json()
     assert data["divergence_score"] == 0.0

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -11,11 +12,14 @@ from database import session_scope
 from models import Debate, Message, Score
 from orchestration.execution_lease import ExecutionSupersededError
 from orchestration.finalization import FinalizationService
+from parliament_budget_guard import ParliamentBudgetExceeded
+from parliament_budget_guard import budget_exhausted_reason, clear_state
 from parliament_budget_guard import call_llm_for_role_budgeted as call_llm_for_role
 from pydantic import ValidationError
 from schemas import DebateConfig, JudgeConfig, PanelConfig, default_judges, default_panel_config
 from sqlmodel import select
 from sse_backend import get_sse_backend
+from utils.async_bridge import run_blocking
 
 from config import settings
 
@@ -71,6 +75,40 @@ def parse_seat_llm_output(raw_text: str) -> SeatLLMEnvelope:
         return SeatLLMEnvelope(content=raw_text.strip()[:16384])
 
 
+#: Roles that speak after the participants, reacting to their turns.
+CRITIC_ROLE_PROFILES = frozenset({"critic", "researcher"})
+#: Roles that never take a round turn. The chair's contribution is the final
+#: verdict produced by ``_synthesize_verdict``, not a seat message, so a chair
+#: seat is excluded from the round loop *and* from judging.
+NON_SPEAKING_ROLE_PROFILES = frozenset({"chair"})
+
+
+def _split_seats(panel: PanelConfig) -> tuple[list[Any], list[Any], list[Any]]:
+    """Split panel seats into (participants, critics, non-speaking) buckets."""
+    participants = [
+        seat
+        for seat in panel.seats
+        if seat.role_profile not in CRITIC_ROLE_PROFILES
+        and seat.role_profile not in NON_SPEAKING_ROLE_PROFILES
+    ]
+    critics = [seat for seat in panel.seats if seat.role_profile in CRITIC_ROLE_PROFILES]
+    non_speaking = [
+        seat for seat in panel.seats if seat.role_profile in NON_SPEAKING_ROLE_PROFILES
+    ]
+    return participants, critics, non_speaking
+
+
+def _scored_seats(panel: PanelConfig) -> list[Any]:
+    """Seats that take a round turn and are therefore eligible for judging."""
+    return [
+        seat for seat in panel.seats if seat.role_profile not in NON_SPEAKING_ROLE_PROFILES
+    ]
+
+
+def _normalize_persona(name: str | None) -> str:
+    return " ".join(str(name or "").split()).casefold()
+
+
 def _resolve_tolerance(panel: PanelConfig) -> tuple[float, int, bool]:
     return (
         panel.max_seat_fail_ratio if panel.max_seat_fail_ratio is not None else settings.DEBATE_MAX_SEAT_FAIL_RATIO,
@@ -124,17 +162,27 @@ async def _judge_performance(
     judges: list[JudgeConfig],
     model_id: str | None,
     locale: str | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], UsageAccumulator]:
+    spoke: set[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], UsageAccumulator, list[str]]:
     """
     Score each participant based on the full debate transcript.
+
+    Returns aggregate scores, per-judge details, usage, and the personas no
+    judge scored at all. Only seats that actually take a round turn are judged.
+
+    ``spoke`` names the seats that produced at least one turn. A seat missing
+    from it left nothing in the transcript for a judge to read, so its absent
+    score is already covered by round failure tolerance and is not reported as
+    missing judge coverage.
     """
     if not judges:
         judges = [JudgeConfig(name="DefaultJudge")]
 
     usage = UsageAccumulator()
     judge_details = []
-    
-    participants = [seat.display_name for seat in panel.seats]
+
+    scored_seats = _scored_seats(panel)
+    participants = [seat.display_name for seat in scored_seats]
     participants_str = ", ".join(participants)
 
     async def _evaluate(judge: JudgeConfig):
@@ -199,34 +247,55 @@ async def _judge_performance(
 
     # Run every configured judge. A failed judge degrades evaluation evidence
     # but does not erase scores from judges that completed successfully.
-    import asyncio
-
     raw_results = await asyncio.gather(
         *[_evaluate(judge) for judge in judges],
         return_exceptions=True,
     )
     successful_judges: list[tuple[JudgeConfig, list[dict[str, Any]]]] = []
     for judge, result in zip(judges, raw_results, strict=False):
+        if isinstance(result, ParliamentBudgetExceeded):
+            raise result
         if isinstance(result, Exception):
             logger.warning("Judge %s failed: %s", judge.name, result)
             continue
         successful_judges.append((judge, result))
 
     final_scores = []
-    for seat in panel.seats:
+    uncovered: list[str] = []
+    for seat in scored_seats:
+        wanted = _normalize_persona(seat.display_name)
         seat_scores: list[float] = []
         rationales: list[str] = []
         for judge, results in successful_judges:
             found = next(
-                (r for r in results if r.get("persona") == seat.display_name),
+                (
+                    r
+                    for r in results
+                    if isinstance(r, dict) and _normalize_persona(r.get("persona")) == wanted
+                ),
                 None,
             )
-            score_val = float(found.get("score", 0.0)) if found else 0.0
-            rationale = (
-                found.get("rationale", "No evaluation provided.")
-                if found
-                else "Did not participate or parsing failed."
-            )
+            if found is None:
+                # A judge that never mentioned this persona has no opinion about
+                # it. Silence is not a zero, so it contributes nothing.
+                logger.warning(
+                    "Judge %s returned no score for persona %s in debate %s",
+                    judge.name,
+                    seat.display_name,
+                    debate_id,
+                )
+                continue
+            try:
+                score_val = float(found.get("score", 0.0))
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Judge %s returned a non-numeric score for persona %s: %r",
+                    judge.name,
+                    seat.display_name,
+                    found.get("score"),
+                )
+                continue
+            rationale = found.get("rationale", "No evaluation provided.")
             judge_details.append(
                 {
                     "persona": seat.display_name,
@@ -239,21 +308,26 @@ async def _judge_performance(
             if rationale:
                 rationales.append(f"{judge.name}: {rationale}")
 
-        aggregate_score = (
-            sum(seat_scores) / len(seat_scores) if seat_scores else 0.0
-        )
+        if not seat_scores:
+            # No fabricated zero: an unscored seat is reported as unscored.
+            # A seat that never spoke is already covered by failure tolerance.
+            if spoke is None or _normalize_persona(seat.display_name) in spoke:
+                uncovered.append(seat.display_name)
+            continue
+
         final_scores.append(
             {
                 "persona": seat.display_name,
                 "judge": "aggregate",
-                "score": aggregate_score,
+                "score": sum(seat_scores) / len(seat_scores),
+                "judge_count": len(seat_scores),
                 "rationale": " | ".join(rationales)
                 if rationales
-                else "No judge completed successfully.",
+                else "No rationale provided.",
             }
         )
 
-    return final_scores, judge_details, usage
+    return final_scores, judge_details, usage, uncovered
 
 
 def _assert_parliament_write(session, debate_id: str) -> tuple[Any, str | None]:
@@ -280,19 +354,40 @@ async def run_parliament_debate(
     *,
     model_id: str | None,
 ) -> ParliamentResult:
-    # Load debate data synchronously to avoid detached objects
-    with session_scope() as session:
-        debate = session.get(Debate, debate_id)
-        if not debate:
-            raise ValueError(f"Debate {debate_id} not found")
-        
-        # Eager load/copy fields needed
-        prompt = debate.prompt
-        panel_payload = debate.panel_config or default_panel_config().model_dump()
-        debate_model_id = debate.model_id
-        config_payload = debate.config or {}
-        locale = config_payload.get("locale")
-    
+    try:
+        return await _run_parliament_debate(debate_id, model_id=model_id)
+    finally:
+        # Terminal for this worker either way: in-process budget accounting is
+        # durable in LLMUsageLog and is rebuilt on demand for a later attempt.
+        clear_state(str(debate_id))
+
+
+async def _run_parliament_debate(
+    debate_id: str,
+    *,
+    model_id: str | None,
+) -> ParliamentResult:
+    # Load debate data synchronously to avoid detached objects. The sync
+    # session is bridged off the event loop so the shared loop keeps serving
+    # SSE heartbeats for concurrent debates.
+    def _load_debate() -> tuple[str, dict[str, Any], str | None, dict[str, Any]]:
+        with session_scope() as session:
+            debate = session.get(Debate, debate_id)
+            if not debate:
+                raise ValueError(f"Debate {debate_id} not found")
+
+            # Eager load/copy fields needed
+            return (
+                debate.prompt,
+                debate.panel_config or default_panel_config().model_dump(),
+                debate.model_id,
+                debate.config or {},
+            )
+
+    loop = asyncio.get_running_loop()
+    prompt, panel_payload, debate_model_id, config_payload = await run_blocking(_load_debate)
+    locale = config_payload.get("locale")
+
     try:
         panel = PanelConfig.model_validate(panel_payload)
     except Exception:
@@ -305,7 +400,40 @@ async def run_parliament_debate(
     seat_usage: list[dict[str, Any]] = []
     degraded_rounds: list[int] = []
 
+    def _budget_terminal(reason: str, round_index: int) -> ParliamentResult:
+        logger.warning(
+            "Parliament debate %s stopped at round %s: %s",
+            debate_id,
+            round_index,
+            reason,
+        )
+        return ParliamentResult(
+            final_answer="",
+            final_meta={
+                "engine": panel.engine_version,
+                "rounds": round_history,
+                "panel": panel.model_dump(),
+                "seat_usage": seat_usage,
+                "usage": usage.snapshot(),
+                "failure": {
+                    "reason": "budget_exceeded",
+                    "budget_reason": reason,
+                    "round_index": round_index,
+                },
+            },
+            usage_tracker=usage,
+            status="budget_exceeded",
+            error_reason="budget_exceeded",
+        )
+
     for round_info in DEFAULT_ROUNDS:
+        # Budget exhaustion is a terminal outcome of its own, not a seat, chair
+        # or judge failure. Detect it at the round boundary so the run stops
+        # instead of degrading into a fallback verdict with unscored personas.
+        exhausted = await budget_exhausted_reason(debate_id)
+        if exhausted:
+            return _budget_terminal(exhausted, round_info["index"])
+
         await backend.publish(
             f"debate:{debate_id}",
             {
@@ -315,16 +443,19 @@ async def run_parliament_debate(
                 "phase": round_info["phase"],
             },
         )
-        outcome, round_turns = await _execute_round(
-            debate_id=debate_id,
-            prompt=prompt,
-            debate_model_id=debate_model_id,
-            panel=panel,
-            round_info=round_info,
-            transcript_summary=transcript_to_text(transcript_buffer),
-            usage_tracker=usage,
-            locale=locale,
-        )
+        try:
+            outcome, round_turns = await _execute_round(
+                debate_id=debate_id,
+                prompt=prompt,
+                debate_model_id=debate_model_id,
+                panel=panel,
+                round_info=round_info,
+                transcript_summary=transcript_to_text(transcript_buffer),
+                usage_tracker=usage,
+                locale=locale,
+            )
+        except ParliamentBudgetExceeded as budget_exc:
+            return _budget_terminal(str(budget_exc), round_info["index"])
         seat_messages: list[SeatMessage] = []
         for turn in round_turns:
             transcript_buffer.append({"seat_name": turn.seat_name, "content": turn.content})
@@ -411,6 +542,11 @@ async def run_parliament_debate(
             )
 
     status = "completed_with_warnings" if degraded_rounds else "completed"
+
+    exhausted = await budget_exhausted_reason(debate_id)
+    if exhausted:
+        return _budget_terminal(exhausted, DEFAULT_ROUNDS[-1]["index"] if DEFAULT_ROUNDS else 0)
+
     try:
         final_text, final_usage = await _synthesize_verdict(
             debate_id=debate_id,
@@ -429,6 +565,11 @@ async def run_parliament_debate(
                 "model": final_usage.model,
                 "tokens": final_usage.total_tokens,
             }
+        )
+    except ParliamentBudgetExceeded as budget_exc:
+        # Not a chair failure: the configured budget ended the run.
+        return _budget_terminal(
+            str(budget_exc), DEFAULT_ROUNDS[-1]["index"] if DEFAULT_ROUNDS else 0
         )
     except Exception as chair_exc:
         logger.warning(
@@ -451,8 +592,9 @@ async def run_parliament_debate(
         judges = default_judges()
 
     # Wrap judging in try/except so a judge LLM failure does not crash the debate
+    unscored_personas: list[str] = []
     try:
-        scores, judge_details, judge_usage = await _judge_performance(
+        scores, judge_details, judge_usage, unscored_personas = await _judge_performance(
             debate_id=debate_id,
             prompt=prompt,
             transcript=transcript_to_text(transcript_buffer, limit=50),
@@ -460,37 +602,45 @@ async def run_parliament_debate(
             judges=judges,
             model_id=model_id,
             locale=locale,
+            spoke={
+                _normalize_persona(entry["seat_name"])
+                for entry in transcript_buffer
+                if entry.get("seat_name")
+            },
         )
         usage.extend(judge_usage)
 
-        # Persist scores under the same lease fence as the parent Debate.
-        with session_scope() as session:
-            _lease, attempt_id = _assert_parliament_write(session, debate_id)
-            # Idempotency: a crash-takeover that re-runs judging for the same
-            # attempt must not duplicate Score rows. Mirror the Message
-            # response_id-dedup pattern using the natural key
-            # (debate_id, attempt_id, persona, judge).
-            for detail in judge_details:
-                existing = session.exec(
-                    select(Score.id).where(
-                        Score.debate_id == debate_id,
-                        Score.attempt_id == attempt_id,
-                        Score.persona == detail["persona"],
-                        Score.judge == detail["judge"],
+        def _persist_scores() -> None:
+            # Persist scores under the same lease fence as the parent Debate.
+            with session_scope() as session:
+                _lease, attempt_id = _assert_parliament_write(session, debate_id)
+                # Idempotency: a crash-takeover that re-runs judging for the same
+                # attempt must not duplicate Score rows. Mirror the Message
+                # response_id-dedup pattern using the natural key
+                # (debate_id, attempt_id, persona, judge).
+                for detail in judge_details:
+                    existing = session.exec(
+                        select(Score.id).where(
+                            Score.debate_id == debate_id,
+                            Score.attempt_id == attempt_id,
+                            Score.persona == detail["persona"],
+                            Score.judge == detail["judge"],
+                        )
+                    ).first()
+                    if existing is not None:
+                        continue
+                    session.add(
+                        Score(
+                            debate_id=debate_id,
+                            persona=detail["persona"],
+                            judge=detail["judge"],
+                            score=detail["score"],
+                            rationale=detail["rationale"],
+                            attempt_id=attempt_id,
+                        )
                     )
-                ).first()
-                if existing is not None:
-                    continue
-                session.add(
-                    Score(
-                        debate_id=debate_id,
-                        persona=detail["persona"],
-                        judge=detail["judge"],
-                        score=detail["score"],
-                        rationale=detail["rationale"],
-                        attempt_id=attempt_id,
-                    )
-                )
+
+        await run_blocking(_persist_scores)
 
         # Compute Ranking
         ranking, _ = FinalizationService.compute_rankings(scores)
@@ -499,10 +649,24 @@ async def run_parliament_debate(
         # a "judging failed" fallback. Abort immediately — the new owner owns
         # this run, and any further scoring/ranking/terminal work is invalid.
         raise
+    except ParliamentBudgetExceeded as budget_exc:
+        # Not a judging failure: the configured budget ended the run.
+        return _budget_terminal(
+            str(budget_exc), DEFAULT_ROUNDS[-1]["index"] if DEFAULT_ROUNDS else 0
+        )
     except Exception as judge_exc:
         logger.error("Judging phase failed, falling back to seat-order ranking: %s", judge_exc)
         scores = []
-        ranking = [seat.display_name for seat in panel.seats]
+        ranking = [seat.display_name for seat in _scored_seats(panel)]
+        unscored_personas = list(ranking)
+
+    if unscored_personas:
+        logger.warning(
+            "Debate %s has personas with no judge coverage: %s",
+            debate_id,
+            ", ".join(unscored_personas),
+        )
+        status = "completed_with_warnings"
 
     final_meta = {
         "engine": panel.engine_version,
@@ -514,6 +678,11 @@ async def run_parliament_debate(
         "degraded_rounds": degraded_rounds,
         "usage": usage.snapshot(),
     }
+    if unscored_personas:
+        final_meta["judge_coverage"] = {
+            "reason": "insufficient_judge_coverage",
+            "unscored_personas": unscored_personas,
+        }
     return ParliamentResult(final_answer=final_text, final_meta=final_meta, usage_tracker=usage, status=status)
 
 

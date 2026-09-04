@@ -94,12 +94,38 @@ def _result_has_measured_tokens(result: GatewayModelCallResult | None) -> bool:
     )
 
 
+def _result_has_measured_zero_cost(result: GatewayModelCallResult | None) -> bool:
+    """Return True when a reported cost of exactly 0.0 is a measurement, not a gap.
+
+    ``cost_usd`` is a non-optional float, so 0.0 alone cannot distinguish "free"
+    from "unknown", and for a paid route the conservative reservation stays the
+    right answer. A free route is different: it always settles at zero, so
+    charging the estimate accrues spend the user never incurred and eventually
+    trips the monthly safety cap on an account that has spent nothing.
+    """
+    if result is None or not result.success:
+        return False
+    if not _result_has_measured_tokens(result):
+        return False
+    model_key = getattr(result, "model_key", None) or getattr(result, "model_id", None)
+    if not model_key:
+        return False
+    try:
+        from model_gateway.model_map import is_free_model
+
+        return is_free_model(str(model_key))
+    except Exception:
+        return False
+
+
 def _record_effective_cost(record: AttemptRecord) -> float:
     result = record.result
     if result is not None and result.provider == "mock":
         return 0.0
     if result is not None and float(result.cost_usd or 0.0) > 0:
         return max(float(result.cost_usd or 0.0), 0.0)
+    if _result_has_measured_zero_cost(result):
+        return 0.0
     return max(float(record.reserved_cost_usd or 0.0), 0.0)
 
 

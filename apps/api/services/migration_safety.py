@@ -39,10 +39,15 @@ def ensure_alembic_version_table(session: Session) -> None:
     inspector = inspect(session.get_bind())
     if "alembic_version" not in inspector.get_table_names():
         logger.info("Creating alembic_version table")
+        # Mirror Alembic's own bootstrap DDL, including the primary key that
+        # enforces the single-row invariant. Without it two concurrent release
+        # jobs can each insert a revision row and every later upgrade fails
+        # with "expected to match one row".
         session.execute(
             text(
                 "CREATE TABLE alembic_version ("
-                "    version_num VARCHAR(128) NOT NULL"
+                "    version_num VARCHAR(128) NOT NULL, "
+                "    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)"
                 ")"
             )
         )
@@ -92,6 +97,30 @@ def get_current_revisions(session: Session) -> list[str]:
     except Exception as exc:
         logger.warning("Failed to read current revision: %s", exc)
         return []
+
+
+class MultipleRevisionRowsError(RuntimeError):
+    """alembic_version holds more than the single row Alembic permits."""
+
+
+def require_single_revision(revisions: list[str], phase: str) -> str | None:
+    """Return the one current revision, or None when there is none.
+
+    Raises MultipleRevisionRowsError if alembic_version holds several rows.
+    Reading only the first row hides the corruption and lets a --check run
+    report a healthy schema while every deploy fails inside Alembic.
+    """
+    if len(revisions) > 1:
+        raise MultipleRevisionRowsError(
+            f"alembic_version holds {len(revisions)} rows during {phase}: "
+            f"{sorted(revisions)}. Alembic requires exactly one. This normally "
+            "means two release jobs bootstrapped the table concurrently. "
+            "Resolve manually before deploying: confirm which revision the "
+            "schema actually matches, then "
+            "DELETE FROM alembic_version WHERE version_num <> '<correct>'; "
+            "the p168 migration adds the primary key that prevents a repeat."
+        )
+    return revisions[0] if revisions else None
 
 
 def get_migration_heads() -> list[str]:
