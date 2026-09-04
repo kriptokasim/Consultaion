@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { PointerEvent } from "react";
 
 const MODELS = [
   { label: "GPT", tone: "from-amber-300/90 to-amber-500/70" },
@@ -12,7 +13,6 @@ const MODELS = [
 ];
 
 export function InteractiveParliamentChamber() {
-  const hostRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ x: 0, y: 0, baseX: 0, baseY: 0, active: false });
   const [rotation, setRotation] = useState({ x: -7, y: 0 });
   const [hovered, setHovered] = useState(false);
@@ -44,16 +44,16 @@ export function InteractiveParliamentChamber() {
     dragRef.current.active = false;
   };
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     startDrag(event.clientX, event.clientY);
   };
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     moveDrag(event.clientX, event.clientY);
   };
 
-  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
@@ -64,7 +64,6 @@ export function InteractiveParliamentChamber() {
 
   return (
     <div
-      ref={hostRef}
       className="relative aspect-[16/10] w-full select-none overflow-hidden rounded-[24px] border border-amber-200/50 bg-[radial-gradient(circle_at_50%_30%,rgba(255,248,224,0.95),rgba(236,233,226,0.95)_55%,rgba(218,213,204,0.98))] shadow-2xl shadow-amber-900/10 backdrop-blur dark:border-amber-700/30 dark:bg-[radial-gradient(circle_at_50%_25%,rgba(59,51,40,0.95),rgba(25,29,38,0.98)_62%,rgba(15,18,25,1))] dark:shadow-amber-900/20"
       aria-label="Interactive Parliament chamber. Drag to rotate the chamber view."
       onPointerDown={handlePointerDown}
@@ -81,10 +80,7 @@ export function InteractiveParliamentChamber() {
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.55),transparent_34%),linear-gradient(to_bottom,transparent_58%,rgba(35,30,24,0.18))] dark:bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.08),transparent_28%),linear-gradient(to_bottom,transparent_55%,rgba(0,0,0,0.36))]" />
 
-      <div
-        className="absolute inset-[8%]"
-        style={{ perspective: "900px" }}
-      >
+      <div className="absolute inset-[8%]" style={{ perspective: "900px" }}>
         <div
           className="relative h-full w-full"
           style={{
