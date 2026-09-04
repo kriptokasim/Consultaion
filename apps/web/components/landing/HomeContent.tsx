@@ -15,7 +15,6 @@ import { ExampleReportPreview } from "./ExampleReportPreview";
 import { DifferentiationSection } from "./DifferentiationSection";
 import { UseCases } from "./UseCases";
 import { DecisionEdgeShowcase } from "./DecisionEdgeShowcase";
-import InteractiveParliamentChamber from "./InteractiveParliamentChamber";
 
 export default function HomeContent() {
   const router = useRouter();
@@ -130,14 +129,16 @@ export default function HomeContent() {
               )}
             </div>
 
-            {/* Right: lightweight interactive Parliament chamber */}
+            {/* Right: supplied interactive chamber, kept at the existing hero footprint */}
             <Reveal delay={200} direction="right" className="hidden lg:block">
-              <div className="relative">
-                <div
-                  className="absolute -inset-4 rounded-[32px] bg-amber-400/15 blur-3xl dark:bg-amber-500/10"
-                  aria-hidden="true"
+              <div className="relative aspect-video w-full overflow-hidden rounded-[24px] border border-slate-200/80 bg-[#f3f2f2] shadow-xl shadow-slate-900/10 dark:border-slate-700/60 dark:bg-slate-900 dark:shadow-black/20">
+                <iframe
+                  title="Consultaion Parliament Chamber"
+                  src="/embeds/consultaion-chamber.html"
+                  className="absolute inset-0 h-full w-full border-0"
+                  loading="eager"
+                  aria-label="Interactive Consultaion Parliament Chamber"
                 />
-                <InteractiveParliamentChamber />
               </div>
             </Reveal>
           </div>

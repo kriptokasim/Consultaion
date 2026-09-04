@@ -103,12 +103,11 @@ describe("HomeContent", () => {
     expect(secondaryButtons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders the interactive Parliament chamber in the hero", () => {
+  it("renders the supplied interactive Parliament chamber embed in the hero", () => {
     render(<HomeContent />);
-    expect(
-      screen.getByLabelText("Interactive Parliament chamber. Drag to rotate the chamber view.")
-    ).toBeInTheDocument();
-    expect(screen.getByText("Drag to rotate · double-click to reset")).toBeInTheDocument();
+    const frame = screen.getByTitle("Consultaion Parliament Chamber");
+    expect(frame).toBeInTheDocument();
+    expect(frame).toHaveAttribute("src", "/embeds/consultaion-chamber.html");
   });
 
   it("renders the final CTA section", () => {
