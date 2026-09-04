@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import { ExampleReportPreview } from "./ExampleReportPreview";
 import { DifferentiationSection } from "./DifferentiationSection";
 import { UseCases } from "./UseCases";
 import { DecisionEdgeShowcase } from "./DecisionEdgeShowcase";
+import InteractiveParliamentChamber from "./InteractiveParliamentChamber";
 
 export default function HomeContent() {
   const router = useRouter();
@@ -130,38 +130,14 @@ export default function HomeContent() {
               )}
             </div>
 
-            {/* Right: Parliament.png in premium frame */}
+            {/* Right: lightweight interactive Parliament chamber */}
             <Reveal delay={200} direction="right" className="hidden lg:block">
               <div className="relative">
-                {/* Ambient glow */}
                 <div
                   className="absolute -inset-4 rounded-[32px] bg-amber-400/15 blur-3xl dark:bg-amber-500/10"
                   aria-hidden="true"
                 />
-
-                {/* Image container */}
-                <div className="relative overflow-hidden rounded-[24px] border border-amber-200/50 bg-white/60 shadow-2xl shadow-amber-900/10 backdrop-blur dark:border-amber-700/30 dark:bg-slate-800/60 dark:shadow-amber-900/20">
-                  <Image
-                    src="/images/landing/Parliament.webp"
-                    alt="A futuristic AI parliament chamber representing multiple AI models participating in a structured decision-making arena."
-                    width={1600}
-                    height={900}
-                    priority
-                    sizes="(max-width: 1024px) 100vw, 50vw"
-                    className="h-auto w-full object-cover"
-                  />
-
-                  {/* Gradient overlay */}
-                  <div
-                    className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/15 via-transparent to-white/5"
-                    aria-hidden="true"
-                  />
-
-                  {/* Badge */}
-                  <div className="absolute left-4 top-4 rounded-full border border-white/30 bg-white/20 px-3 py-1 text-[10px] font-semibold text-white/90 backdrop-blur-sm shadow-sm">
-                    Multi-model decision arena
-                  </div>
-                </div>
+                <InteractiveParliamentChamber />
               </div>
             </Reveal>
           </div>

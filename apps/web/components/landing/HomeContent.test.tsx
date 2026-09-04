@@ -2,15 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 
-// Mock next/image
-vi.mock("next/image", () => ({
-  __esModule: true,
-  default: (props: any) => {
-    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-    return <img {...props} />;
-  },
-}));
-
 // Mock next/navigation
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -86,7 +77,6 @@ vi.mock("@/lib/i18n/client", () => ({
   }),
 }));
 
-// Mock fetch
 beforeEach(() => {
   global.fetch = vi.fn().mockResolvedValue({
     ok: false,
@@ -94,7 +84,6 @@ beforeEach(() => {
   });
 });
 
-// Dynamically import after mocks
 import HomeContent from "./HomeContent";
 
 describe("HomeContent", () => {
@@ -107,21 +96,19 @@ describe("HomeContent", () => {
 
   it("renders primary and secondary hero CTAs", () => {
     render(<HomeContent />);
-    // Primary CTA button
     const primaryButtons = screen.getAllByText("Start an Arena Run");
     expect(primaryButtons.length).toBeGreaterThanOrEqual(1);
 
-    // Secondary CTA button
     const secondaryButtons = screen.getAllByText("View Example Report");
     expect(secondaryButtons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders Parliament image with alt text on desktop", () => {
+  it("renders the interactive Parliament chamber in the hero", () => {
     render(<HomeContent />);
-    const img = screen.getByAltText(
-      "A futuristic AI parliament chamber representing multiple AI models participating in a structured decision-making arena."
-    );
-    expect(img).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Interactive Parliament chamber. Drag to rotate the chamber view.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Drag to rotate · double-click to reset")).toBeInTheDocument();
   });
 
   it("renders the final CTA section", () => {
