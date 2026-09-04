@@ -18,3 +18,13 @@ def install_cancelled_terminal_event() -> None:
     sse_execution_guard._STREAM_TERMINAL_EVENTS = frozenset(
         set(sse_execution_guard._STREAM_TERMINAL_EVENTS) | {cancelled}
     )
+
+
+def install_sse_ordering() -> None:
+    """Install the publication-order fence before serving debate traffic."""
+    from sse_ordering_guard import install_sse_ordering_guard
+
+    install_sse_ordering_guard()
+
+
+install_sse_ordering()
