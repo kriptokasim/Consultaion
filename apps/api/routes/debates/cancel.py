@@ -16,18 +16,14 @@ from deps import get_session, get_sse_backend
 from exceptions import NotFoundError, ValidationError
 from routes.common import require_debate_mutation_access
 from sse_backend import BaseSSEBackend
+from utils.async_bridge import run_blocking
 
 router = APIRouter()
 
 
-@router.post("/debates/{debate_id}/cancel")
-async def cancel_debate_run(
-    debate_id: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
-):
-    """Cancel the active run and fence any stale worker before publishing terminal state."""
+
+def _cancel_transaction(debate_id: str, current_user: User, session: Session) -> tuple[str, int]:
+    """Apply the complete cancellation/accounting transaction synchronously."""
     from billing.service import refund_hosted_credit
     from usage_limits import refund_run_slot
 
@@ -60,9 +56,6 @@ async def cancel_debate_run(
         .with_for_update()
     ).first()
 
-    # A continuation carries its own reservation and its own status. Leaving it
-    # ``running`` strands that credit: settlement keys off continuation status
-    # and the recovery guard only revisits non-terminal debates.
     continuation = session.exec(
         select(DebateContinuation)
         .where(DebateContinuation.debate_id == debate_id)
@@ -75,9 +68,8 @@ async def cancel_debate_run(
         .with_for_update()
     ).first()
 
-    # Compensations belong to the run's owner. Admins and team editors may
-    # cancel someone else's debate; billing that identity would refund the
-    # wrong account and leave the owner's credit and run slot consumed.
+    # Compensations belong to the run's owner, not the actor performing the
+    # cancellation (admins/team editors may cancel another user's run).
     owner_id = debate.user_id or current_user.id
 
     reservation_id = debate.credit_reservation_id
@@ -100,9 +92,7 @@ async def cancel_debate_run(
             debate_id=debate_id,
         )
 
-    # Epoch fencing is the execution cancellation primitive. A worker holding
-    # the old lease may finish its current provider await, but all subsequent
-    # DB/SSE writes fail ownership checks and cannot resurrect the run.
+    # Increment epoch before terminalizing so the old worker is fenced.
     debate.lease_epoch = int(debate.lease_epoch or 0) + 1
     debate.runner_id = None
     debate.lease_expires_at = None
@@ -135,26 +125,42 @@ async def cancel_debate_run(
 
     session.commit()
 
-    # The reservation has already been settled. The run slot is also returned
-    # because cancellation is not a completed user-visible run.
+    # Return the run slot in the same synchronous transaction boundary.
     refund_run_slot(session, owner_id)
 
-    channel = f"debate:{debate_id}"
+    return debate_id, int(debate.run_attempt or 1)
+
+
+@router.post("/debates/{debate_id}/cancel")
+async def cancel_debate_run(
+    debate_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    sse_backend: BaseSSEBackend = Depends(get_sse_backend),
+):
+    """Cancel the active run and fence stale workers before terminal SSE."""
+    cancelled_id, attempt_number = await run_blocking(
+        _cancel_transaction,
+        debate_id,
+        current_user,
+        session,
+    )
+
     await sse_backend.publish(
-        channel,
+        f"debate:{cancelled_id}",
         {
             "type": "cancelled",
             "contract_version": 1,
-            "debate_id": str(debate_id),
-            "run_attempt": int(debate.run_attempt or 1),
+            "debate_id": str(cancelled_id),
+            "run_attempt": attempt_number,
             "status": "cancelled",
             "reason": "cancelled_by_user",
             "partial_output_available": True,
         },
     )
     return {
-        "id": debate_id,
+        "id": cancelled_id,
         "status": "cancelled",
-        "attempt_number": int(debate.run_attempt or 1),
+        "attempt_number": attempt_number,
         "partial_output_available": True,
     }
