@@ -151,7 +151,9 @@ export function PositionDriftIndicator({ drift }: { drift?: Node["position_drift
   );
 }
 
-export function ArgumentTree({ debateId }: { debateId: string }) {
+const TERMINAL_DEBATE_STATUSES = new Set(["completed", "completed_with_warnings", "failed", "cancelled"]);
+
+export function ArgumentTree({ debateId, status }: { debateId: string; status?: string }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -171,10 +173,12 @@ export function ArgumentTree({ debateId }: { debateId: string }) {
 
   useEffect(() => {
     fetchTree();
-    // Poll for updates if debate is in progress
+    // Poll only while the run can still produce new arguments. A terminal run's
+    // tree is fixed, so polling it just repeats the same request forever.
+    if (status && TERMINAL_DEBATE_STATUSES.has(status)) return;
     const interval = setInterval(fetchTree, 10000);
     return () => clearInterval(interval);
-  }, [debateId, fetchTree]);
+  }, [debateId, fetchTree, status]);
 
   if (loading) {
     return (

@@ -37,9 +37,15 @@ export function VotingRunView({
     const [isRevealed, setIsRevealed] = useState(false);
     const [loadingReveal, setLoadingReveal] = useState(false);
 
-    const fetchReveal = useCallback(async (signal?: AbortSignal) => {
+    const fetchReveal = useCallback(async (signal?: AbortSignal, compute = false) => {
         try {
-            const res = await fetchWithAuth(`/voting/${debate.id}/reveal`, { signal });
+            // POST extracts the vote reasons and spends a credit; GET returns
+            // whatever has already been extracted. Only an explicit reveal
+            // should pay for the extraction.
+            const res = await fetchWithAuth(`/voting/${debate.id}/reveal`, {
+                signal,
+                ...(compute ? { method: "POST" } : {}),
+            });
             if (res.ok) {
                 const data = await res.json();
                 setRevealData(data);
@@ -79,9 +85,15 @@ export function VotingRunView({
         await fetchReveal();
     };
 
-    const handleRevealClick = () => {
+    const handleRevealClick = async () => {
         setIsRevealed(true);
         localStorage.setItem(`voting_revealed_${debate.id}`, "true");
+        setLoadingReveal(true);
+        try {
+            await fetchReveal(undefined, true);
+        } finally {
+            setLoadingReveal(false);
+        }
     };
 
     // Collect candidates

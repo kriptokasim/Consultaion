@@ -124,7 +124,9 @@ export default function HansardTranscript({
     const link = document.createElement("a");
     link.href = url;
     link.download = `hansard-${Date.now()}.txt`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 

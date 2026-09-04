@@ -56,6 +56,7 @@ const statusColors: Record<SSEStatus, string> = {
   connected: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200",
   reconnecting: "bg-rose-100 text-rose-700 animate-pulse dark:bg-rose-900/50 dark:text-rose-200",
   closed: "bg-muted text-muted-foreground",
+  unavailable: "bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-200",
 };
 
 function formatTime(value?: string) {
@@ -94,6 +95,7 @@ export default function DebateArena({
     connected: t("arena.status.connected"),
     reconnecting: t("arena.status.reconnecting"),
     closed: t("arena.status.closed"),
+    unavailable: t("arena.status.unavailable"),
   };
 
   const transcriptEvents = events.filter((event) =>
@@ -292,7 +294,7 @@ export default function DebateArena({
             </div>
           ) : (
             <div className="max-h-[600px] overflow-y-auto pr-1">
-              <ArgumentTree debateId={debate.id} />
+              <ArgumentTree debateId={debate.id} status={debate.status} />
             </div>
           )}
         </section>

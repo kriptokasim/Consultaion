@@ -270,6 +270,7 @@
   "arena.status.connected": "Canlı yayın",
   "arena.status.reconnecting": "Yeniden bağlanıyor",
   "arena.status.closed": "Kapalı",
+  "arena.status.unavailable": "Akış kullanılamıyor",
   "arena.activeSeats": "Aktif koltuklar",
   "arena.sessionMetrics": "Oturum metrikleri",
   "arena.metrics.rounds": "Tur",

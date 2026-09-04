@@ -547,6 +547,10 @@ export function useRunWorkspace(
       ? parseInt(process.env.NEXT_PUBLIC_SSE_FALLBACK_POLL_MS || "3000", 10)
       : 3000;
 
+  // Matches the Retry-After the stream endpoint sends when it refuses a
+  // connection, so a refused stream does not fall back to hammering REST.
+  const SSE_UNAVAILABLE_POLL_MS = 30000;
+
   const isTerminal = isTerminalRunStatus(debate?.status);
   const isPaused = debate?.status === "perspectives_ready";
 
@@ -1107,6 +1111,13 @@ export function useRunWorkspace(
             "perspectives_ready",
             "debate_completed",
             "stage_checkpoint",
+            // The rest of the backend's terminal set (sse_backend.TERMINAL_TYPES
+            // and sse_terminal_contract). Without these the run never reads as
+            // finished, so the client reopens the stream the server just closed.
+            "final",
+            "error",
+            "run_completed",
+            "cancelled",
           ].includes(eventType)
         ) {
           if (
@@ -1165,7 +1176,7 @@ export function useRunWorkspace(
 
   // ── Polling fallback ───────────────────────────────────────────────────
   const startPolling = useCallback(
-    (id: string) => {
+    (id: string, intervalMs: number = SSE_FALLBACK_POLL_MS) => {
       if (pollTimerRef.current) return;
       dispatchConn({ type: "START_POLLING" });
       const tick = async () => {
@@ -1192,14 +1203,14 @@ export function useRunWorkspace(
           if (activeDebateIdRef.current === id) {
             pollTimerRef.current = setTimeout(
               tick,
-              SSE_FALLBACK_POLL_MS,
+              intervalMs,
             ) as unknown as NodeJS.Timeout;
           }
         }
       };
       pollTimerRef.current = setTimeout(
         tick,
-        SSE_FALLBACK_POLL_MS,
+        intervalMs,
       ) as unknown as NodeJS.Timeout;
     },
     [hydrate, SSE_FALLBACK_POLL_MS],
@@ -1224,6 +1235,15 @@ export function useRunWorkspace(
     // Start polling when SSE is closed/reconnecting
     if (sseStatus === "closed" || sseStatus === "reconnecting") {
       startPolling(debateId);
+      resetSilenceTimer();
+      setIsSilent(false);
+      return;
+    }
+
+    // The server refused the stream and asked us to back off. Keep the run
+    // updated, but at the cadence it requested rather than the fallback rate.
+    if (sseStatus === "unavailable") {
+      startPolling(debateId, SSE_UNAVAILABLE_POLL_MS);
       resetSilenceTimer();
       setIsSilent(false);
       return;

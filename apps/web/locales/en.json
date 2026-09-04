@@ -270,6 +270,7 @@
   "arena.status.connected": "Live stream",
   "arena.status.reconnecting": "Reconnecting",
   "arena.status.closed": "Closed",
+  "arena.status.unavailable": "Stream unavailable",
   "arena.activeSeats": "Active Seats",
   "arena.sessionMetrics": "Session Metrics",
   "arena.metrics.rounds": "Rounds",

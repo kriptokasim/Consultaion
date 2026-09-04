@@ -44,6 +44,9 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
   const { pushToast } = useToast();
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollCountRef = useRef(0);
+  // An in-flight request resolves after cleanup has already cleared the timer,
+  // so the poll has to check this before scheduling the next one.
+  const cancelledRef = useRef(false);
   const prefersReducedMotion = useRef(false);
 
   useEffect(() => {
@@ -77,20 +80,24 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
     }
   }, [report?.divergence_score]);
 
-  const fetchReport = useCallback(async () => {
+  const fetchReport = useCallback(async (compute: boolean) => {
     try {
+      // POST computes the report and spends a credit; GET is a cached read,
+      // so only the first call of a mount asks for computation.
       const data = await apiRequest<DivergenceReport>({
         path: `/arena/${debateId}/divergence`,
-        method: "GET",
+        method: compute ? "POST" : "GET",
       });
+      if (cancelledRef.current) return null;
       setReport(data);
       if (!data.ready && pollCountRef.current < MAX_POLLS) {
         setIsPolling(true);
         const nextInterval = POLL_INTERVALS[pollCountRef.current] || 15000;
         pollTimerRef.current = setTimeout(() => {
+          if (cancelledRef.current) return;
           pollCountRef.current += 1;
           setPollCount(pollCountRef.current);
-          fetchReport();
+          fetchReport(false);
         }, nextInterval);
       } else {
         setIsPolling(false);
@@ -100,6 +107,7 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
       }
       return data;
     } catch (err: any) {
+      if (cancelledRef.current) return null;
       console.error("Failed to load divergence report:", err);
       setError("Unable to compute claims divergence at this time.");
       setIsPolling(false);
@@ -109,12 +117,16 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
 
   useEffect(() => {
     if (!isCompleted) return;
+    cancelledRef.current = false;
     setLoading(true);
     pollCountRef.current = 0;
     setPollCount(0);
-    fetchReport().finally(() => setLoading(false));
+    fetchReport(true).finally(() => {
+      if (!cancelledRef.current) setLoading(false);
+    });
 
     return () => {
+      cancelledRef.current = true;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, [debateId, isCompleted, fetchReport]);
@@ -191,6 +203,31 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
     );
   }
 
+  // Errors win over the pending state: a timed-out analysis still carries a
+  // not-ready report, and showing its spinner would hide the failure forever.
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20 p-4 text-sm text-rose-700 dark:text-rose-300 flex flex-col gap-3">
+        <p>{error}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            pollCountRef.current = 0;
+            setPollCount(0);
+            setLoading(true);
+            fetchReport(true).finally(() => {
+              if (!cancelledRef.current) setLoading(false);
+            });
+          }}
+          className="self-start rounded-md border border-rose-300 dark:border-rose-700 px-3 py-1.5 text-xs font-medium hover:bg-rose-100/60 dark:hover:bg-rose-900/30"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   // Polling state: not ready yet
   if (report && !report.ready) {
     return (
@@ -207,14 +244,6 @@ export function DivergenceMeter({ debateId, isCompleted, synthesisStatus }: Dive
             Taking longer than expected. Analysis is still processing.
           </p>
         )}
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-2xl border border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/20 p-4 text-sm text-rose-700 dark:text-rose-300">
-        {error}
       </div>
     );
   }
