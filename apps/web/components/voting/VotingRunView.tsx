@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Eye, Trophy, Sparkles, HelpCircle, ArrowRight, Star } from "lucide-react";
+import { Eye, Trophy, Sparkles, HelpCircle, ArrowRight, Star, CheckCircle2, XCircle } from "lucide-react";
 import type { DebateDetail, DebateEvent } from "@/lib/api/types";
 import { fetchWithAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ export function VotingRunView({
     const [revealData, setRevealData] = useState<any>(null);
     const [isRevealed, setIsRevealed] = useState(false);
     const [loadingReveal, setLoadingReveal] = useState(false);
+    const [showResolutionCue, setShowResolutionCue] = useState(false);
 
     const fetchReveal = useCallback(async (signal?: AbortSignal, compute = false) => {
         try {
@@ -52,8 +53,6 @@ export function VotingRunView({
             if (res.ok) {
                 const data = await res.json();
                 setRevealData(data);
-                
-                // Retrieve localStorage status for persistence
                 const storedReveal = localStorage.getItem(`voting_revealed_${debate.id}`);
                 if (storedReveal === "true") {
                     setIsRevealed(true);
@@ -69,6 +68,16 @@ export function VotingRunView({
         fetchReveal(controller.signal);
         return () => controller.abort();
     }, [fetchReveal]);
+
+    useEffect(() => {
+        const prediction = revealData?.prediction;
+        if (!prediction?.resolved_at) return;
+        const key = `voting_resolution_seen_${debate.id}_${prediction.resolved_at}`;
+        if (!localStorage.getItem(key)) {
+            localStorage.setItem(key, "true");
+            setShowResolutionCue(true);
+        }
+    }, [debate.id, revealData?.prediction?.resolved_at]);
 
     // Handle prediction lock-in
     const handleLockPrediction = async (pred: { predicted_winner: string; confidence_score: number }) => {
@@ -240,6 +249,23 @@ export function VotingRunView({
     // Render completed, fully revealed results screen
     return (
         <div className="space-y-8 py-6">
+            {showResolutionCue && revealData?.prediction?.resolved_at && (
+                <div className={`flex items-start gap-3 rounded-2xl border p-4 ${revealData.prediction.is_correct ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20" : "border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/20"}`}>
+                    {revealData.prediction.is_correct ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />}
+                    <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">
+                            {revealData.prediction.is_correct ? "Your prediction was correct." : "Your prediction missed this verdict."}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                            You picked <strong>{revealData.prediction.predicted_winner}</strong> at {Math.round((revealData.prediction.confidence_score || 0) * 100)}% confidence. Compare it with the final model verdict and community predictions below.
+                        </p>
+                    </div>
+                    <button aria-label="Dismiss prediction result" onClick={() => setShowResolutionCue(false)} className="shrink-0 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+                        Dismiss
+                    </button>
+                </div>
+            )}
+
             {/* Top Row: Prediction Stance summary & Community Aggregates */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-1">

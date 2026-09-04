@@ -15,6 +15,7 @@ import { ArenaAtAGlance } from "./ArenaAtAGlance";
 import { ExampleReportPreview } from "./ExampleReportPreview";
 import { DifferentiationSection } from "./DifferentiationSection";
 import { UseCases } from "./UseCases";
+import { DecisionEdgeShowcase } from "./DecisionEdgeShowcase";
 
 export default function HomeContent() {
   const router = useRouter();
@@ -166,6 +167,8 @@ export default function HomeContent() {
           </div>
         </section>
 
+        <DecisionEdgeShowcase />
+
         {/* ─── SECTION 2: How a Debate Works ─── */}
         <HowItWorks />
 
@@ -199,7 +202,7 @@ export default function HomeContent() {
               </Button>
               <button
                 onClick={scrollToReport}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
                 {t("landing.finalCta.secondary")}
               </button>
