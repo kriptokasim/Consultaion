@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Github } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { trackEvent } from "@/lib/analytics";
 import { API_ORIGIN } from "@/lib/config/runtime";
@@ -67,7 +68,6 @@ export default function HomeContent() {
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-amber-50/30 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-      {/* Background orbs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div className="absolute top-10 left-8 h-64 w-64 rounded-full bg-amber-100 blur-3xl opacity-30 dark:bg-amber-500/10" />
         <div className="absolute top-40 right-12 h-80 w-80 rounded-full bg-amber-50 blur-3xl opacity-25 dark:bg-amber-500/5" />
@@ -75,10 +75,8 @@ export default function HomeContent() {
       </div>
 
       <div className="relative mx-auto flex max-w-6xl flex-col gap-0 px-6 py-8 md:py-16">
-        {/* ─── SECTION 1: Hero ─── */}
         <section className="pb-16 md:pb-24">
           <div className="grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr]">
-            {/* Left: copy + CTAs */}
             <div className="space-y-6">
               <Reveal>
                 <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] sm:text-5xl lg:text-[3.4rem] lg:leading-[1.08]">
@@ -129,13 +127,12 @@ export default function HomeContent() {
               )}
             </div>
 
-            {/* Right: supplied interactive chamber, kept at the existing hero footprint */}
             <Reveal delay={200} direction="right" className="hidden lg:block">
               <div className="relative aspect-video w-full overflow-hidden rounded-[24px] border border-slate-200/80 bg-[#f3f2f2] shadow-xl shadow-slate-900/10 dark:border-slate-700/60 dark:bg-slate-900 dark:shadow-black/20">
                 <iframe
                   title="Consultaion Parliament Chamber"
                   src="/embeds/consultaion-chamber.html"
-                  className="absolute inset-0 h-full w-full border-0"
+                  className="absolute left-[-6%] top-[-6%] h-[112%] w-[112%] border-0"
                   loading="eager"
                   aria-label="Interactive Consultaion Parliament Chamber"
                 />
@@ -145,23 +142,12 @@ export default function HomeContent() {
         </section>
 
         <DecisionEdgeShowcase />
-
-        {/* ─── SECTION 2: How a Debate Works ─── */}
         <HowItWorks />
-
-        {/* ─── SECTION 3: Arena at a Glance ─── */}
         <ArenaAtAGlance />
-
-        {/* ─── SECTION 4: Example Decision Report ─── */}
         <ExampleReportPreview />
-
-        {/* ─── SECTION 5: Why not just ask two models yourself? ─── */}
         <DifferentiationSection />
-
-        {/* ─── SECTION 6: Use Cases ─── */}
         <UseCases />
 
-        {/* ─── SECTION 7: Final CTA ─── */}
         <Reveal>
           <section className="relative z-10 mx-auto mb-12 flex max-w-2xl flex-col items-center gap-5 rounded-3xl border border-amber-200/50 bg-gradient-to-br from-amber-50/80 to-white/80 p-10 text-center shadow-xl shadow-amber-900/5 dark:border-amber-700/30 dark:from-slate-900/80 dark:to-slate-800/80 dark:shadow-none backdrop-blur">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white md:text-3xl">
@@ -187,44 +173,25 @@ export default function HomeContent() {
           </section>
         </Reveal>
 
-        {/* Footer links */}
         <footer className="mt-4 flex flex-col items-center gap-6">
           <div className="flex flex-wrap justify-center gap-6 border-t border-slate-200 pt-6 dark:border-slate-800">
-            <Link
-              href="/docs"
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400"
-              onClick={() => trackEvent("landing_docs_clicked")}
-            >
+            <Link href="/docs" className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400" onClick={() => trackEvent("landing_docs_clicked")}>
               <BookOpen className="h-4 w-4" />
               {t("landing.devs.docs")}
             </Link>
-            <a
-              href="https://github.com/kriptokasim/Consultaion"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400"
-              onClick={() => trackEvent("landing_github_clicked")}
-            >
+            <a href="https://github.com/kriptokasim/Consultaion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-amber-600 dark:text-slate-300 dark:hover:text-amber-400" onClick={() => trackEvent("landing_github_clicked")}>
               <Github className="h-4 w-4" />
               {t("landing.devs.github")}
             </a>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-4 pb-8 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {marketingLinks.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="transition hover:text-amber-600"
-              >
+              <Link key={item.href} href={item.href} className="transition hover:text-amber-600">
                 {item.label}
               </Link>
             ))}
-            <Link href="/terms" className="transition hover:text-amber-600">
-              {t("footer.terms")}
-            </Link>
-            <Link href="/privacy" className="transition hover:text-amber-600">
-              {t("footer.privacy")}
-            </Link>
+            <Link href="/terms" className="transition hover:text-amber-600">{t("footer.terms")}</Link>
+            <Link href="/privacy" className="transition hover:text-amber-600">{t("footer.privacy")}</Link>
           </div>
         </footer>
       </div>
