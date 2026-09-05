@@ -135,7 +135,7 @@ export default function HomeContent() {
                 <iframe
                   title="Consultaion Parliament Chamber"
                   src="/embeds/consultaion-chamber.html"
-                  className="absolute left-[-6%] top-[-6%] h-[112%] w-[112%] border-0"
+                  className="absolute inset-0 h-full w-full border-0"
                   loading="eager"
                   aria-label="Interactive Consultaion Parliament Chamber"
                 />
