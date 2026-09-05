@@ -242,7 +242,7 @@ class MemoryChannelBackend:
     Queue size is bounded (default 1000). When full, the queue enforces a priority-aware eviction policy:
     1. Loss-tolerant events are dropped first.
     2. Important events are dropped next.
-    3. If full of critical events, the oldest critical event is replaced by the newest (latest critical wins).
+    3. Critical events are retained; when a critical queue is full, the oldest non-terminal critical event is replaced first. Terminal events are never evicted.
 
     Subscriptions will terminate on:
     - Receiving 'final' or 'error' event types
@@ -275,6 +275,7 @@ class MemoryChannelBackend:
         # PS155.2: Per-channel delta coalescers
         self._coalescers: dict[str, DeltaCoalescer] = {}
         self._coalescer_flush_tasks: dict[str, asyncio.Task[None]] = {}
+        self._publish_order_lock = asyncio.Lock()
 
     async def start(self) -> None:
         self._running = True
@@ -357,90 +358,115 @@ class MemoryChannelBackend:
         self._coalescer_flush_tasks[channel_id] = asyncio.create_task(flush_after_interval())
 
     async def _publish_single(self, channel_id: str, event: dict) -> None:
-        """Publish a single event (after coalescing) to all subscribers."""
-        async with self._lock:
-            # Generate monotonic sequence number
-            seq = self._sequences.get(channel_id, 0) + 1
-            self._sequences[channel_id] = seq
+        async with self._publish_order_lock:
+            """Publish a single event (after coalescing) to all subscribers."""
+            async with self._lock:
+                # Generate monotonic sequence number
+                seq = self._sequences.get(channel_id, 0) + 1
+                self._sequences[channel_id] = seq
 
-            # Create unified event envelope
-            envelope = {
-                "id": f"sse-{channel_id}-{seq}",
-                "type": event.get("type", "notice"),
-                "event": event.get("type", "notice"),
-                "session_id": channel_id,
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "sequence": seq,
-                "payload": event,
-            }
+                # Create unified event envelope
+                envelope = {
+                    "id": f"sse-{channel_id}-{seq}",
+                    "type": event.get("type", "notice"),
+                    "event": event.get("type", "notice"),
+                    "session_id": channel_id,
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "sequence": seq,
+                    "payload": event,
+                }
 
-            from observability.metrics import record_sse_message
+                from observability.metrics import record_sse_message
 
-            record_sse_message()
+                record_sse_message()
 
-            # Add correlation context if available
-            from correlation import get_correlation_context
+                # Add correlation context if available
+                from correlation import get_correlation_context
 
-            ctx = get_correlation_context()
-            if ctx:
-                envelope["correlation"] = ctx.to_sse_metadata()
+                ctx = get_correlation_context()
+                if ctx:
+                    envelope["correlation"] = ctx.to_sse_metadata()
 
-            # Cache in history
-            if channel_id not in self._history:
-                self._history[channel_id] = []
-            self._history[channel_id].append(envelope)
-            if len(self._history[channel_id]) > self._max_queue_size:
-                self._history[channel_id].pop(0)
+                # Cache in history
+                if channel_id not in self._history:
+                    self._history[channel_id] = []
+                self._history[channel_id].append(envelope)
+                if len(self._history[channel_id]) > self._max_queue_size:
+                    self._history[channel_id].pop(0)
 
-            self._last_seen[channel_id] = time.time()
+                self._last_seen[channel_id] = time.time()
 
-            # FH125 F-4: Fan out to all per-subscriber queues
-            # Priority-based backpressure — Critical events are preferentially retained.
-            # "Latest critical wins" policy applies as a per-subscriber pending queue guarantee.
-            subscribers = list(self._subscribers.get(channel_id, []))
+                # FH125 F-4: Fan out to all per-subscriber queues
+                # Priority-based backpressure — Critical events are preferentially retained.
+                # "Latest critical wins" policy applies as a per-subscriber pending queue guarantee.
+                subscribers = list(self._subscribers.get(channel_id, []))
 
-        new_priority = _event_priority(envelope)
-        for sub_queue in subscribers:
-            try:
-                if sub_queue.full():
-                    # Try to drop a loss-tolerant event to make room
-                    dropped = False
-                    if new_priority == 0:
-                        # Critical event: must make room by dropping oldest loss-tolerant
-                        dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
-                        if not dropped:
-                            # No loss-tolerant to drop; try important
-                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=1)
-                        if not dropped:
-                            # Queue is 100% full of critical events. To guarantee the new critical
-                            # event is delivered, we implement a "latest critical wins" policy
-                            # by dropping the oldest critical event.
-                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=0)
-                            if dropped:
-                                from metrics import increment_metric
-
-                                increment_metric("sse.backpressure.critical_replaced")
-                    elif new_priority == 1:
-                        # Important event: only drop loss-tolerant
-                        dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
-                    else:
-                        # Loss-tolerant event: drop oldest loss-tolerant event to keep queue fresh
-                        dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
-
-                    if not dropped and sub_queue.full():
-                        from metrics import increment_metric
-
-                        increment_metric("sse.backpressure.overflow")
+            new_priority = _event_priority(envelope)
+            for sub_queue in subscribers:
+                try:
+                    if sub_queue.full():
+                        # Try to drop a loss-tolerant event to make room
+                        dropped = False
                         if new_priority == 0:
-                            logger.error(
-                                "CRITICAL: Cannot enqueue terminal event — queue full with only critical/important events"
-                            )
-                            increment_metric("sse.backpressure.critical_enqueue_failed")
-                        continue  # Skip this subscriber rather than blocking
+                            # Critical event: must make room by dropping oldest loss-tolerant
+                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
+                            if not dropped:
+                                # No loss-tolerant to drop; try important
+                                dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=1)
+                            if not dropped:
+                                # Queue is 100% full of critical events. To guarantee the new critical
+                                # event is delivered, we implement a "latest critical wins" policy
+                                # by dropping the oldest critical event.
+                                dropped = self._drop_oldest_non_terminal_critical(sub_queue)
+                                if dropped:
+                                    from metrics import increment_metric
 
-                await sub_queue.put(envelope)
-            except Exception as e:
-                logger.error(f"Error publishing to subscriber queue for {channel_id}: {e}")
+                                    increment_metric("sse.backpressure.critical_replaced")
+                        elif new_priority == 1:
+                            # Important event: only drop loss-tolerant
+                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
+                        else:
+                            # Loss-tolerant event: drop oldest loss-tolerant event to keep queue fresh
+                            dropped = self._drop_from_queue(sub_queue, min_priority_to_drop=2)
+
+                        if not dropped and sub_queue.full():
+                            from metrics import increment_metric
+
+                            increment_metric("sse.backpressure.overflow")
+                            if new_priority == 0:
+                                logger.error(
+                                    "CRITICAL: Cannot enqueue terminal event — queue full with only critical/important events"
+                                )
+                                increment_metric("sse.backpressure.critical_enqueue_failed")
+                            continue  # Skip this subscriber rather than blocking
+
+                    await sub_queue.put(envelope)
+                except Exception as e:
+                    logger.error(f"Error publishing to subscriber queue for {channel_id}: {e}")
+
+    def _drop_oldest_non_terminal_critical(self, queue: asyncio.Queue[dict]) -> bool:
+        """Drop the oldest critical event that is not a terminal event."""
+        temp: list[dict] = []
+        dropped = False
+        while not queue.empty():
+            try:
+                item = queue.get_nowait()
+                payload = item.get("payload", {})
+                event_type = item.get("type", payload.get("type", ""))
+                if (not dropped) and event_type in CRITICAL_NON_TERMINAL_EVENT_TYPES:
+                    dropped = True
+                    from metrics import increment_metric
+                    increment_metric("sse.backpressure.critical_replaced")
+                    continue
+                temp.append(item)
+            except asyncio.QueueEmpty:
+                break
+        for item in temp:
+            try:
+                queue.put_nowait(item)
+            except asyncio.QueueFull:
+                break
+        return dropped
 
     def _drop_from_queue(self, queue: asyncio.Queue[dict], min_priority_to_drop: int) -> bool:
         """Try to drop the oldest event with priority >= min_priority_to_drop from a queue.
