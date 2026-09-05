@@ -1,0 +1,35 @@
+name: Fix chamber runtime
+
+on:
+  push:
+    branches:
+      - fix/wave4-traffic-gate-20260905-final
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch chamber stage bootstrap
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/web/public/embeds/consultaion-chamber.html')
+          s = p.read_text()
+          old = "const stage = document.querySelector('three-d-stage');\\nconst { THREE } = await stage.ready;"
+          new = """const stage = document.querySelector('three-d-stage');\\nawait customElements.whenDefined('three-d-stage');\\nlet THREE;\\nif (stage && stage.ready && typeof stage.ready.then === 'function') {\\n  const ready = await stage.ready;\\n  THREE = ready?.THREE ?? ready?.default ?? ready;\\n}\\nif (!THREE) {\\n  const threeModule = await import('three');\\n  THREE = threeModule.THREE ?? threeModule;\\n}\\nif (!THREE) throw new Error('Three.js failed to initialize');"""
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one target, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/web/public/embeds/consultaion-chamber.html
+          git commit -m 'fix(web): make chamber three.js bootstrap resilient'
+          git rm .github/workflows/_fix_chamber_three.yml
+          git commit -m 'chore: remove chamber fix workflow'
+          git push origin HEAD:fix/wave4-traffic-gate-20260905-final
