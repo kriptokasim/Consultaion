@@ -745,6 +745,12 @@ class RedisChannelBackend:
         self._coalescer_flush_tasks[channel_id] = asyncio.create_task(flush_after_interval())
 
     async def _publish_single(self, channel_id: str, event: dict) -> None:
+        """Publish one Redis SSE event under a distributed per-channel lock."""
+        lock = self._redis.lock(f"sse:publish:{channel_id}", timeout=30, blocking_timeout=30)
+        async with lock:
+            await self._publish_single_unlocked(channel_id, event)
+
+    async def _publish_single_unlocked(self, channel_id: str, event: dict) -> None:
         # Generate monotonic sequence number atomically in Redis
         seq_key = f"sse:seq:{channel_id}"
         try:
