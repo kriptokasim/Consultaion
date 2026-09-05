@@ -1,0 +1,36 @@
+name: Wave 4 one-shot sync
+
+on:
+  push:
+    branches:
+      - fix/wave4-traffic-gate-20260905
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply exact chamber artifact
+        env:
+          BRANCH: fix/wave4-traffic-gate-20260905
+        run: |
+          set -euo pipefail
+          cp "Consultaion Chamber 3D-2.html" apps/web/public/embeds/consultaion-chamber.html
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("apps/web/components/landing/HomeContent.tsx")
+          s = p.read_text()
+          s = s.replace('className="absolute left-[-6%] top-[-6%] h-[112%] w-[112%] border-0"', 'className="absolute inset-0 h-full w-full border-0"')
+          p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/public/embeds/consultaion-chamber.html apps/web/components/landing/HomeContent.tsx
+          git diff --cached --quiet || git commit -m "fix(web): use uploaded chamber artifact without crop"
+          git rm .github/workflows/_wave4_sync.yml
+          git commit -m "chore: remove one-shot sync workflow"
+          git push origin HEAD:${BRANCH}
+          # This comment intentionally makes the workflow replacement commit deterministic.
