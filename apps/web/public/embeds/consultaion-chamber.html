@@ -1,222 +1,30 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Consultaion — Chamber</title>
 <style>
-  :root{color-scheme:light dark}
-  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
-  body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
-  canvas.dragging{cursor:grabbing}
-  .hint{position:absolute;left:16px;bottom:14px;padding:7px 10px;border:1px solid rgba(127,99,45,.18);border-radius:999px;background:rgba(255,255,255,.72);backdrop-filter:blur(8px);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#6b5a3d;pointer-events:none}
-  @media (prefers-color-scheme:dark){.hint{background:rgba(20,20,20,.68);color:#d8c39d;border-color:rgba(216,195,157,.18)}}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f3f2f2}
+canvas{display:block;width:100%;height:100%;touch-action:none}
 </style>
-</head>
-<body>
-<canvas id="c" aria-label="Interactive 3D visualization of the Consultaion Parliament Chamber"></canvas>
-<div class="hint">Drag to explore · Wheel to zoom</div>
-<script>
-(() => {
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d');
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
-  let W=0,H=0;
-  let yaw = 0.58, pitch = 0.78, zoom = 1.03;
-  let dragging=false, lastX=0, lastY=0, interacted=false;
-  let auto = true, raf=0;
+</head><body>
+<canvas id="chamber"></canvas>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.184.0/build/three.module.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js';
 
-  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
-  const C = isDark ? {
-    bg:'#0d0d0e', floor:'#262523', walnut:'#6b4426', brass:'#c79a4c', steel:'#3d3b38',
-    pale:'#9e9a92', shadow:'rgba(0,0,0,.34)', line:'rgba(231,214,179,.17)', text:'#d8c39d'
-  } : {
-    bg:'#f3f2f2', floor:'#e9e6e0', walnut:'#6b4426', brass:'#c79a4c', steel:'#35322e',
-    pale:'#b8b2a7', shadow:'rgba(63,50,35,.20)', line:'rgba(75,55,28,.18)', text:'#6b5a3d'
-  };
+const canvas=document.getElementById('chamber');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0xf3f2f2);
+const camera=new THREE.PerspectiveCamera(38,1,0.01,10);
+camera.position.set(0.34,0.27,0.42);
+const controls=new OrbitControls(camera,canvas); controls.enableDamping=true; controls.dampingFactor=.08; controls.minDistance=.24; controls.maxDistance=.75; controls.target.set(0,.055,0);
+scene.add(new THREE.HemisphereLight(0xffffff,0xd8d2c4,1.15));
+const key=new THREE.DirectionalLight(0xffffff,2.3); key.position.set(.35,.65,.4); key.castShadow=true; key.shadow.mapSize.set(2048,2048); key.shadow.bias=-.0002; scene.add(key);
+const fill=new THREE.DirectionalLight(0xfff4e6,.55); fill.position.set(-.5,.3,-.4); scene.add(fill);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.ShadowMaterial({opacity:.16})); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
 
-  const meshes=[];
-  const V=(x,y,z)=>({x,y,z});
-  const face=(v, color)=>({v, color});
-  function addPoly(points, yTop, yBottom, color, stroke=true){
-    const top=points.map(p=>V(p[0],yTop,p[1]));
-    const bot=points.map(p=>V(p[0],yBottom,p[1]));
-    meshes.push(face(top.slice(),color));
-    for(let i=0;i<points.length;i++){
-      const j=(i+1)%points.length;
-      meshes.push(face([bot[i],bot[j],top[j],top[i]],color));
-    }
-  }
-  function addCylinder(x,z,r,h,color,n=40){
-    const top=[],bot=[];
-    for(let i=0;i<n;i++){const a=i*Math.PI*2/n;top.push(V(x+Math.cos(a)*r,h,z+Math.sin(a)*r));bot.push(V(x+Math.cos(a)*r,0,z+Math.sin(a)*r));}
-    meshes.push(face(top,color));
-    for(let i=0;i<n;i++){const j=(i+1)%n;meshes.push(face([bot[i],bot[j],top[j],top[i]],color));}
-  }
-  function addRingSector(r0,r1,a0,a1,h,y,color){
-    const pts=[];
-    const steps=56;
-    for(let i=0;i<=steps;i++){const a=a0+(a1-a0)*i/steps;pts.push([Math.cos(a)*r1,Math.sin(a)*r1]);}
-    for(let i=steps;i>=0;i--){const a=a0+(a1-a0)*i/steps;pts.push([Math.cos(a)*r0,Math.sin(a)*r0]);}
-    addPoly(pts,y+h/2,y-h/2,color);
-  }
-  function box(x,y,z,sx,sy,sz,color){
-    const x0=x-sx/2,x1=x+sx/2,y0=y-sy/2,y1=y+sy/2,z0=z-sz/2,z1=z+sz/2;
-    meshes.push(face([V(x0,y1,z0),V(x1,y1,z0),V(x1,y1,z1),V(x0,y1,z1)],color));
-    meshes.push(face([V(x0,y0,z1),V(x1,y0,z1),V(x1,y1,z1),V(x0,y1,z1)],color));
-    meshes.push(face([V(x1,y0,z0),V(x1,y0,z1),V(x1,y1,z1),V(x1,y1,z0)],color));
-    meshes.push(face([V(x0,y0,z0),V(x0,y1,z0),V(x0,y1,z1),V(x0,y0,z1)],color));
-    meshes.push(face([V(x0,y0,z0),V(x1,y0,z0),V(x1,y1,z0),V(x0,y1,z0)],color));
-  }
-
-  // Floor/plinth.
-  addCylinder(0,0,.178,.009,C.steel,80);
-  box(0,.018,0,.35,.02,.35,C.walnut);
-  addCylinder(0,0,.152,.008,C.floor,80);
-  // subtle brass rings
-  const ringSteps=96;
-  const outer=[],inner=[];
-  for(let i=0;i<ringSteps;i++){const a=i*Math.PI*2/ringSteps;outer.push([Math.cos(a)*.1745,Math.sin(a)*.1745]);inner.push([Math.cos(a)*.172,Math.sin(a)*.172]);}
-  addPoly(outer,.030,.028,C.brass); addPoly(inner,.031,.029,C.floor);
-
-  // Version 2-inspired crescent table.
-  const crescent=[];
-  for(let i=0;i<=72;i++){const a=Math.PI*0.22 + Math.PI*0.56*i/72; crescent.push([Math.cos(a)*.096,Math.sin(a)*.096+.017]);}
-  for(let i=72;i>=0;i--){const a=Math.PI*0.22 + Math.PI*0.56*i/72; crescent.push([Math.cos(a)*.074,Math.sin(a)*.074+.012]);}
-  addPoly(crescent,.070,.064,C.walnut);
-  // brass fascia
-  const fascia=crescent.map(p=>[p[0]*1.015,p[1]*1.015]);
-  addPoly(fascia,.062,.060,C.brass);
-
-  // Table legs.
-  [[0,.042],[.050,.028],[-.050,.028],[.073,.001],[-.073,.001]].forEach(([x,z])=>box(x,.050,z,.006,.030,.006,C.steel));
-
-  // Four seats + figures.
-  [-0.058,-0.020,0.020,0.058].forEach((x,i)=>{
-    const z=-.075;
-    box(x,.050,z,.018,.004,.016,C.walnut);
-    box(x,.036,z-.006,.018,.026,.003,C.walnut);
-    addCylinder(x,z,.006,.024,C.alabaster,20);
-    addCylinder(x,z,.009,.001,C.walnut,20);
-    addCylinder(x,z,.0058,.010,C.brass,20);
-    box(x,.078,z+.010,.017,.003,.006,C.brass);
-  });
-
-  // Dais inside opening.
-  addCylinder(0,0.006,.034,.007,C.alabaster,64);
-  addCylinder(0,0.006,.026,.008,C.walnut,56);
-  addCylinder(0,0.006,.018,.006,C.brass,56);
-  addCylinder(0,0.006,.014,.024,C.walnut,48);
-  addCylinder(0,0.006,.019,.006,C.brass,48);
-
-  // Gallery tiers behind.
-  addRingSector(.118,.130,Math.PI*0.08,Math.PI*0.92,.018,.100,C.walnut);
-  addRingSector(.132,.146,Math.PI*0.04,Math.PI*0.96,.025,.118,C.walnut);
-  addRingSector(.130,.132,Math.PI*0.08,Math.PI*0.92,.004,.110,C.steel);
-  addRingSector(.144,.146,Math.PI*0.04,Math.PI*0.96,.004,.143,C.steel);
-
-  // Small gallery balustrade posts.
-  for(let i=0;i<9;i++){
-    const a=Math.PI*0.11 + Math.PI*0.78*i/8;
-    const x=Math.cos(a)*.142,z=Math.sin(a)*.142;
-    addCylinder(x,z,.0022,.026,C.steel,12);
-    addCylinder(x,z,.0032,.002,C.brass,12);
-  }
-
-  // Star over the dais.
-  const star=[];
-  const ro=.036,ri=.015;
-  for(let i=0;i<10;i++){const a=Math.PI/2+i*Math.PI/5,r=i%2?ri:ro;star.push([Math.cos(a)*r,Math.sin(a)*r]);}
-  const star3=star.map(([x,z])=>[x,z-.004]);
-  const top=star3.map(([x,z])=>V(x,.184,z)),bot=star3.map(([x,z])=>V(x,.178,z));
-  meshes.push(face(top,C.brass));
-  for(let i=0;i<10;i++){const j=(i+1)%10;meshes.push(face([bot[i],bot[j],top[j],top[i]],C.brass));}
-  addCylinder(0,0,.003,.095,C.steel,16);
-
-  function rotate(p){
-    const cy=Math.cos(yaw),sy=Math.sin(yaw);
-    let x=p.x*cy-p.z*sy, z=p.x*sy+p.z*cy;
-    const cx=Math.cos(pitch),sx=Math.sin(pitch);
-    const y=p.y*cx-z*sx;
-    z=p.y*sx+z*cx;
-    return V(x,y,z);
-  }
-  function project(p){
-    const r=rotate(p);
-    const camera=0.62;
-    const depth=(camera-r.z);
-    const s=(Math.min(W,H)*0.82*zoom)/depth;
-    return {x:W/2+r.x*s,y:H/2-r.y*s,z:r.z,depth};
-  }
-  function normal(a,b,c){
-    const ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z;
-    const vx=c.x-a.x,vy=c.y-a.y,vz=c.z-a.z;
-    return {x:uy*vz-uz*vy,y:uz*vx-ux*vz,z:ux*vy-uy*vx};
-  }
-  function shade(hex,n){
-    const m=Math.max(.55,Math.min(1.1,.78+n.y*.30+n.z*.16));
-    const v=parseInt(hex.slice(1),16);
-    let r=(v>>16)&255,g=(v>>8)&255,b=v&255;
-    r=Math.min(255,Math.round(r*m));g=Math.min(255,Math.round(g*m));b=Math.min(255,Math.round(b*m));
-    return `rgb(${r},${g},${b})`;
-  }
-
-  function draw(){
-    raf=requestAnimationFrame(draw);
-    if(auto && !dragging && !interacted){ yaw += 0.0017; }
-    if(W!==canvas.clientWidth*DPR || H!==canvas.clientHeight*DPR){
-      W=canvas.clientWidth*DPR;H=canvas.clientHeight*DPR;
-      canvas.width=W;canvas.height=H;
-    }
-    ctx.clearRect(0,0,W,H);
-
-    // Soft ground shadow.
-    ctx.save();
-    ctx.translate(W/2,H/2);
-    ctx.scale(zoom,zoom*.36);
-    const g=ctx.createRadialGradient(0,0,10,0,0,Math.min(W,H)*.30);
-    g.addColorStop(0,C.shadow);g.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,20,Math.min(W,H)*.30,Math.min(W,H)*.16,0,0,Math.PI*2);ctx.fill();
-    ctx.restore();
-
-    const projected=meshes.map(m=>({m,p:m.v.map(project)}));
-    projected.sort((a,b)=>b.p.reduce((s,p)=>s+p.depth,0)/b.p.length - a.p.reduce((s,p)=>s+p.depth,0)/a.p.length);
-
-    for(const item of projected){
-      const pts=item.p;if(!pts.length)continue;
-      ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
-      for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
-      ctx.closePath();
-      const n=pts.length>2?normal(item.m.v[0],item.m.v[1],item.m.v[2]):{y:1,z:0};
-      ctx.fillStyle=shade(item.m.color,n);
-      ctx.fill();
-      ctx.strokeStyle=C.line;
-      ctx.lineWidth=Math.max(0.5,DPR*.55);
-      ctx.stroke();
-    }
-
-    // Center glow.
-    const rg=ctx.createRadialGradient(W/2,H*.44,0,W/2,H*.44,Math.min(W,H)*.24);
-    rg.addColorStop(0,isDark?'rgba(199,154,76,.08)':'rgba(199,154,76,.11)');
-    rg.addColorStop(1,'rgba(199,154,76,0)');
-    ctx.fillStyle=rg;ctx.fillRect(0,0,W,H);
-  }
-
-  function resize(){ W=canvas.clientWidth*DPR;H=canvas.clientHeight*DPR;canvas.width=W;canvas.height=H; }
-  addEventListener('resize',resize);
-  resize(); draw();
-
-  canvas.addEventListener('pointerdown',e=>{dragging=true;interacted=true;auto=false;lastX=e.clientX;lastY=e.clientY;canvas.classList.add('dragging');canvas.setPointerCapture(e.pointerId)});
-  canvas.addEventListener('pointermove',e=>{
-    if(!dragging)return;
-    const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
-    yaw += dx*.008; pitch += dy*.006; pitch=Math.max(.35,Math.min(1.45,pitch));
-  });
-  canvas.addEventListener('pointerup',e=>{dragging=false;canvas.classList.remove('dragging')});
-  canvas.addEventListener('pointercancel',()=>{dragging=false;canvas.classList.remove('dragging')});
-  canvas.addEventListener('wheel',e=>{e.preventDefault();interacted=true;auto=false;zoom=Math.max(.78,Math.min(1.35,zoom*(1-e.deltaY*.0007)))},{passive:false});
-})();
-</script>
-</body>
-</html>
+const M = {\n  walnut:   new THREE.MeshStandardMaterial({ color: 0x6b4426, roughness: 0.58, metalness: 0.05 }),\n  brass:    new THREE.MeshStandardMaterial({ color: 0xc79a4c, roughness: 0.30, metalness: 0.38 }),\n  steel:    new THREE.MeshStandardMaterial({ color: 0x35322e, roughness: 0.48, metalness: 0.32 }),\n  alabaster:new THREE.MeshStandardMaterial({ color: 0xe9e6e0, roughness: 0.80, metalness: 0.0 })\n};\nM.walnut.name = 'walnut'; M.brass.name = 'brass'; M.steel.name = 'blackened-steel'; M.alabaster.name = 'alabaster';\n\nconst model = new THREE.Group();\nmodel.name = 'consultaion-chamber';\nconst add = (geo, mat, name, pos = [0,0,0], rot = [0,0,0]) => {\n  const m = new THREE.Mesh(geo, mat);\n  m.name = name;\n  m.position.set(...pos); m.rotation.set(...rot);\n  model.add(m); return m;\n};\nconst D = Math.PI / 180;\nconst flat = [-Math.PI/2, 0, 0];   // shape space: u = world x, v = -world z (+v is the back)\n\n/* ---- plinth ---- */\nadd(new THREE.CylinderGeometry(0.178, 0.180, 0.009, 96), M.steel, 'plinth-band', [0, 0.0045, 0]);\nadd(new THREE.CylinderGeometry(0.174, 0.176, 0.020, 96), M.walnut, 'plinth', [0, 0.019, 0]);\nadd(new THREE.TorusGeometry(0.1745, 0.0016, 12, 128), M.brass, 'plinth-inlay', [0, 0.0288, 0], flat);\nadd(new THREE.CylinderGeometry(0.152, 0.152, 0.008, 96), M.alabaster, 'chamber-floor', [0, 0.0325, 0]);\nconst FLOOR = 0.0365;\n\n/* ---- crescent table: thick at the back, horns reaching forward past the dais ---- */\nconst TB_RO = 0.086, TB_RI = 0.0815, TB_OFF = 0.0185;   // outer disc minus a disc pushed forward\nfunction crescentShape(ro, ri, off) {\n  const vz = (ri*ri - ro*ro - off*off) / (2*off);\n  const hx = Math.sqrt(ro*ro - vz*vz);\n  const aOut = Math.atan2(vz, hx);\n  const aIn  = Math.atan2(vz + off, hx);\n  const s = new THREE.Shape();\n  s.absarc(0, 0, ro, aOut, Math.PI - aOut, false);\n  s.absarc(0, -off, ri, Math.PI - aIn, ain, true);\n  return s;\n}\n// inner edge of the band along a ray φ° off dead-back\nconst innerAt = (phi) => {\n  const dz = -Math.cos(phi * D), b = dz * TB_OFF;\n  return b + Math.sqrt(TB_RI*TB_RI - TB_OFF*TB_OFF + b*b);\n};\nconst TOP = FLOOR + 0.030, SLAB = 0.0055, FASCIA = 0.0024;\nadd(new THREE.ExtrudeGeometry(crescentShape(TB_RO, TB_RI, TB_OFF), { depth: SLAB, bevelEnabled: true, bevelThickness: 0.0008, bevelSize: 0.0008, bevelSegments: 2, curveSegments: 128 }),\n    M.walnut, 'table-top', [0, TOP - SLABĠ 0.0055, {\n  inside: model\}, [0, FIOOR + 0.014, 0], flat);\n[0, 34, -34, 66, -66].forEach((phi, i) => {\n  const r = (innerAt(phi) + TB_RO) / 2;\n  const legH = TOP - SLAB - FASCIA - FLOOR;\n  add(new THREE.CylinderGeometry(0.0023, 0.0026, legH, 20), M.steel, `table-leg-${i + 1}`,\n      [Math.sin(phi * D) * r, FLOOR + legH/2, -Math.cos(phi * D) * r]);\n});\n\n/* ---- fourseats at the table ---- */\n[-52, -18, 18, 52].forEach((phi, i) => {\n  const a = phi * D, r = 0.104;\n  const g = new THREE.Group();\n  g.name = `talker-${i + 1}`;\n  g.position.set(Math.sin(a) * r, FLOOR, -Math.cos(a) * r);\n  g.rotation.y = -a;\n  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.0026, 0.0034, 0.014, 20), M.steel);\n  post.name = `talker-${i + 1}-chair-post`; post.position.y = 0.007;\n  const seat = new THREE.Mesh("...", M.walnnut);\n\n\nadd(new THREE.CircleDelfaaul(), M.steel, 'chamber', [0, 0.02, 0]);\nscene.add(model);
+function fit(){const w=Math.max(1,innerWidth),h=Math.max(1,innerHeight);renderer.setSize(w,h,true);camera.aspect=w/h:camera.updateProjectionMatrix();}addEventListener('resize',fit);fit();renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera});</script>
+</body></html>

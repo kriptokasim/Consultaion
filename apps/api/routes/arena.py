@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict
 
 from auth import get_current_user
+from database import SessionLocal
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from guards.llm_action_guard import require_llm_action_allowed
@@ -10,6 +11,7 @@ from models import Debate, DivergenceReport, User, UserInteraction, VoteRecord
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 from worker.arena_tasks import _execute_divergence_computation
+from utils.async_bridge import run_blocking
 
 from routes.common import can_access_debate, require_debate_access
 
@@ -80,18 +82,17 @@ async def get_divergence_report(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Retrieve claims divergence report.
-
-    Read-only: an un-computed report reports `ready: false`. Use the POST
-    variant to compute it, which spends credits.
-    """
-    debate = _load_debate_for_divergence(debate_id, current_user, session)
-
-    report = _load_divergence_report(debate_id, session)
-    if not report:
-        return _pending_divergence_payload(debate_id, debate.status)
-
-    return _divergence_payload(report)
+    """Retrieve divergence without blocking the FastAPI event loop."""
+    user_id = current_user.id
+    def _read() -> Dict[str, Any]:
+        with SessionLocal() as db:
+            user = db.get(User, user_id)
+            if not user:
+                raise HTTPException(status_code=404, detail="Debate not found")
+            debate = _load_debate_for_divergence(debate_id, user, db)
+            report = _load_divergence_report(debate_id, db)
+            return _divergence_payload(report) if report else _pending_divergence_payload(debate_id, debate.status)
+    return await run_blocking(_read)
 
 
 @router.post("/{debate_id}/divergence")
@@ -143,80 +144,37 @@ async def cast_arena_vote(
     debate_id: str,
     payload: UserVotePayload,
     current_user: User = Depends(get_current_user),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Cast a user agreement vote on a claim. Requires debate access."""
-    _debate = require_debate_access(session.get(Debate, debate_id), current_user, session)
-
+    """Cast a vote using a thread-local DB session."""
     user_id = current_user.id
-
-    # Report existence means it's ready (no `ready` column on DivergenceReport)
-    report = session.exec(
-        select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
-    ).first()
-    if not report:
-        raise HTTPException(status_code=400, detail="Divergence report not available")
-
-    # Build claim text set and validate claim_id server-side
-    all_claims = []
-    for claim_group in [report.consensus_claims, report.contested_claims]:
-        if claim_group and isinstance(claim_group, dict):
-            for claim in claim_group.get("claims", []):
-                if isinstance(claim, dict):
-                    text = claim.get("claim", "")
-                    if text:
-                        all_claims.append(text)
-
-    # Validate claim_id matches server-computed SHA-256
-    claim_text_lower = payload.claim_text.strip().lower()
-    found = False
-    for claim_text in all_claims:
-        if claim_text.strip().lower() == claim_text_lower:
-            found = True
-            # Verify claim_id matches server-side computation
-            expected_id = _compute_claim_id(claim_text)
+    def _write() -> Dict[str, Any]:
+        with SessionLocal() as db:
+            user = db.get(User, user_id)
+            if not user:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            require_debate_access(db.get(Debate, debate_id), user, db)
+            report = db.exec(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)).first()
+            if not report:
+                raise HTTPException(status_code=400, detail="Divergence report not available")
+            all_claims = []
+            for claim_group in [report.consensus_claims, report.contested_claims]:
+                if claim_group and isinstance(claim_group, dict):
+                    for claim in claim_group.get("claims", []):
+                        if isinstance(claim, dict) and claim.get("claim"):
+                            all_claims.append(claim["claim"])
+            claim_text_lower = payload.claim_text.strip().lower()
+            found = next((t for t in all_claims if t.strip().lower() == claim_text_lower), None)
+            if found is None:
+                raise HTTPException(status_code=400, detail="Invalid claim — not found in divergence report")
+            expected_id = _compute_claim_id(found)
             if payload.claim_id != expected_id:
                 raise HTTPException(status_code=400, detail="Invalid claim_id — hash mismatch")
-            break
-
-    if not found:
-        raise HTTPException(status_code=400, detail="Invalid claim — not found in divergence report")
-
-    # Check for existing vote on this claim by this user
-    existing_vote = session.exec(
-        select(VoteRecord).where(
-            VoteRecord.debate_id == debate_id,
-            VoteRecord.user_id == user_id,
-        )
-    ).first()
-
-    if existing_vote:
-        existing_claim_text = (existing_vote.vote_json or {}).get("claim_text", "")
-        if existing_claim_text.strip().lower() == claim_text_lower:
-            raise HTTPException(status_code=400, detail="Already voted on this claim")
-
-    # Record VoteRecord
-    vote_record = VoteRecord(
-        debate_id=debate_id,
-        user_id=user_id,
-        vote_json={
-            "claim_id": payload.claim_id,
-            "claim_text": payload.claim_text,
-            "type": "arena_vote"
-        }
-    )
-    session.add(vote_record)
-
-    interaction = UserInteraction(
-        user_id=user_id,
-        debate_id=debate_id,
-        interaction_type="arena_vote",
-        details={
-            "claim_id": payload.claim_id,
-            "claim_text": payload.claim_text,
-        }
-    )
-    session.add(interaction)
-    session.commit()
-
-    return {"success": True}
+            existing_vote = db.exec(select(VoteRecord).where(VoteRecord.debate_id == debate_id, VoteRecord.user_id == user_id)).first()
+            if existing_vote and (existing_vote.vote_json or {}).get("claim_text", "").strip().lower() == claim_text_lower:
+                raise HTTPException(status_code=400, detail="Already voted on this claim")
+            db.add(VoteRecord(debate_id=debate_id, user_id=user_id, vote_json={"claim_id": payload.claim_id, "claim_text": payload.claim_text, "type": "arena_vote"}))
+            db.add(UserInteraction(user_id=user_id, debate_id=debate_id, interaction_type="arena_vote", details={"claim_id": payload.claim_id, "claim_text": payload.claim_text}))
+            db.commit()
+            return {"success": True}
+    return await run_blocking(_write)
