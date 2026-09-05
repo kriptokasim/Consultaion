@@ -82,9 +82,8 @@ async def get_divergence_report(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Retrieve claims divergence report without blocking the async event loop."""
+    """Retrieve divergence without blocking the FastAPI event loop."""
     user_id = current_user.id
-
     def _read() -> Dict[str, Any]:
         with SessionLocal() as db:
             user = db.get(User, user_id)
@@ -93,7 +92,6 @@ async def get_divergence_report(
             debate = _load_debate_for_divergence(debate_id, user, db)
             report = _load_divergence_report(debate_id, db)
             return _divergence_payload(report) if report else _pending_divergence_payload(debate_id, debate.status)
-
     return await run_blocking(_read)
 
 
@@ -148,74 +146,35 @@ async def cast_arena_vote(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Cast a user agreement vote using a thread-local synchronous DB session."""
+    """Cast a vote using a thread-local DB session."""
     user_id = current_user.id
-
     def _write() -> Dict[str, Any]:
         with SessionLocal() as db:
             user = db.get(User, user_id)
             if not user:
                 raise HTTPException(status_code=401, detail="Authentication required")
-            _debate = require_debate_access(db.get(Debate, debate_id), user, db)
-
-            report = db.exec(
-                select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)
-            ).first()
+            require_debate_access(db.get(Debate, debate_id), user, db)
+            report = db.exec(select(DivergenceReport).where(DivergenceReport.debate_id == debate_id)).first()
             if not report:
                 raise HTTPException(status_code=400, detail="Divergence report not available")
-
             all_claims = []
             for claim_group in [report.consensus_claims, report.contested_claims]:
                 if claim_group and isinstance(claim_group, dict):
                     for claim in claim_group.get("claims", []):
-                        if isinstance(claim, dict):
-                            text = claim.get("claim", "")
-                            if text:
-                                all_claims.append(text)
-
+                        if isinstance(claim, dict) and claim.get("claim"):
+                            all_claims.append(claim["claim"])
             claim_text_lower = payload.claim_text.strip().lower()
-            found = False
-            for claim_text in all_claims:
-                if claim_text.strip().lower() == claim_text_lower:
-                    found = True
-                    expected_id = _compute_claim_id(claim_text)
-                    if payload.claim_id != expected_id:
-                        raise HTTPException(status_code=400, detail="Invalid claim_id — hash mismatch")
-                    break
-            if not found:
+            found = next((t for t in all_claims if t.strip().lower() == claim_text_lower), None)
+            if found is None:
                 raise HTTPException(status_code=400, detail="Invalid claim — not found in divergence report")
-
-            existing_vote = db.exec(
-                select(VoteRecord).where(
-                    VoteRecord.debate_id == debate_id,
-                    VoteRecord.user_id == user_id,
-                )
-            ).first()
-            if existing_vote:
-                existing_claim_text = (existing_vote.vote_json or {}).get("claim_text", "")
-                if existing_claim_text.strip().lower() == claim_text_lower:
-                    raise HTTPException(status_code=400, detail="Already voted on this claim")
-
-            db.add(
-                VoteRecord(
-                    debate_id=debate_id,
-                    user_id=user_id,
-                    vote_json={
-                        "claim_id": payload.claim_id,
-                        "claim_text": payload.claim_text,
-                        "type": "arena_vote",
-                    },
-                )
-            )
-            db.add(
-                UserInteraction(
-                    user_id=user_id,
-                    debate_id=debate_id,
-                    interaction_type="arena_vote",
-                    details={"claim_id": payload.claim_id, "claim_text": payload.claim_text},
-                )
-            )
+            expected_id = _compute_claim_id(found)
+            if payload.claim_id != expected_id:
+                raise HTTPException(status_code=400, detail="Invalid claim_id — hash mismatch")
+            existing_vote = db.exec(select(VoteRecord).where(VoteRecord.debate_id == debate_id, VoteRecord.user_id == user_id)).first()
+            if existing_vote and (existing_vote.vote_json or {}).get("claim_text", "").strip().lower() == claim_text_lower:
+                raise HTTPException(status_code=400, detail="Already voted on this claim")
+            db.add(VoteRecord(debate_id=debate_id, user_id=user_id, vote_json={"claim_id": payload.claim_id, "claim_text": payload.claim_text, "type": "arena_vote"}))
+            db.add(UserInteraction(user_id=user_id, debate_id=debate_id, interaction_type="arena_vote", details={"claim_id": payload.claim_id, "claim_text": payload.claim_text}))
             db.commit()
             return {"success": True}
-
     return await run_blocking(_write)
