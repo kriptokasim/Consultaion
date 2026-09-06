@@ -24,6 +24,24 @@ def _engine_kwargs() -> dict:
         "connect_args": connect_args,
     }
 
+    # Without these the async engine silently uses SQLAlchemy's defaults
+    # (pool_size=5, max_overflow=10, no pre-ping, no recycle) while the sync
+    # engine is configured from settings. A session is held for the duration of
+    # each provider call, so the pool size is effectively the cap on concurrent
+    # LLM calls per process; five plus ten is well under one fan-out. No
+    # pre-ping also turns every connection closed by an idle timeout (pgbouncer,
+    # Supabase, NAT) into a user-visible 500 instead of a silent reconnect.
+    if not settings.DATABASE_URL_ASYNC.startswith("sqlite"):
+        kwargs.update(
+            {
+                "pool_size": settings.DB_POOL_SIZE,
+                "max_overflow": settings.DB_MAX_OVERFLOW,
+                "pool_recycle": settings.DB_POOL_RECYCLE,
+                "pool_timeout": settings.DB_POOL_TIMEOUT,
+                "pool_pre_ping": True,
+            }
+        )
+
     # Tests intentionally reset the global engine between cases while pytest-anyio
     # and pytest-asyncio may use different event-loop lifetimes. A pooled aiosqlite
     # connection can therefore remain bound to a loop that has already closed.

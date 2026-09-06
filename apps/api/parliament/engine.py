@@ -742,8 +742,20 @@ async def _execute_round(
                 return seat, None, None, exc
 
         group_turns: list[SeatTurn] = []
+
+        # Bounded fan-out: every in-flight seat call holds a pooled DB
+        # connection for its whole duration, so a wide panel would otherwise be
+        # able to exhaust the connection pool on its own.
+        _seat_slots = asyncio.Semaphore(
+            max(1, int(getattr(settings, "LLM_MAX_CONCURRENT_CALLS_PER_RUN", 6)))
+        )
+
+        async def _run_seat_bounded(seat, transcript):
+            async with _seat_slots:
+                return await _run_seat(seat, transcript)
+
         tasks = [
-            asyncio.create_task(_run_seat(seat, current_transcript))
+            asyncio.create_task(_run_seat_bounded(seat, current_transcript))
             for seat in seat_group
         ]
 

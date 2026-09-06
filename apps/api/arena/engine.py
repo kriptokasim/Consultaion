@@ -1642,11 +1642,27 @@ async def run_arena(
         completed_models = {response.model_id for response in responses}
 
         # Fan-out: call only missing models, collect as each completes.
+        #
+        # The fan-out is bounded. Each in-flight provider call holds a pooled
+        # DB connection for its entire duration, so an unbounded fan-out (the
+        # panel can carry 20 models) is able to exhaust the connection pool
+        # from a single run and stall every other request on the process until
+        # pool_timeout elapses.
+        from config import settings as _fanout_settings
+
+        _call_slots = asyncio.Semaphore(
+            max(1, int(getattr(_fanout_settings, "LLM_MAX_CONCURRENT_CALLS_PER_RUN", 6)))
+        )
+
+        async def _call_and_persist_bounded(model_info):
+            async with _call_slots:
+                return await _call_and_persist(model_info)
+
         tasks: list[asyncio.Task] = []
         for model in arena_models:
             if model.id in completed_models:
                 continue
-            task = asyncio.create_task(_call_and_persist(model))
+            task = asyncio.create_task(_call_and_persist_bounded(model))
             tasks.append(task)
         provisional_task: asyncio.Task[ArenaSynthesisRevision | None] | None = None
         provisional_state: dict[str, object] = {

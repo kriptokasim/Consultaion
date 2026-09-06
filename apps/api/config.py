@@ -336,6 +336,12 @@ class AppSettings(BaseSettings):
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
+    # Upper bound on simultaneous provider calls fanned out from a single run.
+    # Each in-flight call holds a pooled DB connection for its whole duration,
+    # so an unbounded fan-out (seats go to 20) can exhaust the pool by itself
+    # and stall every other request on the process for pool_timeout seconds.
+    # Keep this comfortably below DB_POOL_SIZE + DB_MAX_OVERFLOW.
+    LLM_MAX_CONCURRENT_CALLS_PER_RUN: int = 6
     DB_POOL_RECYCLE: int = 3600
     DB_POOL_TIMEOUT: int = 30
     FORCE_CREATE_ALL: bool = False
