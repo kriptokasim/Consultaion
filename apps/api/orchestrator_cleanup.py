@@ -19,6 +19,51 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
+
+def _requeue_debate_run(debate: "Debate") -> bool:
+    """Hand an expired-lease debate back to a worker.
+
+    Returns True when the run has been re-dispatched. Returns False when no
+    dispatch path is available, in which case the caller should fail the run
+    promptly instead of leaving it queued for the stale sweep to reap.
+    """
+    try:
+        from debate_dispatch import choose_queue_for_debate, run_debate_task
+    except Exception as exc:  # pragma: no cover - import guard
+        logger.error("Cannot requeue debate %s: dispatch module unavailable: %s", debate.id, exc)
+        return False
+
+    if run_debate_task is None:
+        logger.error(
+            "Cannot requeue debate %s: Celery worker tasks are unavailable "
+            "(DEBATE_DISPATCH_MODE=%s). Runs cannot survive a lease expiry "
+            "without a worker.",
+            debate.id,
+            settings.DEBATE_DISPATCH_MODE,
+        )
+        return False
+
+    config_data = debate.config if isinstance(getattr(debate, "config", None), dict) else None
+    queue_name = choose_queue_for_debate(config_data, settings)
+    try:
+        run_debate_task.apply_async(
+            args=[str(debate.id), None],
+            kwargs={"is_resume": True, "continuation_id": None},
+            queue=queue_name,
+        )
+    except Exception as exc:
+        logger.error("Failed to re-dispatch debate %s to queue %s: %s", debate.id, queue_name, exc)
+        return False
+
+    try:
+        from metrics import incr_metric
+
+        incr_metric("debate.lease.requeued")
+    except Exception:  # pragma: no cover - metrics are best-effort
+        pass
+    return True
+
+
 async def check_api_key_rotations() -> int:
     """
     Scan for API keys expiring within 7 days and trigger warnings/reminders.
@@ -133,7 +178,20 @@ async def cleanup_stale_debates() -> Tuple[int, int]:
                 if lease_expires < now:
                     age = int((now - lease_expires).total_seconds())
                     if debate.run_attempt < 3:
-                        # Requeue for another worker
+                        # Requeue for another worker.
+                        #
+                        # Flipping the row to "queued" is not enough on its own:
+                        # nothing polls for queued debates, and Celery has
+                        # already acked the original delivery, so a run left
+                        # here simply sits until DEBATE_STALE_QUEUED_SECONDS
+                        # marks it failed — half an hour later, after the user's
+                        # credit was spent. The row change and the re-dispatch
+                        # have to happen together.
+                        if not _requeue_debate_run(debate):
+                            stale_debates.append(
+                                (debate.id, "lease_timeout_requeue_unavailable", age)
+                            )
+                            continue
                         debate.status = "queued"
                         debate.runner_id = None
                         debate.lease_expires_at = None

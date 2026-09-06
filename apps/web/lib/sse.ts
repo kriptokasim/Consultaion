@@ -21,9 +21,19 @@ export type UseEventSourceOptions<T> = {
   onError?: (event: Event) => void;
 };
 
-const DEFAULT_RETRY = [2000, 4000, 8000, 15000];
+const DEFAULT_RETRY = [2000, 4000, 8000, 15000, 30000];
 const DEFAULT_MAX_RETRIES = 6;
 const MAX_RETRY_AFTER_MS = 300000;
+
+/**
+ * Spread reconnects across the window instead of firing them in lockstep.
+ *
+ * A deploy disconnects every open stream in the same instant. Without jitter
+ * they all return at exactly +2s, then +4s, and each reconnect costs the server
+ * an auth check, an access query, a Redis lease and a history replay. The
+ * multiplier keeps the ladder's shape while turning a spike into a spread.
+ */
+const jittered = (delay: number) => Math.round(delay * (0.5 + Math.random()));
 
 /**
  * The backend refuses excess concurrent streams with a named `stream_unavailable`
@@ -155,9 +165,13 @@ export function useEventSource<T = unknown>(
           return;
         }
 
+        // An explicit delay comes from the server's `retry_after` and is
+        // honoured as given; only our own ladder gets jittered.
         const delay =
           explicitDelay ??
-          retryDelays[Math.min(attemptsRef.current - 1, retryDelays.length - 1)];
+          jittered(
+            retryDelays[Math.min(attemptsRef.current - 1, retryDelays.length - 1)]
+          );
 
         clearRetryTimer();
         retryTimerRef.current = setTimeout(() => {

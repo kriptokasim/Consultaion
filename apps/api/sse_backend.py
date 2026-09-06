@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+from contextlib import suppress
 from collections.abc import AsyncIterator
 from enum import Enum
 from typing import Optional, Protocol
@@ -670,6 +671,13 @@ class RedisChannelBackend:
             )
         self._coalescers: dict[str, DeltaCoalescer] = {}
         self._coalescer_flush_tasks: dict[str, asyncio.Task[None]] = {}
+        # Coalescers are process-local Python objects, not Redis keys, so they
+        # are not reclaimed by any TTL. Track last activity so idle channels can
+        # be evicted; without this the process retains one DeltaCoalescer — and
+        # its unbounded _seen_keys set — for every debate it has ever published.
+        self._last_publish: dict[str, float] = {}
+        self._running = False
+        self._cleanup_task: Optional[asyncio.Task[None]] = None
 
     async def start(self) -> None:
         # Verify connection
@@ -678,8 +686,28 @@ class RedisChannelBackend:
         except Exception as e:
             logger.error(f"Failed to connect to Redis for SSE: {e}")
             # We don't raise here to allow app startup, but subsequent calls will fail/retry
+        self._running = True
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+
+    async def _periodic_cleanup(self) -> None:
+        while self._running:
+            await asyncio.sleep(60)
+            try:
+                await self.cleanup()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # pragma: no cover - cleanup is best-effort
+                logger.warning("Redis SSE cleanup pass failed: %s", exc)
 
     async def stop(self) -> None:
+        self._running = False
+        cleanup_task = getattr(self, "_cleanup_task", None)
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleanup_task
+            self._cleanup_task = None
         flush_tasks = list(getattr(self, "_coalescer_flush_tasks", {}).values())
         self._coalescer_flush_tasks = {}
         for task in flush_tasks:
@@ -707,8 +735,11 @@ class RedisChannelBackend:
             self._coalescers = {}
         if not hasattr(self, "_coalescer_flush_tasks"):
             self._coalescer_flush_tasks = {}
+        if not hasattr(self, "_last_publish"):
+            self._last_publish = {}
         if channel_id not in self._coalescers:
             self._coalescers[channel_id] = DeltaCoalescer()
+        self._last_publish[channel_id] = time.time()
 
         coalescer = self._coalescers[channel_id]
         events_to_publish = coalescer.ingest(event)
@@ -930,8 +961,31 @@ class RedisChannelBackend:
             return []
 
     async def cleanup(self) -> None:
-        # Redis handles TTL automatically
-        return None
+        """Evict process-local state for channels that have gone idle.
+
+        Redis expires its own keys, but the coalescers and their pending flush
+        tasks are Python objects in this process and were never reclaimed: the
+        old implementation returned None on the assumption that Redis TTLs
+        covered them.
+        """
+        now = time.time()
+        last_publish = getattr(self, "_last_publish", {})
+        stale = [
+            cid for cid, ts in list(last_publish.items())
+            if now - ts > self._ttl_seconds
+        ]
+        cancelled: list[asyncio.Task[None]] = []
+        for cid in stale:
+            last_publish.pop(cid, None)
+            self._coalescers.pop(cid, None)
+            task = self._coalescer_flush_tasks.pop(cid, None)
+            if task is not None and not task.done():
+                task.cancel()
+                cancelled.append(task)
+        if cancelled:
+            await asyncio.gather(*cancelled, return_exceptions=True)
+        if stale:
+            logger.info("Cleaned up %d idle Redis SSE channels", len(stale))
 
     async def ping(self) -> bool:
         try:
