@@ -100,6 +100,12 @@ if TEST_FAST_APP and not settings.IS_LOCAL_ENV:
         "Refusing to start. Set ENV to 'production' or 'staging'."
     )
 
+# Error tracking and tracing must be initialized for every environment, not
+# only for tests. init_sentry() is a no-op when SENTRY_DSN is unset, so this is
+# safe to call unconditionally.
+init_sentry()
+init_tracing()
+
 if TEST_FAST_APP:
 
     try:
@@ -112,9 +118,6 @@ if TEST_FAST_APP:
         except Exception as exc:
             logger.error("Failed to reset DB engine in TEST_FAST_APP mode", exc_info=exc)
             raise
-
-    init_sentry()
-    init_tracing()
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 ENABLE_SEC_HEADERS = settings.ENABLE_SEC_HEADERS
@@ -475,9 +478,16 @@ async def _metrics_depends(
     request: Request,
     current_user = Depends(get_optional_user),
 ) -> None:
-    """Allow unrestricted access in local dev; require admin in production."""
+    """Allow local dev, a static scrape token, or an authenticated admin."""
     if settings.IS_LOCAL_ENV:
         return
+    scrape_token = (settings.METRICS_TOKEN or "").strip()
+    if scrape_token:
+        presented = (request.headers.get("authorization") or "").strip()
+        if presented.lower().startswith("bearer "):
+            presented = presented[7:].strip()
+        if presented and hmac.compare_digest(presented, scrape_token):
+            return
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
     is_admin = current_user.role == "admin" or getattr(current_user, "is_admin", False)

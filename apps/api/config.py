@@ -289,6 +289,13 @@ class AppSettings(BaseSettings):
 
     SENTRY_ENV: str = "local"
     SENTRY_SAMPLE_RATE: float = 0.1
+    # Profiling is a per-request CPU cost on a single event loop; 100% is not a
+    # production setting. Prompts are user content, so PII is opt-in.
+    SENTRY_PROFILE_SAMPLE_RATE: float = 0.05
+    SENTRY_SEND_PII: bool = False
+    # Static bearer token for Prometheus scrapers. Scrapers cannot present an
+    # admin JWT, so without this the endpoint is unreachable by any collector.
+    METRICS_TOKEN: str = ""
     
     # Langfuse Observability (Patchset v2.0)
     ENABLE_LANGFUSE: bool = Field(default=False, description="Enable Langfuse tracing")

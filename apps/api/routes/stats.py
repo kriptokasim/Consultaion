@@ -117,7 +117,7 @@ async def debug_cookie_config(current_user: User = Depends(get_current_admin)):
 if settings.ENABLE_METRICS:
 
     @router.get("/stats/metrics")
-    def metrics():
+    def metrics(_admin: User = Depends(get_current_admin)):
         payload = get_metrics_snapshot()
         payload["total_429s"] = len(get_recent_429_events())
         return payload
