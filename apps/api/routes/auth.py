@@ -1,3 +1,4 @@
+import hmac
 import logging
 import secrets
 import time
@@ -28,6 +29,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from models import User, utcnow
 from ratelimit import increment_ip_bucket, record_429
+from sqlalchemy.exc import IntegrityError
 from schemas import AuthRequest, UserProfile as UserProfileSchema, UserProfileUpdate
 from sqlmodel import Session, select
 
@@ -45,6 +47,36 @@ def csrf_exempt(func):
 
 
 DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-guard")
+
+
+def _adopt_or_link_oauth_account(user, provider: str, ip: str) -> None:
+    """Bind a verified identity-provider login to a local account safely.
+
+    /auth/register issues an account for any address with no proof that the
+    registrant owns the mailbox. Matching an OAuth login to that row by bare
+    email is the federated-merge pre-hijack: an attacker registers the victim's
+    address, keeps the password, and inherits the session the moment the real
+    owner signs in with Google.
+
+    Google has just proved mailbox ownership, so the mailbox owner wins. An
+    unverified password credential on that row is revoked (the hash is replaced
+    with an unguessable value and password login is disabled); the user keeps
+    access through the provider. Accounts already verified, or already bound to
+    a provider, are untouched.
+    """
+    superseded = user.email_verified_at is None and not user.oauth_provider
+    if superseded:
+        user.password_hash = hash_password(secrets.token_urlsafe(32))
+        user.password_login_enabled = False
+        logger.warning(
+            "Revoked an unverified password credential after a verified %s login",
+            provider,
+            extra={"user_id": user.id, "provider": provider, "ip": ip},
+        )
+    if user.email_verified_at is None:
+        user.email_verified_at = datetime.now(timezone.utc)
+    if not user.oauth_provider:
+        user.oauth_provider = provider
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -272,8 +304,29 @@ async def google_login(request: Request, response: Response) -> Response:
             "state": state,
         }
     )
-    # No cookies needed for state!
-    return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{query}", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    # The state value alone proves nothing about *which* browser started the
+    # flow: a server-side store makes it single-use, not browser-bound. Without
+    # this cookie an attacker can begin a flow, obtain an unredeemed code for
+    # their own Google account, and hand the victim the callback URL — logging
+    # the victim's browser into the attacker's account. Double-submit the state
+    # so the callback can require that the browser presenting the code is the
+    # one that started the flow.
+    redirect_resp = RedirectResponse(
+        url=f"{GOOGLE_AUTH_URL}?{query}", status_code=status.HTTP_307_TEMPORARY_REDIRECT
+    )
+    redirect_resp.set_cookie(
+        key=OAUTH_STATE_COOKIE,
+        value=state,
+        httponly=True,
+        secure=get_cookie_secure(),
+        # Lax, not None: the cookie has to survive Google's top-level GET
+        # redirect back to the callback, and must not ride cross-site subrequests.
+        samesite="lax",
+        max_age=600,
+        path="/",
+        domain=get_cookie_domain(),
+    )
+    return redirect_resp
 
 
 @router.get("/auth/google/callback")
@@ -301,8 +354,19 @@ async def google_callback(
         logger.warning(f"OAuth invalid state: {state[:8]}... IP={ip}")
         raise ValidationError(message="Invalid OAuth state (expired or mismatch)", code="auth.invalid_state")
         
-    # Optional: Validate IP binding? strict binding can be tricky with mobile/proxies, let's skip strict IP check for now 
-    # unless extreme security required.
+    # Require the browser presenting this code to be the one that started the
+    # flow (see google_login). A missing or mismatched cookie means the callback
+    # URL was handed over by someone else.
+    state_cookie = request.cookies.get(OAUTH_STATE_COOKIE)
+    if not state_cookie or not hmac.compare_digest(state_cookie, state):
+        logger.warning(
+            "OAuth state/cookie mismatch — refusing callback",
+            extra={"ip": ip, "had_cookie": bool(state_cookie)},
+        )
+        raise ValidationError(
+            message="Invalid OAuth state (expired or mismatch)",
+            code="auth.invalid_state",
+        )
     
     next_param = state_meta.get("next")
 
@@ -330,10 +394,19 @@ async def google_callback(
     user = session.exec(select(User).where(User.email == email)).first()
     audit_action = "login_google"
     if not user:
-        random_pwd = secrets.token_urlsafe(12)
-        user = User(email=email, password_hash=hash_password(random_pwd))
+        random_pwd = secrets.token_urlsafe(32)
+        user = User(
+            email=email,
+            password_hash=hash_password(random_pwd),
+            password_login_enabled=False,
+            oauth_provider="google",
+            email_verified_at=datetime.now(timezone.utc),
+        )
         session.add(user)
         audit_action = "register_google"
+    else:
+        _adopt_or_link_oauth_account(user, "google", ip)
+        session.add(user)
     
     # Stage audit before commit so it persists atomically
     record_audit(
@@ -376,6 +449,8 @@ async def google_callback(
     
     redirect_resp = RedirectResponse(url=target_url, status_code=status.HTTP_302_FOUND)
     set_auth_cookie(redirect_resp, token)
+    # The state cookie is single-use; drop it now that the flow has completed.
+    redirect_resp.delete_cookie(OAUTH_STATE_COOKIE, path="/", domain=get_cookie_domain())
     
     # [AUTH_DEBUG] Patchset 53.0: Log after cookie set
     if settings.AUTH_DEBUG:
@@ -529,10 +604,19 @@ async def google_callback_post(
     user = session.exec(select(User).where(User.email == email)).first()
     audit_action = "login_google"
     if not user:
-        random_pwd = secrets.token_urlsafe(12)
-        user = User(email=email, password_hash=hash_password(random_pwd))
+        random_pwd = secrets.token_urlsafe(32)
+        user = User(
+            email=email,
+            password_hash=hash_password(random_pwd),
+            password_login_enabled=False,
+            oauth_provider="google",
+            email_verified_at=datetime.now(timezone.utc),
+        )
         session.add(user)
         audit_action = "register_google"
+    else:
+        _adopt_or_link_oauth_account(user, "google", ip)
+        session.add(user)
     
     record_audit(
         audit_action,
@@ -597,7 +681,15 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
         raise ValidationError(message="Email already registered", code="auth.email_exists")
     if len(body.password or "") < 8:
         raise ValidationError(message="Password too short; minimum 8 characters", code="auth.password_too_short")
-    user = User(email=email, password_hash=hash_password(body.password))
+    # email_verified_at stays None: registration proves nothing about mailbox
+    # ownership, and _adopt_or_link_oauth_account relies on that to decide
+    # whether a later verified login supersedes this credential.
+    user = User(
+        email=email,
+        password_hash=hash_password(body.password),
+        password_login_enabled=True,
+        email_verified_at=None,
+    )
     session.add(user)
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
@@ -612,7 +704,17 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
         meta={"email": user.email},
         session=session,
     )
-    session.commit()
+    # The existence check above is not a lock: two concurrent signups for the
+    # same address both pass it and the loser hits the unique constraint. That
+    # surfaced as an unhandled IntegrityError (HTTP 500) rather than the 409
+    # the first branch returns.
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise ValidationError(
+            message="Email already registered", code="auth.email_exists"
+        )
     return serialize_user(user)
 
 
@@ -657,11 +759,13 @@ async def login_user(body: AuthRequest, request: Request, response: Response, se
             user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
             user.last_failed_login_at = datetime.now(timezone.utc)
             attempts = user.failed_login_attempts
-            if attempts >= 20:
-                user.locked_until = datetime.now(timezone.utc) + timedelta(hours=24)
-            elif attempts >= 10:
-                user.locked_until = datetime.now(timezone.utc) + timedelta(hours=1)
-            elif attempts >= 5:
+            # Capped at 15 minutes. The counter is keyed on the user row alone,
+            # with no IP scoping and no CAPTCHA, so the previous 1h/24h tiers let
+            # anyone lock any known address out of their own account for a day —
+            # and with no password-reset flow there was no way back in. Fifteen
+            # minutes still defeats online guessing (the per-IP bucket does the
+            # rest) without handing out a free denial-of-service.
+            if attempts >= 5:
                 user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
             session.add(user)
             session.commit()

@@ -40,6 +40,18 @@ class User(SQLModel, table=True):
     bio: Optional[str] = Field(default=None, sa_column=Column(Text))
     timezone: Optional[str] = Field(default=None)
     email_summaries_enabled: bool = Field(default=False, nullable=False)
+
+    # Federated-merge protection. A password account created through
+    # /auth/register has never proved it owns the mailbox, so it must not be
+    # silently adopted when the real mailbox owner later signs in with Google.
+    # email_verified_at is set the first time an identity provider vouches for
+    # the address; password_login_enabled is cleared when an unverified
+    # password credential is superseded that way.
+    email_verified_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    password_login_enabled: bool = Field(default=True, nullable=False)
+    oauth_provider: Optional[str] = Field(default=None, max_length=32)
     
     # Patchset 55.0: Subscription plan for quota enforcement
     plan: str = Field(default="free", max_length=50, nullable=False, index=True)

@@ -401,6 +401,45 @@ class AppSettings(BaseSettings):
         is_render = render_var in ("true", "1", "yes")
         
         is_local = env_label in local_envs and not is_render
+
+        # Fail closed when ENV was never set on a host that is plainly not a
+        # developer machine.
+        #
+        # ENV defaults to "development", which counts as local, and every
+        # production hardening decision below is gated on IS_LOCAL_ENV. So a
+        # deployment that simply forgets the variable — anywhere that isn't
+        # Render, since only Render is auto-detected — silently boots with
+        # COOKIE_SECURE off, security headers off, bcrypt cost 4, the in-process
+        # rate limiter, and the literal default JWT_SECRET, because the secret
+        # validation below is skipped too. A publicly known signing key is a
+        # complete authentication bypass, so this must not be inferable.
+        env_explicitly_set = bool(
+            (os.environ.get("ENV") or "").strip()
+            or (os.environ.get("APP_ENV") or "").strip()
+        )
+        db_url = (self.DATABASE_URL or "").strip().lower()
+        uses_real_database = bool(db_url) and not db_url.startswith("sqlite")
+        if is_local and uses_real_database and not env_explicitly_set:
+            raise ValueError(
+                "ENV is not set, but DATABASE_URL points at a non-sqlite database. "
+                "Refusing to start: an unset ENV would be treated as local and would "
+                "disable secure cookies, security headers, strong password hashing and "
+                "the production secret checks. Set ENV explicitly to one of "
+                "development, test, staging or production."
+            )
+
+        # Defence in depth, independent of the environment label: never run
+        # against a real database with the shipped placeholder signing key.
+        if uses_real_database and (
+            not self.JWT_SECRET
+            or self.JWT_SECRET in ("change_me_in_prod", "CHANGE_ME_IN_PRODUCTION")
+        ):
+            raise ValueError(
+                "JWT_SECRET is still the default placeholder while DATABASE_URL points "
+                "at a non-sqlite database. Set JWT_SECRET to a random value of at least "
+                "32 characters."
+            )
+
         object.__setattr__(self, "IS_LOCAL_ENV", is_local)
         
         # Patchset 54.0: Standardize APP_ENV for telemetry and feature gating
@@ -450,6 +489,21 @@ class AppSettings(BaseSettings):
         
         # Production secret validation
         if not is_local:
+            # Per-IP rate limiting silently collapses into a single shared
+            # bucket when the proxy is not trusted: _get_trusted_client_ip only
+            # honours X-Forwarded-For from a peer inside this list, and behind a
+            # managed load balancer the peer is a private ingress address, never
+            # loopback. Warn loudly rather than fail, since the correct value is
+            # platform-specific and an existing deployment should not be bricked
+            # by an upgrade.
+            if set(self.TRUSTED_PROXY_CIDRS) <= {"127.0.0.1/32", "::1/128"}:
+                logger.warning(
+                    "TRUSTED_PROXY_CIDRS is still the loopback default in a "
+                    "non-local environment. Behind a load balancer every request "
+                    "will resolve to the proxy's IP, so all clients share one "
+                    "per-IP rate-limit bucket. Set it to your ingress CIDR."
+                )
+
             # JWT Secret
             if not self.JWT_SECRET or self.JWT_SECRET in ("change_me_in_prod", "CHANGE_ME_IN_PRODUCTION"):
                 raise ValueError("JWT_SECRET must be set to a secure value in production (ENV={})".format(self.ENV))
