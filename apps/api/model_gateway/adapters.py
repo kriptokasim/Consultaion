@@ -57,8 +57,50 @@ def _usage_value(usage: Any, name: str) -> int:
         return 0
 
 
+def _proxy_reported_cost(response: Any) -> float | None:
+    """Cost the LiteLLM proxy computed for this call, if it reported one.
+
+    In proxy mode the model string is a deployment name ("openai/seat_anthropic"),
+    which the SDK cannot price -- litellm.cost_per_token() raises "This model
+    isn't mapped yet" for it. So every local cost path yields 0.0 while the call
+    genuinely cost money.
+
+    The proxy does report the real figure, but it arrives as a response header
+    that the SDK files under a nested key rather than on ``response_cost``:
+
+        _hidden_params["additional_headers"]["llm_provider-x-litellm-response-cost"]
+
+    Read that first. Without it every paid proxy call settles at cost_usd=0.0
+    while reporting real token counts, so llm_usage_log records a debate that
+    cost nothing and actual-vs-estimated reconciliation always resolves to zero.
+
+    The monthly safety cap itself survives, because the reservation is priced
+    from the pre-proxy model id and from a model-independent character estimate,
+    not from this value -- and attempt_tracker does not mistake the zero for a
+    free route, since a deployment slug does not match a free one. So this is a
+    reporting and reconciliation defect, not a spend-control hole. It still has
+    to be fixed before per-user budgets mean anything, because those enforce on
+    measured spend.
+    """
+    hidden = getattr(response, "_hidden_params", None)
+    if not isinstance(hidden, dict):
+        return None
+    headers = hidden.get("additional_headers")
+    if not isinstance(headers, dict):
+        return None
+    raw = headers.get("llm_provider-x-litellm-response-cost")
+    if raw is None:
+        return None
+    try:
+        cost = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return cost if cost > 0 else None
+
+
 def _stream_cost(chunk: Any, usage: Any) -> float:
     candidates = [
+        _proxy_reported_cost(chunk),
         getattr(chunk, "response_cost", None),
         usage.get("total_cost") if isinstance(usage, dict) else getattr(usage, "total_cost", None),
     ]
@@ -455,7 +497,14 @@ class DirectProviderAdapter(BaseAdapter):
         prompt_tokens = usage.get("prompt_tokens") or 0
         completion_tokens = usage.get("completion_tokens") or 0
         total_tokens = usage.get("total_tokens") or (prompt_tokens + completion_tokens)
-        cost_usd = getattr(response, "response_cost", 0.0) or usage.get("total_cost", 0.0) or 0.0
+        # Proxy-reported cost first: in proxy mode the model string is a
+        # deployment name the SDK cannot price, so every local path is 0.0.
+        cost_usd = (
+            _proxy_reported_cost(response)
+            or getattr(response, "response_cost", 0.0)
+            or usage.get("total_cost", 0.0)
+            or 0.0
+        )
         
         return GatewayModelCallResult(
             content=content,
@@ -761,7 +810,14 @@ class OpenRouterAdapter(BaseAdapter):
         prompt_tokens = usage.get("prompt_tokens") or 0
         completion_tokens = usage.get("completion_tokens") or 0
         total_tokens = usage.get("total_tokens") or (prompt_tokens + completion_tokens)
-        cost_usd = getattr(response, "response_cost", 0.0) or usage.get("total_cost", 0.0) or 0.0
+        # Proxy-reported cost first: in proxy mode the model string is a
+        # deployment name the SDK cannot price, so every local path is 0.0.
+        cost_usd = (
+            _proxy_reported_cost(response)
+            or getattr(response, "response_cost", 0.0)
+            or usage.get("total_cost", 0.0)
+            or 0.0
+        )
         
         return GatewayModelCallResult(
             content=content,
