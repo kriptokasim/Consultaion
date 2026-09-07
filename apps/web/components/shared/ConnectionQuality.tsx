@@ -3,9 +3,14 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
+import type { SSEStatus } from "@/lib/sse";
 
 interface ConnectionQualityProps {
-  sseStatus?: "idle" | "connecting" | "connected" | "reconnecting" | "closed";
+  /**
+   * Takes the stream's own status type rather than a hand-copied union, which
+   * had drifted: it was missing "unavailable" entirely.
+   */
+  sseStatus?: SSEStatus;
   className?: string;
 }
 
@@ -57,9 +62,15 @@ export default function ConnectionQuality({
     return () => clearInterval(interval);
   }, [checkLatency]);
 
-  // Compute status colors
-  let statusColor = "bg-rose-500 border-rose-500/30";
-  let statusText = "Offline";
+  // Compute status colors.
+  //
+  // Every state gets an explicit branch. The fallthrough default used to be
+  // red "Offline", which meant a workspace showed a red offline badge before a
+  // run had even started (`idle`), and showed the same red badge when the
+  // server was applying stream backpressure (`unavailable`) — a state where
+  // the client is in fact still succeeding, over polling.
+  let statusColor = "bg-slate-500 border-slate-500/30";
+  let statusText = "Not connected";
 
   if (sseStatus === "connected") {
     if (healthStatus === "healthy") {
@@ -68,14 +79,22 @@ export default function ConnectionQuality({
     } else if (healthStatus === "degraded") {
       statusColor = "bg-amber-500 border-amber-500/30";
       statusText = "Fair";
+    } else {
+      statusColor = "bg-rose-500 border-rose-500/30";
+      statusText = "Offline";
     }
   } else if (sseStatus === "connecting" || sseStatus === "reconnecting") {
     statusColor = "bg-amber-500 border-amber-500/30 animate-pulse";
     statusText = sseStatus === "reconnecting" ? "Reconnecting..." : "Connecting...";
+  } else if (sseStatus === "unavailable") {
+    statusColor = "bg-amber-500 border-amber-500/30";
+    statusText = "Server busy — retrying";
   } else if (sseStatus === "closed") {
     statusColor = "bg-slate-500 border-slate-500/30";
     statusText = "Disconnected";
   }
+
+  const isTrouble = statusText === "Offline" || sseStatus === "closed";
 
   return (
     <div
@@ -105,7 +124,9 @@ export default function ConnectionQuality({
       ) : sseStatus === "connected" ? (
         <Wifi className="h-3 w-3 text-emerald-400" />
       ) : (
-        <WifiOff className="h-3 w-3 text-rose-400" />
+        <WifiOff
+          className={cn("h-3 w-3", isTrouble ? "text-rose-400" : "text-slate-500")}
+        />
       )}
     </div>
   );

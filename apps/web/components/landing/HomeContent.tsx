@@ -33,7 +33,17 @@ export default function HomeContent() {
   useEffect(() => {
     let cancelled = false;
     const apiBase = API_ORIGIN;
-    fetch(`${apiBase}/me`, { credentials: "include", cache: "no-store" })
+    // Bounded: fetch only rejects on transport failure, so a saturated API that
+    // accepts connections and answers slowly would otherwise leave `loading`
+    // true forever — and the hero's primary CTA is disabled while it is. That
+    // is precisely the failure mode of a launch-day traffic spike. A timeout is
+    // treated as "signed out", which routes to /login?next=/live; the button
+    // never needs auth state to work, only to choose a destination.
+    fetch(`${apiBase}/me`, {
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000),
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled) setUser(data);
