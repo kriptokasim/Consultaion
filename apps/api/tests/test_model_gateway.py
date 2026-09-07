@@ -230,12 +230,38 @@ def test_openrouter_key_enables_full_arena_manifest(monkeypatch):
     monkeypatch.setattr("config.settings.GEMINI_API_KEY", None)
     monkeypatch.setattr("config.settings.GOOGLE_API_KEY", None)
 
-    assert [model.id for model in get_arena_models()] == [
-        "gpt4o-deep",
-        "claude-sonnet",
-        "gemini-2-5-pro",
-        "deepseek-r1",
-    ]
+    # The arena roster moved to the SOTA registry; the legacy ids this used to
+    # assert are no longer what get_arena_models() serves. Pin the real contract
+    # instead: with a key present and FREE_ONLY_MODE off, every seat is a
+    # distinct frontier model rather than repeats of one free router.
+    from parliament.model_registry import SOTA_ARENA_MODELS
+
+    monkeypatch.setattr("config.settings.FREE_ONLY_MODE", False)
+    served = [model.id for model in get_arena_models()]
+    assert served == SOTA_ARENA_MODELS
+    assert len(set(served)) == len(served), "arena seats must be distinct models"
+
+
+def test_free_only_mode_serves_four_distinct_free_seats(monkeypatch):
+    """FREE_ONLY_MODE is the degraded roster, not a broken one.
+
+    openrouter-nemotron-free lived only as a runtime addition under a different
+    spelling, so this seat failed to resolve and the free arena silently ran a
+    seat short. Guard the whole roster rather than that one key.
+    """
+    from model_gateway.model_map import resolve_model_key
+    from parliament.model_registry import FREE_ARENA_MODELS
+
+    monkeypatch.setattr("config.settings.USE_MOCK", False)
+    monkeypatch.setattr("config.settings.OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setattr("config.settings.FREE_ONLY_MODE", True)
+
+    for model_id in FREE_ARENA_MODELS:
+        resolve_model_key(model_id)  # raises ModelKeyError if a seat is unresolvable
+
+    served = [model.id for model in get_arena_models()]
+    assert served == FREE_ARENA_MODELS
+    assert len(set(served)) == len(served), "free arena seats must be distinct models"
 
 
 @pytest.mark.anyio

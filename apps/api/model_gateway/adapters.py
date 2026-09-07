@@ -198,6 +198,15 @@ class DirectProviderAdapter(BaseAdapter):
             llm_kwargs: dict[str, Any] = {}
             if api_key:
                 llm_kwargs["api_key"] = api_key
+            # Redirect through the LiteLLM proxy when that backend is selected.
+            # Returns {} on the direct path, so this is inert by default.
+            from model_gateway.proxy_transport import proxy_overrides
+
+            overrides = proxy_overrides(model_id, target_model, user_id, api_key)
+            if overrides:
+                target_model = overrides.pop("model")
+                provider_name = "litellm_proxy"
+                llm_kwargs.update(overrides)
             response = await acompletion(
                 model=target_model,
                 messages=messages,
@@ -388,8 +397,17 @@ class DirectProviderAdapter(BaseAdapter):
                     target_model = "gemini/gemini-2.5-pro-preview-06-05"
                     provider_name = "gemini"
 
+        # Redirect through the LiteLLM proxy when that backend is selected.
+        # Returns {} on the direct path, so this is inert by default.
+        from model_gateway.proxy_transport import proxy_overrides
+
+        _proxy = proxy_overrides(model_id, target_model, user_id, api_key)
+        if _proxy:
+            target_model = _proxy.pop("model")
+            provider_name = "litellm_proxy"
+
         start_ts = time.monotonic()
-        kwargs = {}
+        kwargs = dict(_proxy)
         if response_format is not None:
             kwargs["response_format"] = response_format
         if tools is not None:

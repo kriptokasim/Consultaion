@@ -342,6 +342,26 @@ class AppSettings(BaseSettings):
     # and stall every other request on the process for pool_timeout seconds.
     # Keep this comfortably below DB_POOL_SIZE + DB_MAX_OVERFLOW.
     LLM_MAX_CONCURRENT_CALLS_PER_RUN: int = 6
+
+    # --- Model gateway backend -------------------------------------------------
+    # "direct": call providers in-process with the LiteLLM SDK (historical path).
+    # "proxy":  route every call through a LiteLLM proxy service, which owns the
+    #           virtual keys, budgets, global spend ceiling, per-deployment
+    #           cooldowns and cross-provider fallback.
+    # Flipping this back to "direct" is the rollback for the whole migration.
+    MODEL_GATEWAY_BACKEND: str = "direct"
+    LITELLM_PROXY_URL: str | None = None
+    LITELLM_PROXY_API_KEY: str | None = None
+
+    # Hard stop for all LLM spend. Unlike the per-user monthly cap in
+    # model_gateway/costs.py this is global: one runaway account, a pricing
+    # change or a loop cannot bankrupt the platform while nobody is watching.
+    # The proxy's own max_budget is the enforcing twin of this flag; this one
+    # exists so a debate is refused cleanly up front instead of dying mid-run
+    # after a credit was already spent.
+    LLM_KILL_SWITCH_ENABLED: bool = False
+    LLM_GLOBAL_MONTHLY_CEILING_USD: float = 200.0
+
     DB_POOL_RECYCLE: int = 3600
     DB_POOL_TIMEOUT: int = 30
     FORCE_CREATE_ALL: bool = False

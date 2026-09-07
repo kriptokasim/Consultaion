@@ -1,0 +1,127 @@
+# LiteLLM proxy configuration for Consultaion.
+#
+# Run alongside the api and worker services. This file is the single place the
+# seat -> upstream mapping lives once MODEL_GATEWAY_BACKEND=proxy: changing which
+# model sits in which seat becomes a config edit, not a deploy.
+#
+# Required environment:
+#   DATABASE_URL          Postgres for virtual keys, budgets and spend logs.
+#                         Use a SEPARATE database or schema from the app.
+#   LITELLM_MASTER_KEY    Admin credential. Never hand this to the app; the app
+#                         uses a virtual key issued from it.
+#   LITELLM_SALT_KEY      Encrypts stored provider keys. Losing or rotating this
+#                         makes every stored provider key undecryptable. Treat it
+#                         with the same care as JWT_SECRET.
+#   REDIS_HOST/PORT       Router state, cooldowns and the response cache.
+
+model_list:
+  # --- Frontier seats (SOTA_ARENA_MODELS) ------------------------------------
+  # These are what the arena serves when FREE_ONLY_MODE is off. One deployment
+  # per genuinely distinct upstream: the whole point of the product is that the
+  # seats disagree, which they cannot do if they are the same model.
+  - model_name: seat_openai_premium
+    litellm_params:
+      model: openrouter/openai/gpt-5.6-sol
+      api_key: os.environ/OPENROUTER_API_KEY
+    model_info: {seat: sota-gpt}
+
+  - model_name: seat_anthropic
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-4.8
+      api_key: os.environ/OPENROUTER_API_KEY
+    model_info: {seat: sota-claude}
+
+  - model_name: seat_google
+    litellm_params:
+      model: openrouter/google/gemini-3-pro
+      api_key: os.environ/OPENROUTER_API_KEY
+    model_info: {seat: sota-gemini}
+
+  - model_name: seat_xai
+    litellm_params:
+      model: openrouter/x-ai/grok-5
+      api_key: os.environ/OPENROUTER_API_KEY
+    model_info: {seat: sota-grok}
+
+  # --- Free / degraded seats (FREE_ARENA_MODELS) -----------------------------
+  # The FREE_ONLY_MODE roster. Still four distinct upstreams, so a free debate
+  # is a real debate rather than one router answering four times.
+  - model_name: seat_free_router
+    litellm_params: {model: openrouter/openrouter/free, api_key: os.environ/OPENROUTER_API_KEY}
+  - model_name: seat_free_glm
+    litellm_params: {model: openrouter/z-ai/glm-5.2:free, api_key: os.environ/OPENROUTER_API_KEY}
+  - model_name: seat_free_gpt_oss
+    litellm_params: {model: openrouter/openai/gpt-oss-20b:free, api_key: os.environ/OPENROUTER_API_KEY}
+  - model_name: seat_free_nemotron
+    litellm_params: {model: openrouter/nvidia/nemotron-3-ultra:free, api_key: os.environ/OPENROUTER_API_KEY}
+
+  # --- Cheap direct seats -----------------------------------------------------
+  - model_name: seat_openai_fast
+    litellm_params: {model: openai/gpt-4o-mini, api_key: os.environ/OPENAI_API_KEY, rpm: 500}
+  - model_name: seat_groq
+    litellm_params: {model: groq/openai/gpt-oss-20b, api_key: os.environ/GROQ_API_KEY}
+  - model_name: seat_deepseek
+    litellm_params: {model: openrouter/deepseek/deepseek-r1, api_key: os.environ/OPENROUTER_API_KEY}
+  - model_name: seat_mistral
+    litellm_params: {model: mistral/mistral-large-latest, api_key: os.environ/MISTRAL_API_KEY}
+
+  # --- Chair / synthesizer ----------------------------------------------------
+  # The one call per debate where model quality actually decides the output.
+  # Keeping this separate is what lets seats be cheap without cheapening the
+  # report: ~1 frontier call per debate instead of one per seat per round.
+  - model_name: chair
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-4.8
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Pass-through for anything the gateway resolves to a slug we have not named.
+  - model_name: "*"
+    litellm_params: {model: "openrouter/*", api_key: os.environ/OPENROUTER_API_KEY}
+
+router_settings:
+  routing_strategy: usage-based-routing-v2
+  redis_host: os.environ/REDIS_HOST
+  redis_port: os.environ/REDIS_PORT
+  enable_pre_call_checks: true
+
+  # Replaces the global 3600s circuit breaker. Cooldown is per *deployment*, so
+  # one provider degrading takes that seat out of rotation for a minute instead
+  # of taking every user's debates down for an hour.
+  allowed_fails: 3
+  cooldown_time: 60
+  num_retries: 2
+
+  # Cross-provider failover. A seat that cannot answer falls to a different
+  # upstream rather than failing the run.
+  fallbacks:
+    - seat_openai_premium: [seat_google, seat_anthropic]
+    - seat_anthropic: [seat_google, seat_openai_premium]
+    - seat_google: [seat_openai_premium, seat_anthropic]
+    - seat_xai: [seat_google]
+    - seat_free_router: [seat_free_glm, seat_free_gpt_oss, seat_free_nemotron]
+    - chair: [seat_openai_premium]
+
+litellm_settings:
+  # Exact-match response cache. Separately, provider prompt caching passes
+  # through: debate seats share a long common prefix (question + prior rounds),
+  # and cached input reads run ~0.1x on several providers.
+  cache: true
+  cache_params:
+    type: redis
+    ttl: 600
+
+  # GLOBAL spend ceiling. This is the ceiling the launch-readiness audit found
+  # missing: the per-user monthly cap in model_gateway/costs.py cannot stop the
+  # platform as a whole from overspending.
+  max_budget: 200
+  budget_duration: 30d
+
+  drop_params: true
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  # Per-user virtual keys (Phase 3) are issued from /key/generate against this
+  # master key, with max_budget mirroring MAX_MONTHLY_SAFETY_LIMIT_USD.
+  store_model_in_db: true

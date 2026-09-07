@@ -31,7 +31,14 @@ def test_is_free_model():
     assert is_free_model("groq_fast") is True
     assert is_free_model("openai_fast") is False  # cheap
     assert is_free_model("openai_premium") is False  # paid
-    assert is_free_model("openrouter_fallback") is False  # unknown
+    # openrouter_fallback used to be absent from MODEL_MAP, so this asserted the
+    # "unknown key" branch. The catalog now carries it with cost_class="free",
+    # which is correct: the OpenRouter free router settles at zero. Asserting
+    # False here would push the billing guard back into charging estimates for a
+    # route that never bills, which is what tripped the monthly cap on accounts
+    # that had spent nothing.
+    assert is_free_model("openrouter_fallback") is True  # explicit free
+    assert is_free_model("some_unknown_key") is False  # unknown -> not free
 
 @pytest.mark.asyncio
 async def test_route_llm_call_free_only_guard():

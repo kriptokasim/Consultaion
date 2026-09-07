@@ -92,6 +92,9 @@ class TestRunPipelineModelValidation:
             assert seat.model, f"Seat {seat.seat_id} missing model"
             assert seat.provider_key, f"Seat {seat.seat_id} missing provider_key"
 
+    # Without a marker this coroutine was collected, never awaited, and reported
+    # as a failure -- so the model-resolution path it guards was untested.
+    @pytest.mark.anyio
     async def test_model_resolution_with_mock_routing(self):
         """Simulate the route_llm_call path with a litellm-style model_id.
 
@@ -112,10 +115,17 @@ class TestRunPipelineModelValidation:
             user_plan="free",
         )
 
-        # We only test that the call doesn't fail at model resolution.
-        # It will likely fail at the adapter level because no API keys are set,
-        # but that's a different error code (not model_key_unresolved).
-        result = await route_llm_call(request, db_session=None)
+        # We only test that the call doesn't fail at model resolution. Anything
+        # raised *after* resolution is a different concern: with no keys set the
+        # adapter fails, and on a free plan the pool gate rejects a premium seat
+        # before the adapter is even reached. Both prove resolution succeeded.
+        from model_gateway.types import GatewayModelRestrictedError
+
+        try:
+            result = await route_llm_call(request, db_session=None)
+        except GatewayModelRestrictedError:
+            # Reached the plan gate, so 'openai/gpt-4o-mini' resolved cleanly.
+            return
 
         assert result is not None
         # The error code should NOT be model_key_unresolved — that means

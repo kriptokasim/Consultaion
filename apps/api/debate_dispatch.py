@@ -15,6 +15,14 @@ except Exception as exc:  # pragma: no cover - Celery optional in some envs
     run_debate_task = None  # type: ignore
 
 
+class LLMKillSwitchEngaged(RuntimeError):
+    """Raised when LLM_KILL_SWITCH_ENABLED blocks a debate before dispatch.
+
+    Distinct from a generic RuntimeError so the route layer can surface a clean
+    503 with the operator's message instead of a 500 traceback.
+    """
+
+
 def choose_queue_for_debate(config_data: dict | None, settings_obj=settings) -> str:
     """
     Select an appropriate Celery queue for a debate configuration.
@@ -48,6 +56,23 @@ async def dispatch_debate_run(
     ctx = get_correlation_context()
     if ctx:
         ctx = create_child_context(debate_id=debate_id)
+
+    # Global kill switch. Refuse the run up front rather than letting it start
+    # and die partway through, which strands the run and burns a credit for a
+    # debate the user never receives. The proxy's own max_budget is the hard
+    # enforcing stop; this is the graceful one.
+    if getattr(settings, "LLM_KILL_SWITCH_ENABLED", False):
+        from metrics import incr_metric
+
+        incr_metric("debate.dispatch.kill_switch_blocked")
+        logger.error(
+            "LLM kill switch is enabled; refusing to dispatch debate",
+            extra={"debate_id": debate_id, "trace_id": trace_id},
+        )
+        raise LLMKillSwitchEngaged(
+            "Debates are temporarily paused while we work on model capacity. "
+            "No credit has been spent."
+        )
 
     mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
 
