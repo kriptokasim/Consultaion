@@ -3,7 +3,6 @@ import logging
 from typing import Any, Dict
 
 from auth import get_current_user
-from database import SessionLocal
 from deps import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from guards.llm_action_guard import require_llm_action_allowed
@@ -85,6 +84,11 @@ async def get_divergence_report(
     """Retrieve divergence without blocking the FastAPI event loop."""
     user_id = current_user.id
     def _read() -> Dict[str, Any]:
+        # Imported per call, not at module scope: database.reset_engine()
+        # disposes the engine and rebinds database.SessionLocal, and a name
+        # captured at import time keeps pointing at the disposed sessionmaker.
+        from database import SessionLocal
+
         with SessionLocal() as db:
             user = db.get(User, user_id)
             if not user:
@@ -149,6 +153,8 @@ async def cast_arena_vote(
     """Cast a vote using a thread-local DB session."""
     user_id = current_user.id
     def _write() -> Dict[str, Any]:
+        from database import SessionLocal
+
         with SessionLocal() as db:
             user = db.get(User, user_id)
             if not user:

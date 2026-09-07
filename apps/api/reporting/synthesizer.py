@@ -714,18 +714,29 @@ async def generate_decision_report(
                 if usage is not None and hasattr(usage, "add_call"):
                     usage.add_call(call_usage)
                 data = extract_and_parse_json(revised_raw) or {}
-                revised_json = json.dumps(data)
                 revised_report = DecisionReport.model_validate(data)
                 # Belt-and-suspenders: the prompt asks the model to carry over
                 # unaffected fields, but LLMs don't always comply. Backfill
                 # anything left empty in the revision from the pre-revision
                 # draft so real content (like caveats) never silently vanishes.
-                final_report = _backfill_empty_fields_from_draft(revised_report, draft_report)
+                #
+                # Build the candidate in a local. Assigning straight to
+                # final_report meant that when the integrity check below failed,
+                # the handler logged "Keeping original draft" while final_report
+                # still held the rejected revision — and execution fell through
+                # to stamp quality metadata on it and return it to the user.
+                candidate_report = _backfill_empty_fields_from_draft(revised_report, draft_report)
                 # Check revised report integrity
-                ok, problems = validate_report_integrity(final_report)
+                ok, problems = validate_report_integrity(candidate_report)
                 if not ok:
                     raise ValueError(f"Revised report integrity failed: {problems}")
-                final_raw = revised_json
+
+                # Verify the document that actually ships. The critic previously
+                # scored the raw pre-backfill JSON, so fields restored from the
+                # draft (caveats, dissenting views) were never checked and the
+                # completeness score described a report nobody would see.
+                final_report = candidate_report
+                final_raw = final_report.model_dump_json()
 
                 # Run critic on the revised report to update the score
                 critic_res = await verify_synthesis_report(
@@ -733,6 +744,8 @@ async def generate_decision_report(
                 )
             except Exception as revise_exc:
                 logger.warning("Revision pass failed: %s. Keeping original draft.", revise_exc)
+                final_report = draft_report
+                final_raw = raw_content
 
         # Determine verification status
         verification_error = bool(critic_res.get("verification_error", False))

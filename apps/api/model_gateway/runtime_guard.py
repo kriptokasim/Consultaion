@@ -83,6 +83,17 @@ def estimate_full_call_cost(
     """Estimate worst-case call cost using input plus full output budget."""
     model = _resolved_litellm_model(model_id)
     output_budget = max(int(max_tokens or 0), 0)
+
+    # A free route settles at zero, so reserving the flat fallback rate below
+    # accrues spend the user never incurs. That reservation is written to
+    # LLMUsageLog.cost_usd, which is the column the monthly safety cap sums —
+    # so without this an account on a free route is eventually blocked for the
+    # month having spent nothing.
+    from model_gateway.attempt_tracker import _is_free_route
+
+    if _is_free_route(model_id) or _is_free_route(model):
+        return 0.0
+
     try:
         from litellm import cost_per_token, token_counter
 

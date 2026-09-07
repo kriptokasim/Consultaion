@@ -738,6 +738,15 @@ async def _execute_round(
                 )
                 envelope = parse_seat_llm_output(text)
                 return seat, envelope, call_usage, None
+            except ParliamentBudgetExceeded:
+                # Budget exhaustion is a run-level terminal condition, not a
+                # seat failure. ParliamentBudgetExceeded subclasses RuntimeError,
+                # so the generic handler below would turn it into a provider
+                # error card, drive success_count under min_required, and end
+                # the run as "minimum_successful_seats_not_met" before the
+                # post-round budget check ever ran - reporting the wrong reason
+                # to the user for a run that simply hit its token ceiling.
+                raise
             except Exception as exc:
                 return seat, None, None, exc
 

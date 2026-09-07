@@ -47,6 +47,10 @@ class AttemptRecord:
     reserved_tokens: int
     result: GatewayModelCallResult | None = None
     raised: bool = False
+    # The model this attempt was reserved for. Needed at settlement to tell a
+    # genuinely free route apart from a paid one that happened to report no
+    # cost; GatewayModelCallResult carries only the resolved upstream slug.
+    model_id: str | None = None
 
 
 @dataclass
@@ -94,7 +98,34 @@ def _result_has_measured_tokens(result: GatewayModelCallResult | None) -> bool:
     )
 
 
-def _result_has_measured_zero_cost(result: GatewayModelCallResult | None) -> bool:
+def _is_free_route(value: str | None) -> bool:
+    """True when the value names a route that always settles at zero cost.
+
+    Accepts both canonical model keys (``openai_fast``), deprecated aliases
+    (``gpt4o-mini``) and resolved provider slugs (``openrouter/openrouter/free``,
+    ``openrouter/openai/gpt-oss-20b:free``). The slug forms matter because
+    free_model_runtime remaps every alias onto an OpenRouter free route at
+    startup, and those slugs are not in MODEL_MAP at all.
+    """
+    if not value:
+        return False
+    candidate = str(value).strip()
+    if not candidate:
+        return False
+    if candidate.endswith(":free") or candidate.endswith("/free"):
+        return True
+    try:
+        from model_gateway.model_map import is_free_model, resolve_model_key
+
+        return is_free_model(resolve_model_key(candidate))
+    except Exception:
+        return False
+
+
+def _result_has_measured_zero_cost(
+    result: GatewayModelCallResult | None,
+    model_id: str | None = None,
+) -> bool:
     """Return True when a reported cost of exactly 0.0 is a measurement, not a gap.
 
     ``cost_usd`` is a non-optional float, so 0.0 alone cannot distinguish "free"
@@ -107,15 +138,12 @@ def _result_has_measured_zero_cost(result: GatewayModelCallResult | None) -> boo
         return False
     if not _result_has_measured_tokens(result):
         return False
-    model_key = getattr(result, "model_key", None) or getattr(result, "model_id", None)
-    if not model_key:
-        return False
-    try:
-        from model_gateway.model_map import is_free_model
-
-        return is_free_model(str(model_key))
-    except Exception:
-        return False
+    # ``model_used`` is the slug the provider actually served; ``model_id`` is
+    # the key the attempt was reserved under. Either identifying a free route is
+    # enough. (This previously read ``result.model_key`` / ``result.model_id``,
+    # neither of which exists on GatewayModelCallResult, so it always returned
+    # False and every free call was billed at its paid estimate.)
+    return _is_free_route(getattr(result, "model_used", None)) or _is_free_route(model_id)
 
 
 def _record_effective_cost(record: AttemptRecord) -> float:
@@ -124,7 +152,7 @@ def _record_effective_cost(record: AttemptRecord) -> float:
         return 0.0
     if result is not None and float(result.cost_usd or 0.0) > 0:
         return max(float(result.cost_usd or 0.0), 0.0)
-    if _result_has_measured_zero_cost(result):
+    if _result_has_measured_zero_cost(result, record.model_id):
         return 0.0
     return max(float(record.reserved_cost_usd or 0.0), 0.0)
 
@@ -306,6 +334,7 @@ async def begin_adapter_attempt(
         AttemptRecord(
             reserved_cost_usd=max(float(cost or 0.0), 0.0),
             reserved_tokens=max(int(tokens or 0), 0),
+            model_id=model_id,
         )
     )
     index = len(context.records) - 1

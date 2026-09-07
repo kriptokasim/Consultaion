@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends
 from models import (
     Debate,
@@ -17,6 +19,8 @@ from exceptions import NotFoundError, ValidationError
 from routes.common import require_debate_mutation_access
 from sse_backend import BaseSSEBackend
 from utils.async_bridge import run_blocking
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -127,8 +131,21 @@ def _cancel_transaction(debate_id: str, current_user: User) -> tuple[str, int]:
 
         session.commit()
 
-        # Return the run slot in the same synchronous transaction boundary.
-        refund_run_slot(session, owner_id)
+        # The cancellation is durable at this point. refund_run_slot opens its
+        # own transaction (SELECT ... FOR UPDATE on UsageCounter), so it can
+        # fail independently under lock contention - and if it raised, the
+        # request 500'd, the caller never got a response, and the terminal
+        # "cancelled" SSE event was never published, leaving every open
+        # subscriber streaming a run that had already ended. The refund is
+        # idempotent and floor-guarded, so a failure here is logged and the
+        # cancellation still completes.
+        try:
+            refund_run_slot(session, owner_id)
+        except Exception:
+            logger.exception(
+                "Failed to refund the hourly run slot after cancelling debate %s",
+                debate_id,
+            )
 
         return debate_id, int(debate.run_attempt or 1)
 
