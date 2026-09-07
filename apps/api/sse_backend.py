@@ -852,9 +852,34 @@ class RedisChannelBackend:
     ) -> AsyncIterator[dict]:
         # Race-safe replay-to-live handoff for Redis
         # 1. Subscribe to Pub/Sub FIRST (before reading history)
+        # The pubsub connection is dedicated for its whole lifetime -- a subscribed
+        # Redis connection cannot serve anything else -- so it must be released on
+        # EVERY exit path. It previously was not: the try/finally below started at
+        # step 5, leaving steps 1-4 (subscribe, history read, replay, drain)
+        # unguarded. A client that disconnected during replay -- routine on mobile,
+        # where the reconnect ladder fires constantly -- abandoned the generator at
+        # a yield and leaked the connection permanently. On a 30-connection plan a
+        # single debate with a few reconnects exhausts the database.
         pubsub = self._redis.pubsub()
-        await pubsub.subscribe(channel_id)
+        try:
+            await pubsub.subscribe(channel_id)
 
+            async for event in self._consume(pubsub, channel_id, last_sequence):
+                yield event
+        finally:
+            try:
+                await pubsub.unsubscribe(channel_id)
+            except Exception:
+                logger.warning("Failed to unsubscribe pubsub for %s", channel_id, exc_info=True)
+            try:
+                await pubsub.close()
+            except Exception:
+                logger.warning("Failed to close pubsub for %s", channel_id, exc_info=True)
+
+    async def _consume(
+        self, pubsub, channel_id: str, last_sequence: Optional[int] = None
+    ) -> AsyncIterator[dict]:
+        """Body of subscribe(). Split out so one try/finally owns the connection."""
         # 2. Read history and capture high-watermark
         replay_high_watermark = 0
         history_key = f"sse:history:{channel_id}"
@@ -875,8 +900,6 @@ class RedisChannelBackend:
                 yield evt
                 payload = evt.get("payload", {})
                 if payload.get("type") in ("final", "error"):
-                    await pubsub.unsubscribe(channel_id)
-                    await pubsub.close()
                     return
 
         # 4. Drain Pub/Sub messages that arrived during history read (duplicates)
@@ -894,8 +917,6 @@ class RedisChannelBackend:
                     yield envelope
                     payload = envelope.get("payload", {})
                     if payload.get("type") in ("final", "error"):
-                        await pubsub.unsubscribe(channel_id)
-                        await pubsub.close()
                         return
             except Exception:
                 break
@@ -903,49 +924,45 @@ class RedisChannelBackend:
         # 5. Continue live consumption from Pub/Sub
         last_heartbeat = time.time()
         heartbeat_interval = getattr(self, "_heartbeat_interval_seconds", 5.0)
-        try:
-            while True:
-                try:
-                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                    if message:
-                        data = message.get("data")
-                        if data:
-                            envelope = json.loads(data)
-                            yield envelope
+        while True:
+            try:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message:
+                    data = message.get("data")
+                    if data:
+                        envelope = json.loads(data)
+                        yield envelope
+                        last_heartbeat = time.time()
+                        payload = envelope.get("payload", {})
+                        if payload.get("type") in ("final", "error"):
+                            break
+                else:
+                    # Emit heartbeat if no events for heartbeat interval
+                    if heartbeat_interval > 0:
+                        elapsed = time.time() - last_heartbeat
+                        if elapsed >= heartbeat_interval:
+                            heartbeat_envelope = {
+                                "id": f"hb-{channel_id}-{int(time.time())}",
+                                "type": "heartbeat",
+                                "event": "heartbeat",
+                                "session_id": channel_id,
+                                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                "sequence": 0,
+                                "payload": {"type": "heartbeat"},
+                            }
+                            try:
+                                yield heartbeat_envelope
+                            except Exception:
+                                pass
                             last_heartbeat = time.time()
-                            payload = envelope.get("payload", {})
-                            if payload.get("type") in ("final", "error"):
-                                break
-                    else:
-                        # Emit heartbeat if no events for heartbeat interval
-                        if heartbeat_interval > 0:
-                            elapsed = time.time() - last_heartbeat
-                            if elapsed >= heartbeat_interval:
-                                heartbeat_envelope = {
-                                    "id": f"hb-{channel_id}-{int(time.time())}",
-                                    "type": "heartbeat",
-                                    "event": "heartbeat",
-                                    "session_id": channel_id,
-                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                                    "sequence": 0,
-                                    "payload": {"type": "heartbeat"},
-                                }
-                                try:
-                                    yield heartbeat_envelope
-                                except Exception:
-                                    pass
-                                last_heartbeat = time.time()
-                        await asyncio.sleep(0.01)
-                except (redis.ConnectionError, redis.TimeoutError) as e:
-                    logger.warning(f"Redis connection lost in subscribe ({e}), retrying...")
-                    await asyncio.sleep(1)
-                    try:
-                        await pubsub.subscribe(channel_id)
-                    except Exception:
-                        pass
-        finally:
-            await pubsub.unsubscribe(channel_id)
-            await pubsub.close()
+                    await asyncio.sleep(0.01)
+            except (redis.ConnectionError, redis.TimeoutError) as e:
+                logger.warning(f"Redis connection lost in subscribe ({e}), retrying...")
+                await asyncio.sleep(1)
+                try:
+                    await pubsub.subscribe(channel_id)
+                except Exception:
+                    pass
 
     async def replay(self, channel_id: str, after_sequence: Optional[int] = None) -> list[dict]:
         """Return cached events after the given sequence number (public contract)."""

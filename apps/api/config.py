@@ -343,6 +343,23 @@ class AppSettings(BaseSettings):
     # Keep this comfortably below DB_POOL_SIZE + DB_MAX_OVERFLOW.
     LLM_MAX_CONCURRENT_CALLS_PER_RUN: int = 6
 
+    # --- Redis connection budget -------------------------------------------
+    # These are per PROCESS, and every process (api + each Celery worker) opens
+    # its own pools. The managed plan caps CONCURRENT CONNECTIONS PER DATABASE,
+    # not per client: Redis Cloud Essentials 30MB allows 30. The old ceilings
+    # (20 sync + 50 async = 70) let a single process try to open more than twice
+    # the entire plan, so the pool never applied backpressure -- it just kept
+    # opening until Redis refused.
+    # Budget: keep (sync + async) * process_count comfortably under the plan cap.
+    REDIS_MAX_CONNECTIONS_SYNC: int = 5
+    REDIS_MAX_CONNECTIONS_ASYNC: int = 15
+
+    # Embedding model for synthesizer claim similarity. Referenced only via
+    # getattr() before, so it could never be set from the environment -- which
+    # meant a free-only deployment had no way to point it at a free route and
+    # silently kept calling a paid one on every debate.
+    EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
+
     # --- Model gateway backend -------------------------------------------------
     # "direct": call providers in-process with the LiteLLM SDK (historical path).
     # "proxy":  route every call through a LiteLLM proxy service, which owns the

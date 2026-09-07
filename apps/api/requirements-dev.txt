@@ -8,3 +8,4 @@ anyio>=4.7.0,<5.0
 pre-commit==4.6.2
 sqlalchemy2-stubs==0.0.2a38
 types-requests==2.33.0.20260712
+pytest-timeout>=2.3.0

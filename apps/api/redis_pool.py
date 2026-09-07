@@ -86,7 +86,7 @@ def get_sync_redis_client() -> Optional["redis.Redis"]:
             if _sync_pool is None:
                 _sync_pool = redis.ConnectionPool.from_url(
                     settings.REDIS_URL,
-                    max_connections=20,
+                    max_connections=getattr(settings, "REDIS_MAX_CONNECTIONS_SYNC", 5),
                     socket_connect_timeout=5,
                     socket_timeout=5,
                     retry_on_timeout=True,
@@ -147,7 +147,7 @@ def get_async_redis_client() -> Optional["aioredis.Redis"]:
             if _async_pool is None:
                 _async_pool = aioredis.ConnectionPool.from_url(
                     url,
-                    max_connections=50,
+                    max_connections=getattr(settings, "REDIS_MAX_CONNECTIONS_ASYNC", 15),
                     socket_connect_timeout=5,
                     socket_timeout=10,
                     socket_keepalive=True,
