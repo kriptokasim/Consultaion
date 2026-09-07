@@ -11,11 +11,19 @@ python scripts/migrate_database.py --check || {
 
 echo "Schema verification passed. Starting API server..."
 
-# Which upstream hops may set X-Forwarded-For. With "*", uvicorn trusts the
-# leftmost — entirely client-supplied — hop and rewrites scope["client"] to it,
-# which makes every per-IP rate limit (login, register, debate creation, the
-# LLM action guard) trivially bypassable with a spoofed header. Set this to the
-# CIDR of your actual edge proxy, and keep TRUSTED_PROXY_CIDRS in sync with it.
+# Which upstream hops may set X-Forwarded-For.
+#
+# Uvicorn normally walks the XFF chain from the right and takes the first hop
+# that is NOT in this list, which is the correct behaviour. The exception is
+# "*": that trusts everything and takes the leftmost — entirely client-supplied
+# — hop, which makes every per-IP rate limit (login, register, debate creation,
+# the LLM action guard) bypassable with a spoofed header.
+#
+# Leaving it unset is the opposite failure: the default is 127.0.0.1, the
+# platform's ingress connects from a private address, the header is ignored,
+# and every client on the internet resolves to the load balancer's IP and
+# shares one bucket. So it has to be set, and set correctly: the CIDR of your
+# actual edge proxy. Keep TRUSTED_PROXY_CIDRS in sync with it.
 APP_ENVIRONMENT="${ENV:-${APP_ENV:-production}}"
 if [ -z "${FORWARDED_ALLOW_IPS:-}" ]; then
     case "${APP_ENVIRONMENT}" in

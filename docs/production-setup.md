@@ -29,7 +29,13 @@ This guide covers deploying and configuring Consultaion in production using:
    - **Name**: `consultaion-api` (or your preference)
    - **Environment**: Python 3
    - **Build Command**: Use Render's auto-detect or specify if needed
-   - **Start Command**: `gunicorn main:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
+   - **Start Command**: `bash scripts/start_production.sh`
+     (A bare `uvicorn`/`gunicorn` command leaves `--forwarded-allow-ips` at
+     `127.0.0.1`, so the proxy header is ignored and every client resolves to
+     the ingress IP — collapsing all per-IP rate limits into one shared bucket.
+     If you must run gunicorn directly, pass
+     `--forwarded-allow-ips=$FORWARDED_ALLOW_IPS` and note that `gunicorn` is
+     not currently in `apps/api/requirements.txt`.)
    - **Root Directory**: `apps/api`
 
 ### 1.2. Environment Variables

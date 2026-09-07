@@ -804,7 +804,10 @@ async def list_debates(
             if redis_client:
                 import hashlib
                 key_parts = [str(current_user.id), str(status), str(q)]
-                key_str = "".join(key_parts)
+                # Separator matters: joining bare strings makes
+                # ("run", "ningx") and ("running", "x") the same cache key, so
+                # one filter's total is served for another's query.
+                key_str = "\x00".join(key_parts)
                 cache_hash = hashlib.sha256(key_str.encode("utf-8")).hexdigest()
                 cache_key = f"count:debates:{cache_hash}"
                 cached = redis_client.get(cache_key)

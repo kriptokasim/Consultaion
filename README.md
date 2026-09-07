@@ -215,11 +215,21 @@ If you see `auth.invalid_state` — the most common cause is `INTERNAL_SECRET` m
 
 ```
 Build command:  pip install -r apps/api/requirements.txt
-Start command:  cd apps/api && python scripts/migrate_database.py && uvicorn main:app --host 0.0.0.0 --port $PORT
+Start command:  cd apps/api && bash scripts/start_production.sh
 Root directory: apps/api
 ```
 
-**Required Render env vars:** `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `INTERNAL_SECRET`, `OPENROUTER_API_KEY`, `RATE_LIMIT_BACKEND=redis`, `STREAMING_RESPONSES_ENABLED=1`, `ENV=production`, `REQUIRE_REAL_LLM=1`
+Use `scripts/start_production.sh` rather than a bare `uvicorn main:app`. A plain
+invocation leaves `--forwarded-allow-ips` at its default of `127.0.0.1`, and the
+platform's ingress connects from a private address — so `X-Forwarded-For` is
+never applied, every request resolves to the load balancer's IP, and the whole
+internet shares one login / register / debate-create rate-limit bucket.
+
+**Required Render env vars:** `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `INTERNAL_SECRET`, `OPENROUTER_API_KEY`, `RATE_LIMIT_BACKEND=redis`, `STREAMING_RESPONSES_ENABLED=1`, `ENV=production`, `REQUIRE_REAL_LLM=1`, `FORWARDED_ALLOW_IPS`, `TRUSTED_PROXY_CIDRS`
+
+`FORWARDED_ALLOW_IPS` and `TRUSTED_PROXY_CIDRS` must both name your platform's
+ingress range. Leaving them unset breaks per-IP rate limiting; setting
+`FORWARDED_ALLOW_IPS=*` makes it bypassable with a spoofed header.
 
 ### Frontend (Vercel)
 

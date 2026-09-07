@@ -255,7 +255,8 @@ class UserProfileUpdate(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=80)
     avatar_url: Optional[str] = Field(default=None)
     bio: Optional[str] = Field(default=None, max_length=1000)
-    timezone: Optional[str] = Field(default=None)
+    # Bounded like its siblings; previously the only limit was the 10 MB body cap.
+    timezone: Optional[str] = Field(default=None, max_length=64)
     email_summaries_enabled: Optional[bool] = Field(default=None)
 
     @field_validator("avatar_url", mode="before")

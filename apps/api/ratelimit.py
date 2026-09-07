@@ -55,17 +55,38 @@ def _utc_timestamp() -> str:
 
 
 class MemoryRateLimiterBackend(BaseRateLimiterBackend):
+    _SWEEP_INTERVAL_SECONDS = 60.0
+    _SWEEP_MAX_BUCKETS = 50_000
+
     def __init__(self) -> None:
         import threading
         self._lock = threading.Lock()
         self._buckets: dict[str, dict[str, float]] = {}
+        # Buckets were only ever overwritten in place, never removed, so the dict
+        # grew with the number of distinct keys seen for the life of the process.
+        # This is reachable in production: RedisRateLimiterBackend falls back to
+        # this backend on any Redis exception, so a single blip seeds it
+        # permanently. Sweep expired entries under the existing lock.
+        self._sweep_after = time.time() + self._SWEEP_INTERVAL_SECONDS
         self._recent: deque[dict] = deque(maxlen=RECENT_EVENTS_MAX)
         self._sse_leases: dict[str, dict[str, float]] = {}
+
+    def _sweep_expired_locked(self, now: float) -> None:
+        """Drop expired buckets. Caller must hold self._lock."""
+        if now < self._sweep_after and len(self._buckets) < self._SWEEP_MAX_BUCKETS:
+            return
+        self._sweep_after = now + self._SWEEP_INTERVAL_SECONDS
+        expired = [k for k, b in self._buckets.items() if b.get("reset", 0) < now]
+        for k in expired:
+            self._buckets.pop(k, None)
+        if expired:
+            logger.debug("Swept %d expired in-memory rate-limit buckets", len(expired))
 
     def allow(self, key: str, window_seconds: int, max_requests: int) -> tuple[bool, int | None]:
         """Check if request is allowed and return retry_after_seconds if not."""
         now = time.time()
         with self._lock:
+            self._sweep_expired_locked(now)
             bucket = self._buckets.get(key)
             if not bucket or bucket.get("reset", 0) < now:
                 bucket = {"count": 0, "reset": now + window_seconds}
@@ -84,6 +105,7 @@ class MemoryRateLimiterBackend(BaseRateLimiterBackend):
         """
         now = time.time()
         with self._lock:
+            self._sweep_expired_locked(now)
             bucket = self._buckets.get(key)
             if not bucket or bucket.get("reset", 0) < now:
                 bucket = {"count": 0.0, "reset": now + window_seconds}
@@ -160,9 +182,14 @@ class RedisRateLimiterBackend(BaseRateLimiterBackend):
         """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
         redis_key = f"rl:ip:{key}:{window_seconds}"
         try:
-            current = self._client.incr(redis_key)
-            if current == 1:
-                self._client.expire(redis_key, window_seconds)
+            # INCR and EXPIRE must land together. Setting the TTL only when the
+            # counter happens to read 1 means that if that second call fails —
+            # or the process dies between the two — the key survives with no
+            # expiry and permanently 429s that client with no way to recover.
+            pipe = self._client.pipeline()
+            pipe.incr(redis_key)
+            pipe.expire(redis_key, window_seconds, nx=True)
+            current, _ = pipe.execute()
             allowed = int(current) <= max_requests
             retry_after = None
             if not allowed:

@@ -65,8 +65,15 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit, options?:
 
 export async function getMe() {
   const res = await authFetch("/me");
-  if (!res.ok) {
+  // Only an auth failure means "signed out". Returning null for every non-OK
+  // status made a 500/502/503 look like an expired session, so during an API
+  // incident every signed-in user was redirected to /login — where logging in
+  // also failed. Let a server error surface as an error instead.
+  if (res.status === 401 || res.status === 403) {
     return null;
+  }
+  if (!res.ok) {
+    throw new Error(`Could not load your account (HTTP ${res.status})`);
   }
   return res.json();
 }
@@ -84,10 +91,8 @@ export async function logout() {
     method: "POST",
     path: "/auth/logout",
   });
-  // Clear the frontend bootstrap cookie set during Google OAuth redirect
-  if (typeof window !== "undefined") {
-    document.cookie = "consultaion_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=lax";
-  }
+  // The session cookie is HttpOnly on every path that sets it, so document.cookie
+  // could never clear it. POST /auth/logout above is what actually clears it.
 }
 
 export async function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit, options?: RequestOptions) {
