@@ -261,6 +261,13 @@ async def lifespan(app: FastAPI):
             if settings.APP_ENV in ("production", "staging"):
                 raise
 
+    # Fail closed if MODEL_GATEWAY_BACKEND=proxy is selected without the
+    # LiteLLM proxy URL/key it requires. A no-op when the backend is "direct"
+    # (the default); discovering a half-configured proxy backend here beats
+    # discovering it on the first user debate, in any environment.
+    from model_gateway.proxy_transport import validate_proxy_configuration
+    validate_proxy_configuration()
+
     # OT-3: Log resolved safe configuration at startup
     logger.info(
         "Startup config: env=%s deploy_target=%s sse_backend=%s rate_limit_backend=%s "
