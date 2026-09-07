@@ -124,3 +124,58 @@ def test_a_zero_cost_proxy_call_is_not_treated_as_a_free_route():
     free = result(0.0)
     free.model_used = "openrouter/openrouter/free"
     assert _result_has_measured_zero_cost(free, "router-smart") is True
+
+
+def test_interrupted_proxy_stream_estimates_against_the_real_slug():
+    """The estimator must never see a deployment name.
+
+    _estimate_stream_usage() calls token_counter() and cost_per_token(), both of
+    which raise on "openai/seat_anthropic". The whole body is wrapped in a bare
+    except, so the failure was silent: an interrupted proxy stream recorded zero
+    tokens and zero cost for work that had actually been done. Pricing off the
+    pre-override slug keeps the estimate real.
+    """
+    from model_gateway.adapters import _estimate_stream_usage
+
+    messages = [{"role": "user", "content": "hello " * 200}]
+
+    real = _estimate_stream_usage(
+        model="openai/gpt-4o-mini", messages=messages, content="a reply " * 50
+    )
+    deployment = _estimate_stream_usage(
+        model="openai/seat_openai_fast", messages=messages, content="a reply " * 50
+    )
+
+    prompt_tokens, completion_tokens, total_tokens, cost = real
+    assert prompt_tokens > 0 and completion_tokens > 0 and total_tokens > 0
+    assert cost > 0
+
+    # The failure mode being guarded against: everything silently zero.
+    assert deployment == (0, 0, 0, 0.0)
+
+
+def test_every_estimate_call_prices_off_the_real_slug():
+    """Structural guard over the source, since the methods are decorated.
+
+    ``target_model`` is still correct for the acompletion call -- that one *must*
+    carry the deployment name -- so this checks only the estimator call sites.
+    """
+    import re
+    from pathlib import Path
+
+    import model_gateway.adapters as adapters_module
+
+    src = Path(adapters_module.__file__).read_text()
+
+    # Capture is before the override, so it holds the pre-proxy slug.
+    assert "pricing_model = target_model" in src
+    assert src.index("pricing_model = target_model") < src.index("proxy_overrides(")
+
+    calls = re.findall(r"_estimate_stream_usage\(\s*\n\s*model=(\w+),", src)
+    assert calls, "no estimate call sites found -- has the helper been renamed?"
+
+    # DirectProviderAdapter's three sites must use pricing_model. OpenRouterAdapter
+    # has no proxy override, so target_model is already the real slug there.
+    assert calls.count("pricing_model") == 3, (
+        f"expected 3 estimate calls priced off pricing_model, got {calls}"
+    )

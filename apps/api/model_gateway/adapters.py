@@ -220,6 +220,13 @@ class DirectProviderAdapter(BaseAdapter):
             except Exception:
                 pass
 
+        # Keep the real provider slug for pricing. In proxy mode target_model is
+        # replaced below by a deployment name ("openai/seat_anthropic"), which
+        # litellm cannot price or tokenize -- cost_per_token() raises on it, so
+        # an interrupted stream fell into the estimator's except branch and
+        # recorded zero tokens and zero cost for work that was actually done.
+        pricing_model = target_model
+
         start_ts = time.monotonic()
         accumulated = ""
         seq = 0
@@ -323,7 +330,7 @@ class DirectProviderAdapter(BaseAdapter):
             err_code = str(e) if str(e) in ("stream_first_token_timeout", "stream_active_stall", "stream_total_timeout") else "stream_total_timeout"
             if total_tokens <= 0:
                 prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
-                    model=target_model,
+                    model=pricing_model,
                     messages=messages,
                     content=accumulated,
                 )
@@ -350,7 +357,7 @@ class DirectProviderAdapter(BaseAdapter):
             failure = classify_provider_exception(e)
             if total_tokens <= 0:
                 prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
-                    model=target_model,
+                    model=pricing_model,
                     messages=messages,
                     content=accumulated,
                 )
@@ -376,7 +383,7 @@ class DirectProviderAdapter(BaseAdapter):
         latency_ms = (time.monotonic() - start_ts) * 1000
         if total_tokens <= 0:
             prompt_tokens, completion_tokens, total_tokens, estimated_cost = _estimate_stream_usage(
-                model=target_model,
+                model=pricing_model,
                 messages=messages,
                 content=accumulated,
             )
