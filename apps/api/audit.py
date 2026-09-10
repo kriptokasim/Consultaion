@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from database import session_scope
 from models import AuditLog, utcnow
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
+
+logger = logging.getLogger(__name__)
 
 # Public-share acquisition attribution is token-based. Retaining visitor IP on
 # the generic public-view audit event no longer serves product attribution and
@@ -87,6 +90,10 @@ def record_audit(
 
         # Snapshot caller-owned ORM state before adding anything. If domain ORM
         # changes are pending, keep audit evidence in the caller transaction.
+        # NOTE: these collections are emptied by any autoflush the caller has
+        # already triggered (an expired-attribute refresh is enough), so they
+        # under-report pending work and this branch can be skipped for a caller
+        # that does hold an uncommitted write. See consultaion-status.md.
         has_pending_orm_changes = bool(session.new or session.dirty or session.deleted)
         if has_pending_orm_changes:
             session.add(
@@ -114,6 +121,15 @@ def record_audit(
                     meta=final_meta,
                 )
             )
-    except SQLAlchemyError:
-        # Audit failures must not commit, rollback, or poison caller-owned work.
+    except SQLAlchemyError as exc:
+        # Audit failures must not commit, rollback, or poison caller-owned work,
+        # but they must never be silent: a dropped row is missing security
+        # evidence, not a no-op.
+        logger.error(
+            "Failed to record audit event %s (target=%s/%s): %s",
+            action,
+            target_type,
+            target_id,
+            exc,
+        )
         return

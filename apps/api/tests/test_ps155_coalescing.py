@@ -15,6 +15,22 @@ from sse_backend import (
 )
 
 
+def _install_redis_lock_double(redis_mock):
+    """Give a mocked Redis client a working ``lock()``.
+
+    ``redis.asyncio.Redis.lock()`` is a *synchronous* method returning a Lock
+    object that is used as an async context manager. On a bare ``AsyncMock``
+    the call returns a coroutine instead, and ``async with`` raises
+    ``TypeError: 'coroutine' object does not support the asynchronous context
+    manager protocol`` (see ``RedisChannelBackend._publish_single``).
+    """
+    lock = MagicMock()
+    lock.__aenter__ = AsyncMock(return_value=lock)
+    lock.__aexit__ = AsyncMock(return_value=False)
+    redis_mock.lock = MagicMock(return_value=lock)
+    return lock
+
+
 def _make_delta(response_id: str, text: str, accumulated_chars: int = 0, seq: int = 1) -> dict:
     return {
         "type": "model_response_delta",
@@ -166,6 +182,7 @@ async def test_redis_backend_coalesces_deltas_before_lifecycle_event():
     """Production Redis transport must match memory coalescing semantics."""
     backend = RedisChannelBackend.__new__(RedisChannelBackend)
     backend._redis = AsyncMock()
+    _install_redis_lock_double(backend._redis)
     backend._redis.incr.side_effect = [1, 2, 3]
     history_pipeline = MagicMock()
     history_pipeline.rpush.return_value = history_pipeline
@@ -196,6 +213,7 @@ async def test_redis_backend_pipelines_history_maintenance():
     """History append, expiry, and trim should use one Redis round trip."""
     backend = RedisChannelBackend.__new__(RedisChannelBackend)
     backend._redis = AsyncMock()
+    _install_redis_lock_double(backend._redis)
     backend._redis.incr.return_value = 1
     history_pipeline = MagicMock()
     history_pipeline.rpush.return_value = history_pipeline
@@ -221,6 +239,7 @@ async def test_redis_backend_pipelines_history_maintenance():
 async def test_redis_sequence_allocation_failure_is_fail_closed():
     backend = RedisChannelBackend.__new__(RedisChannelBackend)
     backend._redis = AsyncMock()
+    _install_redis_lock_double(backend._redis)
     backend._redis.incr.side_effect = RuntimeError("redis unavailable")
     backend._ttl_seconds = 60
     backend._max_queue_size = 100
