@@ -1,0 +1,111 @@
+# Labelled claim-verification cases.
+#
+# Every case is a claim that was actually made during the 2026-09-07 working
+# session, by Claude or by ChatGPT, together with the answer that turned out to
+# be true. Two of them are claims a model asserted confidently and wrongly, which
+# is what makes this a test rather than a demo.
+#
+# `expect` is the verdict a working verifier must reach.
+# `oracle` records which source settles it — the point of the eval is as much
+# "which oracles do we actually need" as "does verification work".
+#
+# Cases whose oracle is `web` or `execution` are expected to come back
+# UNCHECKABLE from the read-only repo tools. That is the correct answer for a
+# repo-only verifier, and the score report separates it from a wrong answer.
+
+cases:
+  - id: arena-seats-distinct
+    claim: "All arena seats resolve to a single free OpenRouter model."
+    asserted_by: claude
+    expect: REFUTED
+    oracle: repo
+    commit: 31f198b
+    note: >
+      Asserted confidently after reading DEFAULT_POOLS and the free-model runtime
+      remap, without reading the arena roster. SOTA_ARENA_MODELS is the default
+      and holds six distinct models; the free roster is the degraded path.
+    check:
+      tool: grep
+      pattern: "SOTA_ARENA_MODELS.*=.*\\["
+      glob: "apps/api/parliament/model_registry.py"
+      refuted_if_matches: "sota-gpt.*sota-claude|sota-claude.*sota-gemini"
+
+  - id: analytics-foreach-still-broken
+    claim: "The analytics forEach TypeError is still unfixed in production."
+    asserted_by: claude
+    expect: REFUTED
+    oracle: repo
+    commit: null
+    note: >
+      Sentry showed the issue open, which reads as "still broken". The guard had
+      already landed; only git history distinguishes "fixed" from "not seen
+      lately". This is the case read_file alone cannot settle.
+    check:
+      tool: git_log_search
+      needle: "if (!Array.isArray(scores)) return;"
+      path: "apps/web/app/(app)/analytics/page.tsx"
+      refuted_if_matches: "\\w{7}"
+
+  - id: pubsub-released-on-all-paths
+    claim: "sse_backend.subscribe() releases its pubsub connection on every exit path."
+    asserted_by: implied-by-design
+    expect: REFUTED
+    oracle: repo
+    commit: 13dddf3
+    note: >
+      The try/finally began at step 5, leaving subscribe/history/replay/drain
+      unguarded. Readable directly, and the reason one debate exhausted a
+      30-connection Redis plan.
+    check:
+      tool: read_file
+      path: "apps/api/sse_backend.py"
+      pattern: "pubsub = self\\._redis\\.pubsub\\(\\)|^        try:|^        finally:"
+      refuted_if_absent: "pubsub = self\\._redis\\.pubsub\\(\\)\\n        try:"
+
+  - id: zero-cost-read-as-free-route
+    claim: "A zero-cost proxy result is misread as a free route, so the monthly cap stops binding."
+    asserted_by: claude
+    expect: REFUTED
+    oracle: repo
+    commit: 13dddf3
+    note: >
+      Claude's own first framing of the cost-passthrough bug, and an overstatement.
+      _result_has_measured_zero_cost only returns True when the slug matches a
+      free route, which a deployment name never does. The bug was real; this
+      description of its blast radius was not.
+    check:
+      tool: read_file
+      path: "apps/api/model_gateway/attempt_tracker.py"
+      pattern: "_is_free_route\\(getattr\\(result|return _is_free_route"
+      refuted_if_matches: "_is_free_route"
+
+  - id: openrouter-has-no-enterprise
+    claim: "OpenRouter offers no enterprise or committed-spend option."
+    asserted_by: chatgpt
+    expect: REFUTED
+    oracle: web
+    commit: null
+    note: >
+      Stated in a review of the gateway work. OpenRouter's own pricing page lists
+      an Enterprise tier with volume commitments and invoicing. One fetch settles
+      it; no amount of debate does. Expected UNCHECKABLE for repo-only tools.
+    check:
+      tool: web
+      url: "https://openrouter.ai/pricing"
+      refuted_if_matches: "[Ee]nterprise"
+
+  - id: sdk-can-price-deployment-name
+    claim: "The LiteLLM SDK can price a proxy deployment name such as openai/seat_openai_fast."
+    asserted_by: implied-by-design
+    expect: REFUTED
+    oracle: execution
+    commit: null
+    note: >
+      cost_per_token() raises "This model isn't mapped yet" for a deployment name.
+      Only running it settles this — reading the code suggests nothing is wrong.
+      Expected UNCHECKABLE for read-only tools, and the clearest argument for a
+      later execution tier.
+    check:
+      tool: execution
+      snippet: "litellm.cost_per_token(model='openai/seat_openai_fast', prompt_tokens=1, completion_tokens=1)"
+      refuted_if_raises: true
