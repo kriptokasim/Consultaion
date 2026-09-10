@@ -360,6 +360,12 @@ class AppSettings(BaseSettings):
     # silently kept calling a paid one on every debate.
     EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
 
+    # Claim verification (evidence layer). Off until a verifier is wired: with
+    # this false every claim reports UNCHECKABLE and synthesis is unchanged.
+    # Turning it on without an implementation logs loudly rather than quietly
+    # reporting "checked, found nothing".
+    CLAIM_VERIFICATION_ENABLED: bool = False
+
     # --- Model gateway backend -------------------------------------------------
     # "direct": call providers in-process with the LiteLLM SDK (historical path).
     # "proxy":  route every call through a LiteLLM proxy service, which owns the

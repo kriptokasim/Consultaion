@@ -23,6 +23,11 @@ from config import settings
 from reporting.claim_contradiction import classify_contradiction
 from reporting.claim_quality import filter_claims
 from reporting.claim_similarity import compute_semantic_similarity, get_claim_embeddings
+from reporting.claim_verdicts import (
+    partition_by_verdict,
+    verdict_summary,
+    verify_claims,
+)
 from reporting.model_evaluator import evaluate_models_blind
 from reporting.report_integrity import validate_report_integrity
 from reporting.synthesis_schema import DecisionReport, QualityMeta
@@ -155,6 +160,8 @@ async def run_semantic_claims_analysis(
             "semantic_analysis_mode": "fallback_string",
             "embedding_success": False,
             "contradiction_pairs_classified": 0,
+            "verification": verdict_summary([]),
+            "refuted_claims": [],
         }
 
     # Extract claims in parallel
@@ -180,6 +187,20 @@ async def run_semantic_claims_analysis(
                 break
         if len(all_claims) >= _int_setting("SYNTHESIS_MAX_TOTAL_CLAIMS", 60):
             break
+
+    # Attach a verdict to every claim, then drop anything shown to be false
+    # before it can reach consensus grouping. Ships as a no-op: with no verifier
+    # wired every claim is UNCHECKABLE, so `all_claims` is unchanged and every
+    # number below is what it was. See reporting/claim_verdicts.py.
+    verified_claims = await verify_claims(all_claims, debate_id=debate_id)
+    all_claims, refuted_claims = partition_by_verdict(verified_claims)
+    verification = verdict_summary(verified_claims)
+    if refuted_claims:
+        logger.info(
+            "Dropped %d refuted claim(s) before synthesis for debate %s",
+            len(refuted_claims),
+            debate_id or "-",
+        )
 
     # Fetch embeddings in batch for performance
     claim_texts = [item["claim"] for item in all_claims]
@@ -336,6 +357,8 @@ async def run_semantic_claims_analysis(
         "semantic_analysis_mode": semantic_analysis_mode,
         "embedding_success": embedding_success,
         "contradiction_pairs_classified": len(limited_pairs),
+        "verification": verification,
+        "refuted_claims": refuted_claims,
     }
 
 
