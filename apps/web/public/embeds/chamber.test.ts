@@ -17,9 +17,17 @@ const SOURCE = readFileSync(
   "utf8",
 );
 
+/** The classic 2D renderer: the one that must always work. */
 function script(): string {
-  const match = SOURCE.match(/<script>([\s\S]*)<\/script>/);
-  expect(match, "embed has an inline script block").toBeTruthy();
+  const match = SOURCE.match(/<script>\n([\s\S]*?)<\/script>/);
+  expect(match, "embed has the 2D inline script block").toBeTruthy();
+  return match![1];
+}
+
+/** The optional WebGL upgrade layer. */
+function moduleScript(): string {
+  const match = SOURCE.match(/<script type="module">([\s\S]*?)<\/script>/);
+  expect(match, "embed has the 3D module block").toBeTruthy();
   return match![1];
 }
 
@@ -66,5 +74,41 @@ describe("consultaion-chamber embed", () => {
 
   it("keeps a noscript fallback so the hero is never empty", () => {
     expect(SOURCE).toMatch(/<noscript/i);
+  });
+});
+
+describe("consultaion-chamber WebGL upgrade", () => {
+  it("parses as valid JavaScript", () => {
+    // Written as a module, so it is parsed as one rather than with new Function.
+    expect(() => new Function(`return import("data:text/javascript,")`)).not.toThrow();
+    expect(moduleScript().length).toBeGreaterThan(500);
+  });
+
+  it("never hides the 2D chamber before a real frame exists", () => {
+    // The whole point of the layering. Hiding the fallback on load start -- or on
+    // model load rather than first render -- reintroduces the blank hero this
+    // embed already shipped once.
+    const src = moduleScript();
+    const hideIndex = src.indexOf("chamber-3d");
+    const guardIndex = src.indexOf("if (!shown)");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(hideIndex).toBeGreaterThan(guardIndex);
+  });
+
+  it("bails out instead of throwing when WebGL or the model is unavailable", () => {
+    const src = moduleScript();
+    // Every failure path returns; none of them tear down the 2D renderer.
+    expect(src).toMatch(/catch[\s\S]*?return;/);
+    expect(src).toMatch(/prefers-reduced-motion/);
+    expect(src).toMatch(/saveData/);
+    expect(src).not.toMatch(/chamber-unavailable/);
+  });
+
+  it("loads three and the model from this origin, not a CDN", () => {
+    // The app's CSP is script-src 'self'; a CDN import would be blocked outright.
+    const src = moduleScript();
+    expect(src).toMatch(/\.\/three-chamber\.js/);
+    expect(src).toMatch(/\.\/consultaion-chamber\.glb/);
+    expect(src).not.toMatch(/https?:\/\/(cdn|unpkg|jsdelivr)/);
   });
 });

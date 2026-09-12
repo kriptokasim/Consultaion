@@ -17,12 +17,22 @@
      the failure is completely silent. */
   .fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;font-size:12px;line-height:1.7;letter-spacing:.04em;color:#6b5a3d;background:#f3f2f2}
   @media (prefers-color-scheme:dark){.fallback{color:#d8c39d;background:#141414}}
+  /* The WebGL layer sits over the 2D chamber and is invisible until its first
+     frame has actually rendered. The 2D version therefore paints immediately and
+     remains the fallback: no loading spinner, and never an empty hero, whatever
+     happens to the model download or the GPU. */
+  #c3d{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:0;
+       transition:opacity .6s ease;pointer-events:none}
+  #c3d.ready{opacity:1;pointer-events:auto}
+  .chamber-3d #c{opacity:0;transition:opacity .6s ease}
+  .chamber-unavailable #c3d{display:none}
   .chamber-unavailable .fallback{display:flex}
   .chamber-unavailable canvas,.chamber-unavailable .hint{display:none}
 </style>
 </head>
 <body>
 <canvas id="c" aria-label="Interactive 3D visualization of the Consultaion Parliament Chamber"></canvas>
+<canvas id="c3d" aria-hidden="true"></canvas>
 <div class="hint">Drag to explore · Wheel to zoom</div>
 <div class="fallback" role="img" aria-label="The Consultaion parliament chamber: a crescent of seats around an open floor.">The chamber &mdash; a crescent of seats around an open floor,<br>where every model argues its case in the round.</div>
 <noscript><style>.fallback{display:flex}canvas,.hint{display:none}</style></noscript>
@@ -241,6 +251,159 @@ try {
   document.documentElement.className += ' chamber-unavailable';
   if (window.console && console.warn) console.warn('Chamber visual unavailable:', err);
 }
+</script>
+
+<script type="module">
+/* Progressive upgrade to the real geometry.
+ *
+ * Everything here is optional by construction. The 2D chamber below has already
+ * painted by the time this runs, and if any step fails -- no WebGL, a blocked or
+ * slow download, a driver crash -- this script simply stops and the 2D version
+ * stays on screen. That is deliberate: this embed shipped broken once and left
+ * the hero blank for every desktop visitor, so the working renderer is never
+ * removed, only covered.
+ *
+ * three.js is served from this origin because the app's CSP is script-src 'self';
+ * a CDN would be blocked. Budget over the wire, gzipped: ~151 KB for three,
+ * ~308 KB for the model (UVs stripped -- the model carries no textures, so every
+ * one of them was downloaded and uploaded to the GPU to be ignored).
+ */
+(async () => {
+  const canvas = document.getElementById('c3d');
+  if (!canvas) return;
+
+  // Respect the user before spending their bandwidth or battery.
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const saveData = navigator.connection && navigator.connection.saveData;
+  const slowLink = navigator.connection && /^(slow-)?2g$/.test(navigator.connection.effectiveType || '');
+  if (reduced || saveData || slowLink) return;
+
+  // Probe WebGL before downloading 450 KB we would not be able to use.
+  try {
+    const probe = document.createElement('canvas').getContext('webgl2')
+      || document.createElement('canvas').getContext('webgl');
+    if (!probe) return;
+  } catch { return; }
+
+  let T, GLTFLoader;
+  try {
+    ({ GLTFLoader, ...T } = await import('./three-chamber.js'));
+  } catch (err) {
+    console.warn('chamber: three.js unavailable, keeping the 2D chamber', err);
+    return;
+  }
+
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.toneMapping = T.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = isDark ? 0.92 : 1.12;
+  renderer.outputColorSpace = T.SRGBColorSpace;
+
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(34, 1, 0.01, 100);
+
+  // Same warm brass-and-walnut reading as the 2D palette, so the swap is a
+  // sharpening rather than a different picture.
+  scene.add(new T.HemisphereLight(isDark ? 0x4a4335 : 0xf3efe6, isDark ? 0x111111 : 0xcfc7b8, isDark ? 1.5 : 2.1));
+  const key = new T.DirectionalLight(0xffe7c0, isDark ? 2.1 : 2.6);
+  key.position.set(2.2, 3.4, 1.8);
+  scene.add(key);
+  const rim = new T.DirectionalLight(0xc79a4c, isDark ? 1.1 : 0.8);
+  rim.position.set(-2.4, 1.4, -2.0);
+  scene.add(rim);
+
+  let model;
+  try {
+    const gltf = await new GLTFLoader().loadAsync('./consultaion-chamber.glb');
+    model = gltf.scene;
+  } catch (err) {
+    console.warn('chamber: model unavailable, keeping the 2D chamber', err);
+    renderer.dispose();
+    return;
+  }
+
+  // Normalise whatever the exporter produced into a unit-ish subject, so the
+  // framing does not depend on the model's authored scale or origin.
+  const box = new T.Box3().setFromObject(model);
+  const size = box.getSize(new T.Vector3());
+  const centre = box.getCenter(new T.Vector3());
+  const span = Math.max(size.x, size.y, size.z) || 1;
+  model.position.sub(centre);
+  const pivot = new T.Group();
+  pivot.add(model);
+  pivot.scale.setScalar(1 / span);
+  scene.add(pivot);
+
+  // Start where the 2D chamber is sitting, so the cross-fade is continuous.
+  let yaw = 0.58, pitch = 0.78, dist = 2.55;
+  let dragging = false, lastX = 0, lastY = 0, auto = true, raf = 0;
+
+  function place() {
+    const p = Math.max(0.18, Math.min(1.35, pitch));
+    camera.position.set(
+      Math.sin(yaw) * Math.cos(p) * dist,
+      Math.sin(p) * dist,
+      Math.cos(yaw) * Math.cos(p) * dist,
+    );
+    camera.lookAt(0, 0, 0);
+  }
+
+  function resize() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  let shown = false;
+  function frame() {
+    raf = requestAnimationFrame(frame);
+    if (auto) yaw += 0.0016;
+    place();
+    renderer.render(scene, camera);
+    if (!shown) {
+      // Only now is it safe to hide the 2D chamber: a real frame exists.
+      shown = true;
+      canvas.classList.add('ready');
+      canvas.removeAttribute('aria-hidden');
+      canvas.setAttribute('aria-label', 'Interactive 3D visualization of the Consultaion Parliament Chamber');
+      document.documentElement.classList.add('chamber-3d');
+      const hint = document.querySelector('.hint');
+      if (hint) hint.textContent = 'Drag to explore \u00b7 Wheel to zoom';
+    }
+  }
+
+  addEventListener('resize', resize);
+  resize();
+  frame();
+
+  // Pause when off-screen or the tab is hidden; a hero animation has no business
+  // holding the GPU awake while nobody is looking at it.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
+    else if (!raf) frame();
+  });
+
+  canvas.addEventListener('pointerdown', e => {
+    dragging = true; auto = false; lastX = e.clientX; lastY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    yaw -= (e.clientX - lastX) * 0.008;
+    pitch += (e.clientY - lastY) * 0.006;
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  const stop = () => { dragging = false; };
+  canvas.addEventListener('pointerup', stop);
+  canvas.addEventListener('pointercancel', stop);
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault(); auto = false;
+    dist = Math.max(1.5, Math.min(4.5, dist * (1 + e.deltaY * 0.0007)));
+  }, { passive: false });
+})();
 </script>
 </body>
 </html>
