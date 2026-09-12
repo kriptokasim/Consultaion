@@ -183,6 +183,51 @@ async def provider_health() -> dict[str, Any]:
     return {"providers": providers}
 
 
+
+def _provider_status(provider: str, configured: bool) -> dict[str, Any]:
+    """Real health for one provider, not merely "an env var is set".
+
+    This endpoint used to report `operational` whenever a key string was
+    non-empty. It never called the provider, never checked credit, and never
+    looked at the circuit breaker -- so on 2026-09-07, with OpenAI returning
+    credit_balance_exhausted, Anthropic insufficient_balance and Gemini
+    invalid_credentials (all three tripping the global circuit), the public
+    status page showed "All Systems Operational". An invalid key is still a
+    non-empty string.
+
+    get_provider_circuit_status() already had the answer and simply was not
+    called from here. The gateway trips that breaker on terminal provider
+    failures, which is exactly the signal a status page exists to surface.
+    """
+    if not configured:
+        return {"configured": False, "status": "not_configured"}
+
+    circuit = get_provider_circuit_status(provider)
+    failures = int(circuit.get("consecutive_failures") or 0)
+
+    if circuit.get("state") == "open":
+        status = "outage"
+    elif failures > 0:
+        # Failing but not yet tripped: visible before it becomes an outage,
+        # which is the window where a status page is actually worth having.
+        status = "degraded"
+    else:
+        status = "operational"
+
+    entry: dict[str, Any] = {
+        "configured": True,
+        "status": status,
+        "consecutive_failures": failures,
+    }
+    if circuit.get("ttl") is not None:
+        entry["retry_in_seconds"] = circuit["ttl"]
+    if not circuit.get("redis_connected", True):
+        # Be honest that the breaker state could not be read, rather than
+        # letting "closed by default" masquerade as a healthy check.
+        entry["health_source"] = "unverified"
+    return entry
+
+
 @router.get("/api/status")
 async def api_status() -> dict[str, Any]:
     """
@@ -194,41 +239,42 @@ async def api_status() -> dict[str, Any]:
     """
     db_ok, _ = await _db_readiness_async()
     sse_ok, _ = await check_sse_readiness()
-    
+
     providers = {
-        "openai": {
-            "configured": bool(settings.OPENAI_API_KEY),
-            "status": "operational" if settings.OPENAI_API_KEY else "not_configured"
-        },
-        "anthropic": {
-            "configured": bool(settings.ANTHROPIC_API_KEY),
-            "status": "operational" if settings.ANTHROPIC_API_KEY else "not_configured"
-        },
-        "gemini": {
-            "configured": bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY),
-            "status": "operational" if (settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY) else "not_configured"
-        },
-        "openrouter": {
-            "configured": bool(settings.OPENROUTER_API_KEY),
-            "status": "operational" if settings.OPENROUTER_API_KEY else "not_configured"
-        }
+        name: _provider_status(name, configured)
+        for name, configured in (
+            ("openai", bool(settings.OPENAI_API_KEY)),
+            ("anthropic", bool(settings.ANTHROPIC_API_KEY)),
+            ("gemini", bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)),
+            ("openrouter", bool(settings.OPENROUTER_API_KEY)),
+        )
     }
-    
-    # If any critical system or SOTA provider is down, we mark as degraded
+
     overall_status = "operational"
     if not db_ok or not sse_ok:
         overall_status = "major_outage"
-    elif not all(p["configured"] for p in providers.values()):
+    elif all(p["status"] in ("outage", "not_configured") for p in providers.values()):
+        # Nothing left to serve a debate with.
+        overall_status = "major_outage"
+    elif any(p["status"] in ("outage", "degraded", "not_configured") for p in providers.values()):
         overall_status = "degraded"
 
-    return {
+    payload = {
         "status": overall_status,
         "database": "operational" if db_ok else "down",
         "sse": "operational" if sse_ok else "down",
         "providers": providers,
         "version": settings.APP_VERSION,
-        "env": settings.ENV
+        "env": settings.ENV,
     }
+
+    # Free-only mode means the SOTA providers are not serving debates at all,
+    # whatever their keys say. Reporting them without this reads as a healthy
+    # frontier roster when nothing frontier is actually reachable.
+    if getattr(settings, "FREE_ONLY_MODE", False):
+        payload["free_only_mode"] = True
+
+    return payload
 
 
 @router.get("/meta/contracts")
