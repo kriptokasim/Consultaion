@@ -40,10 +40,10 @@ try {
   const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
   const C = isDark ? {
     bg:'#0d0d0e', floor:'#262523', walnut:'#6b4426', brass:'#c79a4c', steel:'#3d3b38',
-    pale:'#9e9a92', shadow:'rgba(0,0,0,.34)', line:'rgba(231,214,179,.17)', text:'#d8c39d'
+    pale:'#9e9a92', alabaster:'#e6dfd0', shadow:'rgba(0,0,0,.34)', line:'rgba(231,214,179,.17)', text:'#d8c39d'
   } : {
     bg:'#f3f2f2', floor:'#e9e6e0', walnut:'#6b4426', brass:'#c79a4c', steel:'#35322e',
-    pale:'#b8b2a7', shadow:'rgba(63,50,35,.20)', line:'rgba(75,55,28,.18)', text:'#6b5a3d'
+    pale:'#b8b2a7', alabaster:'#f7f2e8', shadow:'rgba(63,50,35,.20)', line:'rgba(75,55,28,.18)', text:'#6b5a3d'
   };
 
   const meshes=[];
@@ -166,7 +166,16 @@ try {
   }
   function shade(hex,n){
     const m=Math.max(.55,Math.min(1.1,.78+n.y*.30+n.z*.16));
+    // A missing palette key used to reach parseInt as undefined and throw here,
+    // once per affected face per frame -- thousands of exceptions a second, and
+    // a blank canvas, from one typo. Degrade to a visible neutral instead: a
+    // slightly wrong colour is a far better failure than no chamber at all.
+    if(typeof hex!=='string'||hex.charAt(0)!=='#'){
+      if(!shade._warned){shade._warned=true;console.warn('chamber: face has no usable colour, using fallback',hex);}
+      hex=C.pale;
+    }
     const v=parseInt(hex.slice(1),16);
+    if(!Number.isFinite(v))return C.pale;
     let r=(v>>16)&255,g=(v>>8)&255,b=v&255;
     r=Math.min(255,Math.round(r*m));g=Math.min(255,Math.round(g*m));b=Math.min(255,Math.round(b*m));
     return `rgb(${r},${g},${b})`;

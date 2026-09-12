@@ -158,9 +158,22 @@ def _normalize_message(msg: Message, *, is_public: bool) -> Dict[str, Any]:
 
     response_id = _safe_column(msg, "response_id")
 
+    # Message.id is an autoincrement integer primary key, but the wire contract
+    # (apps/web/lib/api/arenaSchemas.ts) declares every id as a string, in line
+    # with debate_id and response_id. Emitting the raw int failed Zod validation
+    # on every arena response -- "items.0.id: Expected string, received number" --
+    # so the /responses fetch was rejected wholesale and the workspace fell back
+    # to a pending state until it gave up. Coerce here rather than widening the
+    # schema: ids are identifiers, not numbers, and a JSON integer id is a
+    # precision hazard in JS besides.
+    msg_id_str = str(msg_id) if msg_id is not None else None
+    resolved_response_id = (
+        response_id or _getattr_safely(meta, "response_id") or msg_id_str
+    )
+
     item: Dict[str, Any] = {
-        "id": msg_id,
-        "response_id": response_id or _getattr_safely(meta, "response_id") or msg_id,
+        "id": msg_id_str,
+        "response_id": str(resolved_response_id) if resolved_response_id is not None else None,
         "debate_id": debate_id,
         "response_type": response_type,
         "role": role,
