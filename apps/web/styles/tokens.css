@@ -1,0 +1,52 @@
+/* Consultaion New UX — semantic token layer from the Broadsheet handoff. */
+:root {
+  --paper: #f3f2f2;
+  --ink-900: #201e1d;
+  --spot-cyan: #0088b0;
+  --spot-cyan-deep: #006a8a;
+  --spot-cyan-lift: #5cc4e6;
+  --spot-magenta: #d6006c;
+  --spot-magenta-deep: #a80055;
+  --spot-magenta-lift: #ff6fa8;
+
+  --surface: var(--paper);
+  --surface-raised: #ffffff;
+  --ink: var(--ink-900);
+  --ink-soft: color-mix(in srgb, var(--ink-900) 78%, transparent);
+  --ink-faint: color-mix(in srgb, var(--ink-900) 62%, transparent);
+  --rule: color-mix(in srgb, var(--ink-900) 18%, transparent);
+  --rule-strong: var(--ink-900);
+  --spot: var(--spot-cyan);
+  --spot-text: var(--spot-cyan-deep);
+  --alarm: var(--spot-magenta);
+  --alarm-text: var(--spot-magenta-deep);
+  --on-spot: var(--paper);
+
+  --font-heading: "Source Serif 4", Georgia, serif;
+  --font-body: "Source Serif 4", Georgia, serif;
+  --heading-weight: 600;
+
+  --text-meta: 12px;
+  --text-sm: 13px;
+  --text-body: 15.5px;
+  --text-lede: 17px;
+  --text-h3: 24px;
+  --text-h2: 32px;
+  --text-h1: 42px;
+  --text-display: 108px;
+}
+
+[data-surface="ink"] {
+  --surface: color-mix(in srgb, #2d2b2b 56%, #000);
+  --surface-raised: color-mix(in srgb, #2d2b2b 72%, #000);
+  --ink: #f0eeec;
+  --ink-soft: color-mix(in srgb, #f0eeec 78%, transparent);
+  --ink-faint: color-mix(in srgb, #f0eeec 62%, transparent);
+  --rule: color-mix(in srgb, #f0eeec 22%, transparent);
+  --rule-strong: #f0eeec;
+  --spot: var(--spot-cyan-lift);
+  --spot-text: var(--spot-cyan-lift);
+  --alarm: var(--spot-magenta-lift);
+  --alarm-text: var(--spot-magenta-lift);
+  --on-spot: color-mix(in srgb, #2d2b2b 56%, #000);
+}
