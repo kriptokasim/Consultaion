@@ -7,7 +7,22 @@ import { useI18n } from "@/lib/i18n/client";
 
 function NewWorkspacePage() {
   const searchParams = useSearchParams();
-  return <RunWorkspaceNew initialRunId={searchParams.get("run")} />;
+  const run = searchParams.get("run");
+  const oracle = searchParams.get("oracle");
+  const redteam = searchParams.get("redteam");
+
+  return (
+    <RunWorkspaceNew
+      initialRunId={run}
+      initialAuxRun={
+        oracle
+          ? { kind: "oracle", id: oracle }
+          : redteam
+            ? { kind: "redteam", id: redteam }
+            : null
+      }
+    />
+  );
 }
 
 function NewPageFallback() {
