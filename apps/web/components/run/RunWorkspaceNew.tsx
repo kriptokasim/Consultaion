@@ -78,6 +78,7 @@ export default function RunWorkspaceNew({
   const [error, setError] = useState<string | null>(null);
 
   const mode = getMode(modeId);
+  const activeModeNameKey = auxRun?.kind === "oracle" ? "mode.oracle.name" : auxRun?.kind === "redteam" ? "mode.redteam.name" : mode.nameKey;
   const workspace = useRunWorkspace(runId);
 
   // R9: the real model registry (GET /models), not a hardcoded list.
@@ -285,7 +286,7 @@ export default function RunWorkspaceNew({
         <header className="new-ux__header">
           <div className="new-ux__brand">Consultaion</div>
           <PrimaryNav variant="inline" />
-          {hasRun && <span className="new-ux__meta">{t(mode.nameKey)}</span>}
+          {hasRun && <span className="new-ux__meta">{t(activeModeNameKey)}</span>}
         </header>
 
         <main className="new-ux__main">
