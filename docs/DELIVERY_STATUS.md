@@ -113,3 +113,84 @@ PostgreSQL, Docker, Redis, or production verification is claimed. Remaining M2
 work is deterministic test repair plus Python 3.11 parity after dependency
 access is restored; the infrastructure blocker for the database-specific slice
 is the absence of both a PostgreSQL 16 service/client and Docker.
+
+## New UX delivery — `feat/consultaion-new-ux` — 2026-09-21
+
+**Branch evidence:** `feat/consultaion-new-ux`, HEAD `c50b167`, 28 commits ahead
+of `main` (`6070311`), 0 behind. The last 8 commits (`fa0939c` through
+`c50b167`) implement the New UX handoff per `docs/new-ux/CLAUDE-CODE-START.md`,
+`docs/NEW_UX_PATCHSET.md`, and `docs/new-ux/AUDIT-RESOLUTION.md`: semantic
+tokens/typography (PS01), canonical UI primitives (PS03), navigation registry
+(PS04), unified-workspace presentation integration (PS02, presentation layer
+only), first-run/dashboard convergence (PS05), a `DecisionReport({run,
+audience})` wrapper over the existing report stack (PS06), and the Broadsheet
+marketing rebuild plus Models/Leaderboard/Hall-of-Fame consolidation (PS07).
+Zero files deleted; zero backend (`apps/api`) files touched.
+
+Commands and outcomes, all run from a clean `npm install` at repo root and in
+`apps/web` (no cached state from a prior session):
+
+- `cd apps/web && npx tsc --noEmit`: clean except 4 errors in
+  `public/embeds/chamber.test.ts` (`TS2802`, missing `downlevelIteration`) —
+  confirmed present on `73f4fa9` before any New UX commit in this batch, i.e.
+  pre-existing and untouched by this work, not a regression.
+- `cd apps/web && npm run lint`: clean except 1 pre-existing error in the
+  vendored `public/embeds/three-chamber.js` and 1 pre-existing warning in
+  `components/voting/VotingRunView.tsx`, both present before this batch and
+  outside its diff.
+- `npm run lint:i18n` (repo root): passed — `apps/web/locales/en.json` and
+  `tr.json` both hold the same 934 keys; the literal-string guard across the
+  3 configured roots passed.
+- `npm run lint:colors` (repo root): passed — 32 pre-existing baselined raw-color
+  warnings, 0 new violations.
+- `cd apps/web && npx vitest run`: **440 passed, 0 failed**, 68 files. This is
+  the complete Vitest suite, not a selection.
+- `cd apps/web && npm run dev`, then Playwright (`chromium`, executable at
+  `/opt/pw-browsers/chromium`) driven ad hoc against `http://127.0.0.1:3000`
+  at 430×932 and 1440×900 for `/`, `/new`, `/models`, `/pricing`,
+  `/leaderboard`, `/hall-of-fame`: confirms rendering, the two redirects
+  (`/leaderboard` → `/models#leaderboard`, `/hall-of-fame` →
+  `/models#hall-of-fame`), and DOM content with 0 uncaught page errors.
+
+**Blockers, recorded separately from the above deterministic results:**
+
+- `docker info` fails (`dial unix /var/run/docker.sock: connect: no such file
+  or directory`) and `psql`/Postgres/Redis are not reachable in this sandbox.
+  `playwright.config.ts`'s full project matrix starts `uvicorn` on :8000 plus
+  a Postgres/Redis-backed API; that full, authenticated Playwright suite —
+  including the `mobile-large` (430×932) project it already defines — was
+  **not run**. The ad hoc frontend-only Playwright pass above is evidence for
+  rendering and routing only; it does not exercise real SSE streaming,
+  reconnection, continuation/retry, auth, billing, or DB-backed data.
+- No backend (`apps/api`) test command was run this session: no backend files
+  were changed, and this batch is presentation-layer only.
+- No real-provider/model-gateway smoke was run or claimed, consistent with
+  this file's standing rule that such a check is explicit and separately
+  reported.
+
+## New UX milestone state
+
+| Item | State | Evidence / blocker |
+|---|---|---|
+| PS00 baseline | Partial | Ad hoc Playwright screenshots captured at 430×932/1440×900 against `next dev` (frontend-only); the repo's own Playwright config/`mobile-large` project was not run (blocker above). |
+| PS00.5 chamber | Verified | `public/embeds/chamber.test.ts` (8 tests) passes; embed file untouched; visually confirmed rendering in the screenshot pass above. |
+| PS01 tokens/i18n | Complete | See `lint:i18n`/`tsc`/`vitest` results above. |
+| PS02 presentation integration | Partial | `RunWorkspaceNew.tsx` now consumes the canonical primitives/registry; the deeper `useComposer`/`useRunStream`/`useRunReport` split from `docs/NEW_UX_PATCHSET.md` was deliberately not attempted without a real backend to verify SSE/reconnect/continuation against. |
+| PS03 primitives | Complete | `components/ui/{PanelPicker,StatusPill,EmptyState,ListSkeleton,OfflineBar}.tsx`, `components/errors/ErrorBanner.tsx`, all covered by the Vitest run above. |
+| PS04 navigation | Complete | `lib/nav.ts` + `components/navigation/PrimaryNav.tsx`, covered by the Vitest run above. |
+| PS05 first-run/dashboard | Complete | `RunWorkspaceNew.tsx` pinned-run + recent-runs, covered by the Vitest run above. |
+| PS06 canonical report | Complete | `components/report/DecisionReport.tsx` wraps the existing report stack without modifying its integrity/verification/fallback logic; the pre-existing 40-test suite for that stack still passes unchanged. |
+| PS07 marketing | Mostly complete | `/`, `/models`, `/pricing` rebuilt and verified by screenshot; roughly 13 other marketing routes (`/contact`, `/terms`, `/privacy`, `/security`, `/methodology`, `/docs`, `/demo`, `/gallery`, `/changelog`, `/status`, `/login`, `/register`, `/home`) still render their pre-existing bodies under the new shared nav — a visible but non-functional styling mismatch, not attempted further this session. |
+| PS08 anonymous runs | Not started | Explicitly out of scope for this batch per the task instructions. |
+| PS09 dead-code cleanup | Not started | `components/landing/MarketingNavbar.tsx` and `components/parliament/LeaderboardTable.tsx` are confirmed orphaned (repo-wide reference search done) but not deleted. |
+| PS10 chamber/performance | Not started | Chamber embed unchanged; no lazy-loading/perf work beyond `LazyChamberEmbed.tsx`'s IntersectionObserver gate on the marketing homepage. |
+| PS11 final audit | Not started | Depends on PS08–PS10 and on the Playwright/backend blocker above being resolved. |
+
+## Next executable action
+
+Restore Docker/Postgres/Redis (or an equivalent API+DB+cache target) so the
+full authenticated Playwright matrix in `playwright.config.ts` — including
+real SSE/reconnect/continuation behavior on `/new` — can run against this
+branch before it is treated as fully verified. Until then, "frontend
+regression suite green" and "full-stack (SSE/DB/Redis/auth/billing)
+re-verified" are two different claims; only the first is made here.
