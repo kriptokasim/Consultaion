@@ -148,3 +148,39 @@ async def test_free_only_mode_is_disclosed(circuit, monkeypatch):
 
     payload = await ops.api_status()
     assert payload.get("free_only_mode") is True
+
+
+@pytest.mark.anyio
+async def test_legacy_provider_health_uses_breaker_state(circuit, monkeypatch):
+    """Legacy consumers must not get a false healthy signal from a present key."""
+    monkeypatch.setattr("config.settings.OPENAI_API_KEY", "sk-present", raising=False)
+    monkeypatch.setattr("config.settings.ANTHROPIC_API_KEY", None, raising=False)
+    monkeypatch.setattr("config.settings.GEMINI_API_KEY", None, raising=False)
+    monkeypatch.setattr("config.settings.GOOGLE_API_KEY", None, raising=False)
+    monkeypatch.setattr("config.settings.OPENROUTER_API_KEY", None, raising=False)
+    monkeypatch.setattr("config.settings.GROQ_API_KEY", None, raising=False)
+    monkeypatch.setattr("config.settings.MISTRAL_API_KEY", None, raising=False)
+
+    circuit["openai"] = {
+        "state": "open", "consecutive_failures": 4, "ttl": 300, "redis_connected": True,
+    }
+
+    payload = await ops.provider_health()
+    assert payload["providers"] == [
+        {
+            "provider": "openai",
+            "configured": True,
+            "status": "outage",
+            "consecutive_failures": 4,
+            "retry_in_seconds": 300,
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_provider_status_does_not_claim_operational_when_breaker_is_unreadable(circuit):
+    circuit["openai"] = {
+        "state": "closed", "consecutive_failures": 0, "ttl": None, "redis_connected": False,
+    }
+    entry = ops._provider_status("openai", True)
+    assert entry["status"] == "unverified"
