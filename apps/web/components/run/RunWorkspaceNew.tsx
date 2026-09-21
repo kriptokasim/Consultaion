@@ -17,7 +17,6 @@ import { PanelPicker, type PanelPickerModel } from "@/components/ui/PanelPicker"
 import { StatusPill } from "@/components/ui/StatusPill";
 import { DecisionReport } from "@/components/report/DecisionReport";
 import type { DecisionReport as DecisionReportData } from "@/components/report/DecisionReportView";
-import type { PersistedModelResponse } from "@/lib/api/types";
 import OracleModeRun from "@/components/run/OracleModeRun";
 import RedTeamModeRun from "@/components/run/RedTeamModeRun";
 
@@ -42,14 +41,6 @@ const MODEL_STATE_LABEL_KEYS: Record<LiveRowState, string> = {
   complete: "workspace.modelState.complete",
   failed: "status.failed",
 };
-
-function textFromResponse(response: PersistedModelResponse): string {
-  return response.content || "";
-}
-
-function nameFromResponse(response: PersistedModelResponse): string {
-  return response.display_name || response.provider || "Model";
-}
 
 function reportFromState(synthesisState: any, debate: any): Record<string, any> | null {
   if (synthesisState?.report && typeof synthesisState.report === "object") {
