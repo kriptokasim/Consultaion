@@ -33,14 +33,23 @@ test.describe("Smoke Tests", () => {
         await expect(page.getByRole("heading", { name: /Pricing/i })).toBeVisible();
     });
 
-    test("leaderboard page loads", async ({ page }) => {
+    test("leaderboard redirects into the consolidated model registry", async ({ page }) => {
         await page.goto("/leaderboard");
-        await expect(page.getByRole("heading", { name: /Leaderboard/i })).toBeVisible();
+        await expect(page).toHaveURL(/\/models#leaderboard$/);
+        await expect(page.getByRole("heading", { name: /Model registry/i })).toBeVisible();
     });
 
-    test("models page loads", async ({ page }) => {
+    test("hall of fame redirects into the consolidated model registry", async ({ page }) => {
+        await page.goto("/hall-of-fame");
+        await expect(page).toHaveURL(/\/models#hall-of-fame$/);
+        await expect(page.getByRole("heading", { name: /Model registry/i })).toBeVisible();
+    });
+
+    test("models page loads and shows the consolidated registry", async ({ page }) => {
         await page.goto("/models");
-        await expect(page.getByRole("heading", { name: /Models/i })).toBeVisible();
+        await expect(page.getByRole("heading", { name: /Model registry/i })).toBeVisible();
+        await expect(page.getByRole("tab", { name: /Models/i })).toBeVisible();
+        await expect(page.getByRole("tab", { name: /Leaderboard/i })).toBeVisible();
     });
 
     test("terms page loads", async ({ page }) => {

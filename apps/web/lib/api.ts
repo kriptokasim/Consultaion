@@ -2,7 +2,13 @@ import { apiRequest } from "@/lib/apiClient";
 import { fetchWithAuth } from "@/lib/auth";
 import type { PanelConfigPayload } from "@/lib/panels";
 import { API_ORIGIN } from "@/lib/config/runtime";
-import type { ModelsListResponse, PersistedResponsesResponse, RequestOptions } from "@/lib/api/types";
+import type {
+  HallOfFameEntry,
+  ModelsListResponse,
+  ModelStatsSummary,
+  PersistedResponsesResponse,
+  RequestOptions,
+} from "@/lib/api/types";
 import {
   formatArenaSchemaDiagnostic,
   persistedResponsesSchema,
@@ -372,11 +378,11 @@ export async function getHallOfFame(params: { sort?: string; model?: string; sta
   if (params.start_date) search.set("start_date", params.start_date);
   if (params.end_date) search.set("end_date", params.end_date);
   const suffix = search.size ? `?${search.toString()}` : "";
-  return request<{ items: any[] }>(`/stats/hall-of-fame${suffix}`);
+  return request<{ items: HallOfFameEntry[] }>(`/stats/hall-of-fame${suffix}`);
 }
 
 export async function getModelLeaderboard() {
-  return request<any>(`/stats/models`);
+  return request<ModelStatsSummary[]>(`/stats/models`);
 }
 
 export async function getModelDetail(id: string) {

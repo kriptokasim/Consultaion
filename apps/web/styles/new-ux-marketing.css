@@ -1,0 +1,421 @@
+@import "./tokens.css";
+
+/*
+ * Broadsheet marketing surfaces (PS07). Paper surface (DESIGN-SPEC:
+ * marketing/report/print are paper) — this file never sets
+ * [data-surface="ink"], so it always renders on the light :root tokens.
+ * Scoped under .new-ux-marketing so it never leaks into the ink app shell.
+ */
+
+.new-ux-marketing {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.new-ux-marketing *, .new-ux-marketing *::before, .new-ux-marketing *::after { box-sizing: border-box; }
+.new-ux-marketing a { color: inherit; text-decoration: none; }
+.new-ux-marketing :focus-visible { outline: 2px solid var(--spot); outline-offset: 3px; }
+
+.new-ux-marketing__shell {
+  width: min(1160px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.new-ux-marketing__section {
+  padding: 56px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.new-ux-marketing__section:first-of-type { border-top: 0; }
+
+.new-ux-marketing__kicker {
+  margin: 0 0 10px;
+  font-size: var(--text-meta);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-faint);
+}
+
+.new-ux-marketing__section-title {
+  margin: 0;
+  font-size: var(--text-h2);
+  line-height: 1.1;
+  font-weight: var(--heading-weight);
+  letter-spacing: -.01em;
+  max-width: 22ch;
+}
+
+.new-ux-marketing__lede {
+  margin: 14px 0 0;
+  max-width: 62ch;
+  font-size: var(--text-lede);
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* Hero */
+.new-ux-marketing__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+  gap: 48px;
+  align-items: start;
+  padding: 44px 0 56px;
+}
+
+.new-ux-marketing__hero h1 {
+  margin: 0;
+  font-size: clamp(36px, 5.2vw, 64px);
+  line-height: .98;
+  letter-spacing: -.02em;
+  font-weight: var(--heading-weight);
+  max-width: 16ch;
+}
+
+.new-ux-marketing__hero-actions {
+  margin-top: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.new-ux-marketing__hero-hint {
+  margin: 12px 0 0;
+  font-size: var(--text-meta);
+  color: var(--ink-faint);
+}
+
+.new-ux-marketing__hero-figure {
+  border: 1px solid var(--rule);
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--surface-raised);
+}
+
+.new-ux-marketing__hero-figure iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Primary/secondary buttons (paper-surface variants of the workspace ones) */
+.new-ux-marketing__primary,
+.new-ux-marketing__secondary {
+  min-height: 48px;
+  border-radius: 2px;
+  border: 1px solid var(--spot);
+  padding: 0 22px;
+  font-size: var(--text-body);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.new-ux-marketing__primary {
+  background: var(--spot);
+  color: var(--on-spot);
+}
+
+.new-ux-marketing__secondary {
+  background: transparent;
+  color: var(--spot-text);
+}
+
+/* How it works */
+.new-ux-marketing__steps {
+  margin-top: 32px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--rule-strong);
+}
+
+.new-ux-marketing__step {
+  padding: 20px 20px 0 0;
+  border-right: 1px solid var(--rule);
+}
+
+.new-ux-marketing__step:last-child { border-right: 0; padding-right: 0; }
+
+.new-ux-marketing__step-index {
+  font-size: var(--text-meta);
+  color: var(--spot-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.new-ux-marketing__step h3 {
+  margin: 8px 0 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.new-ux-marketing__step p {
+  margin: 6px 0 0;
+  font-size: var(--text-utility);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* Trust */
+.new-ux-marketing__trust-grid {
+  margin-top: 28px;
+  display: grid;
+  gap: 28px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.new-ux-marketing__trust-item {
+  border-left: 2px solid var(--rule-strong);
+  padding-left: 16px;
+}
+
+.new-ux-marketing__trust-item h3 {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.new-ux-marketing__trust-item p {
+  margin: 6px 0 0;
+  font-size: var(--text-utility);
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* Pricing */
+.new-ux-marketing__pricing-grid {
+  margin-top: 28px;
+  display: grid;
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.new-ux-marketing__plan {
+  background: var(--surface);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.new-ux-marketing__plan-name {
+  font-size: var(--text-meta);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-faint);
+}
+
+.new-ux-marketing__plan-price {
+  font-size: var(--text-h2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.new-ux-marketing__plan-price small {
+  font-size: var(--text-meta);
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+.new-ux-marketing__plan-features {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-utility);
+  color: var(--ink-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.new-ux-marketing__plan-cta { margin-top: auto; padding-top: 16px; }
+
+/* Model registry surface */
+.new-ux-marketing__tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--rule-strong);
+  margin-top: 24px;
+}
+
+.new-ux-marketing__tab {
+  min-height: 44px;
+  padding: 0 4px;
+  margin-right: 20px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: var(--text-body);
+  cursor: pointer;
+}
+
+.new-ux-marketing__tab[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--spot);
+}
+
+.new-ux-marketing__table {
+  margin-top: 20px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-utility);
+}
+
+.new-ux-marketing__table th {
+  text-align: left;
+  font-size: var(--text-meta);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-faint);
+  font-weight: 400;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.new-ux-marketing__table td {
+  padding: 12px 12px 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.new-ux-marketing__table tr:last-child td { border-bottom: 0; }
+
+.new-ux-marketing__empty {
+  margin-top: 20px;
+  padding: 32px 0;
+  color: var(--ink-soft);
+  font-size: var(--text-body);
+  max-width: 48ch;
+}
+
+/* Nav */
+.new-ux-marketing__navbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+}
+
+.new-ux-marketing__navbar-inner {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.new-ux-marketing__brand {
+  font-size: var(--text-lede);
+  font-weight: 600;
+}
+
+.new-ux-marketing__navbar-links {
+  margin-left: auto;
+  display: none;
+  align-items: center;
+  gap: 22px;
+}
+
+.new-ux-marketing__navbar-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-utility);
+  color: var(--ink-soft);
+}
+
+.new-ux-marketing__navbar-link[aria-current="page"] { color: var(--spot-text); }
+.new-ux-marketing__navbar-link:hover { color: var(--ink); }
+
+.new-ux-marketing__navbar-toggle {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule-strong);
+  background: transparent;
+  color: var(--ink);
+  margin-left: auto;
+}
+
+.new-ux-marketing__navbar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: color-mix(in srgb, var(--ink-900) 45%, transparent);
+  border: 0;
+}
+
+.new-ux-marketing__navbar-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  width: min(320px, 86vw);
+  background: var(--surface);
+  border-left: 1px solid var(--rule-strong);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+}
+
+.new-ux-marketing__navbar-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.new-ux-marketing__navbar-drawer-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.new-ux-marketing__navbar-drawer-link {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  font-size: var(--text-body);
+  border-bottom: 1px solid var(--rule);
+}
+
+.new-ux-marketing__navbar-drawer-link[aria-current="page"] { color: var(--spot-text); }
+
+.new-ux-marketing__navbar-drawer-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .new-ux-marketing__navbar-links { display: flex; }
+  .new-ux-marketing__navbar-toggle { display: none; }
+}
+
+@media (max-width: 900px) {
+  .new-ux-marketing__hero { grid-template-columns: 1fr; }
+  .new-ux-marketing__steps { grid-template-columns: 1fr 1fr; }
+  .new-ux-marketing__step { border-right: 0; border-bottom: 1px solid var(--rule); padding: 20px 0; }
+  .new-ux-marketing__trust-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .new-ux-marketing__section { padding: 40px 0; }
+  .new-ux-marketing__steps { grid-template-columns: 1fr; }
+  .new-ux-marketing__hero { padding-top: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .new-ux-marketing * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

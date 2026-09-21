@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import '@/styles/globals.css'
 import '@/styles/new-ux.css'
+import '@/styles/new-ux-marketing.css'
 import { I18nProvider, loadMessages, resolveLocale } from '@/lib/i18n/provider'
 import { Providers } from './providers'
 import { AnalyticsProvider } from '@/components/analytics-provider'

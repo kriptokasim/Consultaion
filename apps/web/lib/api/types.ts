@@ -553,3 +553,22 @@ export interface ModelPublic {
 export interface ModelsListResponse {
   models: ModelPublic[];
 }
+
+/** Mirrors apps/api/schemas.py ModelStatsSummary, served by GET /stats/models. */
+export interface ModelStatsSummary {
+  model: string;
+  total_debates: number;
+  wins: number;
+  win_rate: number;
+  avg_champion_score?: number | null;
+}
+
+/** One card from GET /stats/hall-of-fame. */
+export interface HallOfFameEntry {
+  id: string;
+  prompt: string;
+  champion?: string | null;
+  champion_score?: number | null;
+  runner_up_score?: number | null;
+  champion_excerpt?: string | null;
+}

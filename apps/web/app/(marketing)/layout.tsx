@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
-import { MarketingNavbar } from '@/components/landing/MarketingNavbar'
+import { BroadsheetMarketingNav } from '@/components/marketing/broadsheet/BroadsheetMarketingNav'
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen">
-      <MarketingNavbar />
-      <div id="main-content" className="pt-20">{children}</div>
+    <div className="min-h-screen new-ux-marketing">
+      <BroadsheetMarketingNav />
+      <div id="main-content">{children}</div>
     </div>
   )
 }

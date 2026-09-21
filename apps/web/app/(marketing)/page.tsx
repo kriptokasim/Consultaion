@@ -1,4 +1,4 @@
-import HomeContent from "@/components/landing/HomeContent";
+import BroadsheetHomeContent from "@/components/marketing/broadsheet/BroadsheetHomeContent";
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 
 
 export default function LandingPage() {
-  return <HomeContent />;
+  return <BroadsheetHomeContent />;
 }
