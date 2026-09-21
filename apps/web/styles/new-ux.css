@@ -991,3 +991,34 @@
   .new-ux-aux__fork-actions { flex-direction: column; }
   .new-ux__primary, .new-ux__secondary { min-height: 46px; }
 }
+
+
+/* Featured mode marker — Arena */
+.new-ux__mode--featured {
+  position: relative;
+  padding-top: 13px;
+}
+
+.new-ux__mode-featured {
+  position: absolute;
+  top: -1px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 16px;
+  padding: 0 5px;
+  background: var(--spot);
+  color: var(--on-spot);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.new-ux__mode-featured svg {
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
+}
