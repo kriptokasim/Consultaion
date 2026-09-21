@@ -10,6 +10,7 @@ import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 import { getMode, MODES, type ModeId } from "@/lib/modes";
 import { toUiRunStatus, UI_RUN_STATUS_LABEL_KEYS } from "@/lib/runStatusUi";
 import { useI18n } from "@/lib/i18n/client";
+import { PrimaryNav } from "@/components/navigation/PrimaryNav";
 import type { PersistedModelResponse } from "@/lib/api/types";
 
 type LiveRowState = "queued" | "streaming" | "complete" | "failed";
@@ -208,11 +209,7 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
       <div className="new-ux__shell">
         <header className="new-ux__header">
           <div className="new-ux__brand">Consultaion</div>
-          <div className="new-ux__nav" aria-label={t("nav.mobile.label")}>
-            <Link href="/new" className="new-ux__nav-link new-ux__nav-link--active">{t("nav.ask")}</Link>
-            <Link href="/runs" className="new-ux__nav-link">{t("nav.runs")}</Link>
-            <Link href="/settings" className="new-ux__nav-link">{t("nav.you")}</Link>
-          </div>
+          <PrimaryNav variant="inline" />
           {hasRun && <span className="new-ux__meta">{t(mode.nameKey)}</span>}
         </header>
 
@@ -364,6 +361,8 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
           </div>
         </div>
       )}
+
+      <PrimaryNav variant="bottom-bar" />
     </div>
   );
 }

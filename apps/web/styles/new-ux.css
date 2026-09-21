@@ -507,3 +507,55 @@
 
 .new-ux-panel-sheet { max-height: 80vh; overflow-y: auto; }
 .new-ux-panel-sheet__body { padding: 0 16px 16px; }
+
+/* ── PS04 canonical navigation ────────────────────────────────────────── */
+
+.new-ux { --new-ux-bottom-nav-h: 0px; }
+
+.new-ux-primary-nav--inline {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: var(--text-utility);
+}
+
+.new-ux-primary-nav--inline .new-ux-primary-nav__item {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink);
+}
+
+.new-ux-primary-nav--inline .new-ux-primary-nav__item[aria-current="page"] { color: var(--spot-text); }
+
+.new-ux-primary-nav--bottom-bar {
+  display: none;
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  border-top: 1px solid var(--rule);
+  background: var(--surface);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.new-ux-primary-nav--bottom-bar .new-ux-primary-nav__item {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-meta);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+}
+
+.new-ux-primary-nav--bottom-bar .new-ux-primary-nav__item[aria-current="page"] { color: var(--spot-text); }
+
+@media (max-width: 640px) {
+  .new-ux__header .new-ux-primary-nav--inline { display: none; }
+  .new-ux-primary-nav--bottom-bar { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .new-ux { --new-ux-bottom-nav-h: 52px; }
+  .new-ux__actions { bottom: var(--new-ux-bottom-nav-h); }
+  .new-ux__main { padding-bottom: calc(120px + var(--new-ux-bottom-nav-h)); }
+}
