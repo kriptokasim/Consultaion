@@ -72,6 +72,14 @@ export default function RunWorkspaceNew({
   const activeModeNameKey = auxRun?.kind === "oracle" ? "mode.oracle.name" : auxRun?.kind === "redteam" ? "mode.redteam.name" : mode.nameKey;
   const workspace = useRunWorkspace(runId);
 
+  useEffect(() => {
+    const persistedMode = workspace.debate?.mode;
+    if (!runId || !persistedMode) return;
+    if (MODES.some((item) => item.id === persistedMode)) {
+      setModeId(persistedMode as ModeId);
+    }
+  }, [runId, workspace.debate?.mode]);
+
   // R9: the real model registry (GET /models), not a hardcoded list.
   const modelsQuery = useModelRegistry();
   const registryModels = useMemo(
@@ -130,25 +138,26 @@ export default function RunWorkspaceNew({
   // The workspace hook already merges live stream buffers with persisted responses.
   // Consume that canonical projection rather than rebuilding it from raw events.
   const liveRows = useMemo(() => {
-    const rows = new Map<string, { name: string; text: string; state: LiveRowState }>();
+    const rows = new Map<string, { modelId: string; name: string; text: string; state: LiveRowState }>();
     for (const model of visibleModels) {
-      rows.set(model.id, { name: model.name, text: "", state: "queued" });
+      rows.set(model.id, { modelId: model.id, name: model.name, text: "", state: "queued" });
     }
     for (const response of workspace.mergedStreamingResponses) {
-      const matching = visibleModels.find((model) => model.id === response.modelId);
-      if (!matching) continue;
+      const modelId = response.modelId;
+      const matching = pickerModels.find((model) => model.id === modelId);
       const state: LiveRowState =
         response.state === "failed" ? "failed" :
         response.state === "completed" ? "complete" :
         "streaming";
-      rows.set(matching.id, {
-        name: response.displayName || matching.name,
+      rows.set(modelId, {
+        modelId,
+        name: response.displayName || matching?.name || modelId,
         text: response.content || "",
         state,
       });
     }
     return Array.from(rows.values());
-  }, [workspace.mergedStreamingResponses, visibleModels]);
+  }, [workspace.mergedStreamingResponses, visibleModels, pickerModels]);
 
   const handleModeChange = (next: ModeId) => {
     setModeId(next);
@@ -412,7 +421,7 @@ export default function RunWorkspaceNew({
                   <div className="new-ux__section">
                     <p className="new-ux__section-title">{t("workspace.composer.panelLabel")}</p>
                     {liveRows.map((row) => (
-                      <article key={row.name} className="new-ux__model">
+                      <article key={row.modelId} className="new-ux__model">
                         <div className="new-ux__model-head">
                           <span className="new-ux__model-name">{row.name}</span>
                           <span className="new-ux__model-state">{t(MODEL_STATE_LABEL_KEYS[row.state])}</span>
@@ -438,7 +447,7 @@ export default function RunWorkspaceNew({
                   {modeId === "compare" ? (
                     <div className="new-ux__compare-grid">
                       {liveRows.map((row) => (
-                        <article key={row.name} className="new-ux__compare-card">
+                        <article key={row.modelId} className="new-ux__compare-card">
                           <div className="new-ux__model-head">
                             <span className="new-ux__model-name">{row.name}</span>
                             <span className="new-ux__model-state">{t(MODEL_STATE_LABEL_KEYS[row.state])}</span>
@@ -470,7 +479,7 @@ export default function RunWorkspaceNew({
                     </div>
                   )}
 
-                  {report && (
+                  {modeId !== "compare" && report && (
                     <div className="new-ux__report">
                       <p className="new-ux__kicker">{t("workspace.report.title")}</p>
                       <DecisionReport run={{ report: report as DecisionReportData }} audience="brief" />
