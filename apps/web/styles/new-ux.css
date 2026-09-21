@@ -362,10 +362,7 @@
   padding: 26px 22px 34px;
 }
 
-.new-ux__report h2 { margin-top: 26px; }
-.new-ux__report p { line-height: 1.6; }
-.new-ux__report-confidence { font-variant-numeric: tabular-nums; color: var(--spot-cyan-deep); font-size: 64px; line-height: .9; }
-.new-ux__report-rule { margin: 14px 0 0; border-top: 2px solid var(--ink-900); border-bottom: 1px solid var(--ink-900); height: 6px; }
+.new-ux__report .new-ux__nav-link { margin-top: 18px; display: inline-block; }
 
 .new-ux__footer-note {
   margin-top: 28px;
@@ -560,6 +557,18 @@
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--ink-faint);
+}
+
+/* ── PS06 canonical Decision Report ───────────────────────────────────── */
+
+/*
+ * The report stays on the paper surface even inside the ink app shell
+ * (DESIGN-SPEC). --paper/--ink-900 are defined unscoped in tokens.css, so
+ * this rule works everywhere DecisionReport is rendered, new-ux or legacy.
+ */
+.new-ux-report-paper {
+  background: var(--paper);
+  color: var(--ink-900);
 }
 
 /* ── PS04 canonical navigation ────────────────────────────────────────── */

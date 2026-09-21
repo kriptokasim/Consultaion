@@ -103,6 +103,14 @@ interface DecisionReportViewProps {
   fallbackReason?: string
   fallbackResponse?: { model?: string; content?: string } | null
   divergenceBreakdown?: any
+  /**
+   * PS06: 'record' (default) renders every section — run end/export/print
+   * contexts. 'brief' renders a condensed summary for sharing (verdict, key
+   * findings, next actions, caveats) and omits model-position/risk-matrix/
+   * divergence/context-needed detail. Never affects the failed/fallback/
+   * corrupted/unstructured branches below — those always render in full.
+   */
+  audience?: "brief" | "record"
 }
 
 
@@ -256,7 +264,9 @@ export function DecisionReportView({
   fallbackReason,
   fallbackResponse,
   divergenceBreakdown,
+  audience = "record",
 }: DecisionReportViewProps) {
+  const isBrief = audience === "brief"
   const isCorrupted = useMemo(() => {
     if (rawReport && !isRenderableDecisionReport(rawReport)) {
       return true
@@ -345,8 +355,8 @@ export function DecisionReportView({
         showChrome={showChrome}
         className={className}
       >
-        {/* Context Needed */}
-        {activeReport.context_needed && activeReport.context_needed.length > 0 && (
+        {/* Context Needed (record only — an internal drafting need, not for sharing) */}
+        {!isBrief && activeReport.context_needed && activeReport.context_needed.length > 0 && (
           <div className="bg-amber-50/50 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-2 mb-3">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -385,20 +395,20 @@ export function DecisionReportView({
           </ReportSection>
         )}
 
-        {/* Model Positions */}
-        {activeReport.model_positions && activeReport.model_positions.length > 0 && (
+        {/* Model Positions (record only) */}
+        {!isBrief && activeReport.model_positions && activeReport.model_positions.length > 0 && (
           <ReportSection id="report-positions" title="Model Positions" collapsible>
             <ModelPositionsTable positions={activeReport.model_positions as any} />
           </ReportSection>
         )}
 
-        {/* Semantic Alignment & Divergence */}
-        {activeReport.divergence_breakdown && (
+        {/* Semantic Alignment & Divergence (record only) */}
+        {!isBrief && activeReport.divergence_breakdown && (
           <SemanticAlignmentSection divergenceBreakdown={activeReport.divergence_breakdown} />
         )}
 
-        {/* Risks & Assumptions */}
-        {activeReport.risks_and_assumptions && activeReport.risks_and_assumptions.length > 0 && (
+        {/* Risks & Assumptions (record only) */}
+        {!isBrief && activeReport.risks_and_assumptions && activeReport.risks_and_assumptions.length > 0 && (
           <ReportSection id="report-risks" title="Risks & Assumptions" collapsible>
             <RiskMatrix risks={activeReport.risks_and_assumptions as any} />
           </ReportSection>

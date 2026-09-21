@@ -14,6 +14,8 @@ import { useI18n } from "@/lib/i18n/client";
 import { PrimaryNav } from "@/components/navigation/PrimaryNav";
 import { PanelPicker, type PanelPickerModel } from "@/components/ui/PanelPicker";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { DecisionReport } from "@/components/report/DecisionReport";
+import type { DecisionReport as DecisionReportData } from "@/components/report/DecisionReportView";
 import type { PersistedModelResponse } from "@/lib/api/types";
 
 type LiveRowState = "queued" | "streaming" | "complete" | "failed";
@@ -398,12 +400,7 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
                   {report && (
                     <div className="new-ux__report">
                       <p className="new-ux__kicker">{t("workspace.report.title")}</p>
-                      <h2>{report.title || t("workspace.report.title")}</h2>
-                      <div className="new-ux__report-rule" />
-                      {typeof report.verdict?.confidence === "number" && (
-                        <p className="new-ux__report-confidence">{Math.round(report.verdict.confidence * 100)}%</p>
-                      )}
-                      {report.executive_summary && <p>{report.executive_summary}</p>}
+                      <DecisionReport run={{ report: report as DecisionReportData }} audience="brief" />
                       <Link className="new-ux__nav-link" href={"/runs/" + runId}>{t("workspace.report.openFull")}</Link>
                     </div>
                   )}
