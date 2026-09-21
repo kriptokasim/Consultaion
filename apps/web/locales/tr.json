@@ -965,5 +965,6 @@
   "workspace.redteam.financial": "Finans",
   "workspace.redteam.operations": "Operasyon",
   "workspace.run.waitingForModel": "Bu model bekleniyor…",
-  "workspace.run.compareResults": "Karşılaştırma sonuçları"
+  "workspace.run.compareResults": "Karşılaştırma sonuçları",
+  "workspace.composer.featured": "Öne çıkan"
 }
