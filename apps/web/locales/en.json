@@ -965,5 +965,6 @@
   "workspace.redteam.financial": "Financial",
   "workspace.redteam.operations": "Operations",
   "workspace.run.waitingForModel": "Waiting for this model…",
-  "workspace.run.compareResults": "Compare results"
+  "workspace.run.compareResults": "Compare results",
+  "workspace.composer.featured": "Featured"
 }
