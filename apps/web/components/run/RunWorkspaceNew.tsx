@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Star } from "lucide-react";
 import Link from "next/link";
 import { ApiError, startDebate } from "@/lib/api";
 import { apiRequest } from "@/lib/apiClient";
@@ -312,11 +313,17 @@ export default function RunWorkspaceNew({
                     <button
                       key={item.id}
                       type="button"
-                      className="new-ux__mode"
+                      className={`new-ux__mode${item.id === "arena" ? " new-ux__mode--featured" : ""}`}
                       aria-pressed={item.id === modeId}
                       onClick={() => handleModeChange(item.id)}
                     >
-                      {t(item.nameKey)}
+                      {item.id === "arena" && (
+                        <span className="new-ux__mode-featured" aria-label={t("workspace.composer.featured")}>
+                          <Star aria-hidden="true" />
+                          <span>{t("workspace.composer.featured")}</span>
+                        </span>
+                      )}
+                      <span>{t(item.nameKey)}</span>
                     </button>
                   ))}
                 </div>
