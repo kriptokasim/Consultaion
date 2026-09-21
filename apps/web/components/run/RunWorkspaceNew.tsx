@@ -28,6 +28,14 @@ type AuxiliaryRun =
   | { kind: "redteam"; id: string }
   | null;
 
+const REDTEAM_LENSES = [
+  { id: "security", labelKey: "workspace.redteam.security" },
+  { id: "scaling", labelKey: "workspace.redteam.scaling" },
+  { id: "compliance", labelKey: "workspace.redteam.compliance" },
+  { id: "financial", labelKey: "workspace.redteam.financial" },
+  { id: "operations", labelKey: "workspace.redteam.operations" },
+] as const;
+
 const MODEL_STATE_LABEL_KEYS: Record<LiveRowState, string> = {
   queued: "workspace.modelState.queued",
   streaming: "workspace.modelState.streaming",
@@ -65,6 +73,7 @@ export default function RunWorkspaceNew({
   const [question, setQuestion] = useState("");
   const [modeId, setModeId] = useState<ModeId>("arena");
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [selectedRiskLenses, setSelectedRiskLenses] = useState<string[]>(["security", "scaling", "compliance"]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -179,6 +188,10 @@ export default function RunWorkspaceNew({
         setError(t("workspace.redteam.validationProposal"));
         return;
       }
+      if (selectedRiskLenses.length === 0) {
+        setError(t("workspace.redteam.validationLens"));
+        return;
+      }
     } else if (modeId !== "oracle" && selectedModelIds.length < mode.panelSize[0]) {
       setError(
         t(
@@ -213,7 +226,7 @@ export default function RunWorkspaceNew({
           path: "/redteam",
           body: {
             proposal_text: trimmed,
-            lenses: ["security", "scaling", "compliance"],
+            lenses: selectedRiskLenses,
           },
         });
         setRunId(null);
@@ -318,15 +331,47 @@ export default function RunWorkspaceNew({
                   placeholder={t("workspace.composer.questionPlaceholder")}
                 />
 
-                <PanelPicker
-                  models={pickerModels}
-                  selectedIds={selectedModelIds}
-                  onToggle={toggleModel}
-                  minModels={mode.panelSize[0]}
-                  maxModels={mode.panelSize[1]}
-                  isLoading={modelsQuery.isLoading}
-                  error={modelsQuery.error instanceof Error ? modelsQuery.error.message : null}
-                />
+                {modeId === "oracle" ? (
+                  <div className="new-ux__mode-note">{t("workspace.oracle.composerNote")}</div>
+                ) : modeId === "redteam" ? (
+                  <div className="new-ux__choice-group" role="group" aria-label={t("workspace.redteam.lens")}>
+                    <div className="new-ux__choice-head">
+                      <span className="new-ux__section-title">{t("workspace.redteam.lens")}</span>
+                      <span className="new-ux__choice-count">{selectedRiskLenses.length}</span>
+                    </div>
+                    <div className="new-ux__choice-grid">
+                      {REDTEAM_LENSES.map((item) => {
+                        const selected = selectedRiskLenses.includes(item.id);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="new-ux__choice"
+                            data-selected={selected}
+                            aria-pressed={selected}
+                            onClick={() =>
+                              setSelectedRiskLenses((current) =>
+                                selected ? current.filter((value) => value !== item.id) : [...current, item.id],
+                              )
+                            }
+                          >
+                            {t(item.labelKey)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <PanelPicker
+                    models={pickerModels}
+                    selectedIds={selectedModelIds}
+                    onToggle={toggleModel}
+                    minModels={mode.panelSize[0]}
+                    maxModels={mode.panelSize[1]}
+                    isLoading={modelsQuery.isLoading}
+                    error={modelsQuery.error instanceof Error ? modelsQuery.error.message : null}
+                  />
+                )}
               </div>
 
               {error && <div className="new-ux__error" role="alert">{error}</div>}
@@ -398,26 +443,40 @@ export default function RunWorkspaceNew({
                     <span>{workspace.synthesisState.status === "final" ? t("workspace.run.verdict") : t("workspace.run.verdictForming")}</span>
                     <span>{workspace.isPollingFallback ? t("workspace.run.polling") : workspace.sseStatus}</span>
                   </div>
-                  <div className="new-ux__verdict-grid">
-                    <div>
-                      <div className="new-ux__verdict-word">
-                        {modeId === "compare"
-                          ? t("mode.compare.name")
-                          : report?.verdict?.decision_type || (workspace.synthesisState.status === "failed" ? t("status.failed") : "—")}
-                      </div>
-                      <p className="new-ux__model-copy">
-                        {report?.verdict?.rationale || workspace.synthesisState.text || t("workspace.run.verdictPlaceholder")}
-                      </p>
+                  {modeId === "compare" ? (
+                    <div className="new-ux__compare-grid">
+                      {liveRows.map((row) => (
+                        <article key={row.name} className="new-ux__compare-card">
+                          <div className="new-ux__model-head">
+                            <span className="new-ux__model-name">{row.name}</span>
+                            <span className="new-ux__model-state">{t(MODEL_STATE_LABEL_KEYS[row.state])}</span>
+                          </div>
+                          <p className="new-ux__model-copy">
+                            {row.text || t("workspace.run.waitingForModel")}
+                          </p>
+                        </article>
+                      ))}
                     </div>
-                    <div>
-                      <div className="new-ux__confidence">
-                        {typeof report?.verdict?.confidence === "number"
-                          ? String(Math.round(report.verdict.confidence * 100))
-                          : "—"}
+                  ) : (
+                    <div className="new-ux__verdict-grid">
+                      <div>
+                        <div className="new-ux__verdict-word">
+                          {report?.verdict?.decision_type || (workspace.synthesisState.status === "failed" ? t("status.failed") : "—")}
+                        </div>
+                        <p className="new-ux__model-copy">
+                          {report?.verdict?.rationale || workspace.synthesisState.text || t("workspace.run.verdictPlaceholder")}
+                        </p>
                       </div>
-                      <div className="new-ux__smallcaps">{t("workspace.run.confidenceLabel")}</div>
+                      <div>
+                        <div className="new-ux__confidence">
+                          {typeof report?.verdict?.confidence === "number"
+                            ? String(Math.round(report.verdict.confidence * 100))
+                            : "—"}
+                        </div>
+                        <div className="new-ux__smallcaps">{t("workspace.run.confidenceLabel")}</div>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {report && (
                     <div className="new-ux__report">
