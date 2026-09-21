@@ -1,10 +1,11 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { replaceMock, startDebateMock, registryQueryMock, getWorkspaceMock, debatesQueryMock } = vi.hoisted(() => {
+const { replaceMock, startDebateMock, apiRequestMock, registryQueryMock, getWorkspaceMock, debatesQueryMock } = vi.hoisted(() => {
   return {
     replaceMock: vi.fn(),
     startDebateMock: vi.fn(),
+    apiRequestMock: vi.fn(),
     registryQueryMock: {
       data: {
         models: [
@@ -38,6 +39,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, startDebate: startDebateMock };
 });
 
+vi.mock("@/lib/apiClient", () => ({ apiRequest: apiRequestMock }));
+
 vi.mock("@/hooks/useRunWorkspace", () => ({
   useRunWorkspace: () => getWorkspaceMock.current,
 }));
@@ -59,6 +62,7 @@ function idleWorkspace(overrides: Partial<any> = {}) {
     debate: null,
     events: [],
     responses: [],
+    mergedStreamingResponses: [],
     synthesisState: { status: "idle", text: "", report: null },
     status: "idle",
     sseStatus: "idle",
@@ -80,6 +84,7 @@ describe("RunWorkspaceNew", () => {
   beforeEach(() => {
     getWorkspaceMock.current = idleWorkspace();
     startDebateMock.mockReset();
+    apiRequestMock.mockReset();
     replaceMock.mockReset();
     debatesQueryMock.data = { items: [] };
   });
@@ -92,21 +97,51 @@ describe("RunWorkspaceNew", () => {
     expect(screen.queryByText("Disabled Model")).not.toBeInTheDocument();
   });
 
-  it("switches the mode blurb when a mode chip is clicked and drops to one model for Oracle", () => {
+  it("uses the dedicated Oracle composer without a model panel", () => {
     renderWorkspace();
     fireEvent.click(screen.getByRole("button", { name: "Oracle" }));
     expect(screen.getByText("One deep-reasoning model for a focused answer.")).toBeInTheDocument();
-    // Oracle's panelSize is [1, 1]; the picker head shows "n / 1".
-    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+    expect(screen.getByText("Oracle uses its dedicated reasoning runtime. No model panel is required.")).toBeInTheDocument();
+    expect(screen.queryByText("1 / 1")).not.toBeInTheDocument();
   });
 
-  it("a toggle can never drop the panel below the active mode's minimum", () => {
+  it("starts Oracle through /oracle and restores its auxiliary run URL", async () => {
+    apiRequestMock.mockResolvedValue({ session_id: "oracle-123" });
     renderWorkspace();
     fireEvent.click(screen.getByRole("button", { name: "Oracle" }));
-    const onlySeat = screen.getByRole("button", { name: /GPT-4o Mini/ });
-    expect(onlySeat).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(onlySeat); // attempt to deselect the only seat in a 1-model mode
-    expect(onlySeat).toHaveAttribute("aria-pressed", "true"); // toggle refuses to go below minModels
+    fireEvent.change(screen.getByPlaceholderText("Should we…"), { target: { value: "Should we launch the new plan?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send it to the panel" }));
+
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledWith(expect.objectContaining({
+      method: "POST",
+      path: "/oracle",
+      body: { prompt: "Should we launch the new plan?" },
+    })));
+    expect(replaceMock).toHaveBeenCalledWith("/new?oracle=oracle-123");
+    expect(startDebateMock).not.toHaveBeenCalled();
+  });
+
+  it("shows RedTeam risk lenses instead of a model panel and sends the selected lenses", async () => {
+    apiRequestMock.mockResolvedValue({ id: "redteam-123" });
+    renderWorkspace();
+    fireEvent.click(screen.getByRole("button", { name: "RedTeam" }));
+    expect(screen.getByText("Review the proposal through risk lenses. RedTeam uses its dedicated adversarial runtime.")).toBeInTheDocument();
+    const financial = screen.getByRole("button", { name: "Financial" });
+    expect(financial).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(financial);
+    fireEvent.change(screen.getByPlaceholderText("Should we…"), { target: { value: "Should we ship this architecture?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send it to the panel" }));
+
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledWith(expect.objectContaining({
+      method: "POST",
+      path: "/redteam",
+      body: {
+        proposal_text: "Should we ship this architecture?",
+        lenses: ["security", "scaling", "compliance", "financial"],
+      },
+    })));
+    expect(replaceMock).toHaveBeenCalledWith("/new?redteam=redteam-123");
+    expect(startDebateMock).not.toHaveBeenCalled();
   });
 
   it("blocks sending and shows the minimum-selection error when the registry has no models yet", () => {
@@ -185,6 +220,20 @@ describe("RunWorkspaceNew", () => {
     // The pinned run's own question text should not also appear in the recent-runs list below it.
     expect(screen.getAllByText("Draft the Q3 roadmap")).toHaveLength(1);
     expect(screen.getByText("Pick a vendor")).toBeInTheDocument();
+  });
+
+  it("hydrates the rejoined run mode from the persisted debate", () => {
+    getWorkspaceMock.current = idleWorkspace({
+      debate: { id: "run-compare", prompt: "Compare these choices", status: "running", mode: "compare" },
+      status: "streaming",
+      mergedStreamingResponses: [
+        { responseId: "r1", modelId: "claude-sonnet", displayName: "Claude 3.5 Sonnet", content: "Claude response", state: "streaming" },
+      ],
+    });
+    renderWorkspace("run-compare");
+    expect(screen.getByText("Compare")).toBeInTheDocument();
+    expect(screen.getByText("Claude response")).toBeInTheDocument();
+    expect(screen.queryByText("Confidence")).not.toBeInTheDocument();
   });
 
   it("renders the canonical run status pill once a run and debate exist", () => {
