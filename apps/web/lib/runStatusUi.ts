@@ -44,7 +44,7 @@ export function toUiRunStatus(
   if (options.hasError) return "needsYou";
   if (status && CLOSED_STATUSES.has(status)) return "closed";
   if (status && LIVE_STATUSES.has(status)) return "live";
-  return "live";
+  return "needsYou";
 }
 
 export const UI_RUN_STATUS_LABEL_KEYS: Record<UiRunStatus, string> = {
