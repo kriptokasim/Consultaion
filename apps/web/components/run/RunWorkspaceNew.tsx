@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, startDebate } from "@/lib/api";
+import { apiRequest } from "@/lib/apiClient";
 import { defaultPanelConfig } from "@/lib/panels";
 import { useModelRegistry } from "@/lib/api/hooks/useModelRegistry";
 import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
@@ -17,8 +18,15 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { DecisionReport } from "@/components/report/DecisionReport";
 import type { DecisionReport as DecisionReportData } from "@/components/report/DecisionReportView";
 import type { PersistedModelResponse } from "@/lib/api/types";
+import OracleModeRun from "@/components/run/OracleModeRun";
+import RedTeamModeRun from "@/components/run/RedTeamModeRun";
 
 type LiveRowState = "queued" | "streaming" | "complete" | "failed";
+
+type AuxiliaryRun =
+  | { kind: "oracle"; id: string }
+  | { kind: "redteam"; id: string }
+  | null;
 
 const MODEL_STATE_LABEL_KEYS: Record<LiveRowState, string> = {
   queued: "workspace.modelState.queued",
@@ -43,10 +51,17 @@ function reportFromState(synthesisState: any, debate: any): Record<string, any> 
   return persisted && typeof persisted === "object" ? (persisted as Record<string, any>) : null;
 }
 
-export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?: string | null }) {
+export default function RunWorkspaceNew({
+  initialRunId = null,
+  initialAuxRun = null,
+}: {
+  initialRunId?: string | null;
+  initialAuxRun?: AuxiliaryRun;
+}) {
   const router = useRouter();
   const { t } = useI18n();
   const [runId, setRunId] = useState<string | null>(initialRunId);
+  const [auxRun, setAuxRun] = useState<AuxiliaryRun>(initialAuxRun);
   const [question, setQuestion] = useState("");
   const [modeId, setModeId] = useState<ModeId>("arena");
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
@@ -111,65 +126,28 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     return pickerModels.filter((model) => selected.has(model.id));
   }, [selectedModelIds, pickerModels]);
 
+  // The workspace hook already merges live stream buffers with persisted responses.
+  // Consume that canonical projection rather than rebuilding it from raw events.
   const liveRows = useMemo(() => {
     const rows = new Map<string, { name: string; text: string; state: LiveRowState }>();
-
     for (const model of visibleModels) {
       rows.set(model.id, { name: model.name, text: "", state: "queued" });
     }
-
-    for (const response of workspace.responses || []) {
-      const id = String(response?.model_id || "");
-      const matching = visibleModels.find((model) => model.id === id);
-      const key = matching?.id || id;
-      if (!key) continue;
-      rows.set(key, {
-        name: matching?.name || nameFromResponse(response),
-        text: textFromResponse(response),
-        state: response?.success === false ? "failed" : "complete",
+    for (const response of workspace.mergedStreamingResponses) {
+      const matching = visibleModels.find((model) => model.id === response.modelId);
+      if (!matching) continue;
+      const state: LiveRowState =
+        response.state === "failed" ? "failed" :
+        response.state === "completed" ? "complete" :
+        "streaming";
+      rows.set(matching.id, {
+        name: response.displayName || matching.name,
+        text: response.content || "",
+        state,
       });
     }
-
-    for (const event of workspace.events || []) {
-      const payload = (event as any)?.payload || event;
-      const eventType = String((event as any)?.type || payload?.type || "");
-      if (![
-        "model_response_started",
-        "model_response_delta",
-        "model_response_completed",
-        "model_response_failed",
-        "arena_response",
-        "message",
-        "seat_message",
-      ].includes(eventType)) {
-        continue;
-      }
-      const id = String(payload?.model_id || payload?.model || payload?.provider_model || "");
-      const matching = visibleModels.find((model) => model.id === id);
-      const key = matching?.id || id;
-      if (!key) continue;
-      const existing = rows.get(key) || { name: matching?.name || "Model", text: "", state: "streaming" as LiveRowState };
-      const delta =
-        typeof payload?.delta === "string"
-          ? payload.delta
-          : typeof payload?.text === "string"
-            ? payload.text
-            : typeof payload?.content === "string"
-              ? payload.content
-              : "";
-      rows.set(key, {
-        name: existing.name,
-        text: delta && eventType.endsWith("_delta") ? existing.text + delta : delta || existing.text,
-        state: eventType.endsWith("_failed")
-          ? "failed"
-          : eventType.endsWith("_completed")
-            ? "complete"
-            : "streaming",
-      });
-    }
-
     return Array.from(rows.values());
-  }, [workspace.events, workspace.responses, visibleModels]);
+  }, [workspace.mergedStreamingResponses, visibleModels]);
 
   const handleModeChange = (next: ModeId) => {
     setModeId(next);
@@ -196,7 +174,12 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     const trimmed = question.trim();
     if (!trimmed || sending) return;
 
-    if (selectedModelIds.length < mode.panelSize[0]) {
+    if (modeId === "redteam") {
+      if (trimmed.length < 10) {
+        setError(t("workspace.redteam.validationProposal"));
+        return;
+      }
+    } else if (modeId !== "oracle" && selectedModelIds.length < mode.panelSize[0]) {
       setError(
         t(
           mode.panelSize[0] === 1
@@ -212,6 +195,33 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     setError(null);
 
     try {
+      if (modeId === "oracle") {
+        const result = await apiRequest<{ session_id: string }>({
+          method: "POST",
+          path: "/oracle",
+          body: { prompt: trimmed },
+        });
+        setRunId(null);
+        setAuxRun({ kind: "oracle", id: result.session_id });
+        router.replace("/new?oracle=" + encodeURIComponent(result.session_id));
+        return;
+      }
+
+      if (modeId === "redteam") {
+        const result = await apiRequest<{ id: string }>({
+          method: "POST",
+          path: "/redteam",
+          body: {
+            proposal_text: trimmed,
+            lenses: ["security", "scaling", "compliance"],
+          },
+        });
+        setRunId(null);
+        setAuxRun({ kind: "redteam", id: result.id });
+        router.replace("/new?redteam=" + encodeURIComponent(result.id));
+        return;
+      }
+
       const base = defaultPanelConfig();
       const seats = selectedModelIds.map((id) => {
         const model = registryModels.find((item) => item.id === id);
@@ -228,9 +238,11 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
         prompt: trimmed,
         panel_config: { ...base, seats },
         mode: modeId,
+        compare_models: modeId === "compare" ? selectedModelIds : undefined,
         gateway_policy: "auto",
       });
 
+      setAuxRun(null);
       setRunId(result.id);
       router.replace("/new?run=" + encodeURIComponent(result.id));
     } catch (err) {
@@ -246,7 +258,9 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     }
   };
 
-  const hasRun = Boolean(runId && workspace.debate);
+  const hasDebateRun = Boolean(runId && workspace.debate);
+  const hasAuxRun = Boolean(auxRun);
+  const hasRun = hasDebateRun || hasAuxRun;
   const uiStatus = toUiRunStatus(workspace.debate?.status || workspace.status, {
     hasReport: Boolean(report),
     hasError: Boolean(workspace.error),
@@ -340,6 +354,14 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
                   ))}
                 </div>
               )}
+            </section>
+          ) : auxRun?.kind === "oracle" ? (
+            <section className="new-ux__run">
+              <OracleModeRun sessionId={auxRun.id} />
+            </section>
+          ) : auxRun?.kind === "redteam" ? (
+            <section className="new-ux__run">
+              <RedTeamModeRun sessionId={auxRun.id} />
             </section>
           ) : (
             <section className="new-ux__run">
