@@ -2,18 +2,31 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ApiError, startDebate } from "@/lib/api";
 import { defaultPanelConfig } from "@/lib/panels";
 import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 import { getMode, MODES, type ModeId } from "@/lib/modes";
+import { toUiRunStatus, UI_RUN_STATUS_LABEL_KEYS } from "@/lib/runStatusUi";
+import { useI18n } from "@/lib/i18n/client";
+import type { PersistedModelResponse } from "@/lib/api/types";
 
-function textFromResponse(response: any): string {
-  return response?.content || response?.text || response?.output || response?.message || "";
+type LiveRowState = "queued" | "streaming" | "complete" | "failed";
+
+const MODEL_STATE_LABEL_KEYS: Record<LiveRowState, string> = {
+  queued: "workspace.modelState.queued",
+  streaming: "workspace.modelState.streaming",
+  complete: "workspace.modelState.complete",
+  failed: "status.failed",
+};
+
+function textFromResponse(response: PersistedModelResponse): string {
+  return response.content || "";
 }
 
-function nameFromResponse(response: any): string {
-  return response?.display_name || response?.model_name || response?.model || response?.provider || "Model";
+function nameFromResponse(response: PersistedModelResponse): string {
+  return response.display_name || response.provider || "Model";
 }
 
 function reportFromState(synthesisState: any, debate: any): Record<string, any> | null {
@@ -24,16 +37,9 @@ function reportFromState(synthesisState: any, debate: any): Record<string, any> 
   return persisted && typeof persisted === "object" ? (persisted as Record<string, any>) : null;
 }
 
-function statusWord(status: string, synthesisStatus: string, hasReport: boolean): string {
-  if (hasReport || status === "completed") return "Closed";
-  if (status === "failed") return "Failed";
-  if (synthesisStatus === "streaming" || synthesisStatus === "provisional") return "Deliberating";
-  if (status === "streaming" || status === "running") return "Live";
-  return "Waiting";
-}
-
 export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?: string | null }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [question, setQuestion] = useState("");
   const [modeId, setModeId] = useState<ModeId>("arena");
@@ -57,14 +63,14 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
   }, [selectedModelIds]);
 
   const liveRows = useMemo(() => {
-    const rows = new Map<string, { name: string; text: string; state: string }>();
+    const rows = new Map<string, { name: string; text: string; state: LiveRowState }>();
 
     for (const model of visibleModels) {
       rows.set(model.id, { name: model.name, text: "", state: "queued" });
     }
 
     for (const response of workspace.responses || []) {
-      const id = String(response?.model_id || response?.model || response?.provider_model || "");
+      const id = String(response?.model_id || "");
       const matching = visibleModels.find((model) => model.id === id);
       const key = matching?.id || id;
       if (!key) continue;
@@ -93,7 +99,7 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
       const matching = visibleModels.find((model) => model.id === id);
       const key = matching?.id || id;
       if (!key) continue;
-      const existing = rows.get(key) || { name: matching?.name || "Model", text: "", state: "streaming" };
+      const existing = rows.get(key) || { name: matching?.name || "Model", text: "", state: "streaming" as LiveRowState };
       const delta =
         typeof payload?.delta === "string"
           ? payload.delta
@@ -113,7 +119,7 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
       });
     }
 
-    return [...rows.values()];
+    return Array.from(rows.values());
   }, [workspace.events, workspace.responses, visibleModels]);
 
   const handleModeChange = (next: ModeId) => {
@@ -142,11 +148,12 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
 
     if (selectedModelIds.length < mode.panelSize[0]) {
       setError(
-        "Select at least " +
-          mode.panelSize[0] +
-          " model" +
-          (mode.panelSize[0] === 1 ? "" : "s") +
-          ".",
+        t(
+          mode.panelSize[0] === 1
+            ? "workspace.composer.selectMinimumOne"
+            : "workspace.composer.selectMinimumMany",
+          { count: mode.panelSize[0] },
+        ),
       );
       return;
     }
@@ -178,11 +185,11 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
       router.replace("/new?run=" + encodeURIComponent(result.id));
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-        setError("Sign-in is required to start this run from the current backend.");
+        setError(t("workspace.composer.signInRequired"));
       } else if (err instanceof Error) {
-        setError(err.message || "The run could not be started.");
+        setError(err.message || t("workspace.composer.startError"));
       } else {
-        setError("The run could not be started.");
+        setError(t("workspace.composer.startError"));
       }
     } finally {
       setSending(false);
@@ -190,34 +197,34 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
   };
 
   const hasRun = Boolean(runId && workspace.debate);
-  const currentStatus = statusWord(
-    workspace.debate?.status || workspace.status,
-    workspace.synthesisState.status,
-    Boolean(report),
-  );
+  const uiStatus = toUiRunStatus(workspace.debate?.status || workspace.status, {
+    hasReport: Boolean(report),
+    hasError: Boolean(workspace.error),
+  });
+  const currentStatusLabel = t(UI_RUN_STATUS_LABEL_KEYS[uiStatus]);
 
   return (
     <div className="new-ux" data-surface="ink">
       <div className="new-ux__shell">
         <header className="new-ux__header">
           <div className="new-ux__brand">Consultaion</div>
-          <div className="new-ux__nav" aria-label="Workspace navigation">
-            <a href="/new" className="new-ux__nav-link new-ux__nav-link--active">Ask</a>
-            <a href="/runs" className="new-ux__nav-link">Runs</a>
-            <a href="/settings" className="new-ux__nav-link">You</a>
+          <div className="new-ux__nav" aria-label={t("nav.mobile.label")}>
+            <Link href="/new" className="new-ux__nav-link new-ux__nav-link--active">{t("nav.ask")}</Link>
+            <Link href="/runs" className="new-ux__nav-link">{t("nav.runs")}</Link>
+            <Link href="/settings" className="new-ux__nav-link">{t("nav.you")}</Link>
           </div>
-          {hasRun && <span className="new-ux__meta">{mode.name}</span>}
+          {hasRun && <span className="new-ux__meta">{t(mode.nameKey)}</span>}
         </header>
 
         <main className="new-ux__main">
           {!hasRun ? (
             <section className="new-ux__hero">
-              <p className="new-ux__kicker">Decision workspace</p>
-              <h1>Put a question to a panel.</h1>
-              <p className="new-ux__lede">Choose how the models should answer it. The workspace stays the same when the mode changes.</p>
+              <p className="new-ux__kicker">{t("workspace.hero.kicker")}</p>
+              <h1>{t("workspace.hero.title")}</h1>
+              <p className="new-ux__lede">{t("workspace.hero.lede")}</p>
 
               <div className="new-ux__composer">
-                <div className="new-ux__mode-row" role="group" aria-label="Run mode">
+                <div className="new-ux__mode-row" role="group" aria-label={t("workspace.composer.modeGroupLabel")}>
                   {MODES.map((item) => (
                     <button
                       key={item.id}
@@ -226,25 +233,25 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
                       aria-pressed={item.id === modeId}
                       onClick={() => handleModeChange(item.id)}
                     >
-                      {item.name}
+                      {t(item.nameKey)}
                     </button>
                   ))}
                 </div>
-                <p className="new-ux__mode-blurb">{mode.blurb}</p>
+                <p className="new-ux__mode-blurb">{t(mode.blurbKey)}</p>
 
-                <label className="new-ux__label" htmlFor="new-ux-question">Your question</label>
+                <label className="new-ux__label" htmlFor="new-ux-question">{t("workspace.composer.questionLabel")}</label>
                 <textarea
                   id="new-ux-question"
                   className="new-ux__input"
                   rows={4}
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
-                  placeholder="Should we…"
+                  placeholder={t("workspace.composer.questionPlaceholder")}
                 />
 
                 <div className="new-ux__panel">
                   <div className="new-ux__panel-head">
-                    <span className="new-ux__meta">The panel</span>
+                    <span className="new-ux__meta">{t("workspace.composer.panelLabel")}</span>
                     <span className="new-ux__meta">{selectedModelIds.length} / {mode.panelSize[1]}</span>
                   </div>
                   <div className="new-ux__panel-list">
@@ -260,7 +267,7 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
                           aria-pressed={selected}
                         >
                           <span>{model.name}</span>
-                          <span>{selected ? model.provider : "Not selected"}</span>
+                          <span>{selected ? model.provider : t("workspace.composer.notSelected")}</span>
                         </button>
                       );
                     })}
@@ -269,22 +276,21 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
               </div>
 
               {error && <div className="new-ux__error" role="alert">{error}</div>}
-              <p className="new-ux__footer-note">This branch reuses the existing run API, SSE stream, auth and synthesis state. Anonymous runs are intentionally left for the backend migration rather than faking the capability in the new UI.</p>
             </section>
           ) : (
             <section className="new-ux__run">
               <div className="new-ux__desktop-run">
                 <div>
-                  <p className="new-ux__kicker">{mode.name} · {currentStatus}</p>
+                  <p className="new-ux__kicker">{t(mode.nameKey)} · {currentStatusLabel}</p>
                   <h1 className="new-ux__question">{workspace.debate?.prompt || question}</h1>
 
                   <div className="new-ux__section">
-                    <p className="new-ux__section-title">The panel</p>
+                    <p className="new-ux__section-title">{t("workspace.composer.panelLabel")}</p>
                     {liveRows.map((row) => (
                       <article key={row.name} className="new-ux__model">
                         <div className="new-ux__model-head">
                           <span className="new-ux__model-name">{row.name}</span>
-                          <span className="new-ux__model-state">{row.state}</span>
+                          <span className="new-ux__model-state">{t(MODEL_STATE_LABEL_KEYS[row.state])}</span>
                         </div>
                         {row.text && <p className="new-ux__model-copy">{row.text}</p>}
                       </article>
@@ -293,28 +299,26 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
 
                   {modeId !== "compare" && (
                     <div className="new-ux__divergence">
-                      <p className="new-ux__section-title">Where they diverge</p>
-                      <p className="new-ux__model-copy">
-                        Divergence will use the run&apos;s existing synthesis metadata once the report is finalized.
-                      </p>
+                      <p className="new-ux__section-title">{t("workspace.run.divergenceTitle")}</p>
+                      <p className="new-ux__model-copy">{t("workspace.run.divergencePlaceholder")}</p>
                     </div>
                   )}
                 </div>
 
                 <div className="new-ux__verdict">
                   <div className="new-ux__verdict-top">
-                    <span>{workspace.synthesisState.status === "final" ? "Verdict" : "Verdict forming"}</span>
-                    <span>{workspace.isPollingFallback ? "Polling" : workspace.sseStatus}</span>
+                    <span>{workspace.synthesisState.status === "final" ? t("workspace.run.verdict") : t("workspace.run.verdictForming")}</span>
+                    <span>{workspace.isPollingFallback ? t("workspace.run.polling") : workspace.sseStatus}</span>
                   </div>
                   <div className="new-ux__verdict-grid">
                     <div>
                       <div className="new-ux__verdict-word">
                         {modeId === "compare"
-                          ? "Compare"
-                          : report?.verdict?.decision_type || (workspace.synthesisState.status === "failed" ? "Failed" : "—")}
+                          ? t("mode.compare.name")
+                          : report?.verdict?.decision_type || (workspace.synthesisState.status === "failed" ? t("status.failed") : "—")}
                       </div>
                       <p className="new-ux__model-copy">
-                        {report?.verdict?.rationale || workspace.synthesisState.text || "The panel will write the decision here as synthesis progresses."}
+                        {report?.verdict?.rationale || workspace.synthesisState.text || t("workspace.run.verdictPlaceholder")}
                       </p>
                     </div>
                     <div>
@@ -323,20 +327,20 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
                           ? String(Math.round(report.verdict.confidence * 100))
                           : "—"}
                       </div>
-                      <div className="new-ux__smallcaps">Percent confidence</div>
+                      <div className="new-ux__smallcaps">{t("workspace.run.confidenceLabel")}</div>
                     </div>
                   </div>
 
                   {report && (
                     <div className="new-ux__report">
-                      <p className="new-ux__kicker">Decision report</p>
-                      <h2>{report.title || "Decision report"}</h2>
+                      <p className="new-ux__kicker">{t("workspace.report.title")}</p>
+                      <h2>{report.title || t("workspace.report.title")}</h2>
                       <div className="new-ux__report-rule" />
                       {typeof report.verdict?.confidence === "number" && (
                         <p className="new-ux__report-confidence">{Math.round(report.verdict.confidence * 100)}%</p>
                       )}
                       {report.executive_summary && <p>{report.executive_summary}</p>}
-                      <a className="new-ux__nav-link" href={"/runs/" + runId}>Open the full report →</a>
+                      <Link className="new-ux__nav-link" href={"/runs/" + runId}>{t("workspace.report.openFull")}</Link>
                     </div>
                   )}
                 </div>
@@ -355,7 +359,7 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
               onClick={handleSend}
               disabled={sending || !question.trim()}
             >
-              {sending ? "Sending to the panel…" : "Send it to the panel"}
+              {sending ? t("workspace.composer.sendBusy") : t("workspace.composer.sendIdle")}
             </button>
           </div>
         </div>

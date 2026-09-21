@@ -30,7 +30,7 @@
 }
 
 .new-ux__brand {
-  font-size: 18px;
+  font-size: var(--text-lede);
   font-weight: 600;
   flex: 1;
 }
@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   gap: 18px;
-  font-size: var(--text-sm);
+  font-size: var(--text-utility);
 }
 
 .new-ux__nav-link { min-height: 44px; display: inline-flex; align-items: center; }
@@ -125,7 +125,7 @@
 .new-ux__mode-blurb {
   min-height: 26px;
   margin: 10px 0 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-utility);
   color: var(--ink-soft);
 }
 
@@ -149,7 +149,7 @@
   background: transparent;
   color: var(--ink);
   padding: 12px 0 14px;
-  font-size: 16px;
+  font-size: var(--text-body);
   line-height: 1.6;
 }
 
@@ -233,7 +233,7 @@
 
 .new-ux__status {
   margin-top: 12px;
-  font-size: var(--text-sm);
+  font-size: var(--text-utility);
   color: var(--ink-soft);
 }
 
@@ -252,7 +252,7 @@
 .new-ux__question {
   margin: 0;
   max-width: 800px;
-  font-size: 24px;
+  font-size: var(--text-h3);
   line-height: 1.15;
 }
 
@@ -329,7 +329,7 @@
 }
 
 .new-ux__model-name {
-  font-size: 16px;
+  font-size: var(--text-body);
   font-weight: 600;
 }
 
@@ -370,7 +370,7 @@
 .new-ux__footer-note {
   margin-top: 28px;
   color: var(--ink-faint);
-  font-size: var(--text-sm);
+  font-size: var(--text-utility);
 }
 
 @media (min-width: 900px) {
@@ -386,10 +386,10 @@
 @media (max-width: 640px) {
   .new-ux__shell { width: min(100% - 40px, 520px); }
   .new-ux__header { min-height: 54px; }
-  .new-ux__nav { gap: 10px; font-size: 12px; }
+  .new-ux__nav { gap: 10px; font-size: var(--text-meta); }
   .new-ux__main { padding-top: 16px; }
   .new-ux__hero { padding-top: 8px; }
-  .new-ux__lede { font-size: 15px; }
+  .new-ux__lede { font-size: var(--text-body); }
   .new-ux__actions-inner { flex-direction: column; }
   .new-ux__primary, .new-ux__secondary { width: 100%; }
   .new-ux__verdict-grid { grid-template-columns: 1fr; }
