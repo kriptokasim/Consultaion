@@ -12,7 +12,10 @@ const SITE_CONTACT_FILES = [
   "app/(marketing)/contact/page.tsx",
   "app/(marketing)/security/page.tsx",
   "app/(marketing)/privacy/page.tsx",
-  "app/(marketing)/pricing/page.tsx",
+  // app/(marketing)/pricing/page.tsx delegates its whole body to this
+  // component (PS07 new-ux rebuild, also used by the homepage's pricing
+  // section) — that's where the enterprise "Contact sales" mailto now lives.
+  "components/marketing/broadsheet/BroadsheetPricing.tsx",
   "app/(app)/settings/team/page.tsx",
   "app/(app)/settings/data-retention/page.tsx",
   "public/.well-known/security.txt",
