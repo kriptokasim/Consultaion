@@ -883,5 +883,15 @@
   "workspace.report.openFull": "Tam raporu aç →",
   "workspace.modelState.queued": "Sırada",
   "workspace.modelState.streaming": "Akıyor",
-  "workspace.modelState.complete": "Tamamlandı"
+  "workspace.modelState.complete": "Tamamlandı",
+  "panelPicker.title": "Panel",
+  "panelPicker.loading": "Model paneli yükleniyor…",
+  "panelPicker.error": "Model paneli yüklenemedi.",
+  "panelPicker.empty": "Şu anda kullanılabilir model yok.",
+  "panelPicker.notSelected": "Seçilmedi",
+  "panelPicker.minimum": "En az {count} model seçin.",
+  "panelPicker.sheetDescription": "Bu oturumu hangi modellerin yanıtlayacağını seçin.",
+  "offlineBar.message": "Çevrimdışısınız. Bu oturum sunucuda devam ediyor — yeniden bağlandığınızda güncellemeler görünecek.",
+  "errorBanner.retry": "Tekrar dene",
+  "errorBanner.reference": "Referans: {code}"
 }

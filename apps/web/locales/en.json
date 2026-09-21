@@ -883,5 +883,15 @@
   "workspace.report.openFull": "Open the full report →",
   "workspace.modelState.queued": "Queued",
   "workspace.modelState.streaming": "Streaming",
-  "workspace.modelState.complete": "Complete"
+  "workspace.modelState.complete": "Complete",
+  "panelPicker.title": "The panel",
+  "panelPicker.loading": "Loading the model panel…",
+  "panelPicker.error": "The model panel could not be loaded.",
+  "panelPicker.empty": "No models are available right now.",
+  "panelPicker.notSelected": "Not selected",
+  "panelPicker.minimum": "Choose at least {count} models.",
+  "panelPicker.sheetDescription": "Choose which models answer this run.",
+  "offlineBar.message": "You're offline. This run continues on the server — updates will appear when you reconnect.",
+  "errorBanner.retry": "Try again",
+  "errorBanner.reference": "Reference: {code}"
 }

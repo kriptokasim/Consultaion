@@ -533,3 +533,23 @@ export interface PersistedResponsesResponse {
   items: PersistedModelResponse[];
   summary: PersistedResponsesSummary;
 }
+
+/** Mirrors apps/api/schemas.py ModelPublic, served by GET /models. */
+export interface ModelPublic {
+  id: string;
+  display_name: string;
+  provider: string;
+  capabilities: string[];
+  tier: string;
+  cost_tier: string;
+  latency_class: string;
+  quality_tier: string;
+  safety_profile: string;
+  recommended: boolean;
+  enabled: boolean;
+  tags?: string[] | null;
+}
+
+export interface ModelsListResponse {
+  models: ModelPublic[];
+}

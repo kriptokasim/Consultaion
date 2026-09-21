@@ -2,7 +2,7 @@ import { apiRequest } from "@/lib/apiClient";
 import { fetchWithAuth } from "@/lib/auth";
 import type { PanelConfigPayload } from "@/lib/panels";
 import { API_ORIGIN } from "@/lib/config/runtime";
-import type { PersistedResponsesResponse, RequestOptions } from "@/lib/api/types";
+import type { ModelsListResponse, PersistedResponsesResponse, RequestOptions } from "@/lib/api/types";
 import {
   formatArenaSchemaDiagnostic,
   persistedResponsesSchema,
@@ -221,6 +221,11 @@ export async function getDebate(id: string, options?: RequestOptions) {
 
 export async function getReport(id: string) {
   return request<any>(`/debates/${id}/report`, undefined, { auth: true });
+}
+
+/** Real model registry (apps/api/parliament/model_registry.py), no auth required. */
+export async function listModels() {
+  return request<ModelsListResponse>("/models/");
 }
 
 export async function startDebate(payload: { prompt: string; config?: any; model_id?: string | null; panel_config?: PanelConfigPayload; mode?: string; locale?: string; compare_models?: string[]; gateway_policy?: string }) {
