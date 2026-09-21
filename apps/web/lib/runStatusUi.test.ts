@@ -25,9 +25,9 @@ describe("toUiRunStatus", () => {
     expect(toUiRunStatus("polling")).toBe("live");
   });
 
-  it("defaults unknown/missing statuses to live", () => {
-    expect(toUiRunStatus(null)).toBe("live");
-    expect(toUiRunStatus(undefined)).toBe("live");
-    expect(toUiRunStatus("something_new")).toBe("live");
+  it("fails closed to needsYou for unknown or missing statuses", () => {
+    expect(toUiRunStatus(null)).toBe("needsYou");
+    expect(toUiRunStatus(undefined)).toBe("needsYou");
+    expect(toUiRunStatus("something_new")).toBe("needsYou");
   });
 });
