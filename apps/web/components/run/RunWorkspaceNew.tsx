@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, startDebate } from "@/lib/api";
 import { defaultPanelConfig } from "@/lib/panels";
-import { AVAILABLE_MODELS } from "@/components/arena/ModelPanelSheet";
+import { useModelRegistry } from "@/lib/api/hooks/useModelRegistry";
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 import { getMode, MODES, type ModeId } from "@/lib/modes";
-import { toUiRunStatus, UI_RUN_STATUS_LABEL_KEYS } from "@/lib/runStatusUi";
+import { toUiRunStatus } from "@/lib/runStatusUi";
 import { useI18n } from "@/lib/i18n/client";
 import { PrimaryNav } from "@/components/navigation/PrimaryNav";
+import { PanelPicker, type PanelPickerModel } from "@/components/ui/PanelPicker";
+import { StatusPill } from "@/components/ui/StatusPill";
 import type { PersistedModelResponse } from "@/lib/api/types";
 
 type LiveRowState = "queued" | "streaming" | "complete" | "failed";
@@ -44,14 +46,29 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [question, setQuestion] = useState("");
   const [modeId, setModeId] = useState<ModeId>("arena");
-  const [selectedModelIds, setSelectedModelIds] = useState<string[]>(
-    AVAILABLE_MODELS.slice(0, 4).map((model) => model.id),
-  );
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const mode = getMode(modeId);
   const workspace = useRunWorkspace(runId);
+
+  // R9: the real model registry (GET /models), not a hardcoded list.
+  const modelsQuery = useModelRegistry();
+  const registryModels = useMemo(
+    () => (modelsQuery.data?.models ?? []).filter((item) => item.enabled),
+    [modelsQuery.data],
+  );
+  const pickerModels = useMemo<PanelPickerModel[]>(
+    () => registryModels.map((item) => ({ id: item.id, name: item.display_name, provider: item.provider })),
+    [registryModels],
+  );
+
+  // Seed a default panel once the registry loads; never overrides a choice the user already made.
+  useEffect(() => {
+    if (selectedModelIds.length > 0 || registryModels.length === 0) return;
+    setSelectedModelIds(registryModels.slice(0, Math.min(4, mode.panelSize[1])).map((item) => item.id));
+  }, [registryModels, selectedModelIds.length, mode.panelSize]);
 
   const report = useMemo(
     () => reportFromState(workspace.synthesisState, workspace.debate),
@@ -60,8 +77,8 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
 
   const visibleModels = useMemo(() => {
     const selected = new Set(selectedModelIds);
-    return AVAILABLE_MODELS.filter((model) => selected.has(model.id));
-  }, [selectedModelIds]);
+    return pickerModels.filter((model) => selected.has(model.id));
+  }, [selectedModelIds, pickerModels]);
 
   const liveRows = useMemo(() => {
     const rows = new Map<string, { name: string; text: string; state: LiveRowState }>();
@@ -127,9 +144,10 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     setModeId(next);
     const nextMode = getMode(next);
     setSelectedModelIds((current) => {
-      if (nextMode.panelSize[1] === 1) return [current[0] || AVAILABLE_MODELS[0].id];
+      if (registryModels.length === 0) return current;
+      if (nextMode.panelSize[1] === 1) return [current[0] || registryModels[0].id];
       if (current.length >= nextMode.panelSize[0]) return current;
-      return AVAILABLE_MODELS.slice(0, nextMode.panelSize[0]).map((model) => model.id);
+      return registryModels.slice(0, nextMode.panelSize[0]).map((item) => item.id);
     });
   };
 
@@ -165,11 +183,11 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     try {
       const base = defaultPanelConfig();
       const seats = selectedModelIds.map((id) => {
-        const model = AVAILABLE_MODELS.find((item) => item.id === id);
+        const model = registryModels.find((item) => item.id === id);
         return {
           seat_id: id,
-          display_name: model?.name || id,
-          provider_key: model?.providerKey || "unknown",
+          display_name: model?.display_name || id,
+          provider_key: model?.provider || "unknown",
           model: id,
           role_profile: "architect",
         };
@@ -202,7 +220,6 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     hasReport: Boolean(report),
     hasError: Boolean(workspace.error),
   });
-  const currentStatusLabel = t(UI_RUN_STATUS_LABEL_KEYS[uiStatus]);
 
   return (
     <div className="new-ux" data-surface="ink">
@@ -246,30 +263,15 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
                   placeholder={t("workspace.composer.questionPlaceholder")}
                 />
 
-                <div className="new-ux__panel">
-                  <div className="new-ux__panel-head">
-                    <span className="new-ux__meta">{t("workspace.composer.panelLabel")}</span>
-                    <span className="new-ux__meta">{selectedModelIds.length} / {mode.panelSize[1]}</span>
-                  </div>
-                  <div className="new-ux__panel-list">
-                    {AVAILABLE_MODELS.map((model) => {
-                      const selected = selectedModelIds.includes(model.id);
-                      return (
-                        <button
-                          key={model.id}
-                          type="button"
-                          className="new-ux__panel-row"
-                          data-selected={selected}
-                          onClick={() => toggleModel(model.id)}
-                          aria-pressed={selected}
-                        >
-                          <span>{model.name}</span>
-                          <span>{selected ? model.provider : t("workspace.composer.notSelected")}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <PanelPicker
+                  models={pickerModels}
+                  selectedIds={selectedModelIds}
+                  onToggle={toggleModel}
+                  minModels={mode.panelSize[0]}
+                  maxModels={mode.panelSize[1]}
+                  isLoading={modelsQuery.isLoading}
+                  error={modelsQuery.error instanceof Error ? modelsQuery.error.message : null}
+                />
               </div>
 
               {error && <div className="new-ux__error" role="alert">{error}</div>}
@@ -278,7 +280,9 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
             <section className="new-ux__run">
               <div className="new-ux__desktop-run">
                 <div>
-                  <p className="new-ux__kicker">{t(mode.nameKey)} · {currentStatusLabel}</p>
+                  <p className="new-ux__kicker">
+                    {t(mode.nameKey)} <StatusPill status={uiStatus} />
+                  </p>
                   <h1 className="new-ux__question">{workspace.debate?.prompt || question}</h1>
 
                   <div className="new-ux__section">
