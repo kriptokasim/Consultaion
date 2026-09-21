@@ -194,3 +194,35 @@ real SSE/reconnect/continuation behavior on `/new` — can run against this
 branch before it is treated as fully verified. Until then, "frontend
 regression suite green" and "full-stack (SSE/DB/Redis/auth/billing)
 re-verified" are two different claims; only the first is made here.
+
+## New UX runtime adapter hardening — 2026-09-21
+
+**Branch evidence:** `feat/consultaion-new-ux`. Main remains untouched. The
+follow-up hardening after the independent audit implemented the missing
+presentation/runtime seam without replacing the production backend contracts.
+
+Changes completed:
+
+- Added dedicated New UX Oracle runtime UI using `POST /oracle`, `GET /oracle/{session_id}`, and the existing fork contract.
+- Added dedicated New UX RedTeam runtime UI using `POST /redteam`, `GET /redteam/{session_id}`, and the existing five risk-lens contract.
+- Updated the unified workspace so Oracle/RedTeam no longer submit through `/debates`.
+- Compare now sends `compare_models` and renders model results without a fabricated verdict/confidence.
+- Rejoined runs hydrate their persisted backend mode instead of defaulting to Arena.
+- Live model rows consume `useRunWorkspace().mergedStreamingResponses`, the canonical merged stream/persistence projection.
+- Unknown UI run statuses now fail closed to **Needs you** instead of being presented as **Live**.
+- Added EN/TR copy and New UX styling for the auxiliary mode composers/results.
+- Updated focused Vitest coverage for Oracle, RedTeam, Compare rejoin behavior, and the new status fallback contract.
+
+Repository validation available from this environment:
+
+- EN/TR locale JSON parsed successfully with **967 keys in each locale** and no asymmetric keys.
+- Vercel project runtime-error aggregate for the previous 24 hours reports **no runtime errors**.
+- Vercel's latest Git deployment for the branch is connected to commit `2ad4cc4c010fdd9f0cb6104412d46b99f2186471`; the deployment was still queued when this status entry was written. The Vercel check is therefore not claimed green yet.
+- Full local TypeScript/Vitest/Playwright and backend verification for these new changes was **not rerun in this environment**. Existing prior New UX baseline results remain recorded above and are not silently reused as proof for the new adapter changes.
+
+**Still outstanding before calling the redesign production-complete:**
+
+- PS08 anonymous run-before-signup contract.
+- Canonicalizing the authenticated app shell beyond `/new`.
+- PS09 dead-code cleanup and PS10 chamber/performance work.
+- Full PS11 verification with real API/DB/Redis/SSE/auth/billing available.
