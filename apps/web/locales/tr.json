@@ -894,5 +894,7 @@
   "panelPicker.sheetDescription": "Bu oturumu hangi modellerin yanıtlayacağını seçin.",
   "offlineBar.message": "Çevrimdışısınız. Bu oturum sunucuda devam ediyor — yeniden bağlandığınızda güncellemeler görünecek.",
   "errorBanner.retry": "Tekrar dene",
-  "errorBanner.reference": "Referans: {code}"
+  "errorBanner.reference": "Referans: {code}",
+  "workspace.recent.title": "Son oturumlar",
+  "workspace.recent.rejoin": "Yeniden katıl"
 }

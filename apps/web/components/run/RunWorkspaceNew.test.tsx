@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const { replaceMock, startDebateMock, registryQueryMock, getWorkspaceMock } = vi.hoisted(() => {
+const { replaceMock, startDebateMock, registryQueryMock, getWorkspaceMock, debatesQueryMock } = vi.hoisted(() => {
   return {
     replaceMock: vi.fn(),
     startDebateMock: vi.fn(),
@@ -19,6 +19,12 @@ const { replaceMock, startDebateMock, registryQueryMock, getWorkspaceMock } = vi
       error: null as unknown,
     },
     getWorkspaceMock: { current: null as any },
+    debatesQueryMock: {
+      data: { items: [] as any[] },
+      isLoading: false,
+      isError: false,
+      error: null as unknown,
+    },
   };
 });
 
@@ -38,6 +44,10 @@ vi.mock("@/hooks/useRunWorkspace", () => ({
 
 vi.mock("@/lib/api/hooks/useModelRegistry", () => ({
   useModelRegistry: () => registryQueryMock,
+}));
+
+vi.mock("@/lib/api/hooks/useDebatesList", () => ({
+  useDebatesList: () => debatesQueryMock,
 }));
 
 import { I18nClientProvider } from "@/lib/i18n/I18nClientProvider";
@@ -71,6 +81,7 @@ describe("RunWorkspaceNew", () => {
     getWorkspaceMock.current = idleWorkspace();
     startDebateMock.mockReset();
     replaceMock.mockReset();
+    debatesQueryMock.data = { items: [] };
   });
 
   it("renders the composer with models from the real registry, excluding disabled ones", () => {
@@ -135,6 +146,45 @@ describe("RunWorkspaceNew", () => {
     renderWorkspace();
     expect(screen.getByText("Loading the model panel…")).toBeInTheDocument();
     registryQueryMock.isLoading = false;
+  });
+
+  it("renders no recent-runs section for a first-time visitor with no run history", () => {
+    renderWorkspace();
+    expect(screen.queryByText("Recent runs")).not.toBeInTheDocument();
+  });
+
+  it("lists a closed run with its real verdict confidence and mode, and prefills the composer on click", () => {
+    debatesQueryMock.data = {
+      items: [
+        {
+          id: "run-closed",
+          prompt: "Should we expand to Europe?",
+          status: "completed",
+          mode: "debate",
+          verdict: { confidence: 0.82 },
+        },
+      ],
+    };
+    renderWorkspace();
+    expect(screen.getByText("Recent runs")).toBeInTheDocument();
+    expect(screen.getByText("Debate · 82%")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Should we expand to Europe?" }));
+    expect(screen.getByPlaceholderText("Should we…")).toHaveValue("Should we expand to Europe?");
+  });
+
+  it("pins an in-progress run above the composer with a rejoin link, separate from the recent-runs list", () => {
+    debatesQueryMock.data = {
+      items: [
+        { id: "run-live", prompt: "Draft the Q3 roadmap", status: "running", mode: "arena" },
+        { id: "run-closed", prompt: "Pick a vendor", status: "completed", mode: "compare", verdict: { confidence: 0.6 } },
+      ],
+    };
+    renderWorkspace();
+    expect(screen.getByRole("link", { name: "Rejoin" })).toHaveAttribute("href", "/new?run=run-live");
+    // The pinned run's own question text should not also appear in the recent-runs list below it.
+    expect(screen.getAllByText("Draft the Q3 roadmap")).toHaveLength(1);
+    expect(screen.getByText("Pick a vendor")).toBeInTheDocument();
   });
 
   it("renders the canonical run status pill once a run and debate exist", () => {

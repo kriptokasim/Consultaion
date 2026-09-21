@@ -894,5 +894,7 @@
   "panelPicker.sheetDescription": "Choose which models answer this run.",
   "offlineBar.message": "You're offline. This run continues on the server — updates will appear when you reconnect.",
   "errorBanner.retry": "Try again",
-  "errorBanner.reference": "Reference: {code}"
+  "errorBanner.reference": "Reference: {code}",
+  "workspace.recent.title": "Recent runs",
+  "workspace.recent.rejoin": "Rejoin"
 }

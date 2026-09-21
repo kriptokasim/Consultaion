@@ -508,6 +508,60 @@
 .new-ux-panel-sheet { max-height: 80vh; overflow-y: auto; }
 .new-ux-panel-sheet__body { padding: 0 16px 16px; }
 
+/* ── PS05 first-run / dashboard convergence ───────────────────────────── */
+
+.new-ux-pinned-run {
+  margin-top: 22px;
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--spot);
+  border-radius: 2px;
+}
+
+.new-ux-pinned-run__question {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+  font-size: var(--text-body);
+}
+
+.new-ux-recent__row {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.new-ux-recent__row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.new-ux-recent__question {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.new-ux-recent__question:hover { color: var(--spot-text); }
+
+.new-ux-recent__meta {
+  margin: 4px 0 0;
+  font-size: var(--text-meta);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-faint);
+}
+
 /* ── PS04 canonical navigation ────────────────────────────────────────── */
 
 .new-ux { --new-ux-bottom-nav-h: 0px; }

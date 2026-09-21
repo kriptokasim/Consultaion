@@ -6,9 +6,10 @@ import Link from "next/link";
 import { ApiError, startDebate } from "@/lib/api";
 import { defaultPanelConfig } from "@/lib/panels";
 import { useModelRegistry } from "@/lib/api/hooks/useModelRegistry";
+import { useDebatesList } from "@/lib/api/hooks/useDebatesList";
 import { useRunWorkspace } from "@/hooks/useRunWorkspace";
 import { getMode, MODES, type ModeId } from "@/lib/modes";
-import { toUiRunStatus } from "@/lib/runStatusUi";
+import { toUiRunStatus, type UiRunStatus } from "@/lib/runStatusUi";
 import { useI18n } from "@/lib/i18n/client";
 import { PrimaryNav } from "@/components/navigation/PrimaryNav";
 import { PanelPicker, type PanelPickerModel } from "@/components/ui/PanelPicker";
@@ -69,6 +70,34 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
     if (selectedModelIds.length > 0 || registryModels.length === 0) return;
     setSelectedModelIds(registryModels.slice(0, Math.min(4, mode.panelSize[1])).map((item) => item.id));
   }, [registryModels, selectedModelIds.length, mode.panelSize]);
+
+  // PS05: real runs for the "returning user" state — pinned active run + recent
+  // runs below the composer. Silently empty for a genuine first-time/anonymous
+  // visitor (401/no history); never fabricated example content.
+  const recentRunsQuery = useDebatesList({ limit: 6 });
+  const recentRuns = useMemo(() => {
+    const items = recentRunsQuery.data?.items ?? [];
+    return items.map((item) => {
+      const modeKnown = MODES.some((candidate) => candidate.id === item.mode);
+      return {
+        id: item.id,
+        prompt: item.prompt,
+        modeLabel: modeKnown ? t(getMode(item.mode).nameKey) : item.mode || "",
+        uiStatus: toUiRunStatus(item.status, { hasReport: Boolean(item.verdict) }) as UiRunStatus,
+        confidence:
+          typeof item.verdict?.confidence === "number" ? Math.round(item.verdict.confidence * 100) : undefined,
+      };
+    });
+  }, [recentRunsQuery.data, t]);
+
+  const pinnedRun = useMemo(
+    () => recentRuns.find((run) => run.uiStatus === "live" || run.uiStatus === "needsYou") ?? null,
+    [recentRuns],
+  );
+  const otherRecentRuns = useMemo(
+    () => recentRuns.filter((run) => run.id !== pinnedRun?.id),
+    [recentRuns, pinnedRun],
+  );
 
   const report = useMemo(
     () => reportFromState(workspace.synthesisState, workspace.debate),
@@ -237,6 +266,16 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
               <h1>{t("workspace.hero.title")}</h1>
               <p className="new-ux__lede">{t("workspace.hero.lede")}</p>
 
+              {pinnedRun && (
+                <div className="new-ux-pinned-run" role="status">
+                  <StatusPill status={pinnedRun.uiStatus} />
+                  <p className="new-ux-pinned-run__question">{pinnedRun.prompt}</p>
+                  <Link href={`/new?run=${pinnedRun.id}`} className="new-ux__secondary">
+                    {t("workspace.recent.rejoin")}
+                  </Link>
+                </div>
+              )}
+
               <div className="new-ux__composer">
                 <div className="new-ux__mode-row" role="group" aria-label={t("workspace.composer.modeGroupLabel")}>
                   {MODES.map((item) => (
@@ -275,6 +314,30 @@ export default function RunWorkspaceNew({ initialRunId = null }: { initialRunId?
               </div>
 
               {error && <div className="new-ux__error" role="alert">{error}</div>}
+
+              {otherRecentRuns.length > 0 && (
+                <div className="new-ux__section">
+                  <p className="new-ux__section-title">{t("workspace.recent.title")}</p>
+                  {otherRecentRuns.map((run) => (
+                    <div key={run.id} className="new-ux-recent__row">
+                      <div className="new-ux-recent__row-head">
+                        <button
+                          type="button"
+                          className="new-ux-recent__question"
+                          onClick={() => setQuestion(run.prompt)}
+                        >
+                          {run.prompt}
+                        </button>
+                        <StatusPill status={run.uiStatus} />
+                      </div>
+                      <p className="new-ux-recent__meta">
+                        {run.modeLabel}
+                        {typeof run.confidence === "number" ? ` · ${run.confidence}%` : ""}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           ) : (
             <section className="new-ux__run">
