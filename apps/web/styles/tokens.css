@@ -26,14 +26,14 @@
   --font-body: "Source Serif 4", Georgia, serif;
   --heading-weight: 600;
 
+  /* New UX canonical scale: 12 / 14 / 16 / 18 / 24 / 32 / 48px. */
   --text-meta: 12px;
-  --text-sm: 13px;
-  --text-body: 15.5px;
-  --text-lede: 17px;
+  --text-utility: 14px;
+  --text-body: 16px;
+  --text-lede: 18px;
   --text-h3: 24px;
   --text-h2: 32px;
-  --text-h1: 42px;
-  --text-display: 108px;
+  --text-display: 48px;
 }
 
 [data-surface="ink"] {
