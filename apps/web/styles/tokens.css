@@ -13,7 +13,10 @@
   --surface-raised: #ffffff;
   --ink: var(--ink-900);
   --ink-soft: color-mix(in srgb, var(--ink-900) 78%, transparent);
-  --ink-faint: color-mix(in srgb, var(--ink-900) 62%, transparent);
+  /* 70%, not the handoff's 62%: 62% measures ~4.47:1 on --paper, just under
+     WCAG AA's 4.5:1 for normal text. 70% measures ~5.8:1. The ink surface's
+     own --ink-faint already clears AA (~6.5:1) and is untouched. */
+  --ink-faint: color-mix(in srgb, var(--ink-900) 70%, transparent);
   --rule: color-mix(in srgb, var(--ink-900) 18%, transparent);
   --rule-strong: var(--ink-900);
   --spot: var(--spot-cyan);
