@@ -441,7 +441,13 @@ export default function RunWorkspaceNew({
 
                 <div className="new-ux__verdict">
                   <div className="new-ux__verdict-top">
-                    <span>{workspace.synthesisState.status === "final" ? t("workspace.run.verdict") : t("workspace.run.verdictForming")}</span>
+                    <span>
+                      {modeId === "compare"
+                        ? t("workspace.run.compareResults")
+                        : workspace.synthesisState.status === "final"
+                          ? t("workspace.run.verdict")
+                          : t("workspace.run.verdictForming")}
+                    </span>
                     <span>{workspace.isPollingFallback ? t("workspace.run.polling") : workspace.sseStatus}</span>
                   </div>
                   {modeId === "compare" ? (
