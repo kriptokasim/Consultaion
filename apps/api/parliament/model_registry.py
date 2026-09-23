@@ -36,7 +36,7 @@ ALL_MODELS: List[ModelInfo] = [
     ModelInfo(id="groq-llama-3-3", display_name="GPT-OSS 20B (Groq)", provider="groq", litellm_model="groq/openai/gpt-oss-20b", capabilities={"chat","tools","reasoning"}, tier="standard", cost_tier="low", latency_class="fast", quality_tier="advanced", safety_profile="normal", logo_url="/logos/groq.svg", persona_type="The Creative Visionary", persona_tagline="Fast open-weight reasoning"),
     ModelInfo(id="llama-3-free", display_name="Ling 3.0 Flash Fin (OpenRouter Free)", provider="openrouter", litellm_model="openrouter/inclusionai/ling-3.0-flash-fin:free", capabilities={"chat","tools","reasoning"}, tier="standard", cost_tier="low", latency_class="fast", quality_tier="advanced", safety_profile="normal", logo_url="/logos/openrouter.svg"),
     ModelInfo(id="mimo-v2-free", display_name="Gemma 4 26B Free (OpenRouter legacy)", provider="openrouter", litellm_model="openrouter/openai/gpt-oss-20b:free", capabilities={"chat","reasoning"}, tier="standard", cost_tier="low", latency_class="fast", quality_tier="advanced", safety_profile="normal", logo_url="/logos/openrouter.svg"),
-    ModelInfo(id="openrouter-nemotron-free", display_name="Nemotron 3 Ultra (OpenRouter Free)", provider="openrouter", litellm_model="openrouter/qwen/qwen3.8-27b:free", capabilities={"chat","tools","reasoning"}, tier="advanced", cost_tier="low", latency_class="normal", quality_tier="advanced", safety_profile="normal", logo_url="/logos/openrouter.svg"),
+    ModelInfo(id="openrouter-nemotron-free", display_name="Qwen 3.8 27B (OpenRouter Free)", provider="openrouter", litellm_model="openrouter/qwen/qwen3.8-27b:free", capabilities={"chat","tools","reasoning"}, tier="advanced", cost_tier="low", latency_class="normal", quality_tier="advanced", safety_profile="normal", logo_url="/logos/openrouter.svg"),
     ModelInfo(id="mistral-large", display_name="Mistral Large", provider="mistral", litellm_model="mistral/mistral-large-latest", capabilities={"chat","tools","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/mistralai.svg", persona_type="The European Pragmatist", persona_tagline="Efficient solutions, minimal waste"),
     ModelInfo(id="deepseek-r1", display_name="DeepSeek R1", provider="openrouter", litellm_model="openrouter/deepseek/deepseek-r1", capabilities={"chat","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/deepseek.svg", persona_type="The Deep Thinker", persona_tagline="Chain-of-thought reasoning at scale"),
     # Current frontier/SOTA roster, all routed through OpenRouter's unified API.
@@ -48,7 +48,7 @@ ALL_MODELS: List[ModelInfo] = [
     ModelInfo(id="sota-kimi", display_name="Kimi K2.5", provider="openrouter", litellm_model="openrouter/moonshotai/kimi-k2.5", capabilities={"chat","tools","vision","reasoning"}, tier="advanced", cost_tier="medium", latency_class="normal", quality_tier="flagship", safety_profile="normal", logo_url="/logos/moonshot.svg", persona_type="The Researcher", persona_tagline="Broad synthesis and technical exploration"),
 ]
 
-FREE_ARENA_MODELS: List[str] = ["router-smart", "groq-llama-3-3", "router-deep", "openrouter-nemotron-free"]
+FREE_ARENA_MODELS: List[str] = ["groq-llama-3-3", "router-smart", "router-deep", "llama-3-free"]
 SOTA_ARENA_MODELS: List[str] = ["sota-gpt", "sota-claude", "sota-gemini", "sota-grok", "sota-glm", "sota-kimi"]
 ARENA_MODELS: List[str] = FREE_ARENA_MODELS
 
