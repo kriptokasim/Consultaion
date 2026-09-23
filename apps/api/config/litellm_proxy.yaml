@@ -48,12 +48,12 @@ model_list:
   # is a real debate rather than one router answering four times.
   - model_name: seat_free_router
     litellm_params: {model: openrouter/openrouter/free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: seat_free_glm
-    litellm_params: {model: openrouter/z-ai/glm-5.2:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: seat_free_gpt_oss
-    litellm_params: {model: openrouter/openai/gpt-oss-20b:free, api_key: os.environ/OPENROUTER_API_KEY}
+  - model_name: seat_free_laguna
+    litellm_params: {model: openrouter/poolside/laguna-s-2.1:free, api_key: os.environ/OPENROUTER_API_KEY}
+  - model_name: seat_free_ling
+    litellm_params: {model: openrouter/inclusionai/ling-3.0-flash-fin:free, api_key: os.environ/OPENROUTER_API_KEY}
   - model_name: seat_free_nemotron
-    litellm_params: {model: openrouter/nvidia/nemotron-3-ultra:free, api_key: os.environ/OPENROUTER_API_KEY}
+    litellm_params: {model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free, api_key: os.environ/OPENROUTER_API_KEY}
 
   # --- Cheap direct seats -----------------------------------------------------
   - model_name: seat_openai_fast
@@ -98,7 +98,7 @@ router_settings:
     - seat_anthropic: [seat_google, seat_openai_premium]
     - seat_google: [seat_openai_premium, seat_anthropic]
     - seat_xai: [seat_google]
-    - seat_free_router: [seat_free_glm, seat_free_gpt_oss, seat_free_nemotron]
+    - seat_free_router: [seat_free_laguna, seat_free_ling, seat_free_nemotron]
     - chair: [seat_openai_premium]
 
 litellm_settings:
