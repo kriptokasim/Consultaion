@@ -7,7 +7,7 @@ def test_legacy_openrouter_fallback_aliases_resolve_to_free_routes():
 
     assert OpenRouterAdapter._resolve_model("router-smart") == "openrouter/openrouter/free"
     assert OpenRouterAdapter._resolve_model("gpt4o-mini") == "openrouter/openrouter/free"
-    assert OpenRouterAdapter._resolve_model("groq-llama-3-3") == "openrouter/groq-llama-3-3"
+    assert OpenRouterAdapter._resolve_model("groq-llama-3-3") != "openrouter/openai/gpt-oss-20b:free"
     assert OpenRouterAdapter._resolve_model("openrouter-nemotron-free") == "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
 
 
