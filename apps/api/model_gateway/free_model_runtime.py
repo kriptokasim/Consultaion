@@ -12,10 +12,10 @@ _installed = False
 # Keep a small, current set of general-purpose free models. OpenRouter's live
 # catalog changes frequently, so these IDs are intentionally isolated here.
 FREE_OPENROUTER_CANDIDATES = (
-    "openrouter/openai/gpt-oss-20b:free",
-    "openrouter/z-ai/glm-5.2:free",
-    "openrouter/nvidia/nemotron-3-ultra:free",
     "openrouter/google/gemma-4-26b-a4b-it:free",
+    "openrouter/poolside/laguna-s-2.1:free",
+    "openrouter/inclusionai/ling-3.0-flash-fin:free",
+    "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
 )
 
 
@@ -27,7 +27,7 @@ _RUNTIME_MODEL_PATCHES: dict[str, dict[str, Any]] = {
         "provider_model_id": "gemini-3.7-flash",
         "litellm_model": "gemini/gemini-3.7-flash",
         "cost_class": "paid",
-        "last_verified_at": "2026-08-30",
+        "last_verified_at": "2026-09-23",
         "free_tier_verified_at": None,
         "free_tier_source": "Google Gemini API",
         "free_tier_limit_notes": "Current production model; account pricing and limits apply.",
@@ -37,7 +37,7 @@ _RUNTIME_MODEL_PATCHES: dict[str, dict[str, Any]] = {
         "litellm_model": "groq/openai/gpt-oss-20b",
         "cost_class": "free",
         "last_verified_at": "2026-08-30",
-        "free_tier_verified_at": "2026-08-30",
+        "free_tier_verified_at": "2026-09-23",
         "free_tier_source": "Groq free-plan limits",
         "free_tier_limit_notes": "Current developer/free-plan rate limits apply.",
     },
@@ -54,22 +54,22 @@ _RUNTIME_MODEL_PATCHES: dict[str, dict[str, Any]] = {
 
 _RUNTIME_MODEL_ADDITIONS: dict[str, dict[str, Any]] = {
     "openrouter_gpt_oss_free": {
-        "provider": "openrouter", "provider_model_id": "openai/gpt-oss-20b:free",
-        "litellm_model": "openrouter/openai/gpt-oss-20b:free", "cost_class": "free",
+        "provider": "openrouter", "provider_model_id": "google/gemma-4-26b-a4b-it:free",
+        "litellm_model": "openrouter/google/gemma-4-26b-a4b-it:free", "cost_class": "free",
         "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
         "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
         "free_tier_limit_notes": "Free endpoint; rate limited.",
     },
     "openrouter_glm_free": {
-        "provider": "openrouter", "provider_model_id": "z-ai/glm-5.2:free",
-        "litellm_model": "openrouter/z-ai/glm-5.2:free", "cost_class": "free",
+        "provider": "openrouter", "provider_model_id": "poolside/laguna-s-2.1:free",
+        "litellm_model": "openrouter/poolside/laguna-s-2.1:free", "cost_class": "free",
         "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
         "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
         "free_tier_limit_notes": "Free endpoint; rate limited.",
     },
     "openrouter_nemotron_free": {
-        "provider": "openrouter", "provider_model_id": "nvidia/nemotron-3-ultra:free",
-        "litellm_model": "openrouter/nvidia/nemotron-3-ultra:free", "cost_class": "free",
+        "provider": "openrouter", "provider_model_id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "litellm_model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free", "cost_class": "free",
         "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
         "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
         "free_tier_limit_notes": "Free endpoint; rate limited.",
@@ -135,22 +135,20 @@ def install_current_free_model_targets() -> None:
         "claude-haiku": "openrouter/openrouter/free",
         "gemini-2-flash": "openrouter/openrouter/free",
         "gemini-2-5-pro": "openrouter/openrouter/free",
-        "groq-llama-3-3": "openrouter/openai/gpt-oss-20b:free",
-        "mistral-large": "openrouter/openrouter/free",
+                "mistral-large": "openrouter/openrouter/free",
         "deepseek-r1": "openrouter/openrouter/free",
         "openai_fast": "openrouter/openrouter/free",
         "openai_premium": "openrouter/openrouter/free",
         "anthropic_reasoning": "openrouter/openrouter/free",
         "gemini_general": "openrouter/openrouter/free",
         "gemini_pro": "openrouter/openrouter/free",
-        "groq_fast": "openrouter/openai/gpt-oss-20b:free",
-        "mistral_large": "openrouter/openrouter/free",
+                "mistral_large": "openrouter/openrouter/free",
         "openrouter_fallback": "openrouter/openrouter/free",
         "router-smart": "openrouter/openrouter/free",
-        "router-deep": "openrouter/z-ai/glm-5.2:free",
-        "llama-3-free": "openrouter/openai/gpt-oss-20b:free",
+        "router-deep": "openrouter/poolside/laguna-s-2.1:free",
+        "llama-3-free": "openrouter/inclusionai/ling-3.0-flash-fin:free",
         "mimo-v2-free": "openrouter/google/gemma-4-26b-a4b-it:free",
-        "openrouter-nemotron-free": "openrouter/nvidia/nemotron-3-ultra:free",
+        "openrouter-nemotron-free": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
     })
 
     if not getattr(OpenRouterAdapter, "_consultaion_free_cascade_installed", False):
