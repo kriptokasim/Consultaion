@@ -15,6 +15,7 @@ REQUIRED_TABLES = [
     "debate_continuation",
     "billing_reconciliation_runs",
     "billing_reconciliation_discrepancies",
+    "promotions",
 ]
 
 MODEL_CRITICAL_COLUMNS: dict[str, list[str]] = {
