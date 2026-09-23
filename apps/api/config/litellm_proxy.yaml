@@ -53,7 +53,7 @@ model_list:
   - model_name: seat_free_ling
     litellm_params: {model: openrouter/inclusionai/ling-3.0-flash-fin:free, api_key: os.environ/OPENROUTER_API_KEY}
   - model_name: seat_free_nemotron
-    litellm_params: {model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free, api_key: os.environ/OPENROUTER_API_KEY}
+    litellm_params: {model: openrouter/qwen/qwen3.8-27b:free, api_key: os.environ/OPENROUTER_API_KEY}
 
   # --- Cheap direct seats -----------------------------------------------------
   - model_name: seat_openai_fast
