@@ -12,10 +12,10 @@ _installed = False
 # Keep a small, current set of general-purpose free models. OpenRouter's live
 # catalog changes frequently, so these IDs are intentionally isolated here.
 FREE_OPENROUTER_CANDIDATES = (
-    "openrouter/openai/gpt-oss-20b:free",
-    "openrouter/z-ai/glm-5.2:free",
-    "openrouter/nvidia/nemotron-3-ultra:free",
     "openrouter/google/gemma-4-26b-a4b-it:free",
+    "openrouter/poolside/laguna-s-2.1:free",
+    "openrouter/inclusionai/ling-3.0-flash-fin:free",
+    "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
 )
 
 
@@ -135,22 +135,20 @@ def install_current_free_model_targets() -> None:
         "claude-haiku": "openrouter/openrouter/free",
         "gemini-2-flash": "openrouter/openrouter/free",
         "gemini-2-5-pro": "openrouter/openrouter/free",
-        "groq-llama-3-3": "openrouter/openai/gpt-oss-20b:free",
-        "mistral-large": "openrouter/openrouter/free",
+                "mistral-large": "openrouter/openrouter/free",
         "deepseek-r1": "openrouter/openrouter/free",
         "openai_fast": "openrouter/openrouter/free",
         "openai_premium": "openrouter/openrouter/free",
         "anthropic_reasoning": "openrouter/openrouter/free",
         "gemini_general": "openrouter/openrouter/free",
         "gemini_pro": "openrouter/openrouter/free",
-        "groq_fast": "openrouter/openai/gpt-oss-20b:free",
-        "mistral_large": "openrouter/openrouter/free",
+                "mistral_large": "openrouter/openrouter/free",
         "openrouter_fallback": "openrouter/openrouter/free",
         "router-smart": "openrouter/openrouter/free",
-        "router-deep": "openrouter/z-ai/glm-5.2:free",
-        "llama-3-free": "openrouter/openai/gpt-oss-20b:free",
+        "router-deep": "openrouter/poolside/laguna-s-2.1:free",
+        "llama-3-free": "openrouter/inclusionai/ling-3.0-flash-fin:free",
         "mimo-v2-free": "openrouter/google/gemma-4-26b-a4b-it:free",
-        "openrouter-nemotron-free": "openrouter/nvidia/nemotron-3-ultra:free",
+        "openrouter-nemotron-free": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
     })
 
     if not getattr(OpenRouterAdapter, "_consultaion_free_cascade_installed", False):
