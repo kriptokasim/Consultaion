@@ -38,13 +38,13 @@ describe("consultaion-chamber embed", () => {
     expect(paletteBlock, "palette object is recognisable").toBeTruthy();
 
     const defined = new Set(
-      [...paletteBlock![1].matchAll(/([a-zA-Z_]+)\s*:/g)].map((m) => m[1]),
+      Array.from(paletteBlock![1].matchAll(/([a-zA-Z_]+)\s*:/g), (m) => m[1]),
     );
     const used = new Set(
-      [...src.matchAll(/C\.([a-zA-Z_]+)/g)].map((m) => m[1]),
+      Array.from(src.matchAll(/C\.([a-zA-Z_]+)/g), (m) => m[1]),
     );
 
-    const missing = [...used].filter((key) => !defined.has(key));
+    const missing = Array.from(used).filter((key) => !defined.has(key));
     expect(
       missing,
       `palette keys used but never defined: ${missing.join(", ")}`,
@@ -61,7 +61,7 @@ describe("consultaion-chamber embed", () => {
     expect(both).toBeTruthy();
 
     const keys = (block: string) =>
-      [...block.matchAll(/([a-zA-Z_]+)\s*:/g)].map((m) => m[1]).sort();
+      Array.from(block.matchAll(/([a-zA-Z_]+)\s*:/g), (m) => m[1]).sort();
 
     expect(keys(both![1])).toEqual(keys(both![2]));
   });

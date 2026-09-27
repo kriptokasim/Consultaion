@@ -19,6 +19,8 @@ export default defineConfig([
     "playwright-report/**",
     "test-results/**",
     "next-env.d.ts",
+    // Minified three.js build served as a static asset to the chamber embed.
+    "public/embeds/three-chamber.js",
   ]),
   {
     files: sourceFiles,
