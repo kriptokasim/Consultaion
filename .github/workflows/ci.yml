@@ -556,7 +556,7 @@ jobs:
           DATABASE_URL: "sqlite:///./ci_test.db"
         working-directory: apps/api
         run: |
-          python -m pytest tests/test_sse_redis_backend.py tests/test_test_isolation_guards.py -x -v
+          python -m pytest --no-cov tests/test_sse_redis_backend.py tests/test_test_isolation_guards.py -x -v
 
   auth-regression:
     name: Authorization Regression
@@ -582,7 +582,7 @@ jobs:
           DATABASE_URL: "sqlite:///./ci_test.db"
         working-directory: apps/api
         run: |
-          python -m pytest -q tests/test_auth_flows.py tests/test_google_auth.py tests/test_redact.py -x
+          python -m pytest -q --no-cov tests/test_auth_flows.py tests/test_google_auth.py tests/test_redact.py -x
 
   architecture-graph-validation:
     name: Architecture Graph Validation (Custom AST)
