@@ -128,22 +128,30 @@ the inserts by that FK). `apps/api/audit.py` gained `stage_audit()`;
 now flush the user row before staging its audit row.
 
 Commands and outcomes, all run under Python 3.11.15 in a fresh
-`apps/api/.venv`:
+`apps/api/.venv`. (Corrected 2026-09-27: an earlier version of this entry
+reported a full-suite pass count from a run that shared its fixed-path SQLite
+test database with a concurrent run; the figures below come from isolated
+runs.)
 
-- `cd apps/api && pytest -q tests/test_auth_audit_fk_ordering.py` (new test
-  file, SQLite with `PRAGMA foreign_keys=ON` enforced on every pooled
-  connection via `event.listens_for(engine, "connect")`): **3 passed**.
-- The full targeted auth/audit selection from the source patchset: **26
-  passed**, matching the patchset author's own claimed result.
+- `cd apps/api && pytest -q --no-cov tests/test_auth_flows.py tests/test_google_auth.py tests/test_audit_transactions.py tests/test_audit_ip.py tests/test_audit_deletion.py tests/test_auth_cookies.py tests/test_auth_audit_fk_ordering.py`
+  (the patchset's targeted selection, which includes the 3 new tests in
+  `test_auth_audit_fk_ordering.py`): **26 passed**.
 - `ruff check apps/api/audit.py apps/api/routes/auth.py apps/api/tests/test_auth_audit_fk_ordering.py`:
   passed.
-- `cd apps/api && pytest -q` (complete suite, not a partial selection):
-  **26 failed, 1279 passed, 17 skipped**, coverage 78.9% (75% gate satisfied).
-  The 26 failures were checked against a `git worktree` of `main` at the same
-  base commit (`9b41d0f`), same Python 3.11.15 venv, same command: the sorted
-  `FAILED` test-name lists are byte-identical between `main` and this branch,
-  so all 26 are pre-existing and unrelated to this change, not introduced by
-  it. None are in auth/signup/audit code.
+- `cd apps/api && TMPDIR=<per-run dir> pytest -q --junitxml=...` (complete
+  suite, not a partial selection), run separately on `main` (`9b41d0f`) and on
+  this branch, each with its own `TMPDIR` because the suite's SQLite database
+  path is fixed under the temp directory:
+  - `main`: **26 failed, 1273 passed, 17 skipped**, coverage 78.96%.
+  - this branch: **26 failed, 1276 passed, 17 skipped**, coverage 79.02%.
+  - Per-test JUnit comparison: the failing sets are identical, and the only
+    difference is the 3 new tests, which pass. All 26 failures are
+    pre-existing on `main`; none are in auth/signup/audit code.
+
+Why CI missed the bug: SQLite enforces foreign keys only on connections that
+enable `PRAGMA foreign_keys`, and the shared test engine did not, so the
+out-of-order `audit_log` insert succeeded in tests. PostgreSQL always enforces
+the constraint, which is where it failed.
 
 Not done in this PR, tracked as explicit follow-up: making the shared SQLite
 test engine enforce FKs globally (not just in this new test's own fixture)
