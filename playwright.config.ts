@@ -1,4 +1,7 @@
-import { defineConfig } from "@playwright/test";
+// Type-only import: the runtime Playwright is the copy pinned in apps/web, which
+// the specs import too. Loading a second copy here aborts every run with
+// "Requiring @playwright/test second time".
+import type { PlaywrightTestConfig } from "@playwright/test";
 
 const PORT = process.env.PORT || "3000";
 const API_PORT = process.env.API_PORT || "8000";
@@ -6,7 +9,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${PORT}`;
 const chromiumExecutablePath =
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
 
-export default defineConfig({
+const config: PlaywrightTestConfig = {
   testDir: "./apps/web/e2e",
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
@@ -44,7 +47,6 @@ export default defineConfig({
     {
       name: 'chromium',
       use: {
-        ...defineConfig({}).use,
         storageState: 'apps/web/.playwright/.auth/user.json',
       },
       dependencies: ['setup'],
@@ -94,4 +96,6 @@ export default defineConfig({
       dependencies: ['setup'],
     },
   ],
-});
+};
+
+export default config;

@@ -371,11 +371,10 @@ jobs:
         env:
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
-      - name: Install Root Playwright
-        run: npm install -D @playwright/test playwright
-
+      # Use the Playwright pinned in apps/web: the specs import it, and a second
+      # root copy aborts the run with "Requiring @playwright/test second time".
       - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
+        run: apps/web/node_modules/.bin/playwright install --with-deps
 
       - name: Seed E2E Test Database
         working-directory: apps/api
@@ -386,6 +385,7 @@ jobs:
           from database import engine
           from sqlmodel import Session, SQLModel
           from models import User
+          from promotions import models as promotion_models  # noqa: F401
           from auth import hash_password
           SQLModel.metadata.create_all(engine)
           with Session(engine) as session:
@@ -396,7 +396,7 @@ jobs:
           '
 
       - name: Run Playwright Tests
-        run: npx playwright test
+        run: apps/web/node_modules/.bin/playwright test
         env:
           CI: true
           API_BASE_URL: http://localhost:8000
