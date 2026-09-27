@@ -113,3 +113,43 @@ PostgreSQL, Docker, Redis, or production verification is claimed. Remaining M2
 work is deterministic test repair plus Python 3.11 parity after dependency
 access is restored; the infrastructure blocker for the database-specific slice
 is the absence of both a PostgreSQL 16 service/client and Docker.
+
+## Auth signup FK-ordering hotfix — 2026-09-27
+
+PR opened: [kriptokasim/Consultaion#86](https://github.com/kriptokasim/Consultaion/pull/86),
+`fix(auth): stage signup audit rows after the user insert`, head
+`claude/awesome-cori-3uho61` onto `main` at `9b41d0f`. Fixes a production
+regression where every new email signup returned 400 `auth.email_exists` and
+every first-time Google OAuth signup returned 500, because `AuditLog` inserts
+were not ordered after their referenced `User` insert within the same flush
+(no declared `relationship()` links the two models, so the ORM does not order
+the inserts by that FK). `apps/api/audit.py` gained `stage_audit()`;
+`apps/api/routes/auth.py`'s `register_user` and both Google callback handlers
+now flush the user row before staging its audit row.
+
+Commands and outcomes, all run under Python 3.11.15 in a fresh
+`apps/api/.venv`:
+
+- `cd apps/api && pytest -q tests/test_auth_audit_fk_ordering.py` (new test
+  file, SQLite with `PRAGMA foreign_keys=ON` enforced on every pooled
+  connection via `event.listens_for(engine, "connect")`): **3 passed**.
+- The full targeted auth/audit selection from the source patchset: **26
+  passed**, matching the patchset author's own claimed result.
+- `ruff check apps/api/audit.py apps/api/routes/auth.py apps/api/tests/test_auth_audit_fk_ordering.py`:
+  passed.
+- `cd apps/api && pytest -q` (complete suite, not a partial selection):
+  **26 failed, 1279 passed, 17 skipped**, coverage 78.9% (75% gate satisfied).
+  The 26 failures were checked against a `git worktree` of `main` at the same
+  base commit (`9b41d0f`), same Python 3.11.15 venv, same command: the sorted
+  `FAILED` test-name lists are byte-identical between `main` and this branch,
+  so all 26 are pre-existing and unrelated to this change, not introduced by
+  it. None are in auth/signup/audit code.
+
+Not done in this PR, tracked as explicit follow-up: making the shared SQLite
+test engine enforce FKs globally (not just in this new test's own fixture)
+and fixing whatever latent bugs that reveals suite-wide; making 4xx
+`AppError`s distinguishable in Sentry logs. Not code, and not attempted here:
+confirming the production DB is at Alembic head, confirming Render's
+pre-deploy step runs `alembic upgrade head`, and — only after this PR merges
+and deploys — one real production email signup and one real first-time
+Google signup to confirm both return 2xx.
