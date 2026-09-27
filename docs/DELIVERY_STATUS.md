@@ -161,3 +161,50 @@ confirming the production DB is at Alembic head, confirming Render's
 pre-deploy step runs `alembic upgrade head`, and — only after this PR merges
 and deploys — one real production email signup and one real first-time
 Google signup to confirm both return 2xx.
+
+## FK enforcement (Patch 2) and CI gate repair — 2026-09-27
+
+Branch `claude/nice-ramanujan-3p0qlk`, stacked on PR #86. Both SQLAlchemy
+engines now run `PRAGMA foreign_keys=ON` on every SQLite connection, and
+`tests/utils.truncate_all_tables` restores the pragma outside its transaction
+(SQLite ignored it inside one, returning pooled connections with enforcement
+off). Enforcement revealed 97 additional failing tests; all were fixed at the
+source without skips or disabling enforcement. It also exposed a latent bug in
+`record_audit` (same insert-order shape as the signup bug), now fixed.
+
+Main's CI was red before any tests ran: `ruff` (71 errors) blocked pytest;
+the PostgreSQL migration/drift steps failed because config requires `ENV`
+and a non-placeholder `JWT_SECRET` with a non-SQLite URL; the SQLite branch of
+migration p170 had 9 columns for 8 values; `docs/openapi.json` had drifted;
+ESLint linted a vendored three.js bundle; `npm audit --audit-level=high`
+failed on a critical Next.js advisory. All are fixed on this branch.
+
+Commands and outcomes (Python 3.11.15, Node 20.20.2):
+
+- `ruff check apps/api`: passed (0 errors; `main`: 71).
+- CI mypy slice: passed.
+- `cd apps/api && pytest -q` with the CI `backend-test` environment
+  (`DATABASE_URL=sqlite:///./ci_test.db`, isolated `TMPDIR`): **1309 passed,
+  0 failed, 17 skipped**, coverage 79.23% (`main`: 26 failed).
+- Same suite against a local PostgreSQL 16 (native FK enforcement, as in
+  production): **1309 passed, 0 failed, 17 skipped**.
+- On PostgreSQL 16: `check-alembic-heads.sh` one head; `alembic upgrade head`
+  passed; `check-schema-drift.sh` "No drift"; the CI PostgreSQL slice
+  **38 passed**.
+- `python scripts/migrate_database.py` and `--check` on SQLite: passed;
+  `python scripts/audit_alembic_revisions.py --ci`: passed (warnings only).
+- `./scripts/check_openapi_drift.sh`: passes once the regenerated spec is
+  committed; the export is deterministic.
+- `apps/web`: `eslint .` 0 problems; `tsc --noEmit` passed; Vitest 400 passed;
+  `npm run build` passed on Next 15.5.26; `npm audit --audit-level=high`
+  passed (2 moderate, dev-only vitest findings remain; fix needs vitest 4).
+
+Blockers and decisions recorded separately, not code:
+
+- Production must set `GROQ_API_KEY` for the free Arena to serve all four
+  seats: `9b41d0f` made the first free seat Groq-direct and deliberately never
+  routed through OpenRouter. Without the key the seat is omitted, not
+  misrouted.
+- Render's pre-deploy `alembic upgrade head` must run with `ENV` set; config
+  refuses to start without it against PostgreSQL.
+- GitHub Actions results for this branch are not yet observed.
