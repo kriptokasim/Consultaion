@@ -231,12 +231,16 @@ jobs:
 
       - name: Run Alembic Migrations
         env:
+          ENV: test
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
           DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_test"
         run: |
           alembic upgrade head
 
       - name: Check Schema Drift
         env:
+          ENV: test
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
           DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_test"
         run: bash ../../scripts/check-schema-drift.sh
 
@@ -503,11 +507,15 @@ jobs:
           pip install -r requirements.txt
       - name: Run safe migration
         env:
+          ENV: test
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
           DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_migration_test"
         working-directory: apps/api
         run: python scripts/migrate_database.py
       - name: Verify revision matches head
         env:
+          ENV: test
+          JWT_SECRET: "test_jwt_secret_32_chars_long_123456"
           DATABASE_URL: "postgresql+psycopg://postgres:postgrespassword@localhost:5432/consultaion_migration_test"
         working-directory: apps/api
         run: python scripts/migrate_database.py --check
