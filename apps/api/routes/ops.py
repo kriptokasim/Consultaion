@@ -9,12 +9,6 @@ from typing import Any
 
 from auth import get_current_admin, get_current_user
 from checks import check_db_readiness, check_model_registry_readiness, check_sse_readiness
-
-# CORE-AUDIT (CE-2): sync DB/alembic checks block the event loop when run
-# directly inside async routes. Offload to the default executor so slow DB
-# readiness probes cannot freeze the whole worker (incl. /healthz).
-async def _db_readiness_async() -> tuple[bool, dict[str, Any]]:
-    return await asyncio.get_running_loop().run_in_executor(None, check_db_readiness)
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from litellm import acompletion
@@ -33,6 +27,13 @@ from sqlmodel import Session, func, select
 from config import settings
 
 router = APIRouter(tags=["ops"])
+
+
+# CORE-AUDIT (CE-2): sync DB/alembic checks block the event loop when run
+# directly inside async routes. Offload to the default executor so slow DB
+# readiness probes cannot freeze the whole worker (incl. /healthz).
+async def _db_readiness_async() -> tuple[bool, dict[str, Any]]:
+    return await asyncio.get_running_loop().run_in_executor(None, check_db_readiness)
 
 _GIT_SHA = os.environ.get("GIT_SHA", "unknown")
 _BUILD_TIMESTAMP = os.environ.get("BUILD_TIMESTAMP", "unknown")

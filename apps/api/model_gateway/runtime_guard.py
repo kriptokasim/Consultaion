@@ -38,7 +38,7 @@ def gateway_runtime_guard_installed() -> bool:
 
 def mark_usage_call_persisted(call_usage: Any) -> None:
     try:
-        setattr(call_usage, "_gateway_usage_persisted", True)
+        call_usage._gateway_usage_persisted = True
     except Exception:
         pass
 

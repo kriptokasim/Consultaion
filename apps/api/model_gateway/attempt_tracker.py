@@ -177,15 +177,16 @@ def _extend_reservation_sync(
 ) -> GatewayBudgetReservation:
     """Atomically extend an existing reservation before another adapter call."""
     from database import session_scope
+    from models import LLMUsageLog, UsageLedgerEntry, User
+    from sqlalchemy import func
+    from sqlmodel import select
+    from usage_limits import QuotaExceededError, check_quota, record_token_usage
+
     from model_gateway.costs import (
         MAX_COST_PER_RUN_USD,
         MAX_MONTHLY_SAFETY_LIMIT_USD,
         _month_bounds_utc,
     )
-    from models import LLMUsageLog, UsageLedgerEntry, User
-    from sqlalchemy import func
-    from sqlmodel import select
-    from usage_limits import QuotaExceededError, check_quota, record_token_usage
 
     extra_cost = max(float(additional_cost_usd or 0.0), 0.0)
     extra_tokens = max(int(additional_tokens or 0), 0)

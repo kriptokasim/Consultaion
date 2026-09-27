@@ -2,8 +2,9 @@ import logging
 from datetime import datetime, timezone
 
 from log_config import log_event
-from orchestration.execution_lease import ExecutionSupersededError
 from sse_backend import get_sse_backend
+
+from orchestration.execution_lease import ExecutionSupersededError
 
 from .interfaces import DebateContext, DebatePipeline, DebateState
 from .state import DebateStateManager

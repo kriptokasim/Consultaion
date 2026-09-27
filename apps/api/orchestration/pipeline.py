@@ -20,11 +20,12 @@ class StandardDebatePipeline(DebatePipeline):
         ]
 
     async def execute(self, context: DebateContext) -> DebateState:
-        from config import settings
         from database_async import async_session_scope
         from models import DebateAttempt
-        from orchestration.execution_context import get_current_execution_lease
         from sqlmodel import select
+
+        from config import settings
+        from orchestration.execution_context import get_current_execution_lease
 
         state = DebateState()
         current_attempt_id: str | None = self.stages[0].state_manager.attempt_id
@@ -282,6 +283,7 @@ class StandardDebatePipeline(DebatePipeline):
             )
 
             import time as time_module
+
             from observability.metrics import (
                 record_pipeline_stage_duration,
                 record_pipeline_stage_failure,

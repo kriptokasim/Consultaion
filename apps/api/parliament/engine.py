@@ -12,9 +12,12 @@ from database import session_scope
 from models import Debate, Message, Score
 from orchestration.execution_lease import ExecutionSupersededError
 from orchestration.finalization import FinalizationService
-from parliament_budget_guard import ParliamentBudgetExceeded
-from parliament_budget_guard import budget_exhausted_reason, clear_state
-from parliament_budget_guard import call_llm_for_role_budgeted as call_llm_for_role
+from parliament_budget_guard import (
+    ParliamentBudgetExceeded,
+    budget_exhausted_reason,
+    call_llm_for_role_budgeted as call_llm_for_role,
+    clear_state,
+)
 from pydantic import ValidationError
 from schemas import DebateConfig, JudgeConfig, PanelConfig, default_judges, default_panel_config
 from sqlmodel import select
@@ -384,7 +387,6 @@ async def _run_parliament_debate(
                 debate.config or {},
             )
 
-    loop = asyncio.get_running_loop()
     prompt, panel_payload, debate_model_id, config_payload = await run_blocking(_load_debate)
     locale = config_payload.get("locale")
 
@@ -759,8 +761,8 @@ async def _execute_round(
             max(1, int(getattr(settings, "LLM_MAX_CONCURRENT_CALLS_PER_RUN", 6)))
         )
 
-        async def _run_seat_bounded(seat, transcript):
-            async with _seat_slots:
+        async def _run_seat_bounded(seat, transcript, _slots=_seat_slots):
+            async with _slots:
                 return await _run_seat(seat, transcript)
 
         tasks = [

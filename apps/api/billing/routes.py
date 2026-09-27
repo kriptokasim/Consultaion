@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from types import SimpleNamespace
@@ -13,6 +12,7 @@ from models import User
 from parliament.model_registry import get_model_info
 from pydantic import BaseModel
 from sqlmodel import Session, select
+from utils.async_bridge import run_blocking
 
 from config import settings
 
@@ -28,7 +28,6 @@ from .service import (
     get_active_plan,
     get_or_create_usage,
 )
-from utils.async_bridge import run_blocking
 
 
 def csrf_exempt(func):

@@ -11,8 +11,8 @@ from models import Debate
 from orchestration.execution_lease import ExecutionSupersededError
 from orchestrator import run_debate
 from sse_backend import get_sse_backend
-
 from state_terminal_guard import install_terminal_accounting_guard
+
 from worker.celery_app import celery_app
 
 # Install guard in the worker process too — debate terminal accounting also runs

@@ -108,8 +108,9 @@ async def _try_acquire_redis_lease(
     *,
     ttl_seconds: int,
 ) -> _LaneLease | None:
-    from config import settings
     from redis_pool import get_async_redis_client
+
+    from config import settings
 
     client = get_async_redis_client()
     if client is None:
