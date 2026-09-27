@@ -44,6 +44,8 @@ apps/api/dev.db
 apps/api/ci_migrate.db
 apps/web/.playwright-browsers/
 .playwright-browsers/
+# Playwright auth state holds a live session token for the e2e user.
+apps/web/.playwright/
 apps/web/*.deb
 .vercel
 .env*.local
