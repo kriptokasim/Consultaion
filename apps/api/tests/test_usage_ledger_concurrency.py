@@ -19,6 +19,8 @@ from services.usage_ledger import (
     settle_run,
 )
 
+from tests.utils import add_rows_in_order
+
 
 @pytest.fixture
 def test_user(db_session):
@@ -120,7 +122,7 @@ class TestExportIdempotency:
             plan="free",
             is_active=True,
         )
-        db_session.add_all([user1, user2])
+        add_rows_in_order(db_session, user1, user2)
         db_session.commit()
 
         entry1 = record_export(db_session, user1.id, "debate-9")

@@ -192,27 +192,34 @@ async def test_canonical_terminal_commit_precedes_record_and_settle(monkeypatch)
     async def fake_async_scope():
         yield Session()
 
+    class SyncSession:
+        def get(self, model, _identifier):
+            return attempt if model is DebateAttempt else debate
+
     @contextmanager
     def fake_sync_scope():
-        yield SimpleNamespace()
+        yield SyncSession()
 
+    def fake_accounting(_session, *, debate, attempt):
+        events.append(("accounting", debate, attempt))
+
+    # Production wraps complete_debate (state_terminal_guard) and settles
+    # through the terminal accounting reconciler after the terminal commit.
+    from state_terminal_guard import install_terminal_accounting_guard
+
+    install_terminal_accounting_guard()
     monkeypatch.setattr("orchestration.state.async_session_scope", fake_async_scope)
     monkeypatch.setattr("database.session_scope", fake_sync_scope)
     monkeypatch.setattr("json_contracts.safe_validate_final_meta", lambda _meta: None)
     monkeypatch.setattr(
-        "services.usage_ledger.record_token_usage",
-        lambda *_args, **_kwargs: events.append("record") or SimpleNamespace(status="reserved"),
-    )
-    monkeypatch.setattr(
-        "services.usage_ledger.settle_token_usage",
-        lambda *_args, **_kwargs: events.append("settle"),
+        "terminal_accounting_reconciler.ensure_token_accounting_once", fake_accounting
     )
     manager = DebateStateManager("debate-1", user_id="user-1", attempt_id="attempt-1")
     monkeypatch.setattr(manager, "_update_checkpoint_in_session", AsyncMock())
 
     await manager.complete_debate("Final", {}, "completed", tokens_total=42)
 
-    assert events == ["terminal_commit", "record", "settle"]
+    assert events == ["terminal_commit", ("accounting", debate, attempt)]
 
 
 @pytest.mark.anyio

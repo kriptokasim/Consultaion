@@ -151,7 +151,11 @@ def test_subscription_event_after_checkout_activates_entitlement(db_session):
     ).first()
     session.refresh(user)
     assert sub.status == "active"
-    assert sub.current_period_end > now
+    period_end = sub.current_period_end
+    # SQLite drops tzinfo on read; PostgreSQL returns the aware value.
+    if period_end.tzinfo is None:
+        period_end = period_end.replace(tzinfo=timezone.utc)
+    assert period_end > now
     assert user.plan == "pro"
     # Resolved DB context is propagated for post-commit integrations even when
     # the original Stripe subscription event had empty metadata.

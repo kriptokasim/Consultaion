@@ -1,5 +1,7 @@
 import pytest
 
+from tests.utils import add_rows_in_order
+
 
 def _seed_retry_reservations(db_session):
     from models import Debate, UsageLedgerEntry, User
@@ -39,10 +41,7 @@ def _seed_retry_reservations(db_session):
         debate_id=debate.id,
         meta={"run_attempt": 2, "continuation_id": None},
     )
-    db_session.add(user)
-    db_session.add(debate)
-    db_session.add(old)
-    db_session.add(new)
+    add_rows_in_order(db_session, user, debate, old, new)
     db_session.commit()
     return user, debate, old, new
 
@@ -81,7 +80,11 @@ def test_successful_retry_handoff_refunds_only_noncurrent_attempt_reservation(
     from models import UsageLedgerEntry, User
 
     user, debate, old, new = _seed_retry_reservations(db_session)
-    monkeypatch.setattr(guard, "_original_refund", billing_service.refund_hosted_credit)
+    # Once installed, billing_service.refund_hosted_credit is the guard's own
+    # wrapper; the reconciler must call the unwrapped original it captured.
+    guard.install_retry_accounting_guard()
+    assert guard._original_refund is not guard._guarded_refund_hosted_credit
+    assert billing_service.refund_hosted_credit is guard._guarded_refund_hosted_credit
 
     changed = guard._refund_superseded_attempt_reservations(debate.id)
 

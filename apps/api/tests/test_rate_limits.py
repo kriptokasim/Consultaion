@@ -42,7 +42,7 @@ config_module.settings.reload()
 
 import ratelimit as ratelimit_module  # noqa: E402
 from auth import hash_password  # noqa: E402
-from database import engine, init_db  # noqa: E402
+from database import init_db  # noqa: E402
 from models import UsageCounter, UsageQuota, User  # noqa: E402
 from usage_limits import RateLimitError, record_token_usage, reserve_run_slot  # noqa: E402
 
@@ -63,7 +63,11 @@ def ensure_memory_backend(monkeypatch):
 
 @pytest.fixture
 def db_session():
-    with Session(engine) as session:
+    import database
+
+    # Resolve the engine per test: conftest rebinds database.engine to the
+    # seeded session database, and a module-level import would keep the stale one.
+    with Session(database.engine) as session:
         yield session
         session.rollback()
 

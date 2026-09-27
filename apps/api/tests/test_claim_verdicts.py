@@ -12,7 +12,6 @@ Two properties matter more than the rest:
 from __future__ import annotations
 
 import pytest
-
 from reporting.claim_verdicts import (
     UNCHECKED,
     Verdict,

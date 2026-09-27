@@ -10,6 +10,8 @@ from orchestration.pipeline import StandardDebatePipeline
 from orchestration.state import DebateStateManager
 from schemas import AgentConfig, DebateConfig, JudgeConfig
 
+from tests.utils import ensure_user
+
 
 @pytest.fixture
 def mock_llm_responses():
@@ -26,6 +28,7 @@ async def test_staged_debate_pipeline_pause_and_resume(db_session, mock_llm_resp
     
     # Create Debate record
     debate = Debate(id=debate_id, user_id=user_id, prompt=prompt, status="queued")
+    ensure_user(db_session, user_id)
     db_session.add(debate)
     db_session.commit()
     

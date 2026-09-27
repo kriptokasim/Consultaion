@@ -523,7 +523,7 @@ def test_model_leaderboard_stats_counts_champions():
                     id=debate_id,
                     prompt=f"Leaderboard prompt {idx}",
                     status="completed",
-                    config=default_debate_config().model_dump(),
+                    config={**default_debate_config().model_dump(), "is_public": True},
                 )
             )
             if idx < 3:
@@ -567,7 +567,7 @@ def test_model_leaderboard_stats_counts_champions():
         session.commit()
 
     with Session(database.engine) as session:
-        summaries = asyncio.run(get_model_leaderboard_stats(session=session))
+        summaries = asyncio.run(get_model_leaderboard_stats(session=session, current_user=None))
 
     entry_a = next(summary for summary in summaries if summary.model == persona_a)
     entry_b = next(summary for summary in summaries if summary.model == persona_b)
@@ -646,7 +646,10 @@ def test_debate_creation_dispatches_celery_task(monkeypatch):
 def test_sweep_stale_channels_removes_old_entries():
     reset_sse_backend_for_tests()
     backend = get_sse_backend()
-    backend._ttl_seconds = 0.01  # Patch the instance directly
+    # Policy decorators forward reads but not writes; patch the transport.
+    while "_backend" in vars(backend):
+        backend = backend._backend
+    backend._ttl_seconds = 0.01
     channel_id = "stale-channel"
     asyncio.run(backend.create_channel(channel_id))
     time.sleep(0.02)

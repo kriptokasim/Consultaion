@@ -1,5 +1,7 @@
 import asyncio
+
 from sse_backend import CRITICAL_NON_TERMINAL_EVENT_TYPES, MemoryChannelBackend
+
 
 def test_terminal_event_is_not_evicted_from_full_critical_queue():
     backend = MemoryChannelBackend(max_queue_size=3)

@@ -14,7 +14,6 @@ the dead free-model billing guard again, through a different door.
 from __future__ import annotations
 
 import pytest
-
 from model_gateway.adapters import _proxy_reported_cost, _stream_cost
 
 COST_HEADER = "llm_provider-x-litellm-response-cost"
@@ -38,7 +37,8 @@ def test_the_sdk_cannot_price_a_proxy_deployment_name():
     """The premise. If this ever stops raising, the fix below is redundant."""
     import litellm
 
-    with pytest.raises(Exception):
+    # litellm raises a bare Exception here, so pin the message instead.
+    with pytest.raises(Exception, match="isn't mapped yet"):
         litellm.cost_per_token(
             model="openai/seat_openai_fast", prompt_tokens=1000, completion_tokens=500
         )

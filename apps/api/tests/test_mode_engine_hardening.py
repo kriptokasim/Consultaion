@@ -21,6 +21,7 @@ from orchestration.execution_context import ExecutionLease, bind_execution_lease
 from sqlmodel import select
 
 from config import settings
+from tests.utils import ensure_user
 
 
 def _mk_running_debate(debate_id: str, mode: str, config: dict | None = None) -> str:
@@ -37,6 +38,7 @@ def _mk_running_debate(debate_id: str, mode: str, config: dict | None = None) ->
             user_id="u1",
             config=config or {},
         )
+        ensure_user(session, "u1")
         session.add(debate)
         session.commit()
     return debate_id

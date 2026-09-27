@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from billing.reconciliation import reconcile_terminal_hosted_credit_reservations
 from models import Debate, DebateContinuation, UsageLedgerEntry, User
 
+from tests.utils import add_rows_in_order
+
 
 def _user(user_id: str) -> User:
     return User(
@@ -38,7 +40,7 @@ def test_reconciler_consumes_completed_initial_reservation(db_session):
         debate_id=debate.id,
         meta={"run_attempt": 1, "continuation_id": None},
     )
-    db_session.add_all([user, debate, reservation])
+    add_rows_in_order(db_session, user, debate, reservation)
     db_session.commit()
 
     summary = reconcile_terminal_hosted_credit_reservations(
@@ -81,7 +83,7 @@ def test_reconciler_uses_continuation_status_and_refunds_exact_reservation(db_se
         debate_id=debate.id,
         meta={"run_attempt": 2, "continuation_id": continuation.id},
     )
-    db_session.add_all([user, debate, continuation, reservation])
+    add_rows_in_order(db_session, user, debate, continuation, reservation)
     db_session.commit()
 
     summary = reconcile_terminal_hosted_credit_reservations(
@@ -116,7 +118,7 @@ def test_reconciler_quarantines_ambiguous_reservation_without_counter_change(db_
         debate_id=debate.id,
         meta=None,
     )
-    db_session.add_all([user, debate, reservation])
+    add_rows_in_order(db_session, user, debate, reservation)
     db_session.commit()
 
     summary = reconcile_terminal_hosted_credit_reservations(
@@ -180,7 +182,7 @@ def test_nonterminal_reservations_do_not_starve_later_terminal_work(db_session):
         meta={"run_attempt": 1, "continuation_id": None},
     )
     records.extend([terminal_debate, terminal_reservation])
-    db_session.add_all(records)
+    add_rows_in_order(db_session, *records)
     db_session.commit()
 
     summary = reconcile_terminal_hosted_credit_reservations(

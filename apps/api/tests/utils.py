@@ -214,3 +214,57 @@ def truncate_all_tables() -> None:
             enabled = connection.exec_driver_sql("PRAGMA foreign_keys").scalar()
             assert enabled == 1, "truncate_all_tables left SQLite FK enforcement off"
 
+
+
+def ensure_user(session, user_id: str, **fields):
+    """Create the user row a fixture references by id, if it is missing.
+
+    Foreign keys are enforced in tests, so a row that names a user must point
+    at a real one.
+    """
+    from models import User
+
+    user = session.get(User, user_id)
+    if user is None:
+        fields.setdefault("email", f"{user_id}@fixtures.consultaion.test")
+        fields.setdefault("password_hash", "not-a-real-hash")
+        user = User(id=user_id, **fields)
+        session.add(user)
+        session.flush()
+    return user
+
+
+def ensure_debate(session, debate_id: str, *, user_id: Optional[str] = None, **fields):
+    """Create the debate row a fixture references by id, if it is missing."""
+    from models import Debate
+
+    debate = session.get(Debate, debate_id)
+    if debate is None:
+        if user_id is not None:
+            ensure_user(session, user_id)
+        fields.setdefault("prompt", "fixture debate")
+        fields.setdefault("status", "queued")
+        debate = Debate(id=debate_id, user_id=user_id, **fields)
+        session.add(debate)
+        session.flush()
+    return debate
+
+
+def add_rows_in_order(session, *rows) -> None:
+    """Insert rows in the order given, flushing after each.
+
+    Without a relationship() between two models the ORM does not order their
+    INSERTs by foreign key, so a single add_all() can insert a child first.
+    """
+    for row in rows:
+        session.add(row)
+        session.flush()
+
+
+def seed_debate(debate_id: str, *, user_id: Optional[str] = None, **fields) -> str:
+    """Commit a debate row (and its user) for tests that only know its id."""
+    from database import session_scope
+
+    with session_scope() as session:
+        ensure_debate(session, debate_id, user_id=user_id, **fields)
+    return debate_id

@@ -1,11 +1,11 @@
+import database
+import database_async
 import pytest
+from models import AuditLog
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
-import database
-import database_async
-from models import AuditLog
 from tests.utils import truncate_all_tables
 
 
