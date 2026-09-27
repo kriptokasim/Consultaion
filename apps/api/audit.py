@@ -5,10 +5,34 @@ from typing import Any, Optional
 
 from database import session_scope
 from models import AuditLog, utcnow
+from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
+
+# session.new/dirty/deleted are emptied by every flush, including autoflush,
+# so they cannot tell record_audit whether the caller's transaction has
+# already written. Track that on the session itself.
+_TXN_HAS_WRITES = "audit_txn_has_writes"
+
+
+@event.listens_for(OrmSession, "after_flush")
+def _note_flushed_writes(session, _flush_context) -> None:
+    session.info[_TXN_HAS_WRITES] = True
+
+
+@event.listens_for(OrmSession, "do_orm_execute")
+def _note_orm_dml(orm_execute_state) -> None:
+    if orm_execute_state.is_insert or orm_execute_state.is_update or orm_execute_state.is_delete:
+        orm_execute_state.session.info[_TXN_HAS_WRITES] = True
+
+
+@event.listens_for(OrmSession, "after_transaction_end")
+def _clear_txn_writes(session, transaction) -> None:
+    if transaction.parent is None:
+        session.info.pop(_TXN_HAS_WRITES, None)
 
 # Public-share acquisition attribution is token-based. Retaining visitor IP on
 # the generic public-view audit event no longer serves product attribution and
@@ -92,21 +116,37 @@ def record_audit(
 
     Transaction contract:
     - no session supplied: persist in a standalone committed transaction;
-    - caller session has pending ORM mutations: stage the audit row in that same
-      transaction so caller commit/rollback remains atomic;
-    - caller session has no visible ORM mutations: persist the audit row through
-      a standalone transaction and leave the caller session untouched.
+    - caller session has pending or flushed-but-uncommitted ORM writes (including
+      ORM-level ``session.execute(update(...))``): stage the audit row in that
+      same transaction so caller commit/rollback remains atomic;
+    - otherwise: persist the audit row through a standalone transaction and
+      leave the caller session untouched.
 
-    The last rule is intentionally conservative. ``session.new/dirty/deleted``
-    cannot see every Core ``session.execute(UPDATE/DELETE/INSERT)`` mutation, so
-    auto-committing a seemingly-clean caller session could accidentally commit
-    business data. Audit code must never own that decision.
+    The last rule is intentionally conservative: textual SQL run through
+    ``session.execute(text(...))`` is not detected, so auto-committing a
+    seemingly-clean caller session could accidentally commit business data.
+    Audit code must never own that decision.
 
     Callers that require audit atomicity with Core DML should explicitly stage an
     ``AuditLog`` in their transaction (or use a dedicated future helper) rather
     than relying on implicit commit heuristics.
     """
     final_meta = _audit_meta(action, ip_address, meta)
+
+    # Snapshot caller-owned state before adding anything. If the caller's
+    # transaction has pending or already-flushed writes, keep audit evidence in
+    # that transaction so it commits or rolls back with them.
+    has_unflushed_changes = session is not None and bool(
+        session.new or session.dirty or session.deleted
+    )
+    has_pending_orm_changes = has_unflushed_changes or (
+        session is not None and session.info.get(_TXN_HAS_WRITES) is True
+    )
+    if has_unflushed_changes:
+        # The ORM does not order the audit INSERT after a pending row it
+        # references (e.g. a new user), so flush the caller's work first.
+        # Outside the try: a failure here is the caller's, not the audit's.
+        session.flush()
 
     try:
         if session is None:
@@ -122,13 +162,6 @@ def record_audit(
                 )
             return
 
-        # Snapshot caller-owned ORM state before adding anything. If domain ORM
-        # changes are pending, keep audit evidence in the caller transaction.
-        # NOTE: these collections are emptied by any autoflush the caller has
-        # already triggered (an expired-attribute refresh is enough), so they
-        # under-report pending work and this branch can be skipped for a caller
-        # that does hold an uncommitted write. See consultaion-status.md.
-        has_pending_orm_changes = bool(session.new or session.dirty or session.deleted)
         if has_pending_orm_changes:
             session.add(
                 _new_audit_log(
@@ -141,9 +174,8 @@ def record_audit(
             )
             return
 
-        # A clean ORM unit-of-work does NOT prove the transaction is read-only:
-        # Core DML executed via session.execute() is invisible to the collections
-        # above. Never commit/rollback the caller session here. Use an independent
+        # Textual SQL run through session.execute() is still invisible here, so
+        # never commit/rollback the caller session. Use an independent
         # best-effort audit transaction instead.
         with session_scope() as scoped:
             scoped.add(
