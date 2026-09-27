@@ -35,6 +35,49 @@ def _new_audit_log(
     )
 
 
+def _audit_meta(
+    action: str, ip_address: Optional[str], meta: Optional[dict[str, Any]]
+) -> dict[str, Any]:
+    final_meta = dict(meta or {})
+    if ip_address and action not in _IP_SUPPRESSED_ACTIONS:
+        final_meta["ip_address"] = ip_address
+    else:
+        # Central policy also protects against a caller placing the same field
+        # directly in meta for a public-view event.
+        final_meta.pop("ip_address", None)
+        if action in _IP_SUPPRESSED_ACTIONS:
+            final_meta.pop("client_ip", None)
+            final_meta.pop("remote_addr", None)
+    return final_meta
+
+
+def stage_audit(
+    session: Session,
+    action: str,
+    *,
+    user_id: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    meta: Optional[dict[str, Any]] = None,
+) -> None:
+    """Add an audit row to the caller's transaction unconditionally.
+
+    Use when the audit row must commit or roll back with the caller's work, in
+    particular when it references a row the caller has only flushed: a
+    standalone audit transaction cannot see that row and fails its FK.
+    """
+    session.add(
+        _new_audit_log(
+            action,
+            user_id=user_id,
+            target_type=target_type,
+            target_id=target_id,
+            meta=_audit_meta(action, ip_address, meta),
+        )
+    )
+
+
 def record_audit(
     action: str,
     *,
@@ -63,16 +106,7 @@ def record_audit(
     ``AuditLog`` in their transaction (or use a dedicated future helper) rather
     than relying on implicit commit heuristics.
     """
-    final_meta = dict(meta or {})
-    if ip_address and action not in _IP_SUPPRESSED_ACTIONS:
-        final_meta["ip_address"] = ip_address
-    else:
-        # Central policy also protects against a caller placing the same field
-        # directly in meta for a public-view event.
-        final_meta.pop("ip_address", None)
-        if action in _IP_SUPPRESSED_ACTIONS:
-            final_meta.pop("client_ip", None)
-            final_meta.pop("remote_addr", None)
+    final_meta = _audit_meta(action, ip_address, meta)
 
     try:
         if session is None:
