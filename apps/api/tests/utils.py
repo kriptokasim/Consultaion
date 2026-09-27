@@ -168,13 +168,17 @@ def truncate_all_tables() -> None:
     # Get all table names from SQLModel metadata
     tables = SQLModel.metadata.sorted_tables
     
-    # Use a connection to execute raw SQL
-    with engine.begin() as connection:
-        existing_tables = set(inspect(connection).get_table_names())
-        # For SQLite, we need to disable foreign key constraints temporarily
-        if engine.url.get_backend_name() == "sqlite":
+    is_sqlite = engine.url.get_backend_name() == "sqlite"
+
+    # SQLite ignores PRAGMA foreign_keys inside a transaction, so both toggles
+    # must run between commits; otherwise the pooled connection goes back to
+    # the pool with enforcement silently left off.
+    with engine.connect() as connection:
+        if is_sqlite:
             connection.exec_driver_sql("PRAGMA foreign_keys = OFF")
-        
+            connection.commit()
+        existing_tables = set(inspect(connection).get_table_names())
+
         # Truncate each table (in reverse order to handle dependencies)
         for table in reversed(tables):
             if table.name not in existing_tables:
@@ -202,8 +206,11 @@ def truncate_all_tables() -> None:
                 # Log but don't fail - some tables might not exist or can't be truncated
                 import sys
                 print(f"Warning: Could not truncate table {table.name}: {e}", file=sys.stderr)
-        
-        # Re-enable foreign key constraints for SQLite
-        if engine.url.get_backend_name() == "sqlite":
+
+        connection.commit()
+        if is_sqlite:
             connection.exec_driver_sql("PRAGMA foreign_keys = ON")
+            connection.commit()
+            enabled = connection.exec_driver_sql("PRAGMA foreign_keys").scalar()
+            assert enabled == 1, "truncate_all_tables left SQLite FK enforcement off"
 

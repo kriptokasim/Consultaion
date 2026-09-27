@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from config import settings
+from database import enforce_sqlite_foreign_keys
 
 
 def _engine_kwargs() -> dict:
@@ -53,7 +54,13 @@ def _engine_kwargs() -> dict:
     return kwargs
 
 
-async_engine = create_async_engine(settings.DATABASE_URL_ASYNC, **_engine_kwargs())
+def _create_async_engine():
+    engine = create_async_engine(settings.DATABASE_URL_ASYNC, **_engine_kwargs())
+    enforce_sqlite_foreign_keys(engine.sync_engine)
+    return engine
+
+
+async_engine = _create_async_engine()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
@@ -89,5 +96,5 @@ def reset_async_engine():
     """
     global async_engine, AsyncSessionLocal
 
-    async_engine = create_async_engine(settings.DATABASE_URL_ASYNC, **_engine_kwargs())
+    async_engine = _create_async_engine()
     AsyncSessionLocal.configure(bind=async_engine)

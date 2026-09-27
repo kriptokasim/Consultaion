@@ -1,8 +1,23 @@
 from contextlib import contextmanager
 
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 from config import settings
+
+
+def enforce_sqlite_foreign_keys(engine) -> None:
+    # SQLite leaves FK enforcement off per connection; PostgreSQL always
+    # enforces it, so without this an insert-order bug passes here and 500s
+    # in production.
+    if engine.url.get_backend_name() != "sqlite":
+        return
+
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 def _create_engine():
@@ -29,7 +44,9 @@ def _create_engine():
                 "pool_timeout": settings.DB_POOL_TIMEOUT,
             }
         )
-    return create_engine(database_url, **engine_kwargs)
+    new_engine = create_engine(database_url, **engine_kwargs)
+    enforce_sqlite_foreign_keys(new_engine)
+    return new_engine
 
 
 engine = _create_engine()
