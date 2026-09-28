@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 
+from celery.exceptions import SoftTimeLimitExceeded
 from celery.utils.log import get_task_logger
 from channels import debate_channel_id
 from database import session_scope
@@ -13,7 +13,9 @@ from orchestrator import run_debate
 from sse_backend import get_sse_backend
 from state_terminal_guard import install_terminal_accounting_guard
 
+from config import settings
 from worker.celery_app import celery_app
+from worker.loop_runtime import run_task_coroutine
 
 # Install guard in the worker process too — debate terminal accounting also runs
 # inside Celery task execution.
@@ -76,7 +78,16 @@ async def _execute_debate_run(
         raise
 
 
-@celery_app.task(name="debates.run", bind=True, max_retries=3)
+_SOFT_TIME_LIMIT = int(getattr(settings, "DEBATE_TASK_SOFT_TIME_LIMIT_SECONDS", 1800) or 1800)
+
+
+@celery_app.task(
+    name="debates.run",
+    bind=True,
+    max_retries=3,
+    soft_time_limit=_SOFT_TIME_LIMIT,
+    time_limit=_SOFT_TIME_LIMIT + 60,
+)
 def run_debate_task(
     self,
     debate_id: str,
@@ -93,8 +104,8 @@ def run_debate_task(
     try:
         from observability.tracing import traced_span
         with traced_span("pipeline.run", {"debate_id": debate_id, "is_resume": str(is_resume)}):
-            asyncio.run(
-                _execute_debate_run(
+            run_task_coroutine(
+                lambda: _execute_debate_run(
                     debate_id,
                     trace_id=trace_id,
                     is_resume=is_resume,
@@ -103,6 +114,12 @@ def run_debate_task(
             )
     except ExecutionSupersededError:
         logger.info("Debate %s task superseded by a newer execution owner; not retrying", debate_id)
+        return
+    except SoftTimeLimitExceeded:
+        # A run that exhausted its time budget would exhaust it again. The
+        # lease is released on the way out; stale-run cleanup settles it.
+        incr_metric("debate.worker.time_limit_exceeded")
+        logger.error("Debate %s exceeded its task time limit; not retrying", debate_id)
         return
     except Exception as exc:  # pragma: no cover - Celery handles retries/logging
         logger.exception("Error while running debate %s", debate_id)

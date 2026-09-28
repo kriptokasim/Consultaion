@@ -265,6 +265,14 @@ class AppSettings(BaseSettings):
     CELERY_INTERACTIVE_QUEUE: str = "interactive"
     CELERY_INTERACTIVE_CONCURRENCY: int = Field(4, ge=1, description="Max concurrent interactive worker processes")
     CELERY_INTERACTIVE_PREFETCH: int = Field(1, ge=0, description="Prefetch count for interactive queue")
+    DEBATE_TASK_SOFT_TIME_LIMIT_SECONDS: int = Field(
+        1800,
+        ge=60,
+        description=(
+            "Soft Celery time limit for one debate run; the hard limit is 60s later. "
+            "Without one, a hung run held a worker slot indefinitely."
+        ),
+    )
 
     # Patchset 53.0: Auth Debug Mode
     AUTH_DEBUG: bool = Field(False, description="Enable verbose auth logging & debug endpoint")

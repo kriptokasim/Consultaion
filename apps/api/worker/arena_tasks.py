@@ -14,6 +14,7 @@ from sqlmodel import select
 from utils.json_utils import extract_and_parse_json
 
 from worker.celery_app import celery_app
+from worker.loop_runtime import run_task_coroutine
 
 logger = get_task_logger(__name__)
 module_logger = logging.getLogger(__name__)
@@ -227,7 +228,7 @@ async def _execute_divergence_computation(debate_id: str) -> None:
 
 
 def _run_divergence_task_once(debate_id: str) -> None:
-    asyncio.run(_execute_divergence_computation(debate_id))
+    run_task_coroutine(lambda: _execute_divergence_computation(debate_id))
 
 
 @celery_app.task(name="arena.compute_divergence", bind=True, max_retries=12)

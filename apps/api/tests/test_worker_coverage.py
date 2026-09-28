@@ -52,9 +52,27 @@ def test_run_debate_task():
     # Mock the task instance (self)
     mock_self = MagicMock()
     
-    with patch("worker.debate_tasks.asyncio.run") as mock_run:
+    with patch("worker.debate_tasks.run_task_coroutine") as mock_run:
         # Call the function directly, bypassing Celery decorator wrapper if possible, 
         # but since it's decorated, we might need to invoke it differently or mock the decorator.
         # Actually, Celery tasks are callable.
         run_debate_task(debate_id)
         mock_run.assert_called()
+
+
+def test_run_debate_task_does_not_retry_after_time_limit():
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    with patch(
+        "worker.debate_tasks.run_task_coroutine", side_effect=SoftTimeLimitExceeded()
+    ) as mock_run:
+        # A retry would re-raise (Retry / the original error in eager mode).
+        run_debate_task("timed-out-debate")
+    mock_run.assert_called_once()
+
+
+def test_run_debate_task_declares_time_limits():
+    from worker.debate_tasks import _SOFT_TIME_LIMIT
+
+    assert run_debate_task.soft_time_limit == _SOFT_TIME_LIMIT
+    assert run_debate_task.time_limit == _SOFT_TIME_LIMIT + 60
