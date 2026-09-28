@@ -208,3 +208,62 @@ Blockers and decisions recorded separately, not code:
 - Render's pre-deploy `alembic upgrade head` must run with `ENV` set; config
   refuses to start without it against PostgreSQL.
 - GitHub Actions results for this branch are not yet observed.
+
+## Run engine audit fixes — 2026-09-28
+
+Same branch. Traced one run from the Run button through `POST /debates`,
+dispatch, the orchestrator, the Arena fan-out, synthesis and the decision
+report to the terminal event, and fixed the defects found. Each fix has a
+regression test that fails without it.
+
+- SSE `/stream` held its request DB session for the whole stream. Reproduced
+  on PostgreSQL 16 with a one-connection pool: one open stream made an
+  unrelated `GET /debates/{id}` return 500 after the pool timeout. The route
+  now closes the session before streaming.
+- Celery: every other run in a worker process failed with `RuntimeError: Event
+  loop is closed` (reproduced), because the async Redis pool, SSE backend and
+  async DB pool stayed bound to the first task's loop. Tasks now release them
+  before their loop closes. `debates.run` has a soft time limit (default
+  1800s) and is not retried after hitting it. Production currently dispatches
+  inline, so this was latent there.
+- Orchestrator: an error after the terminal commit (publish, email,
+  bookkeeping) ran the failure handler, which sent a false failure alert and
+  skipped credit settlement and the terminal event. Post-commit steps are
+  isolated. Failed compare/conversation runs emitted `final`; they now emit
+  `debate_failed`.
+- `POST /debates`: honours `X-Idempotency-Key` (stored in
+  `usage_ledger_entry`, no migration). After a DB error the refund ran in a
+  failed transaction and leaked the hourly run slot; it now rolls back first.
+  Rate limiting resolves the client IP through the trusted-proxy helper. The
+  response no longer lists which provider keys the deployment holds.
+- Web: the Run button ignores clicks while creation is in flight and sends one
+  idempotency key per start intent.
+- Arena: synthesis used the router's default model (a free model on an
+  OpenRouter-only deployment). It now uses `ARENA_SYNTHESIS_MODEL` if set,
+  else the best panel model that answered. A partial quorum was reported as
+  `all_models_failed` with `successful_count=0`. A stream that failed after
+  output started paid for a second full call.
+- Report: draft/repair/revise ignored `SYNTHESIS_MAX_TOKENS` (fixed 1500), and
+  repair ran on the default model. Missing critic scores were recorded as 1.0.
+
+Commands and outcomes (Python 3.11.15, Node 20.20.2):
+
+- `cd apps/api && pytest -q` with the CI `backend-test` environment, isolated
+  `TMPDIR`: **1333 passed, 0 failed, 17 skipped**, coverage 79.68%.
+- `ruff check apps/api`: passed. CI mypy slice: passed.
+- `./scripts/check_openapi_drift.sh`: up to date.
+- `apps/web`: `eslint .` 0 problems; `tsc --noEmit` passed; Vitest **402
+  passed**; `npm run build` passed.
+- Not re-run for this change: the full suite on PostgreSQL. Only the SSE
+  connection-pinning reproduction ran against PostgreSQL 16.
+
+Not changed, by decision:
+
+- Setting `ARENA_SYNTHESIS_MODEL` to a paid model (e.g. the proxy `chair`
+  deployment) is a cost decision for the operator. `chair` also needs a
+  `MODEL_MAP` entry before the gateway can resolve it.
+- The per-event Redis lock in the SSE backend costs several round trips per
+  event. This is a performance item, not a correctness bug.
+- `choose_queue_for_debate` keys on a config `mode` of `fast`/`deep` that runs
+  never set, so every run uses the default queue. Workers consume that queue,
+  so nothing is misrouted.
