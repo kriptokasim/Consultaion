@@ -156,32 +156,36 @@ async def readyz(response: Response) -> dict[str, Any]:
 async def provider_health() -> dict[str, Any]:
     """
     Provider health check.
-    
-    Returns status of AI providers based on configured API keys.
-    Used by frontend to display provider degradation warnings.
+
+    Uses the same breaker-backed health contract as /api/status so callers
+    cannot be told that a provider is healthy merely because an API key exists.
     """
-    providers = []
-    
-    # Check each provider based on configured keys
-    provider_configs = [
-        ("openai", settings.OPENAI_API_KEY),
-        ("anthropic", settings.ANTHROPIC_API_KEY),
-        ("gemini", settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY),
-        ("openrouter", settings.OPENROUTER_API_KEY),
-        ("groq", settings.GROQ_API_KEY),
-        ("mistral", settings.MISTRAL_API_KEY),
-    ]
-    
-    for provider_name, api_key in provider_configs:
-        if api_key:
-            # Provider is configured - assume healthy
-            # In production, you could ping provider endpoints
-            providers.append({
-                "provider": provider_name,
-                "status": "healthy",
-            })
-    
-    return {"providers": providers}
+    configured_providers = (
+        ("openai", bool(settings.OPENAI_API_KEY)),
+        ("anthropic", bool(settings.ANTHROPIC_API_KEY)),
+        ("gemini", bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)),
+        ("openrouter", bool(settings.OPENROUTER_API_KEY)),
+        ("groq", bool(settings.GROQ_API_KEY)),
+        ("mistral", bool(settings.MISTRAL_API_KEY)),
+    )
+    entries = await asyncio.gather(
+        *(
+            asyncio.to_thread(_provider_status, provider, configured)
+            for provider, configured in configured_providers
+        )
+    )
+    return {
+        "providers": [
+            {
+                "provider": provider,
+                **entry,
+                # Preserve the legacy frontend token for healthy providers.
+                "status": "healthy" if entry["status"] == "operational" else entry["status"],
+            }
+            for (provider, _), entry in zip(configured_providers, entries, strict=True)
+            if entry["status"] != "not_configured"
+        ]
+    }
 
 
 
@@ -206,7 +210,11 @@ def _provider_status(provider: str, configured: bool) -> dict[str, Any]:
     circuit = get_provider_circuit_status(provider)
     failures = int(circuit.get("consecutive_failures") or 0)
 
-    if circuit.get("state") == "open":
+    if not circuit.get("redis_connected", True):
+        # A failed breaker read is not evidence of provider health. Do not
+        # report "operational" while the health source itself is unavailable.
+        status = "unverified"
+    elif circuit.get("state") == "open":
         status = "outage"
     elif failures > 0:
         # Failing but not yet tripped: visible before it becomes an outage,
@@ -241,23 +249,33 @@ async def api_status() -> dict[str, Any]:
     db_ok, _ = await _db_readiness_async()
     sse_ok, _ = await check_sse_readiness()
 
-    providers = {
-        name: _provider_status(name, configured)
-        for name, configured in (
-            ("openai", bool(settings.OPENAI_API_KEY)),
-            ("anthropic", bool(settings.ANTHROPIC_API_KEY)),
-            ("gemini", bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)),
-            ("openrouter", bool(settings.OPENROUTER_API_KEY)),
+    configured_providers = (
+        ("openai", bool(settings.OPENAI_API_KEY)),
+        ("anthropic", bool(settings.ANTHROPIC_API_KEY)),
+        ("gemini", bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)),
+        ("openrouter", bool(settings.OPENROUTER_API_KEY)),
+    )
+    # get_provider_circuit_status() is synchronous (Redis). Running all four
+    # checks in worker threads keeps /api/status from blocking the FastAPI
+    # event loop during a Redis stall.
+    provider_entries = await asyncio.gather(
+        *(
+            asyncio.to_thread(_provider_status, provider, configured)
+            for provider, configured in configured_providers
         )
+    )
+    providers = {
+        provider: entry
+        for (provider, _), entry in zip(configured_providers, provider_entries, strict=True)
     }
 
     overall_status = "operational"
     if not db_ok or not sse_ok:
         overall_status = "major_outage"
-    elif all(p["status"] in ("outage", "not_configured") for p in providers.values()):
-        # Nothing left to serve a debate with.
+    elif all(p["status"] in ("outage", "not_configured", "unverified") for p in providers.values()):
+        # Nothing verifiably usable is left to serve a debate with.
         overall_status = "major_outage"
-    elif any(p["status"] in ("outage", "degraded", "not_configured") for p in providers.values()):
+    elif any(p["status"] in ("outage", "degraded", "not_configured", "unverified") for p in providers.values()):
         overall_status = "degraded"
 
     payload = {
@@ -435,84 +453,6 @@ async def get_debate_diagnostics(
     message_count = session.exec(
         select(func.count(Message.id)).where(Message.debate_id == debate_id)
     ).one()
-
-    response_count = session.exec(
-        select(func.count(Message.id)).where(
-            Message.debate_id == debate_id,
-            Message.role == "arena_response"
-        )
-    ).one()
-
-    score_count = session.exec(
-        select(func.count(Score.id)).where(Score.debate_id == debate_id)
-    ).one()
-
-    checkpoint_count = session.exec(
-        select(func.count(DebateCheckpoint.id)).where(DebateCheckpoint.debate_id == debate_id)
-    ).one()
-
-    stage_checkpoint_count = session.exec(
-        select(func.count(DebateStageCheckpoint.id)).where(DebateStageCheckpoint.debate_id == debate_id)
-    ).one()
-
-    # 3. Query provider failures from LLMUsageLog
-    failures_query = select(LLMUsageLog).where(
-        LLMUsageLog.debate_id == debate_id,
-        LLMUsageLog.success.is_(False)  # noqa: E712 — must use SQLAlchemy .is_(), not Python `is`
-    ).order_by(LLMUsageLog.created_at.desc())
-    failed_logs = session.exec(failures_query).all()
-
-    provider_failures = []
-    for log in failed_logs:
-        provider_failures.append({
-            "provider": log.provider,
-            "model": log.model,
-            "role": log.role,
-            "error_message": log.error_message,
-            "timestamp": log.created_at.isoformat() if log.created_at else None
-        })
-
-    # Group counts of failures by provider/model
-    failures_summary = {}
-    for log in failed_logs:
-        key = f"{log.provider}/{log.model}"
-        failures_summary[key] = failures_summary.get(key, 0) + 1
-
-    # 4. Schema revision check
-    db_ok, db_info = await _db_readiness_async()
-    
-    # 5. Build response without credentials, prompts, or user emails
-    return {
-        "debate_id": debate.id,
-        "status": debate.status,
-        "mode": debate.mode,
-        "created_at": debate.created_at.isoformat() if debate.created_at else None,
-        "updated_at": debate.updated_at.isoformat() if debate.updated_at else None,
-        "counts": {
-            "messages": message_count,
-            "arena_responses": response_count,
-            "scores": score_count,
-            "checkpoints": checkpoint_count,
-            "stage_checkpoints": stage_checkpoint_count,
-        },
-        "failures": {
-            "total": len(failed_logs),
-            "summary": failures_summary,
-            "details": provider_failures[:10]
-        },
-        "schema": {
-            "ok": db_ok,
-            "current_revision": db_info.get("revision", {}).get("current"),
-            "head_revision": db_info.get("revision", {}).get("head"),
-        },
-        "meta": {
-            "app_version": settings.APP_VERSION,
-            "env": settings.ENV,
-            "git_sha": _GIT_SHA,
-            "build_timestamp": _BUILD_TIMESTAMP,
-        }
-    }
-
 
 @router.get("/ops/providers/readiness")
 async def get_providers_readiness(

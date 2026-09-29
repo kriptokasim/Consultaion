@@ -41,6 +41,7 @@ PROXY_DEPLOYMENT_NAMES: Dict[str, str] = {
     "openrouter-nemotron-free": "seat_free_nemotron",
     "openrouter_nemotron_free": "seat_free_nemotron",
     "openrouter_glm_free": "seat_free_laguna",
+    "openrouter_gpt_oss_free": "seat_free_ling",
     "openrouter_fallback": "seat_free_router",
     "chair": "chair",
 }

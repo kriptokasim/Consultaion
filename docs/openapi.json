@@ -817,7 +817,7 @@
           "ops"
         ],
         "summary": "Provider Health",
-        "description": "Provider health check.\n\nReturns status of AI providers based on configured API keys.\nUsed by frontend to display provider degradation warnings.",
+        "description": "Provider health check.\n\nUses the same breaker-backed health contract as /api/status so callers\ncannot be told that a provider is healthy merely because an API key exists.",
         "operationId": "provider_health_api_health_providers_get",
         "responses": {
           "200": {
@@ -1169,7 +1169,7 @@
           "ops"
         ],
         "summary": "Provider Health",
-        "description": "Provider health check.\n\nReturns status of AI providers based on configured API keys.\nUsed by frontend to display provider degradation warnings.",
+        "description": "Provider health check.\n\nUses the same breaker-backed health contract as /api/status so callers\ncannot be told that a provider is healthy merely because an API key exists.",
         "operationId": "provider_health_api_v1_api_health_providers_get",
         "responses": {
           "200": {
