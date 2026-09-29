@@ -10,10 +10,12 @@ function NewWorkspacePage() {
   const run = searchParams.get("run");
   const oracle = searchParams.get("oracle");
   const redteam = searchParams.get("redteam");
+  const prefillPrompt = searchParams.get("prefill_prompt");
 
   return (
     <RunWorkspaceNew
       initialRunId={run}
+      initialPrompt={prefillPrompt}
       initialAuxRun={
         oracle
           ? { kind: "oracle", id: oracle }
