@@ -54,15 +54,17 @@ function reportFromState(synthesisState: any, debate: any): Record<string, any> 
 export default function RunWorkspaceNew({
   initialRunId = null,
   initialAuxRun = null,
+  initialPrompt = null,
 }: {
   initialRunId?: string | null;
   initialAuxRun?: AuxiliaryRun;
+  initialPrompt?: string | null;
 }) {
   const router = useRouter();
   const { t } = useI18n();
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [auxRun, setAuxRun] = useState<AuxiliaryRun>(initialAuxRun);
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(initialPrompt ? decodeURIComponent(initialPrompt) : "");
   const [modeId, setModeId] = useState<ModeId>("arena");
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [selectedRiskLenses, setSelectedRiskLenses] = useState<string[]>(["security", "scaling", "compliance"]);
