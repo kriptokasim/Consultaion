@@ -90,7 +90,7 @@ def test_unknown_model_passes_the_resolved_slug_through(proxy_on):
     [
         ("anthropic_reasoning", "openai/seat_anthropic"),
         ("groq_fast", "openai/seat_groq"),
-        ("router-deep", "openai/seat_free_glm"),
+        ("router-deep", "openai/seat_free_laguna"),
         ("openrouter-nemotron-free", "openai/seat_free_nemotron"),
     ],
 )
