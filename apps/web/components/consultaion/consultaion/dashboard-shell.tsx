@@ -363,7 +363,7 @@ export default function DashboardShell({ children, initialProfile }: DashboardSh
             </div>
             <div className="flex items-center gap-3">
               <Button asChild variant="default" size="sm">
-                <Link href={`/login?source=public_run&intent=create_own_run&next=${encodeURIComponent('/live?focus=prompt')}`}>
+                <Link href={`/login?source=public_run&intent=create_own_run&next=${encodeURIComponent('/new')}`}>
                   Create your own Arena run
                 </Link>
               </Button>
