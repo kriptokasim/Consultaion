@@ -45,7 +45,7 @@ export default function DashboardClient({ email }: { email?: string }) {
         if (hasRedirectedRef.current) return;
         hasRedirectedRef.current = true;
         trackEvent("first_run_redirect_to_live");
-        router.replace("/live?focus=prompt");
+        router.replace("/new");
         return;
       }
       setShowOnboarding(true);
@@ -66,7 +66,7 @@ export default function DashboardClient({ email }: { email?: string }) {
     else if (templateId === "product-roadmap") text = t("dashboard.templates.product.description");
     
     trackEvent("overview_template_clicked", { template_id: templateId });
-    router.push(`/live?prefill_prompt=${encodeURIComponent(text)}`);
+    router.push(`/new?prefill_prompt=${encodeURIComponent(text)}`);
   };
 
   return (
@@ -97,15 +97,15 @@ export default function DashboardClient({ email }: { email?: string }) {
                     className="w-full bg-transparent text-sm px-4 py-3 outline-none"
                     onKeyDown={(e) => {
                       if(e.key === 'Enter' && e.currentTarget.value.trim()) {
-                        router.push(`/live?prefill_prompt=${encodeURIComponent(e.currentTarget.value)}`)
+                        router.push(`/new?prefill_prompt=${encodeURIComponent(e.currentTarget.value)}`)
                       }
                     }}
                   />
                   <button 
                     onClick={(e) => {
                       const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-                      if(input?.value.trim()) router.push(`/live?prefill_prompt=${encodeURIComponent(input.value)}`);
-                      else router.push("/live?focus=prompt");
+                      if(input?.value.trim()) router.push(`/new?prefill_prompt=${encodeURIComponent(input.value)}`);
+                      else router.push("/new");
                     }}
                     className="shrink-0 bg-primary text-primary-foreground h-8 w-8 rounded-xl flex items-center justify-center mr-1 shadow-sm hover:opacity-90 transition-opacity"
                   >
@@ -166,7 +166,7 @@ export default function DashboardClient({ email }: { email?: string }) {
           </div>
         ) : (
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => { trackEvent("overview_go_to_arena_clicked"); router.push("/live?focus=prompt"); }} />
+            <PrimaryCard icon={<Plus className="h-5 w-5" />} title={t("dashboard.cards.newDebate.title")} description={t("dashboard.cards.newDebate.description")} onClick={() => { trackEvent("overview_go_to_arena_clicked"); router.push("/new"); }} />
             <LinkCard href="/analytics" icon={<BarChart3 className="h-5 w-5" />} title={t("dashboard.cards.analytics.title")} description={t("dashboard.cards.analytics.description")} />
             {maxDebates ? (
               <div className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-smooth transition-transform transition-shadow duration-200 hover:-translate-y-[2px] hover:shadow-smooth-lg">
@@ -204,7 +204,7 @@ export default function DashboardClient({ email }: { email?: string }) {
               onOpenTemplates={() => {
                 document.getElementById("templates-section")?.scrollIntoView({ behavior: "smooth" });
               }}
-              onNewDebate={() => router.push("/live?focus=prompt")}
+              onNewDebate={() => router.push("/new")}
             />
           )}
 
@@ -222,7 +222,7 @@ export default function DashboardClient({ email }: { email?: string }) {
       )}
 
       {/* Runs History Section */}
-      <DashboardRunsHistory debates={debates} debatesLoading={debatesLoading} onNewRun={() => router.push("/live?focus=prompt")} />
+      <DashboardRunsHistory debates={debates} debatesLoading={debatesLoading} onNewRun={() => router.push("/new")} />
 
       <section>
         <PromotionArea location="dashboard_sidebar" />
