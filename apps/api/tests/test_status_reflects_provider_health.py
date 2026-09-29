@@ -16,7 +16,6 @@ not called from here.
 from __future__ import annotations
 
 import pytest
-
 from routes import ops
 
 pytestmark = pytest.mark.timeout(10)

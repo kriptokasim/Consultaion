@@ -22,6 +22,8 @@ config_module.settings.reload()
 
 from database import init_db, reset_engine
 
+from tests.utils import ensure_user
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():
@@ -48,6 +50,7 @@ def test_build_timeline_completed_debate(session):
         updated_at=datetime.now(timezone.utc),
         user_id="user1"
     )
+    ensure_user(session, "user1")
     session.add(debate)
     
     # Add messages
@@ -104,6 +107,7 @@ def test_build_timeline_failed_debate(session):
         final_meta={"error": "API Error"},
         user_id="user1"
     )
+    ensure_user(session, "user1")
     session.add(debate)
     session.commit()
     

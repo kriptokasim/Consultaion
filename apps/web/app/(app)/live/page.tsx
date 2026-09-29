@@ -146,6 +146,17 @@ function ArenaPageContent() {
   const router = useRouter()
 
   const runningRef = useRef(false)
+  // True while POST /debates is in flight. A second click (or Enter) during
+  // that window used to start a second, separately billed run.
+  const creatingRef = useRef(false)
+  // One idempotency key per start intent, kept until that intent succeeds.
+  const startKeyRef = useRef<{ fingerprint: string; key: string } | null>(null)
+  const startIdempotencyKey = (fingerprint: string) => {
+    if (startKeyRef.current?.fingerprint !== fingerprint) {
+      startKeyRef.current = { fingerprint, key: crypto.randomUUID() }
+    }
+    return startKeyRef.current.key
+  }
   const currentDebateIdRef = useRef<string | null>(null)
   const manualStartAttemptedRef = useRef(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
@@ -241,9 +252,15 @@ function ArenaPageContent() {
           if (intent.expiresAt > Date.now()) {
             setPrompt(intent.prompt)
             setMode(intent.mode)
-            if (intent.models && intent.models.length > 0) {
-              const newSeats = intent.models.map((id: string) => {
-                const match = AVAILABLE_MODELS.find((m) => m.id === id) || AVAILABLE_MODELS[0]
+            // Models no longer offered are dropped. Labelling them with the
+            // first available model's name and provider showed the wrong model
+            // and sent a provider/model pair the API rejects.
+            const resumedModels: string[] = (intent.models || []).filter((id: string) =>
+              AVAILABLE_MODELS.some((m) => m.id === id),
+            )
+            const seatsFor = (ids: string[]) =>
+              ids.map((id) => {
+                const match = AVAILABLE_MODELS.find((m) => m.id === id)!
                 return {
                   seat_id: id,
                   display_name: match.name,
@@ -252,16 +269,20 @@ function ArenaPageContent() {
                   role_profile: 'architect',
                 }
               })
+            if (resumedModels.length > 0) {
+              const newSeats = seatsFor(resumedModels)
               setPanelConfig({
                 engine_version: 'parliament-v1',
                 seats: newSeats,
               })
               setMembers(seatsToMembers(newSeats))
-              setSelectedModelIds(intent.models)
+              setSelectedModelIds(resumedModels)
             }
             
             // Auto-launch the resumed run
             const launchResume = async () => {
+              if (creatingRef.current) return
+              creatingRef.current = true
               reset()
               setRateLimitNotice(null)
               setErrorState(null)
@@ -270,22 +291,16 @@ function ArenaPageContent() {
               runningRef.current = true
               manualStartAttemptedRef.current = false
               try {
-                const finalSeats = intent.models.map((id: string) => {
-                  const match = AVAILABLE_MODELS.find((m) => m.id === id) || AVAILABLE_MODELS[0]
-                  return {
-                    seat_id: id,
-                    display_name: match.name,
-                    provider_key: match.providerKey,
-                    model: id,
-                    role_profile: 'architect',
-                  }
-                })
-                const { id } = await startDebate({
-                  prompt: intent.prompt,
-                  panel_config: { engine_version: 'parliament-v1', seats: finalSeats },
-                  mode: intent.mode,
-                  gateway_policy: gatewayPolicy,
-                })
+                const finalSeats = seatsFor(resumedModels)
+                const { id } = await startDebate(
+                  {
+                    prompt: intent.prompt,
+                    panel_config: { engine_version: 'parliament-v1', seats: finalSeats },
+                    mode: intent.mode,
+                    gateway_policy: gatewayPolicy,
+                  },
+                  `resume-${resumeParam}`.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 128),
+                )
                 currentDebateIdRef.current = id
                 setCurrentDebateId(id)
                 setSessionStatus('created')
@@ -299,6 +314,8 @@ function ArenaPageContent() {
               } catch (error) {
                 console.error('Failed to run resumed intent:', error)
                 stopStream('terminal_error')
+              } finally {
+                creatingRef.current = false
               }
             }
             launchResume()
@@ -339,6 +356,7 @@ function ArenaPageContent() {
 
   const onStart = async () => {
     if (!prompt.trim()) return
+    if (creatingRef.current) return
     track('prompt_started', { prompt_length: prompt.length, mode })
     if (authStatus === 'guest') {
       setContinueRunSheetOpen(true)
@@ -361,8 +379,11 @@ function ArenaPageContent() {
     setRunning(true)
     runningRef.current = true
     manualStartAttemptedRef.current = false
+    creatingRef.current = true
     try {
-      const { id } = await startDebate({ prompt, panel_config: panelConfig, mode, gateway_policy: gatewayPolicy })
+      const payload = { prompt, panel_config: panelConfig, mode, gateway_policy: gatewayPolicy }
+      const { id } = await startDebate(payload, startIdempotencyKey(JSON.stringify(payload)))
+      startKeyRef.current = null
       currentDebateIdRef.current = id
       setCurrentDebateId(id)
       setSessionStatus('created')
@@ -399,6 +420,8 @@ function ArenaPageContent() {
         });
       }
       stopStream('terminal_error')
+    } finally {
+      creatingRef.current = false
     }
   }
 

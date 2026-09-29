@@ -6,6 +6,8 @@ from main import app
 from models import User, UserInteraction, utcnow
 from sqlmodel import Session, select
 
+from tests.utils import seed_debate
+
 pytestmark = pytest.mark.anyio
 
 
@@ -100,6 +102,8 @@ async def test_audit_logs_and_exports(client: AsyncClient, db_session: Session):
     # Find the newly created user in db to insert test audit logs manually
     user = db_session.exec(select(User).where(User.email == email)).first()
     assert user is not None
+
+    seed_debate("debate-uuid-1", user_id=user.id)
 
     # Add a couple of mock interactions
     log1 = UserInteraction(

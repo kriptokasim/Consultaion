@@ -1,6 +1,5 @@
 """Tests for voting access control (private debate protection)."""
-
-
+from tests.utils import ensure_user
 
 
 class TestVotingAccessControl:
@@ -19,6 +18,7 @@ class TestVotingAccessControl:
             status="running",
             config={"is_public": False},
         )
+        ensure_user(db_session, "other-user-id")
         db_session.add(debate)
         db_session.commit()
 
@@ -41,6 +41,7 @@ class TestVotingAccessControl:
             status="running",
             config={"is_public": True},
         )
+        ensure_user(db_session, "other-user-id")
         db_session.add(debate)
         db_session.commit()
 
@@ -63,6 +64,7 @@ class TestVotingAccessControl:
             status="completed",
             config={"is_public": False},
         )
+        ensure_user(db_session, "other-user-id")
         db_session.add(debate)
         db_session.commit()
 
@@ -81,6 +83,7 @@ class TestVotingAccessControl:
             status="completed",
             config={"is_public": False},
         )
+        ensure_user(db_session, "other-user-id")
         db_session.add(debate)
         db_session.commit()
 

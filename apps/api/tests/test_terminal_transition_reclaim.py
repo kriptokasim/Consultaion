@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
+from tests.utils import ensure_debate
+
 
 def test_fresh_terminal_claim_is_not_stolen(db_session):
+    ensure_debate(db_session, "debate-terminal-fresh")
     from services.terminal_transition import (
         TRANSITION_SUMMARY_EMAIL,
         claim_transition,
@@ -24,6 +27,7 @@ def test_fresh_terminal_claim_is_not_stolen(db_session):
 
 
 def test_stale_terminal_claim_is_reclaimable(db_session):
+    ensure_debate(db_session, "debate-terminal-stale")
     from services.terminal_transition import (
         TERMINAL_TRANSITION_CLAIM_TTL_SECONDS,
         TRANSITION_SUMMARY_EMAIL,
@@ -55,6 +59,7 @@ def test_stale_terminal_claim_is_reclaimable(db_session):
 
 
 def test_completed_terminal_claim_is_never_reclaimed(db_session):
+    ensure_debate(db_session, "debate-terminal-completed")
     from services.terminal_transition import (
         TRANSITION_SUMMARY_EMAIL,
         claim_transition,

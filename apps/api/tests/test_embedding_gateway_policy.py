@@ -15,7 +15,6 @@ policy forbids it, and must stop retrying a dead upstream.
 from __future__ import annotations
 
 import pytest
-
 import reporting.claim_similarity as cs
 
 pytestmark = [pytest.mark.anyio, pytest.mark.timeout(10)]

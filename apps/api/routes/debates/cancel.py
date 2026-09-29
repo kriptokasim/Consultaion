@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import logging
 
+from auth import get_current_user
+from deps import get_sse_backend
+from exceptions import NotFoundError, ValidationError
 from fastapi import APIRouter, Depends
 from models import (
     Debate,
@@ -11,14 +14,11 @@ from models import (
     User,
     utcnow,
 )
-from sqlmodel import Session, select
-
-from auth import get_current_user
-from deps import get_sse_backend
-from exceptions import NotFoundError, ValidationError
-from routes.common import require_debate_mutation_access
+from sqlmodel import select
 from sse_backend import BaseSSEBackend
 from utils.async_bridge import run_blocking
+
+from routes.common import require_debate_mutation_access
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,8 @@ router = APIRouter()
 
 def _cancel_transaction(debate_id: str, current_user: User) -> tuple[str, int]:
     """Apply the complete cancellation/accounting transaction in a worker thread."""
-    from database import session_scope
     from billing.service import refund_hosted_credit
+    from database import session_scope
     from usage_limits import refund_run_slot
 
     with session_scope() as session:

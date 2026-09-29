@@ -11,7 +11,6 @@ Two properties matter more than any individual behaviour here:
 from __future__ import annotations
 
 import pytest
-
 from model_gateway import proxy_transport
 from model_gateway.proxy_transport import (
     ProxyConfigurationError,
@@ -91,6 +90,7 @@ def test_unknown_model_passes_the_resolved_slug_through(proxy_on):
         ("anthropic_reasoning", "openai/seat_anthropic"),
         ("groq_fast", "openai/seat_groq"),
         ("router-deep", "openai/seat_free_laguna"),
+        ("groq-llama-3-3", "openai/seat_groq"),
         ("openrouter-nemotron-free", "openai/seat_free_nemotron"),
     ],
 )
@@ -161,16 +161,45 @@ async def test_kill_switch_off_does_not_block(monkeypatch):
     assert getattr(settings, "LLM_KILL_SWITCH_ENABLED", False) is False
 
 
-def test_proxy_deployment_table_covers_every_static_arena_seat():
-    """Every seat the arena can serve must have a proxy deployment.
+def _proxy_config_deployments() -> dict[str, str]:
+    from pathlib import Path
 
-    A seat missing from the table still works (it falls through to the wildcard
-    deployment), but it silently loses its per-deployment cooldown and fallback
-    chain -- which is the reason for running the proxy at all.
+    import yaml
+
+    config_path = Path(__file__).resolve().parents[1] / "config" / "litellm_proxy.yaml"
+    config = yaml.safe_load(config_path.read_text())
+    return {
+        entry["model_name"]: entry["litellm_params"]["model"]
+        for entry in config["model_list"]
+    }
+
+
+def test_proxy_deployment_table_names_only_published_deployments():
+    """A name the proxy does not publish would be forwarded to the wildcard
+    deployment as a bogus upstream slug and fail every call on that seat."""
+    published = _proxy_config_deployments()
+    for model_id, deployment in proxy_transport.PROXY_DEPLOYMENT_NAMES.items():
+        assert deployment in published, (
+            f"{model_id!r} maps to {deployment!r}, which litellm_proxy.yaml does not publish"
+        )
+
+
+def test_proxy_deployment_table_covers_every_static_arena_seat(proxy_on):
+    """Every seat the arena can serve must reach a named deployment for the same model.
+
+    A seat that falls through to the wildcard still works, but it silently loses
+    its per-deployment cooldown and fallback chain -- which is the reason for
+    running the proxy at all. Aliased seats (groq-llama-3-3 -> groq_fast)
+    resolve through resolve_model_key, so check resolution, not raw keys.
     """
-    from parliament.model_registry import FREE_ARENA_MODELS
+    from parliament.model_registry import FREE_ARENA_MODELS, get_model_info
 
+    published = _proxy_config_deployments()
     for model_id in FREE_ARENA_MODELS:
-        assert model_id in proxy_transport.PROXY_DEPLOYMENT_NAMES, (
-            f"free arena seat {model_id!r} has no proxy deployment"
+        resolved = resolve_deployment(model_id, "unrouted")
+        assert resolved != "unrouted", f"free arena seat {model_id!r} has no proxy deployment"
+        deployment = resolved.removeprefix("openai/")
+        assert published[deployment] == get_model_info(model_id).litellm_model, (
+            f"free arena seat {model_id!r} is served by {deployment!r}, "
+            f"which runs {published[deployment]!r}"
         )

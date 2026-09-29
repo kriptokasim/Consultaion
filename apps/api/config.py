@@ -209,6 +209,13 @@ class AppSettings(BaseSettings):
     # Stage-specific max_tokens limits
     ARENA_MAX_TOKENS: int = Field(1200, ge=100, description="Max tokens per arena model response")
     SYNTHESIS_MAX_TOKENS: int = Field(2000, ge=100, description="Max tokens for synthesis step")
+    ARENA_SYNTHESIS_MODEL: str | None = Field(
+        None,
+        description=(
+            "Registry model id that writes the Arena verdict and report. Unset: the "
+            "highest-quality panel model that answered, then the routed default."
+        ),
+    )
     STREAMING_RESPONSES_ENABLED: bool = Field(True, description="Enable streaming deltas via SSE")
     ARENA_MODEL_TIMEOUT_SECONDS: int = Field(45, ge=5, le=300, description="Per-model timeout for Arena perspective calls")
     ARENA_MODEL_TOTAL_TIMEOUT_S: int = Field(60, ge=10, le=600, description="PS155.3: Total max execution time for an Arena model streaming run")
@@ -258,6 +265,14 @@ class AppSettings(BaseSettings):
     CELERY_INTERACTIVE_QUEUE: str = "interactive"
     CELERY_INTERACTIVE_CONCURRENCY: int = Field(4, ge=1, description="Max concurrent interactive worker processes")
     CELERY_INTERACTIVE_PREFETCH: int = Field(1, ge=0, description="Prefetch count for interactive queue")
+    DEBATE_TASK_SOFT_TIME_LIMIT_SECONDS: int = Field(
+        1800,
+        ge=60,
+        description=(
+            "Soft Celery time limit for one debate run; the hard limit is 60s later. "
+            "Without one, a hung run held a worker slot indefinitely."
+        ),
+    )
 
     # Patchset 53.0: Auth Debug Mode
     AUTH_DEBUG: bool = Field(False, description="Enable verbose auth logging & debug endpoint")

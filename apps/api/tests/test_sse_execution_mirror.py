@@ -1,5 +1,7 @@
 import pytest
 
+from tests.utils import add_rows_in_order
+
 
 class _Backend:
     def __init__(self):
@@ -158,7 +160,7 @@ async def test_explicit_release_sets_shared_lost_event(db_session):
         attempt_number=1,
         status="queued",
     )
-    db_session.add_all([debate, attempt])
+    add_rows_in_order(db_session, debate, attempt)
     db_session.commit()
 
     acquired = await acquire_execution_lease(debate.id, lease_seconds=30)

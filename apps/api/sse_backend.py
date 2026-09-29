@@ -4,8 +4,8 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import suppress
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from enum import Enum
 from typing import Optional, Protocol
 
@@ -456,8 +456,9 @@ class MemoryChannelBackend:
                 event_type = item.get("type", payload.get("type", ""))
                 if (not dropped) and event_type in CRITICAL_NON_TERMINAL_EVENT_TYPES:
                     dropped = True
+                    # The caller records the replacement; this records the drop.
                     from metrics import increment_metric
-                    increment_metric("sse.backpressure.critical_replaced")
+                    increment_metric("sse.backpressure.dropped")
                     continue
                 temp.append(item)
             except asyncio.QueueEmpty:

@@ -114,6 +114,12 @@ def test_auxiliary_ai_content_uses_debate_retention_window(
     db_session.add(linked_old)
     db_session.commit()
 
+    # Deleted rows cannot be refreshed, so read ids before the purge expires them.
+    old_coding_id, fresh_coding_id = old_coding.id, fresh_coding.id
+    old_oracle_id, fresh_oracle_id = old_oracle.id, fresh_oracle.id
+    standalone_old_id, standalone_fresh_id = standalone_old.id, standalone_fresh.id
+    linked_old_id = linked_old.id
+
     result = purge_old_auxiliary_ai_content(db_session)
     db_session.expire_all()
 
@@ -123,20 +129,20 @@ def test_auxiliary_ai_content_uses_debate_retention_window(
         "standalone_redteam_sessions_deleted": 1,
     }
 
-    assert db_session.get(CodingRun, old_coding.id) is None
+    assert db_session.get(CodingRun, old_coding_id) is None
     assert db_session.exec(
-        select(CodingTurn).where(CodingTurn.coding_run_id == old_coding.id)
+        select(CodingTurn).where(CodingTurn.coding_run_id == old_coding_id)
     ).first() is None
-    assert db_session.get(CodingRun, fresh_coding.id) is not None
+    assert db_session.get(CodingRun, fresh_coding_id) is not None
 
-    assert db_session.get(OracleSession, old_oracle.id) is None
+    assert db_session.get(OracleSession, old_oracle_id) is None
     assert db_session.exec(
-        select(OracleBranch).where(OracleBranch.session_id == old_oracle.id)
+        select(OracleBranch).where(OracleBranch.session_id == old_oracle_id)
     ).first() is None
-    assert db_session.get(OracleSession, fresh_oracle.id) is not None
+    assert db_session.get(OracleSession, fresh_oracle_id) is not None
 
-    assert db_session.get(RedTeamSession, standalone_old.id) is None
-    assert db_session.get(RedTeamSession, standalone_fresh.id) is not None
+    assert db_session.get(RedTeamSession, standalone_old_id) is None
+    assert db_session.get(RedTeamSession, standalone_fresh_id) is not None
     # Debate-linked RedTeam content is owned by purge_old_debates, not the
     # standalone auxiliary purge.
-    assert db_session.get(RedTeamSession, linked_old.id) is not None
+    assert db_session.get(RedTeamSession, linked_old_id) is not None

@@ -124,106 +124,6 @@
         }
       }
     },
-    "/auth/google/callback": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Google Callback",
-        "operationId": "google_callback_auth_google_callback_get",
-        "parameters": [
-          {
-            "name": "code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Code"
-            }
-          },
-          {
-            "name": "state",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "State"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Google Callback Post",
-        "operationId": "google_callback_post_auth_google_callback_post",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GoogleCallbackRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/auth/register": {
       "post": {
         "tags": [
@@ -243,45 +143,6 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/login": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Login User",
-        "operationId": "login_user_auth_login_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -400,6 +261,148 @@
         }
       }
     },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "auth",
+          "auth"
+        ],
+        "summary": "Login User Hardened",
+        "operationId": "login_user_hardened_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/google/callback": {
+      "get": {
+        "tags": [
+          "auth",
+          "auth"
+        ],
+        "summary": "Google Callback Hardened",
+        "operationId": "google_callback_hardened_auth_google_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth",
+          "auth"
+        ],
+        "summary": "Google Callback Post Hardened",
+        "operationId": "google_callback_post_hardened_auth_google_callback_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCallbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me/profile": {
       "get": {
         "tags": [
@@ -479,106 +482,6 @@
         }
       }
     },
-    "/api/v1/auth/google/callback": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Google Callback",
-        "operationId": "google_callback_api_v1_auth_google_callback_get",
-        "parameters": [
-          {
-            "name": "code",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Code"
-            }
-          },
-          {
-            "name": "state",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "State"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Google Callback Post",
-        "operationId": "google_callback_post_api_v1_auth_google_callback_post",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GoogleCallbackRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/auth/register": {
       "post": {
         "tags": [
@@ -598,45 +501,6 @@
         },
         "responses": {
           "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/auth/login": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Login User",
-        "operationId": "login_user_api_v1_auth_login_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -755,6 +619,148 @@
         }
       }
     },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth",
+          "auth"
+        ],
+        "summary": "Login User Hardened",
+        "operationId": "login_user_hardened_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/callback": {
+      "get": {
+        "tags": [
+          "auth",
+          "auth"
+        ],
+        "summary": "Google Callback Hardened",
+        "operationId": "google_callback_hardened_api_v1_auth_google_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth",
+          "auth"
+        ],
+        "summary": "Google Callback Post Hardened",
+        "operationId": "google_callback_post_hardened_api_v1_auth_google_callback_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCallbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "tags": [
@@ -795,6 +801,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Readyz Readyz Get"
                 }
@@ -810,7 +817,7 @@
           "ops"
         ],
         "summary": "Provider Health",
-        "description": "Provider health check.\n\nReturns status of AI providers based on configured API keys.\nUsed by frontend to display provider degradation warnings.",
+        "description": "Provider health check.\n\nUses the same breaker-backed health contract as /api/status so callers\ncannot be told that a provider is healthy merely because an API key exists.",
         "operationId": "provider_health_api_health_providers_get",
         "responses": {
           "200": {
@@ -818,6 +825,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Provider Health Api Health Providers Get"
                 }
@@ -841,6 +849,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Api Status Api Status Get"
                 }
@@ -863,6 +872,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Contracts Meta Contracts Get"
                 }
@@ -886,6 +896,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Runtime Parity Ops Runtime Parity Get"
                 }
@@ -921,6 +932,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Debate Diagnostics Ops Debates  Debate Id  Diagnostics Get"
                 }
               }
@@ -953,6 +965,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Providers Readiness Ops Providers Readiness Get"
                 }
@@ -976,6 +989,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Run Pipeline Health Ops Run Pipeline Health Get"
                 }
@@ -999,6 +1013,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Llm Smoke Test Ops Llm Smoke Test Post"
                 }
@@ -1034,6 +1049,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Probe Provider Ops Providers  Provider  Probe Post"
                 }
               }
@@ -1078,6 +1094,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Probe Provider User Ops Probe  Provider  Post"
                 }
               }
@@ -1136,6 +1153,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Readyz Api V1 Readyz Get"
                 }
@@ -1151,7 +1169,7 @@
           "ops"
         ],
         "summary": "Provider Health",
-        "description": "Provider health check.\n\nReturns status of AI providers based on configured API keys.\nUsed by frontend to display provider degradation warnings.",
+        "description": "Provider health check.\n\nUses the same breaker-backed health contract as /api/status so callers\ncannot be told that a provider is healthy merely because an API key exists.",
         "operationId": "provider_health_api_v1_api_health_providers_get",
         "responses": {
           "200": {
@@ -1159,6 +1177,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Provider Health Api V1 Api Health Providers Get"
                 }
@@ -1182,6 +1201,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Api Status Api V1 Api Status Get"
                 }
@@ -1204,6 +1224,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Contracts Api V1 Meta Contracts Get"
                 }
@@ -1227,6 +1248,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Runtime Parity Api V1 Ops Runtime Parity Get"
                 }
@@ -1262,6 +1284,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Debate Diagnostics Api V1 Ops Debates  Debate Id  Diagnostics Get"
                 }
               }
@@ -1294,6 +1317,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Providers Readiness Api V1 Ops Providers Readiness Get"
                 }
@@ -1317,6 +1341,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Run Pipeline Health Api V1 Ops Run Pipeline Health Get"
                 }
@@ -1340,6 +1365,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Llm Smoke Test Api V1 Ops Llm Smoke Test Post"
                 }
@@ -1375,6 +1401,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Probe Provider Api V1 Ops Providers  Provider  Probe Post"
                 }
               }
@@ -1419,6 +1446,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Probe Provider User Api V1 Ops Probe  Provider  Post"
                 }
               }
@@ -1457,13 +1485,13 @@
         }
       }
     },
-    "/metrics": {
+    "/stats/metrics": {
       "get": {
         "tags": [
           "stats"
         ],
         "summary": "Metrics",
-        "operationId": "metrics_metrics_get",
+        "operationId": "metrics_stats_metrics_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1780,13 +1808,13 @@
         }
       }
     },
-    "/api/v1/metrics": {
+    "/api/v1/stats/metrics": {
       "get": {
         "tags": [
           "stats"
         ],
         "summary": "Metrics",
-        "operationId": "metrics_api_v1_metrics_get",
+        "operationId": "metrics_api_v1_stats_metrics_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2414,43 +2442,6 @@
       }
     },
     "/debates": {
-      "post": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Create Debate",
-        "operationId": "create_debate_debates_post",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DebateCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "tags": [
           "debates"
@@ -2524,6 +2515,44 @@
                 "schema": {
                   "$ref": "#/components/schemas/DebateListResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Create Debate Hardened",
+        "description": "Preserve canonical create validation while making Celery hand-off durable.",
+        "operationId": "create_debate_hardened_debates_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -2889,8 +2918,8 @@
         "tags": [
           "debates"
         ],
-        "summary": "Retry Debate Run",
-        "operationId": "retry_debate_run_debates__debate_id__retry_post",
+        "summary": "Retry Debate Run Hardened",
+        "operationId": "retry_debate_run_hardened_debates__debate_id__retry_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -2946,8 +2975,8 @@
         "tags": [
           "debates"
         ],
-        "summary": "Retry Agent",
-        "operationId": "retry_agent_debates__debate_id__retry_agent_post",
+        "summary": "Retry Agent Hardened",
+        "operationId": "retry_agent_hardened_debates__debate_id__retry_agent_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -2969,6 +2998,47 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debates/{debate_id}/cancel": {
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Cancel Debate Run",
+        "description": "Cancel the active run and fence stale workers before terminal SSE.",
+        "operationId": "cancel_debate_run_debates__debate_id__cancel_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3694,43 +3764,6 @@
       }
     },
     "/api/v1/debates": {
-      "post": {
-        "tags": [
-          "debates"
-        ],
-        "summary": "Create Debate",
-        "operationId": "create_debate_api_v1_debates_post",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DebateCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "tags": [
           "debates"
@@ -3804,6 +3837,44 @@
                 "schema": {
                   "$ref": "#/components/schemas/DebateListResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Create Debate Hardened",
+        "description": "Preserve canonical create validation while making Celery hand-off durable.",
+        "operationId": "create_debate_hardened_api_v1_debates_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebateCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -4169,8 +4240,8 @@
         "tags": [
           "debates"
         ],
-        "summary": "Retry Debate Run",
-        "operationId": "retry_debate_run_api_v1_debates__debate_id__retry_post",
+        "summary": "Retry Debate Run Hardened",
+        "operationId": "retry_debate_run_hardened_api_v1_debates__debate_id__retry_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -4226,8 +4297,8 @@
         "tags": [
           "debates"
         ],
-        "summary": "Retry Agent",
-        "operationId": "retry_agent_api_v1_debates__debate_id__retry_agent_post",
+        "summary": "Retry Agent Hardened",
+        "operationId": "retry_agent_hardened_api_v1_debates__debate_id__retry_agent_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -4249,6 +4320,47 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/debates/{debate_id}/cancel": {
+      "post": {
+        "tags": [
+          "debates"
+        ],
+        "summary": "Cancel Debate Run",
+        "description": "Cancel the active run and fence stale workers before terminal SSE.",
+        "operationId": "cancel_debate_run_api_v1_debates__debate_id__cancel_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -7241,6 +7353,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get User Participation Users Me Participation Get"
                 }
@@ -7264,6 +7377,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get User Participation Api V1 Users Me Participation Get"
                 }
@@ -7279,7 +7393,7 @@
           "arena"
         ],
         "summary": "Get Divergence Report",
-        "description": "Retrieve claims divergence report. Computes it on the fly if missing on a completed run.",
+        "description": "Retrieve divergence without blocking the FastAPI event loop.",
         "operationId": "get_divergence_report_arena__debate_id__divergence_get",
         "parameters": [
           {
@@ -7299,7 +7413,51 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Divergence Report Arena  Debate Id  Divergence Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "Compute Divergence Report",
+        "description": "Compute the claims divergence report on the fly for a completed run.\n\nCharges the caller for the computation; returns the cached report if one\nalready exists.",
+        "operationId": "compute_divergence_report_arena__debate_id__divergence_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Compute Divergence Report Arena  Debate Id  Divergence Post"
                 }
               }
             }
@@ -7323,7 +7481,7 @@
           "arena"
         ],
         "summary": "Cast Arena Vote",
-        "description": "Cast a user agreement vote on a claim. Requires debate access.",
+        "description": "Cast a vote using a thread-local DB session.",
         "operationId": "cast_arena_vote_arena__debate_id__user_vote_post",
         "parameters": [
           {
@@ -7353,6 +7511,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Cast Arena Vote Arena  Debate Id  User Vote Post"
                 }
               }
@@ -7377,7 +7536,7 @@
           "arena"
         ],
         "summary": "Get Divergence Report",
-        "description": "Retrieve claims divergence report. Computes it on the fly if missing on a completed run.",
+        "description": "Retrieve divergence without blocking the FastAPI event loop.",
         "operationId": "get_divergence_report_api_v1_arena__debate_id__divergence_get",
         "parameters": [
           {
@@ -7397,7 +7556,51 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Divergence Report Api V1 Arena  Debate Id  Divergence Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "arena"
+        ],
+        "summary": "Compute Divergence Report",
+        "description": "Compute the claims divergence report on the fly for a completed run.\n\nCharges the caller for the computation; returns the cached report if one\nalready exists.",
+        "operationId": "compute_divergence_report_api_v1_arena__debate_id__divergence_post",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Compute Divergence Report Api V1 Arena  Debate Id  Divergence Post"
                 }
               }
             }
@@ -7421,7 +7624,7 @@
           "arena"
         ],
         "summary": "Cast Arena Vote",
-        "description": "Cast a user agreement vote on a claim. Requires debate access.",
+        "description": "Cast a vote using a thread-local DB session.",
         "operationId": "cast_arena_vote_api_v1_arena__debate_id__user_vote_post",
         "parameters": [
           {
@@ -7451,6 +7654,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Cast Arena Vote Api V1 Arena  Debate Id  User Vote Post"
                 }
               }
@@ -7526,8 +7730,47 @@
           "voting"
         ],
         "summary": "Reveal Prediction And Reasons",
-        "description": "Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.\nResolves predictions on-the-fly if the debate is completed.",
+        "description": "Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.\n\nRead-only: vote reasons are returned only when already extracted. Use the\nPOST variant to run the extraction, which spends credits.",
         "operationId": "reveal_prediction_and_reasons_voting__debate_id__reveal_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "voting"
+        ],
+        "summary": "Compute Reveal Prediction And Reasons",
+        "description": "Extract judges' vote highlights/drawbacks if not pre-computed, then return\nthe same payload as the GET variant. Charges the caller for the extraction.",
+        "operationId": "compute_reveal_prediction_and_reasons_voting__debate_id__reveal_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -7618,8 +7861,47 @@
           "voting"
         ],
         "summary": "Reveal Prediction And Reasons",
-        "description": "Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.\nResolves predictions on-the-fly if the debate is completed.",
+        "description": "Get prediction outcomes, community aggregates, and judges' vote highlights/drawbacks.\n\nRead-only: vote reasons are returned only when already extracted. Use the\nPOST variant to run the extraction, which spends credits.",
         "operationId": "reveal_prediction_and_reasons_api_v1_voting__debate_id__reveal_get",
+        "parameters": [
+          {
+            "name": "debate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Debate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "voting"
+        ],
+        "summary": "Compute Reveal Prediction And Reasons",
+        "description": "Extract judges' vote highlights/drawbacks if not pre-computed, then return\nthe same payload as the GET variant. Charges the caller for the extraction.",
+        "operationId": "compute_reveal_prediction_and_reasons_api_v1_voting__debate_id__reveal_post",
         "parameters": [
           {
             "name": "debate_id",
@@ -11031,6 +11313,7 @@
           "details": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -11139,6 +11422,7 @@
         "properties": {
           "pushback_text": {
             "type": "string",
+            "maxLength": 5000,
             "minLength": 5,
             "title": "Pushback Text",
             "description": "The critique or pushback on the synthesis"
@@ -11979,6 +12263,7 @@
           },
           "recent_debates": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -11986,6 +12271,7 @@
           },
           "champion_samples": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -12057,6 +12343,7 @@
         "properties": {
           "prompt": {
             "type": "string",
+            "maxLength": 5000,
             "minLength": 5,
             "title": "Prompt",
             "description": "The query to analyze"
@@ -12082,6 +12369,7 @@
           },
           "assumption_text": {
             "type": "string",
+            "maxLength": 5000,
             "minLength": 3,
             "title": "Assumption Text",
             "description": "The custom counter-assumption or text to inject at the fork point"
@@ -12376,6 +12664,7 @@
           },
           "recent_429s": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -12406,6 +12695,7 @@
         "properties": {
           "proposal_text": {
             "type": "string",
+            "maxLength": 5000,
             "minLength": 10,
             "title": "Proposal Text",
             "description": "The proposal text to review"
@@ -12415,6 +12705,8 @@
               "type": "string"
             },
             "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
             "title": "Lenses",
             "description": "The risk lenses to evaluate"
           }
@@ -12554,6 +12846,7 @@
             "description": "Seat ID or name if applicable."
           },
           "payload": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Payload",
             "description": "Event-specific data."
@@ -12708,7 +13001,8 @@
           "timezone": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               {
                 "type": "null"

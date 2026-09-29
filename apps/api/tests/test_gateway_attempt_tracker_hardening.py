@@ -21,6 +21,7 @@ def _result(*, tokens=0, cost=0.0, provider="openai", success=True):
 
 @pytest.mark.anyio
 async def test_nested_stream_to_nonstream_fallback_is_one_provider_attempt(monkeypatch):
+    import model_gateway.runtime_guard as guard
     from model_gateway.attempt_tracker import (
         GatewayAttemptContext,
         begin_adapter_attempt,
@@ -28,7 +29,6 @@ async def test_nested_stream_to_nonstream_fallback_is_one_provider_attempt(monke
         finish_adapter_attempt,
         reset_attempt_context,
     )
-    import model_gateway.runtime_guard as guard
 
     monkeypatch.setattr(guard, "estimate_full_call_cost", lambda **_kwargs: 0.05)
     monkeypatch.setattr(guard, "estimate_full_call_tokens", lambda **_kwargs: 50)
@@ -77,6 +77,7 @@ async def test_nested_stream_to_nonstream_fallback_is_one_provider_attempt(monke
 
 @pytest.mark.anyio
 async def test_cumulative_provider_attempt_budget_uses_non_provider_control_signal(monkeypatch):
+    import model_gateway.runtime_guard as guard
     from model_gateway.attempt_tracker import (
         GatewayAttemptContext,
         ProviderAttemptBudgetBlocked,
@@ -85,7 +86,6 @@ async def test_cumulative_provider_attempt_budget_uses_non_provider_control_sign
         finish_adapter_attempt,
         reset_attempt_context,
     )
-    import model_gateway.runtime_guard as guard
 
     monkeypatch.setattr(guard, "estimate_full_call_cost", lambda **_kwargs: 0.25)
     monkeypatch.setattr(guard, "estimate_full_call_tokens", lambda **_kwargs: 50)

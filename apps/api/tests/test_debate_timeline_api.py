@@ -25,6 +25,8 @@ from auth import create_access_token
 from database import init_db, reset_engine
 from main import app
 
+from tests.utils import ensure_user
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():
@@ -126,6 +128,7 @@ def test_get_timeline_unauthorized(client, session, auth_cookies):
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)
     )
+    ensure_user(session, "other-user")
     session.add(debate)
     session.commit()
 

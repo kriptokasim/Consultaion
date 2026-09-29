@@ -9,8 +9,8 @@ from guards.llm_action_guard import require_llm_action_allowed
 from models import Debate, DivergenceReport, User, UserInteraction, VoteRecord
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
-from worker.arena_tasks import _execute_divergence_computation
 from utils.async_bridge import run_blocking
+from worker.arena_tasks import _execute_divergence_computation
 
 from routes.common import can_access_debate, require_debate_access
 

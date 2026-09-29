@@ -825,3 +825,42 @@ async def test_forbidden_debate_returns_error():
             pass  # Expected — access denied
 
     await backend.stop()
+
+
+@pytest.mark.anyio
+async def test_stream_releases_db_connection_before_streaming():
+    """An open stream must not pin a pooled DB connection for the whole run.
+
+    FastAPI tears down the request session only after the body finishes, so the
+    route must release it itself; otherwise N viewers exhaust the pool.
+    """
+    backend = MemoryChannelBackend(ttl_seconds=30)
+    await backend.start()
+
+    from sqlmodel import Session
+    with Session(engine) as session:
+        _, debate_id, token = _ensure_fixtures(session)
+        session.commit()
+        req = _make_request(token=token)
+
+        response = await stream_events(
+            debate_id,
+            request=req,
+            last_sequence=None,
+            session=session,
+            sse_backend=backend,
+        )
+
+        # The auth/ACL lookups opened a transaction; it must be gone before
+        # the long-lived body starts.
+        assert not session.in_transaction()
+        assert response.status_code == 200
+
+        await backend.publish(f"debate:{debate_id}", {"type": "final", "content": "done"})
+        async for chunk in response.body_iterator:
+            data = chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode()
+            if b"final" in data:
+                break
+            assert not session.in_transaction()
+
+    await backend.stop()

@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from typing import Optional
 
@@ -41,7 +42,7 @@ from schemas import (
 from sqlalchemy import func
 from sqlmodel import Session, select
 from sse_backend import BaseSSEBackend
-from usage_limits import reserve_run_slot
+from usage_limits import refund_run_slot, reserve_run_slot
 
 from config import settings
 from routes.common import (
@@ -58,6 +59,77 @@ from routes.debates.schemas import DebateListResponse, DebateUpdate
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# A client-generated key identifying one "start run" intent. Retries and double
+# submits that carry the same key return the run the first request created
+# instead of reserving quota and credits for a second one.
+_IDEMPOTENCY_HEADER = "X-Idempotency-Key"
+_IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
+_CREATE_REQUEST_LEDGER_KIND = "debate_create_request"
+
+
+def _create_idempotency_ledger_key(request: Request, user_id: str) -> str | None:
+    raw = request.headers.get(_IDEMPOTENCY_HEADER) or request.headers.get("Idempotency-Key")
+    if raw is None:
+        return None
+    raw = raw.strip()
+    if not _IDEMPOTENCY_KEY_RE.match(raw):
+        raise ValidationError(
+            message="Invalid idempotency key.",
+            code="debate.invalid_idempotency_key",
+            hint="Use 8-128 letters, digits, '.', '_', ':' or '-'.",
+        )
+    return f"debate_create:{user_id}:{raw}"
+
+
+def _replayed_create_response(session: Session, ledger_key: str, user_id: str) -> dict | None:
+    """Return the original response for a create request already accepted."""
+    from models import UsageLedgerEntry
+
+    entry = session.exec(
+        select(UsageLedgerEntry).where(UsageLedgerEntry.idempotency_key == ledger_key)
+    ).first()
+    if entry is None or entry.user_id != user_id or not entry.debate_id:
+        return None
+    debate = session.get(Debate, entry.debate_id)
+    if debate is None:
+        return None
+    track_metric("debate.create.idempotent_replay")
+    return _create_response_payload(debate.id, debate.status, debate.config or {}, replayed=True)
+
+
+def _create_response_payload(
+    debate_id: str,
+    status: str,
+    config_payload: dict,
+    *,
+    enabled_models_count: int | None = None,
+    replayed: bool = False,
+) -> dict:
+    dispatch_mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
+    queue_name = None
+    if dispatch_mode == "celery":
+        from debate_dispatch import choose_queue_for_debate
+        queue_name = choose_queue_for_debate(config_payload, settings)
+
+    payload: dict = {
+        "id": debate_id,
+        "status": status,
+        "autorun": not settings.DISABLE_AUTORUN,
+        "dispatch_mode": dispatch_mode,
+        "queue": queue_name,
+        "worker_required": dispatch_mode == "celery",
+        # Which provider keys this deployment holds is operator information,
+        # not something to hand every caller; only the model count is exposed.
+        "diagnostics": {"enabled_models_count": enabled_models_count},
+    }
+    if replayed:
+        payload["idempotent_replay"] = True
+    if settings.DISABLE_AUTORUN:
+        payload["warning"] = (
+            "Autorun is disabled; this run will remain queued until manually dispatched."
+        )
+    return payload
 
 
 def _validate_compare_models(
@@ -148,16 +220,6 @@ async def create_debate(
     sse_backend: BaseSSEBackend = Depends(get_sse_backend),
 ):
     require_schema_current(session)
-    # OT-12: Track debate creation via PostHog
-    try:
-        from integrations.posthog import track_event as _ph_track
-        _ph_track("debate_created", str(current_user.id), {
-            "mode": body.mode,
-            "seat_count": len(body.panel_config.seats) if body.panel_config else 4,
-            "prompt_length": len(body.prompt) if body.prompt else 0,
-        })
-    except Exception:
-        pass
 
     # 1. Account Active Check
     from fastapi import HTTPException
@@ -170,9 +232,20 @@ async def create_debate(
             }
         )
 
+    user_id = current_user.id
+    # Replays are answered before any rate-limit or quota accounting: the
+    # original request already paid for the run.
+    idempotency_ledger_key = _create_idempotency_ledger_key(request, user_id)
+    if idempotency_ledger_key:
+        replay = _replayed_create_response(session, idempotency_ledger_key, user_id)
+        if replay is not None:
+            return replay
+
     # 2. IP Rate Limit Check
-    ip = request.client.host if request.client else "anonymous"
-    user_id = current_user.id if current_user else None
+    # Behind the platform proxy request.client is the proxy, so every user
+    # would share one bucket; resolve the client through the trusted-proxy list.
+    from middleware.rate_limit_identity import _get_trusted_client_ip
+    ip = _get_trusted_client_ip(request)
     allowed, retry_after = increment_ip_bucket(ip, settings.RL_DEBATE_CREATE_WINDOW, settings.RL_DEBATE_CREATE_MAX_CALLS, user_id=user_id)
 
     if not allowed:
@@ -205,12 +278,10 @@ async def create_debate(
     except RateLimitError as exc:
         if slot_reserved:
             try:
-                from usage_limits import _get_or_reset_counter
-                counter = _get_or_reset_counter(session, current_user.id, "hour")
-                if counter.runs_used > 0:
-                    counter.runs_used -= 1
-                    session.add(counter)
-                    session.commit()
+                # The monthly increment is only staged; roll it back and refund
+                # the committed hourly slot (owner-aware, floor-guarded).
+                session.rollback()
+                refund_run_slot(session, user_id)
             except Exception as refund_err:
                 logger.error(f"Failed to refund reserved slot on rate limit block: {refund_err}")
         payload = {
@@ -229,7 +300,6 @@ async def create_debate(
         )
         raise RateLimitError(message="Rate limit exceeded", code="rate_limit.quota_exceeded", details=payload) from exc
 
-    has_hosted_credits = False
     try:
         # Patchset 54.0: Check feature flag for conversation mode
         if body.mode == "conversation":
@@ -315,7 +385,6 @@ async def create_debate(
         )
         # Reservation happens after debate_id is assigned (durable ledger key).
         needs_hosted_credit = bool(plan.is_default_free and is_sota_run)
-        has_hosted_credits = False
         credit_reservation_id: str | None = None
 
         allowed_tiers = plan.limits.get("allowed_model_tiers")
@@ -561,7 +630,6 @@ async def create_debate(
                     debate_id=debate_id,
                     run_attempt=1,
                 )
-                has_hosted_credits = credit_reservation_id is not None
             except ValidationError as exc:
                 if exc.code == "hosted_credits.exhausted" and body.model_id is not None:
                     raise ValidationError(
@@ -619,34 +687,42 @@ async def create_debate(
             created_at=utcnow(),
         )
         session.add(attempt)
+        if idempotency_ledger_key:
+            # Same transaction as the debate: the unique ledger key makes a
+            # concurrent duplicate fail at commit instead of creating a run.
+            from models import UsageLedgerEntry
+            session.add(
+                UsageLedgerEntry(
+                    user_id=user_id,
+                    kind=_CREATE_REQUEST_LEDGER_KIND,
+                    status="settled",
+                    idempotency_key=idempotency_ledger_key,
+                    amount=0,
+                    debate_id=debate_id,
+                )
+            )
         session.commit()
 
     except Exception as exc:
-        # Refund run slot & debate usage
+        # Only the hourly run slot is committed at this point (by
+        # reserve_run_slot). The monthly usage increment, any hosted-credit
+        # reservation and the debate rows are still pending in this
+        # transaction, so rolling back undoes them exactly. Rolling back first
+        # also recovers a session that a database error left unusable; the old
+        # in-transaction refund then failed to commit and leaked the slot.
         try:
-            from usage_limits import _get_or_reset_counter
-            counter = _get_or_reset_counter(session, current_user.id, "hour")
-            if counter.runs_used > 0:
-                counter.runs_used -= 1
-                session.add(counter)
-            from billing.service import get_or_create_usage
-            usage = get_or_create_usage(session, current_user.id)
-            if usage.debates_created > 0:
-                usage.debates_created -= 1
-                session.add(usage)
-            if has_hosted_credits:
-                # A hosted credit was reserved before the failure — return it
-                # so users are not charged for debates that were never created.
-                from billing.service import refund_hosted_credit
-                refund_hosted_credit(
-                    session,
-                    current_user.id,
-                    reservation_id=credit_reservation_id,
-                    debate_id=debate_id,
-                )
-            session.commit()
+            session.rollback()
+            refund_run_slot(session, user_id)
         except Exception as refund_err:
             logger.error(f"Failed to refund quotas during creation failure: {refund_err}")
+        if idempotency_ledger_key:
+            from sqlalchemy.exc import IntegrityError
+            if isinstance(exc, IntegrityError):
+                # Lost a race with a concurrent request carrying the same key.
+                session.rollback()
+                replay = _replayed_create_response(session, idempotency_ledger_key, user_id)
+                if replay is not None:
+                    return replay
         raise exc
 
     channel_id = debate_channel_id(debate_id)
@@ -678,7 +754,8 @@ async def create_debate(
     if not settings.DISABLE_AUTORUN:
         track_metric("debate.dispatch.scheduled")
 
-    mode = body.mode or "conversation"
+    # Same default as the Debate row, so analytics match what actually ran.
+    mode = body.mode or "arena"
     from audit import record_audit
     # The debate row was already committed above. Persist telemetry in its own
     # transaction because the request-scoped session does not commit on teardown.
@@ -697,9 +774,15 @@ async def create_debate(
     # and tracking the specific mode as a tag or sub-metric if needed, but for now just:
     track_metric(f"mode.debate.{mode}.started")
 
-    # OT-12: Track debate start via PostHog
+    # OT-12: Track debate creation and start via PostHog. Emitted only once the
+    # run exists, so rejected requests do not count as created debates.
     try:
         from integrations.posthog import track_event as _ph_track
+        _ph_track("debate_created", str(current_user.id), {
+            "mode": mode,
+            "seat_count": len(panel.seats),
+            "prompt_length": len(body.prompt) if body.prompt else 0,
+        })
         _ph_track("debate_started", str(current_user.id), {
             "debate_id": debate_id,
             "mode": mode,
@@ -708,45 +791,12 @@ async def create_debate(
         pass
 
     # Patchset 136: Expanded response with run pipeline diagnostics
-    dispatch_mode = (settings.DEBATE_DISPATCH_MODE or "inline").lower()
-    queue_name = None
-    if dispatch_mode == "celery":
-        from debate_dispatch import choose_queue_for_debate
-        queue_name = choose_queue_for_debate(config_payload, settings)
-
-    provider_keys_present = []
-    if settings.OPENROUTER_API_KEY:
-        provider_keys_present.append("openrouter")
-    if settings.OPENAI_API_KEY:
-        provider_keys_present.append("openai")
-    if settings.ANTHROPIC_API_KEY:
-        provider_keys_present.append("anthropic")
-    if settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY:
-        provider_keys_present.append("gemini")
-    if settings.GROQ_API_KEY:
-        provider_keys_present.append("groq")
-    if settings.MISTRAL_API_KEY:
-        provider_keys_present.append("mistral")
-
-    response_payload: dict = {
-        "id": debate_id,
-        "status": "queued",
-        "autorun": not settings.DISABLE_AUTORUN,
-        "dispatch_mode": dispatch_mode,
-        "queue": queue_name,
-        "worker_required": dispatch_mode == "celery",
-        "diagnostics": {
-            "provider_keys_present": provider_keys_present,
-            "enabled_models_count": len(enabled_models),
-        },
-    }
-
-    if settings.DISABLE_AUTORUN:
-        response_payload["warning"] = (
-            "Autorun is disabled; this run will remain queued until manually dispatched."
-        )
-
-    return response_payload
+    return _create_response_payload(
+        debate_id,
+        "queued",
+        config_payload,
+        enabled_models_count=len(enabled_models),
+    )
 
 
 @router.get("/debates", response_model=DebateListResponse)

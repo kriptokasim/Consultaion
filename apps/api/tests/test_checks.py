@@ -50,7 +50,7 @@ async def test_check_sse_readiness_success():
         "MemoryRateLimiterBackend",
         "MemoryChannelBackend",
     }
-    assert details.get("wrappers") == ["TerminalCommitGuard"]
+    assert details.get("wrappers") == ["ExecutionFencedSSEBackend", "TerminalCommitGuard"]
 
 @pytest.mark.anyio
 async def test_check_sse_readiness_failure():

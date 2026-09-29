@@ -17,6 +17,8 @@ from reporting.model_evaluator import evaluate_models_blind, redact_model_names
 from reporting.synthesis_critic import verify_synthesis_report
 from reporting.synthesizer import generate_decision_report, run_semantic_claims_analysis
 
+from tests.utils import seed_debate
+
 
 def test_redact_model_names():
     model_mappings = {
@@ -187,6 +189,7 @@ async def test_synthesis_preanalysis_starts_scoring_and_semantics_together():
 
 @pytest.mark.anyio
 async def test_generate_decision_report_and_repair():
+    seed_debate("test-debate")
     prompt = "Should we adopt Kafka?"
     responses = [{"persona": "M1", "content": "Adopt Kafka for horizontal scaling."}]
 
@@ -330,6 +333,7 @@ async def test_contradiction_pair_cap():
 
 @pytest.mark.anyio
 async def test_critic_failure_metadata():
+    seed_debate("test-debate-failed")
     prompt = "Test prompt"
     responses = [{"persona": "M1", "content": "Claim 1"}]
     
@@ -418,6 +422,7 @@ async def test_provider_structured_output_adapter_path():
 
 @pytest.mark.anyio
 async def test_critic_failure_sets_unverified():
+    seed_debate("test-critic-fail")
     """When the critic/verifier call itself fails, verification_status must be 'unverified'
     and verification_error must be True, not fake 'verified' with 0.9 scores."""
     prompt = "How to prepare SaaS for VC?"

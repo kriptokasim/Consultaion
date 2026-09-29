@@ -230,6 +230,8 @@ def test_admin_metrics():
             updated_at=datetime.now(timezone.utc),
         )
         session.add(pub_debate)
+        # Parent rows first: no relationship() orders these INSERTs by FK.
+        session.flush()
         now = datetime.now(timezone.utc)
         session.add(
             ReferralAttribution(

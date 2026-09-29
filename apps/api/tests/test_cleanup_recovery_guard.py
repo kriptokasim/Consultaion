@@ -205,8 +205,9 @@ def test_recovery_exhaustion_uses_canonical_failed_not_degraded(db_session):
 
 def test_manual_queued_runs_are_not_expired_by_cleanup(db_session, monkeypatch):
     import cleanup_recovery_guard as guard
-    from config import settings
     from models import Debate, utcnow
+
+    from config import settings
 
     monkeypatch.setattr(settings, "DISABLE_AUTORUN", True)
     now = utcnow()

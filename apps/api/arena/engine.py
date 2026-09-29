@@ -109,6 +109,48 @@ def _lease_for_arena_write(
     return None
 
 
+_QUALITY_RANK = {"flagship": 3, "advanced": 2, "baseline": 1}
+
+
+def _choose_synthesis_model(
+    responses: List["ArenaModelResponse"], routed_model_id: str | None
+) -> str | None:
+    """Pick the model that writes the verdict and decision report.
+
+    The routed ``debate.model_id`` is the router's cheap default (on an
+    OpenRouter-only deployment, a free model), which used to synthesise even
+    flagship panels. Order: an explicitly configured ``ARENA_SYNTHESIS_MODEL``
+    that is enabled; else the highest-quality panel model that answered in this
+    run (ties keep panel order); else the routed model.
+    """
+    from parliament.model_registry import list_enabled_models
+
+    from config import settings
+
+    enabled = {model.id for model in list_enabled_models()}
+    configured = getattr(settings, "ARENA_SYNTHESIS_MODEL", None)
+    if isinstance(configured, str) and configured.strip():
+        configured = configured.strip()
+        info = resolve_model_info(configured)
+        if info is not None and info.id in enabled:
+            return info.id
+        logger.warning("arena.synthesis_model_unavailable configured=%s", configured)
+
+    best: tuple[int, str] | None = None
+    for response in responses:
+        if not response.success:
+            continue
+        info = resolve_model_info(response.model_id)
+        if info is None or info.id not in enabled:
+            continue
+        rank = _QUALITY_RANK.get(info.quality_tier, 0)
+        if best is None or rank > best[0]:
+            best = (rank, info.id)
+    if best is not None:
+        return best[1]
+    return routed_model_id
+
+
 def _derive_model_family(model_info) -> str:
     if model_info.litellm_model and "/" in model_info.litellm_model:
         return model_info.litellm_model.split("/", 1)[1]
@@ -379,6 +421,23 @@ def _usage_call_from_meta(meta: dict | None) -> UsageCall | None:
         user_plan=meta.get("user_plan"),
         estimated_cost_usd=float(meta.get("estimated_cost_usd", 0) or 0),
         retry_count=int(meta.get("retry_count", 0) or 0),
+    )
+
+
+def _aggregate_usage_call(accumulator: UsageAccumulator) -> UsageCall | None:
+    """Fold a multi-call step (the report pipeline) into one persisted UsageCall."""
+    if not accumulator.calls:
+        return None
+    return UsageCall(
+        prompt_tokens=accumulator.prompt_tokens,
+        completion_tokens=accumulator.completion_tokens,
+        total_tokens=accumulator.total_tokens,
+        cost_usd=accumulator.cost_usd,
+        provider=accumulator.provider,
+        model=accumulator.model,
+        fallback_used=any(call.fallback_used for call in accumulator.calls),
+        estimated_cost_usd=sum(call.estimated_cost_usd for call in accumulator.calls),
+        retry_count=sum(call.retry_count for call in accumulator.calls),
     )
 
 
@@ -1164,11 +1223,6 @@ async def run_arena(
             },
         )
 
-        # Build locale instruction if set
-        _locale_instruction = ""
-        if locale and locale != "en":
-            _locale_instruction = f"\nIMPORTANT: Respond in the '{locale}' language.\n"
-
         async def _call_model(
             model_info, response_id: str, deadline: float, timing: dict | None = None, lifecycle_payload: dict | None = None
         ):
@@ -1304,8 +1358,34 @@ async def run_arena(
                                 error_code=result.error_code,
                             ), None
 
-                        # Transient streaming failures may use the non-streaming
-                        # route once within the same total deadline.
+                        if _started_emitted:
+                            # Text already reached viewers and was billed. A
+                            # second full call would pay for the answer twice
+                            # and persist text that differs from what streamed.
+                            # The gateway applies the same rule to provider
+                            # failover: only before user-visible output.
+                            logger.warning(
+                                "Streaming interrupted for %s after output began: %s",
+                                model_info.display_name,
+                                result.error_message,
+                            )
+                            return ArenaModelResponse(
+                                model_id=model_info.id,
+                                display_name=model_info.display_name,
+                                provider=model_info.provider,
+                                content=(
+                                    "⚠️ This model's response was interrupted before it finished."
+                                ),
+                                success=False,
+                                logo_url=model_info.logo_url,
+                                persona_type=model_info.persona_type,
+                                persona_tagline=model_info.persona_tagline,
+                                error=result.error_message,
+                                error_code="stream_interrupted",
+                            ), None
+
+                        # Transient streaming failures before any output may use
+                        # the non-streaming route once within the same deadline.
                         logger.warning(
                             f"Streaming failed for {model_info.display_name}: "
                             f"{result.error_message}. Attempting non-streaming fallback."
@@ -1432,39 +1512,41 @@ async def run_arena(
 
         # A5: Persist/publish each model response as it completes (not after all finish).
         # Uses asyncio.as_completed so fast models become visible immediately.
-        async def _call_and_persist(model_info):
-            """Call a model and persist/publish its response immediately.
-
-            Contract: this function NEVER raises. Provider/model errors are
-            converted into ArenaModelResponse(success=False) and persisted.
-            """
-            _timing: dict = {}
+        def _lifecycle_payload(model_info) -> dict:
             retry_generation = 0
-            response_id = (
-                f"resp-{debate_id}-" f"a{run_attempt}-" f"g{retry_generation}-" f"{model_info.id}"
-            )
-            lifecycle_payload = {
+            return {
                 "contract_version": 1,
-                "response_id": response_id,
+                "response_id": (
+                    f"resp-{debate_id}-a{run_attempt}-g{retry_generation}-{model_info.id}"
+                ),
                 "model_id": model_info.id,
                 "display_name": model_info.display_name,
                 "provider": model_info.provider,
                 "run_attempt": run_attempt,
                 "retry_generation": retry_generation,
             }
+
+        async def _call_and_persist(model_info):
+            """Call a model and persist/publish its response immediately.
+
+            Contract: this function NEVER raises. Provider/model errors are
+            converted into ArenaModelResponse(success=False) and persisted.
+            The caller has already published ``model_response_queued``.
+            """
+            _timing: dict = {}
+            lifecycle_payload = _lifecycle_payload(model_info)
+            response_id = lifecycle_payload["response_id"]
             from config import settings as _settings
 
+            # The deadline starts when the call gets a concurrency slot, so
+            # time spent queued behind other models does not count against it.
             total_timeout = float(getattr(_settings, "ARENA_MODEL_TOTAL_TIMEOUT_S", 60))
             deadline = asyncio.get_running_loop().time() + total_timeout
-            for event_type in (
-                "model_response_queued",
-                "model_response_connecting",
-            ):
-                await _publish_lifecycle_best_effort(
-                    backend,
-                    f"debate:{debate_id}",
-                    {"type": event_type, **lifecycle_payload},
-                )
+            await _publish_lifecycle_best_effort(
+                backend,
+                f"debate:{debate_id}",
+                {"type": "model_response_connecting", **lifecycle_payload},
+            )
 
             try:
                 async with asyncio.timeout_at(deadline):
@@ -1524,7 +1606,7 @@ async def run_arena(
 
             response.response_id = response_id
             response.run_attempt = run_attempt
-            response.retry_generation = retry_generation
+            response.retry_generation = lifecycle_payload["retry_generation"]
             response.usage_call = call_usage
             if not response.success:
                 from llm_errors import classify_provider_exception
@@ -1658,10 +1740,19 @@ async def run_arena(
             async with _call_slots:
                 return await _call_and_persist(model_info)
 
+        # Every pending model shows as queued at once. Publishing this inside
+        # the slot left models beyond the concurrency limit with no status
+        # until an earlier call finished.
+        pending_models = [model for model in arena_models if model.id not in completed_models]
+        for model in pending_models:
+            await _publish_lifecycle_best_effort(
+                backend,
+                f"debate:{debate_id}",
+                {"type": "model_response_queued", **_lifecycle_payload(model)},
+            )
+
         tasks: list[asyncio.Task] = []
-        for model in arena_models:
-            if model.id in completed_models:
-                continue
+        for model in pending_models:
             task = asyncio.create_task(_call_and_persist_bounded(model))
             tasks.append(task)
         provisional_task: asyncio.Task[ArenaSynthesisRevision | None] | None = None
@@ -1710,7 +1801,7 @@ async def run_arena(
                         model_order=model_order,
                         backend=backend,
                         user_id=user_id,
-                        model_id=model_id,
+                        model_id=_choose_synthesis_model(snapshot, model_id),
                         locale=locale,
                         owner_id=execution_owner_id,
                         lease_epoch=lease_epoch,
@@ -1873,11 +1964,23 @@ async def run_arena(
         # the durable terminal DB commit. Emitting a terminal event from the
         # child engine would let SSE say "failed" while the DB still says
         # "running" (a release-blocker race, especially in Celery mode).
+        # Distinguish "nobody answered" from "too few answered": reporting every
+        # shortfall as all-failed hid the responses that did arrive.
+        if successful:
+            failure_reason = "insufficient_responses"
+            final_answer = (
+                f"Only {len(successful)} of {len(model_responses)} models responded; "
+                f"at least {min_required} are needed for a verdict. Please try again."
+            )
+        else:
+            failure_reason = "all_models_failed"
+            final_answer = "All models failed to respond. Please try again."
         return ArenaResult(
-            final_answer="All models failed to respond. Please try again.",
+            final_answer=final_answer,
             final_meta={
                 "mode": "arena",
-                "error": "all_models_failed",
+                "error": failure_reason,
+                "min_required": min_required,
                 "models": [
                     {
                         "model_id": r.model_id,
@@ -1888,12 +1991,12 @@ async def run_arena(
                     }
                     for r in model_responses
                 ],
-                "successful_count": 0,
+                "successful_count": len(successful),
                 "total_count": len(model_responses),
             },
             usage_tracker=usage,
             status="failed",
-            error_reason="all_models_failed",
+            error_reason=failure_reason,
             model_responses=model_responses,
         )
 
@@ -1966,6 +2069,7 @@ async def run_arena(
         usage.add_call(provisional_revision.usage_call)
 
     # Synthesize final verdict
+    synthesis_model_id = _choose_synthesis_model(successful, model_id)
     final_response_ids = _response_snapshot(successful, model_order=model_order)
     final_input_hash = _synthesis_snapshot_hash(prompt, successful, model_order=model_order)
     promote_provisional = (
@@ -2061,7 +2165,7 @@ async def run_arena(
                         model_order=model_order,
                         backend=backend,
                         user_id=user_id,
-                        model_id=model_id,
+                        model_id=synthesis_model_id,
                         locale=locale,
                         owner_id=execution_owner_id,
                         lease_epoch=lease_epoch,
@@ -2150,12 +2254,17 @@ async def run_arena(
                     "provisional_promoted": False,
                 }
         else:
+            # Collect this step's usage separately and persist it with the
+            # synthesis row. Adding it straight to the run accumulator lost it
+            # whenever a takeover resumed from the checkpoint; the aggregate is
+            # added to the run exactly once below, fresh or resumed.
+            synthesis_usage = UsageAccumulator()
             scontent, sreport, meta = await _synthesize_verdict(
                 debate_id=debate_id,
                 prompt=prompt,
                 model_responses=successful,
-                usage=usage,
-                model_id=model_id,
+                usage=synthesis_usage,
+                model_id=synthesis_model_id,
                 locale=locale,
                 execution_owner_id=execution_owner_id,
                 lease_epoch=lease_epoch,
@@ -2169,6 +2278,7 @@ async def run_arena(
                 "synthesis_input_hash": final_input_hash,
                 "provisional_promoted": False,
             }
+            synthesis_usage_call = _aggregate_usage_call(synthesis_usage)
         meta["synthesis_usage_call"] = _usage_call_to_meta(synthesis_usage_call)
         ssuccess = meta.get("synthesis_status") == "succeeded"
 
@@ -2481,6 +2591,10 @@ async def _synthesize_verdict(
         }
         return fallback_content, None, meta_updates
     except Exception as e:
+        # Ownership loss means another worker now owns this run; reporting it
+        # as a synthesis failure would persist a fallback under a stale lease.
+        if _is_execution_ownership_error(e):
+            raise
         logger.error(f"Arena synthesis failed with general exception: {e}")
         successful_responses = [r for r in model_responses if r.success]
         if successful_responses:

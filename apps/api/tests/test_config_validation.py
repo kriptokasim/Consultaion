@@ -117,7 +117,9 @@ def test_config_jwt_secret_validation_missing_or_default(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "change_me_in_prod")
     with pytest.raises(PydanticValidationError) as exc:
         AppSettings()
-    assert "JWT_SECRET must be set to a secure value in production" in str(exc.value)
+    # The environment-independent real-database guard fires before the
+    # production-only check; either way the placeholder must be rejected.
+    assert "JWT_SECRET is still the default placeholder" in str(exc.value)
 
 
 def test_config_jwt_secret_validation_too_short(monkeypatch):

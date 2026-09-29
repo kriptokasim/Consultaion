@@ -1,5 +1,7 @@
 import pytest
 
+from tests.utils import add_rows_in_order
+
 
 async def _cache_hit_checkpoint(
     _debate_id,
@@ -33,7 +35,7 @@ async def test_newer_attempt_scores_never_pair_with_unmarked_legacy_vote(db_sess
     )
     a1 = DebateAttempt(debate_id=debate.id, attempt_number=1, status="completed")
     a2 = DebateAttempt(debate_id=debate.id, attempt_number=2, status="running")
-    db_session.add_all([debate, a1, a2])
+    add_rows_in_order(db_session, debate, a1, a2)
     db_session.commit()
 
     db_session.add_all(

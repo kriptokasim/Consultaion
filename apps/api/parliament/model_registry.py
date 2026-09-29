@@ -1,9 +1,12 @@
 from typing import List, Literal, Optional, Set
+
 import database
 from models import UserProviderKey
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
+
 from config import settings
+
 
 class ModelInfo(BaseModel):
     id: str = Field(..., description="The unique identifier for the model")
@@ -76,7 +79,8 @@ def list_enabled_models() -> List[ModelInfo]:
 
 def list_enabled_models_for_user(user_id: Optional[str] = None) -> List[ModelInfo]:
     enabled_models = list_enabled_models()
-    if not user_id: return enabled_models
+    if not user_id:
+        return enabled_models
     user_providers = set()
     try:
         with Session(database.engine) as session:
@@ -88,7 +92,8 @@ def list_enabled_models_for_user(user_id: Optional[str] = None) -> List[ModelInf
     enabled_ids = {m.id for m in enabled_models}
     for model in ALL_MODELS:
         if model.enabled and model.id not in enabled_ids and model.provider in user_providers:
-            enabled_models.append(model); enabled_ids.add(model.id)
+            enabled_models.append(model)
+            enabled_ids.add(model.id)
     return enabled_models
 
 def get_model_info(name: str) -> Optional[ModelInfo]:
@@ -96,7 +101,8 @@ def get_model_info(name: str) -> Optional[ModelInfo]:
 
 def resolve_model_info(model_key: str) -> Optional[ModelInfo]:
     direct = get_model_info(model_key)
-    if direct is not None: return direct
+    if direct is not None:
+        return direct
     from model_gateway.model_map import MODEL_MAP, ModelKeyError, resolve_model_key
     try:
         canonical_key = resolve_model_key(model_key)
@@ -104,19 +110,23 @@ def resolve_model_info(model_key: str) -> Optional[ModelInfo]:
     except (KeyError, ModelKeyError, TypeError, ValueError):
         return None
     for model in ALL_MODELS:
-        if model.litellm_model == litellm_model: return model
+        if model.litellm_model == litellm_model:
+            return model
     return None
 
 def get_default_model() -> ModelInfo:
     enabled = list_enabled_models()
     for model in enabled:
-        if model.recommended: return model
-    if enabled: return enabled[0]
+        if model.recommended:
+            return model
+    if enabled:
+        return enabled[0]
     raise RuntimeError("No models are enabled; configure at least one provider API key.")
 
 def get_model(model_id: str) -> ModelInfo:
     info = get_model_info(model_id)
-    if not info: raise ValueError(f"Unknown model: {model_id}")
+    if not info:
+        raise ValueError(f"Unknown model: {model_id}")
     return info
 
 def get_arena_models() -> List[ModelInfo]:

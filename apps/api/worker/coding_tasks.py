@@ -19,6 +19,7 @@ from sse_backend import get_sse_backend
 from streaming_types import StreamEventType
 
 from worker.celery_app import celery_app
+from worker.loop_runtime import run_task_coroutine
 
 logger = logging.getLogger("worker.coding_tasks")
 
@@ -108,8 +109,9 @@ async def _try_acquire_redis_lease(
     *,
     ttl_seconds: int,
 ) -> _LaneLease | None:
-    from config import settings
     from redis_pool import get_async_redis_client
+
+    from config import settings
 
     client = get_async_redis_client()
     if client is None:
@@ -530,7 +532,7 @@ async def _async_execute_turn(run_id: str, turn_id: str):
 def execute_turn(self, run_id: str, turn_id: str):
     """Celery task entrypoint with bounded retry for coordination/runtime faults."""
     try:
-        asyncio.run(_async_execute_turn(run_id, turn_id))
+        run_task_coroutine(lambda: _async_execute_turn(run_id, turn_id))
     except LaneCoordinationUnavailable as exc:
         incr_metric("coding.turn_failure_count", tags={"reason": "coordination"})
         logger.warning(
