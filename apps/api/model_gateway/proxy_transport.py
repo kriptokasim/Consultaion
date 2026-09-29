@@ -34,14 +34,14 @@ PROXY_DEPLOYMENT_NAMES: Dict[str, str] = {
     "mistral_large": "seat_mistral",
     "xai_grok": "seat_xai",
     "router-smart": "seat_free_router",
-    "router-deep": "seat_free_glm",
-    "llama-3-free": "seat_free_gpt_oss",
+    "router-deep": "seat_free_laguna",
+    "llama-3-free": "seat_free_ling",
     # Both spellings: the pools yaml and the arena registry use hyphens, the
     # free-model runtime addition uses underscores.
     "openrouter-nemotron-free": "seat_free_nemotron",
     "openrouter_nemotron_free": "seat_free_nemotron",
-    "openrouter_glm_free": "seat_free_glm",
-    "openrouter_gpt_oss_free": "seat_free_gpt_oss",
+    "openrouter_glm_free": "seat_free_laguna",
+    "openrouter_gpt_oss_free": "seat_free_ling",
     "openrouter_fallback": "seat_free_router",
     "chair": "chair",
 }
