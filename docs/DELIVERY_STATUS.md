@@ -113,3 +113,51 @@ PostgreSQL, Docker, Redis, or production verification is claimed. Remaining M2
 work is deterministic test repair plus Python 3.11 parity after dependency
 access is restored; the infrastructure blocker for the database-specific slice
 is the absence of both a PostgreSQL 16 service/client and Docker.
+
+## Auth signup FK-ordering hotfix — 2026-09-27
+
+PR opened: [kriptokasim/Consultaion#86](https://github.com/kriptokasim/Consultaion/pull/86),
+`fix(auth): stage signup audit rows after the user insert`, head
+`claude/awesome-cori-3uho61` onto `main` at `9b41d0f`. Fixes a production
+regression where every new email signup returned 400 `auth.email_exists` and
+every first-time Google OAuth signup returned 500, because `AuditLog` inserts
+were not ordered after their referenced `User` insert within the same flush
+(no declared `relationship()` links the two models, so the ORM does not order
+the inserts by that FK). `apps/api/audit.py` gained `stage_audit()`;
+`apps/api/routes/auth.py`'s `register_user` and both Google callback handlers
+now flush the user row before staging its audit row.
+
+Commands and outcomes, all run under Python 3.11.15 in a fresh
+`apps/api/.venv`. (Corrected 2026-09-27: an earlier version of this entry
+reported a full-suite pass count from a run that shared its fixed-path SQLite
+test database with a concurrent run; the figures below come from isolated
+runs.)
+
+- `cd apps/api && pytest -q --no-cov tests/test_auth_flows.py tests/test_google_auth.py tests/test_audit_transactions.py tests/test_audit_ip.py tests/test_audit_deletion.py tests/test_auth_cookies.py tests/test_auth_audit_fk_ordering.py`
+  (the patchset's targeted selection, which includes the 3 new tests in
+  `test_auth_audit_fk_ordering.py`): **26 passed**.
+- `ruff check apps/api/audit.py apps/api/routes/auth.py apps/api/tests/test_auth_audit_fk_ordering.py`:
+  passed.
+- `cd apps/api && TMPDIR=<per-run dir> pytest -q --junitxml=...` (complete
+  suite, not a partial selection), run separately on `main` (`9b41d0f`) and on
+  this branch, each with its own `TMPDIR` because the suite's SQLite database
+  path is fixed under the temp directory:
+  - `main`: **26 failed, 1273 passed, 17 skipped**, coverage 78.96%.
+  - this branch: **26 failed, 1276 passed, 17 skipped**, coverage 79.02%.
+  - Per-test JUnit comparison: the failing sets are identical, and the only
+    difference is the 3 new tests, which pass. All 26 failures are
+    pre-existing on `main`; none are in auth/signup/audit code.
+
+Why CI missed the bug: SQLite enforces foreign keys only on connections that
+enable `PRAGMA foreign_keys`, and the shared test engine did not, so the
+out-of-order `audit_log` insert succeeded in tests. PostgreSQL always enforces
+the constraint, which is where it failed.
+
+Not done in this PR, tracked as explicit follow-up: making the shared SQLite
+test engine enforce FKs globally (not just in this new test's own fixture)
+and fixing whatever latent bugs that reveals suite-wide; making 4xx
+`AppError`s distinguishable in Sentry logs. Not code, and not attempted here:
+confirming the production DB is at Alembic head, confirming Render's
+pre-deploy step runs `alembic upgrade head`, and — only after this PR merges
+and deploys — one real production email signup and one real first-time
+Google signup to confirm both return 2xx.
