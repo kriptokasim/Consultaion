@@ -148,3 +148,15 @@ async def test_production_proxy_backend_allows_budgeted_embeddings(monkeypatch, 
     assert await cs.get_claim_embeddings(["a claim"], "prod-debate") == [[0.1, 0.2]]
     assert len(calls) == 1
     assert calls[0]["api_base"] == "http://litellm:4000"
+
+
+async def test_production_proxy_without_credentials_fails_closed(monkeypatch, paid_mode):
+    """A URL alone is not sufficient to authorize paid production embeddings."""
+    monkeypatch.setattr("config.settings.APP_ENV", "production")
+    monkeypatch.setattr("config.settings.MODEL_GATEWAY_BACKEND", "proxy")
+    monkeypatch.setattr("config.settings.LITELLM_PROXY_URL", "http://litellm:4000/")
+    monkeypatch.setattr("config.settings.LITELLM_PROXY_API_KEY", None)
+    calls = _spy(monkeypatch)
+
+    assert await cs.get_claim_embeddings(["a claim"], "prod-debate") == []
+    assert calls == []
