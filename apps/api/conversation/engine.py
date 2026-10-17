@@ -46,7 +46,6 @@ async def run_conversation_debate(
         # Eager load/copy fields needed
         prompt = debate.prompt
         panel_payload = debate.panel_config or default_panel_config().model_dump()
-        user_id = debate.user_id
         
     # Load config
     try:
@@ -289,15 +288,8 @@ async def run_conversation_debate(
         "conversation.mode": "conversation"
     })
     
-    # Record token usage for quota tracking
-    if user_id:
-        try:
-            from usage_limits import record_token_usage
-            with session_scope() as session:
-                record_token_usage(session, user_id, usage.total_tokens, commit=True)
-        except Exception as e:
-            logger.error(f"Failed to record token usage for conversation {debate_id}: {e}")
-    
+    # Gateway runtime accounting has already recorded every model call. Avoid a
+    # second aggregate counter increment here, which would double-count tokens.
     status = "completed"
     err = None
     if synthesis_failed or total_seat_failures:
