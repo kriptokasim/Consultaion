@@ -12,15 +12,7 @@ from checks import check_db_readiness, check_model_registry_readiness, check_sse
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from litellm import acompletion
-from models import (
-    Debate,
-    DebateCheckpoint,
-    DebateStageCheckpoint,
-    LLMUsageLog,
-    Message,
-    Score,
-    User,
-)
+from models import Debate, LLMUsageLog, Message, User
 from ratelimit import increment_ip_bucket, record_429
 from sqlmodel import Session, func, select
 
@@ -450,9 +442,7 @@ async def get_debate_diagnostics(
         )
 
     # 2. Get database counts
-    message_count = session.exec(
-        select(func.count(Message.id)).where(Message.debate_id == debate_id)
-    ).one()
+    # Diagnostics intentionally omit a separate message-count query.
 
 @router.get("/ops/providers/readiness")
 async def get_providers_readiness(
