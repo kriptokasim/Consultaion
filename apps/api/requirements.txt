@@ -16,7 +16,7 @@ celery==5.6.3
 starlette>=0.46.0
 httpx==0.28.1
 bcrypt==4.2.1
-langfuse==2.60.2
+langfuse==4.14.1
 loguru==0.7.3
 # OT-5: Observability
 prometheus-client==0.26.0
