@@ -39,7 +39,7 @@ def test_security_dependency_floors_are_installed() -> None:
     # Keep the audited direct dependencies above their first non-vulnerable
     # releases so a later lockfile refresh cannot silently regress the fixes.
     assert Version(version("python-dotenv")) >= Version("1.2.2")
-    assert Version(version("PyJWT")) >= Version("2.13.0")
+    assert Version(version("PyJWT")) >= Version("2.15.0")
     assert Version(version("cryptography")) >= Version("48.0.1")
 
 
