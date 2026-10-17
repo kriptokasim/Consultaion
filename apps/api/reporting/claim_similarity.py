@@ -67,6 +67,17 @@ def _embedding_blocked_reason(model_name: str) -> str | None:
     """
     if getattr(settings, "LLM_KILL_SWITCH_ENABLED", False):
         return "kill switch engaged"
+    # Direct LiteLLM embeddings bypass the gateway's persisted budget reservation
+    # and usage ledger. In production/staging, only permit this paid-capable path
+    # when the budget-enforcing proxy is actually configured and enabled.
+    if str(getattr(settings, "APP_ENV", "local")).lower() in {"production", "staging"}:
+        try:
+            from model_gateway.proxy_transport import proxy_enabled
+
+            if not proxy_enabled():
+                return "production embeddings require the budget-enforcing LiteLLM proxy"
+        except Exception:
+            return "cannot verify the production embedding budget proxy"
     if getattr(settings, "FREE_ONLY_MODE", False):
         try:
             from model_gateway.model_map import is_free_model, resolve_model_key
