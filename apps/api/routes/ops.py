@@ -12,9 +12,9 @@ from checks import check_db_readiness, check_model_registry_readiness, check_sse
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from litellm import acompletion
-from models import Debate, LLMUsageLog, Message, User
+from models import Debate, LLMUsageLog, User
 from ratelimit import increment_ip_bucket, record_429
-from sqlmodel import Session, func, select
+from sqlmodel import Session, select
 
 from config import settings
 
