@@ -1,5 +1,7 @@
 import pytest
 
+from tests.utils import add_rows_in_order
+
 
 def _seed_retry(db_session, *, debate_id: str):
     from models import Debate, DebateAttempt
@@ -22,7 +24,7 @@ def _seed_retry(db_session, *, debate_id: str):
         attempt_number=2,
         status="queued",
     )
-    db_session.add_all([debate, a1, a2])
+    add_rows_in_order(db_session, debate, a1, a2)
     db_session.commit()
     return debate
 
@@ -43,6 +45,9 @@ async def test_full_retry_clears_prior_terminal_payload_before_dispatch(db_sessi
         observed["meta"] = current.final_meta
 
     monkeypatch.setattr(guard, "_installed", False)
+    # install() captures the dispatcher into this global; without restoring it
+    # the app-wide guarded dispatcher keeps calling this test's fake afterwards.
+    monkeypatch.setattr(guard, "_original_dispatch", guard._original_dispatch)
     monkeypatch.setattr(debate_dispatch, "dispatch_debate_run", fake_dispatch)
     guard.install_retry_presentation_guard()
 
@@ -71,6 +76,9 @@ async def test_failed_retry_dispatch_restores_prior_terminal_payload(db_session,
         raise RuntimeError("broker unavailable")
 
     monkeypatch.setattr(guard, "_installed", False)
+    # install() captures the dispatcher into this global; without restoring it
+    # the app-wide guarded dispatcher keeps calling this test's fake afterwards.
+    monkeypatch.setattr(guard, "_original_dispatch", guard._original_dispatch)
     monkeypatch.setattr(debate_dispatch, "dispatch_debate_run", fail_dispatch)
     guard.install_retry_presentation_guard()
 

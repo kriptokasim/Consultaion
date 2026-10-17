@@ -223,10 +223,16 @@ export async function getReport(id: string) {
   return request<any>(`/debates/${id}/report`, undefined, { auth: true });
 }
 
-export async function startDebate(payload: { prompt: string; config?: any; model_id?: string | null; panel_config?: PanelConfigPayload; mode?: string; locale?: string; compare_models?: string[]; gateway_policy?: string }) {
-  return apiRequest<{ id: string; status: string; autorun: boolean; dispatch_mode: string; queue: string | null; worker_required: boolean; diagnostics: { provider_keys_present: string[]; enabled_models_count: number }; warning?: string }>({
+export async function startDebate(
+  payload: { prompt: string; config?: any; model_id?: string | null; panel_config?: PanelConfigPayload; mode?: string; locale?: string; compare_models?: string[]; gateway_policy?: string },
+  idempotencyKey?: string,
+) {
+  return apiRequest<{ id: string; status: string; autorun: boolean; dispatch_mode: string; queue: string | null; worker_required: boolean; diagnostics: { enabled_models_count: number | null }; idempotent_replay?: boolean; warning?: string }>({
     method: "POST",
     path: "/debates",
+    // Same key for the same start intent: a retry after a lost response gets
+    // the run the server already created instead of a second, billed run.
+    headers: idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : undefined,
     body: payload,
   });
 }

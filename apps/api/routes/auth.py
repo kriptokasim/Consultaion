@@ -7,7 +7,7 @@ from typing import Any, Optional
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from audit import record_audit
+from audit import record_audit, stage_audit
 from auth import (
     clear_auth_cookie,
     clear_csrf_cookie,
@@ -29,8 +29,8 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from models import User, utcnow
 from ratelimit import increment_ip_bucket, record_429
-from sqlalchemy.exc import IntegrityError
 from schemas import AuthRequest, UserProfile as UserProfileSchema, UserProfileUpdate
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from config import settings
@@ -403,20 +403,23 @@ async def google_callback(
             email_verified_at=datetime.now(timezone.utc),
         )
         session.add(user)
+        # audit_log.user_id references this row; the ORM will not order the
+        # two INSERTs by that FK, so the user must be flushed first.
+        session.flush()
         audit_action = "register_google"
     else:
         _adopt_or_link_oauth_account(user, "google", ip)
         session.add(user)
     
     # Stage audit before commit so it persists atomically
-    record_audit(
+    stage_audit(
+        session,
         audit_action,
         user_id=user.id,
         target_type="user",
         target_id=user.id,
         ip_address=ip,
         meta={"email": user.email, "provider": "google"},
-        session=session,
     )
     session.commit()
     session.refresh(user)
@@ -613,19 +616,22 @@ async def google_callback_post(
             email_verified_at=datetime.now(timezone.utc),
         )
         session.add(user)
+        # audit_log.user_id references this row; the ORM will not order the
+        # two INSERTs by that FK, so the user must be flushed first.
+        session.flush()
         audit_action = "register_google"
     else:
         _adopt_or_link_oauth_account(user, "google", ip)
         session.add(user)
     
-    record_audit(
+    stage_audit(
+        session,
         audit_action,
         user_id=user.id,
         target_type="user",
         target_id=user.id,
         ip_address=ip,
         meta={"email": user.email, "provider": "google"},
-        session=session,
     )
     session.commit()
     session.refresh(user)
@@ -691,30 +697,32 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
         email_verified_at=None,
     )
     session.add(user)
+    # The existence check above is not a lock: two concurrent signups for the
+    # same address both pass it and the loser hits the unique constraint at
+    # INSERT time. Flushing here also guarantees the user row precedes its
+    # audit_log row; the ORM does not order those inserts by the FK, and
+    # catching the whole commit misreported that FK failure as email_exists.
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise ValidationError(
+            message="Email already registered", code="auth.email_exists"
+        ) from None
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
     if is_csrf_enabled():
         set_csrf_cookie(response, generate_csrf_token())
-    record_audit(
+    stage_audit(
+        session,
         "register",
         user_id=user.id,
         target_type="user",
         target_id=user.id,
         ip_address=ip,
         meta={"email": user.email},
-        session=session,
     )
-    # The existence check above is not a lock: two concurrent signups for the
-    # same address both pass it and the loser hits the unique constraint. That
-    # surfaced as an unhandled IntegrityError (HTTP 500) rather than the 409
-    # the first branch returns.
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise ValidationError(
-            message="Email already registered", code="auth.email_exists"
-        )
+    session.commit()
     return serialize_user(user)
 
 

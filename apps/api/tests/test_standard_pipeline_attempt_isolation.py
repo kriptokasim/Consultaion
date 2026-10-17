@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from tests.utils import add_rows_in_order
+
 
 async def _cache_hit_checkpoint(
     _debate_id,
@@ -126,7 +128,7 @@ async def test_retry_cache_hit_reuses_one_prior_attempt_when_current_has_no_upst
     debate = Debate(id="attempt-reuse", prompt="test prompt long enough", status="running", mode="legacy", run_attempt=2)
     a1 = DebateAttempt(debate_id=debate.id, attempt_number=1, status="completed")
     a2 = DebateAttempt(debate_id=debate.id, attempt_number=2, status="running")
-    db_session.add_all([debate, a1, a2])
+    add_rows_in_order(db_session, debate, a1, a2)
     db_session.commit()
     db_session.add(
         Message(

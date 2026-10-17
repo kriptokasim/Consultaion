@@ -32,6 +32,7 @@ from orchestration.execution_lease import (
 from orchestration.fencing import fenced_debate_update
 
 from config import settings
+from tests.utils import ensure_user
 
 
 def _mk_debate(debate_id: str, status: str = "queued") -> str:
@@ -40,6 +41,7 @@ def _mk_debate(debate_id: str, status: str = "queued") -> str:
         if existing:
             session.delete(existing)
             session.commit()
+        ensure_user(session, "u1")
         debate = Debate(id=debate_id, prompt="PS156", status=status, user_id="u1")
         session.add(debate)
         session.commit()
@@ -753,6 +755,13 @@ async def test_waits_until_checkpoint_is_stale_then_takes_over(monkeypatch):
 def test_prior_attempt_messages_isolated():
     debate_id = _mk_debate(f"ps156-{uuid.uuid4().hex[:8]}")
     with session_scope() as session:
+        for number, attempt_id in enumerate(("attempt-1", "attempt-2"), start=1):
+            session.add(
+                DebateAttempt(
+                    id=attempt_id, debate_id=debate_id, attempt_number=number
+                )
+            )
+        session.flush()
         session.add(
             Message(
                 debate_id=debate_id,

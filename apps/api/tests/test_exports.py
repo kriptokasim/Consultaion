@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from main import app
 from routes.debates import Debate, Score
 
+from tests.utils import ensure_user
+
 client = TestClient(app)
 
 def test_export_scores_csv(db_session, reset_global_state):
@@ -24,6 +26,7 @@ def test_export_scores_csv(db_session, reset_global_state):
         status="completed",
         created_at=datetime.now(timezone.utc)
     )
+    ensure_user(session, "user-123")
     session.add(debate)
     session.commit()
     

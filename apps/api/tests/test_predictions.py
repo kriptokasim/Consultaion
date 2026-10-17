@@ -3,6 +3,8 @@ import pytest
 from models import Debate, Score, User, UserInteraction, UserPrediction
 from sqlmodel import select
 
+from tests.utils import ensure_user
+
 
 def test_cast_prediction_success(authenticated_client, db_session, monkeypatch):
     """Test creating, updating, and locking a prediction successfully."""
@@ -139,6 +141,8 @@ async def test_reveal_prediction_and_reasons(authenticated_client, db_session, m
         confidence_score=0.4,
         is_locked=True
     )
+    ensure_user(db_session, "another-user-1")
+    ensure_user(db_session, "another-user-2")
     db_session.add(pred2)
     db_session.add(pred3)
 

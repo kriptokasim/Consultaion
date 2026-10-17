@@ -76,7 +76,8 @@ async def test_oracle_background_reasoning_tasks(authenticated_client, db_sessio
         status="running"
     )
     db_session.add(sess)
-    
+    db_session.flush()
+
     root_branch = OracleBranch(
         id=str(uuid4()),
         session_id=sess.id,

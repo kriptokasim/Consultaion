@@ -98,7 +98,10 @@ async def test_arena_run_integration(db_session, monkeypatch):
         assert updated_debate is not None
         assert updated_debate.status == "completed"
         assert updated_debate.final_content == "Synthesized arena verdict."
-        assert updated_debate.final_meta["successful_count"] == 4
+        # Every seat of the active default roster answers successfully.
+        from parliament.model_registry import get_arena_models
+
+        assert updated_debate.final_meta["successful_count"] == len(get_arena_models())
 
         # Verify SSE publish events occurred
         assert mock_backend.publish.call_count > 0

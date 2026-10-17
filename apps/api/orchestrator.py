@@ -116,6 +116,118 @@ async def _update_continuation_status(
         )
 
 
+async def _post_terminal_step(debate_id: str, step: str, awaitable: Any) -> None:
+    """Run one side effect that follows a committed terminal state.
+
+    Once ``complete_debate()`` has committed, the run's outcome is decided. A
+    failure in a later publish, email or bookkeeping step must not send the run
+    down the failure path: that would mark the continuation failed, raise a
+    false failure alert, and skip credit settlement and the terminal event.
+    """
+    try:
+        await awaitable
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        from metrics import increment_metric
+
+        increment_metric("debate.post_terminal_step_failed")
+        logger.error(
+            "post_terminal_step_failed debate_id=%s step=%s error=%s",
+            debate_id,
+            step,
+            exc,
+        )
+
+
+_SUCCESS_STATUSES = frozenset({"completed", "completed_with_warnings"})
+
+
+def _terminal_event(
+    debate_id: str,
+    status: Optional[str],
+    content: Optional[str],
+    meta: Optional[Dict[str, Any]],
+    reason: Optional[str],
+) -> Dict[str, Any]:
+    """Build the terminal SSE event for the compare/conversation/parliament modes.
+
+    Success keeps the ``final`` event those views render, now with an explicit
+    ``status``. A failed run emits ``debate_failed`` instead: before, compare
+    and conversation sent ``final`` for failures too, so clients could not
+    tell a failed run from a finished one.
+    """
+    if status in _SUCCESS_STATUSES:
+        return {
+            "type": "final",
+            "round": 0,
+            "debate_id": debate_id,
+            "status": status,
+            "payload": {"content": content, "meta": meta},
+        }
+    failure_reason = reason or (meta or {}).get("error") or "run_failed"
+    return {
+        "type": "debate_failed",
+        "round": 0,
+        "debate_id": debate_id,
+        "status": status or "failed",
+        "reason": failure_reason,
+        "payload": {"reason": failure_reason, "content": content, "meta": meta},
+    }
+
+
+async def _claim_and_send_summary(debate_id: str, user_id: str | None) -> None:
+    from services.terminal_transition import (
+        TRANSITION_SUMMARY_EMAIL,
+        claim_transition_async,
+    )
+
+    if await claim_transition_async(debate_id, TRANSITION_SUMMARY_EMAIL):
+        await _build_and_send_summary(debate_id, user_id)
+
+
+async def _committed_success_status(debate_id: str) -> Optional[str]:
+    """Return the debate's status if it already committed a successful finish.
+
+    Only success counts: a run that some inner layer already marked ``failed``
+    still needs the failure handler's alert, continuation update and event.
+    """
+    try:
+        async with async_session_scope() as session:
+            debate = await session.get(Debate, debate_id)
+            if debate is not None and debate.status in _SUCCESS_STATUSES:
+                return debate.status
+    except Exception as exc:
+        logger.warning("terminal_status_lookup_failed debate_id=%s error=%s", debate_id, exc)
+    return None
+
+
+async def _handled_after_terminal_commit(
+    debate_id: str, continuation_id: Optional[str], exc: BaseException
+) -> bool:
+    """Settle, without failing the run, an error raised after its terminal commit.
+
+    Returns True when the debate already holds a committed successful status.
+    The failure handlers would otherwise mark the continuation failed, send a
+    false failure alert, and try a fenced ``running -> failed`` update that the
+    committed status rejects, re-raising before credit is settled.
+    """
+    status = await _committed_success_status(debate_id)
+    if status is None:
+        return False
+    from metrics import increment_metric
+
+    increment_metric("debate.post_terminal_error")
+    logger.error(
+        "debate.error_after_terminal_commit debate_id=%s status=%s error=%s",
+        debate_id,
+        status,
+        _safe_failure_detail(exc),
+    )
+    await _settle_terminal_hosted_credit(debate_id, continuation_id)
+    return True
+
+
 async def _settle_terminal_hosted_credit(
     debate_id: str,
     continuation_id: Optional[str],
@@ -686,14 +798,6 @@ async def run_debate(
     _judge_configs = config.judges or default_judges()
     _budget = config.budget
     backend = get_sse_backend()
-    await backend.publish(
-        channel_id,
-        {
-            "type": "notice",
-            "round": 0,
-            "payload": {"message": "Debate run started", "note": "plan"},
-        },
-    )
 
     usage_tracker = UsageAccumulator()
     debate_user_id: str | None = None
@@ -749,6 +853,20 @@ async def run_debate(
         )
 
         logger.info("Debate orchestration started (lease acquired)", extra=log_extra)
+        # Announce only once this invocation owns the run: a duplicate dispatch
+        # that loses the lease race must not tell viewers a run started. The
+        # notice is informational, so a transport error must not fail the run.
+        try:
+            await backend.publish(
+                channel_id,
+                {
+                    "type": "notice",
+                    "round": 0,
+                    "payload": {"message": "Debate run started", "note": "plan"},
+                },
+            )
+        except Exception as exc:
+            logger.warning("Failed to publish run-start notice for %s: %s", debate_id, exc)
 
         async def _owned_body() -> None:
             nonlocal debate_user_id
@@ -833,8 +951,7 @@ async def run_debate(
 
                 contract_version = result.final_meta.get("contract_version", 0)
                 if isinstance(contract_version, int) and contract_version >= 1:
-                    await backend.publish(
-                        channel_id,
+                    synthesis_event = (
                         {
                             "type": "arena_synthesis_finalized",
                             "contract_version": 1,
@@ -856,11 +973,10 @@ async def run_debate(
                             "is_verified": orch_verification_status == "verified",
                             "pipeline_type": "structured",
                             "report_version": 1,
-                        },
+                        }
                     )
                 else:
-                    await backend.publish(
-                        channel_id,
+                    synthesis_event = (
                         {
                             "type": "arena_synthesis",
                             "debate_id": debate_id,
@@ -887,32 +1003,39 @@ async def run_debate(
                                 "content": result.final_answer,
                                 "meta": result.final_meta,
                             },
-                        },
+                        }
                     )
+                await _post_terminal_step(
+                    debate_id, "publish_synthesis", backend.publish(channel_id, synthesis_event)
+                )
 
                 terminal_event_type = (
                     "debate_completed"
                     if result.status in {"completed", "completed_with_warnings"}
                     else "debate_failed"
                 )
-                await backend.publish(
-                    channel_id,
-                    {
-                        "type": terminal_event_type,
-                        "debate_id": debate_id,
-                        "status": result.status,
-                        "reason": result.error_reason if terminal_event_type == "debate_failed" else None,
-                    },
+                await _post_terminal_step(
+                    debate_id,
+                    "publish_terminal_event",
+                    backend.publish(
+                        channel_id,
+                        {
+                            "type": terminal_event_type,
+                            "debate_id": debate_id,
+                            "status": result.status,
+                            "reason": result.error_reason
+                            if terminal_event_type == "debate_failed"
+                            else None,
+                        },
+                    ),
                 )
 
                 if result.status in {"completed", "completed_with_warnings"}:
-                    from services.terminal_transition import (
-                        TRANSITION_SUMMARY_EMAIL,
-                        claim_transition_async,
+                    await _post_terminal_step(
+                        debate_id,
+                        "summary_email",
+                        _claim_and_send_summary(debate_id, debate_user_id),
                     )
-
-                    if await claim_transition_async(debate_id, TRANSITION_SUMMARY_EMAIL):
-                        await _build_and_send_summary(debate_id, debate_user_id)
                     try:
                         if settings.DEBATE_DISPATCH_MODE == "celery":
                             from worker.arena_tasks import compute_divergence_task
@@ -955,17 +1078,14 @@ async def run_debate(
                     tokens_total=float(result.usage_tracker.total_tokens),
                 )
 
-                await backend.publish(
-                    channel_id,
-                    {
-                        "type": "final",
-                        "round": 0,
-                        "debate_id": debate_id,
-                        "payload": {
-                            "content": result.final_answer,
-                            "meta": result.final_meta,
-                        },
-                    },
+                await _post_terminal_step(
+                    debate_id,
+                    "publish_terminal_event",
+                    backend.publish(
+                        channel_id,
+                        _terminal_event(debate_id, result.status, result.final_answer, result.final_meta,
+                                        getattr(result, "error_reason", None)),
+                    ),
                 )
                 if result.status == "completed":
                     await _update_continuation_status(
@@ -996,17 +1116,14 @@ async def run_debate(
                     tokens_total=float(result.usage_tracker.total_tokens),
                 )
 
-                await backend.publish(
-                    channel_id,
-                    {
-                        "type": "final",
-                        "round": 0,
-                        "debate_id": debate_id,
-                        "payload": {
-                            "content": result.final_answer,
-                            "meta": result.final_meta,
-                        },
-                    },
+                await _post_terminal_step(
+                    debate_id,
+                    "publish_terminal_event",
+                    backend.publish(
+                        channel_id,
+                        _terminal_event(debate_id, result.status, result.final_answer, result.final_meta,
+                                        getattr(result, "error_reason", None)),
+                    ),
                 )
                 if result.status == "completed":
                     await _update_continuation_status(
@@ -1046,21 +1163,19 @@ async def run_debate(
                 )
 
                 if final_status == "failed":
-                    await backend.publish(
-                        channel_id,
-                        {
-                            "type": "debate_failed",
-                            "debate_id": debate_id,
-                            "round": 0,
-                            "status": final_status,
-                            "reason": panel_result.error_reason
-                            or "seat_failure_threshold_exceeded",
-                            "payload": {
-                                "reason": panel_result.error_reason
-                                or "seat_failure_threshold_exceeded",
-                                "meta": final_meta,
-                            },
-                        },
+                    await _post_terminal_step(
+                        debate_id,
+                        "publish_terminal_event",
+                        backend.publish(
+                            channel_id,
+                            _terminal_event(
+                                debate_id,
+                                final_status,
+                                None,
+                                final_meta,
+                                panel_result.error_reason or "seat_failure_threshold_exceeded",
+                            ),
+                        ),
                     )
                     await _update_continuation_status(
                         continuation_id,
@@ -1071,17 +1186,15 @@ async def run_debate(
                         or "seat_failure_threshold_exceeded",
                     )
                     return
-                await backend.publish(
-                    channel_id,
-                    {
-                        "type": "final",
-                        "debate_id": debate_id,
-                        "round": 0,
-                        "payload": {
-                            "content": panel_result.final_answer,
-                            "meta": final_meta,
-                        },
-                    },
+                await _post_terminal_step(
+                    debate_id,
+                    "publish_terminal_event",
+                    backend.publish(
+                        channel_id,
+                        _terminal_event(
+                            debate_id, final_status, panel_result.final_answer, final_meta, None
+                        ),
+                    ),
                 )
                 await _update_continuation_status(
                     continuation_id,
@@ -1125,13 +1238,9 @@ async def run_debate(
             # Success path for Standard Pipeline
             logger.info("Debate completed successfully", extra=log_extra)
             increment_metric("debate.completed")
-            from services.terminal_transition import (
-                TRANSITION_SUMMARY_EMAIL,
-                claim_transition_async,
+            await _post_terminal_step(
+                debate_id, "summary_email", _claim_and_send_summary(debate_id, debate_user_id)
             )
-
-            if await claim_transition_async(debate_id, TRANSITION_SUMMARY_EMAIL):
-                await _build_and_send_summary(debate_id, debate_user_id)
             await _update_continuation_status(
                 continuation_id,
                 "completed",
@@ -1196,6 +1305,8 @@ async def run_debate(
         raise
 
     except (TransientLLMError, ProviderCircuitOpenError) as exc:
+        if await _handled_after_terminal_commit(debate_id, continuation_id, exc):
+            return
         logger.warning(f"Debate encountered transient/provider error: {exc}", extra=log_extra)
         increment_metric("debate.degraded")
         await _update_continuation_status(
@@ -1283,6 +1394,8 @@ async def run_debate(
             logger.warning("Failed to publish transient error event for debate %s", debate_id)
 
     except Exception as exc:
+        if await _handled_after_terminal_commit(debate_id, continuation_id, exc):
+            return
         logger.exception(f"Debate failed terminally: {exc}", exc_info=exc, extra=log_extra)
         increment_metric("debate.failed")
         await _update_continuation_status(

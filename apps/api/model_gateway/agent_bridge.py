@@ -32,6 +32,7 @@ async def call_model_via_gateway(
     """
     from agents import UsageCall
     from llm_errors import TransientLLMError
+
     from model_gateway.runtime_exception_guard import install_runtime_exception_guard
     from model_gateway.runtime_guard import (
         install_gateway_runtime_guard,

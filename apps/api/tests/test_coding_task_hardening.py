@@ -48,7 +48,12 @@ def _seed_turn(db_session, *, suffix: str, prompt: str, file_paths=None):
         prompt=prompt,
         status="running",
     )
-    db_session.add_all([run, turn])
+    from tests.utils import ensure_user
+
+    ensure_user(db_session, run.user_id)
+    db_session.add(run)
+    db_session.flush()
+    db_session.add(turn)
     db_session.commit()
     return run, turn
 
@@ -207,6 +212,7 @@ async def test_all_failed_lanes_mark_turn_and_run_failed(db_session, monkeypatch
 async def test_nonlocal_missing_redis_fails_closed_before_provider(db_session, monkeypatch):
     import redis_pool
     import worker.coding_tasks as coding
+
     from config import settings
 
     run, turn = _seed_turn(
@@ -237,6 +243,7 @@ async def test_nonlocal_missing_redis_fails_closed_before_provider(db_session, m
 async def test_nonlocal_parent_coordination_unavailable_is_retryable(db_session, monkeypatch):
     import redis_pool
     import worker.coding_tasks as coding
+
     from config import settings
 
     run, turn = _seed_turn(

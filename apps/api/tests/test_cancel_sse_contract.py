@@ -2,7 +2,6 @@ import sse_backend
 import sse_execution_guard
 from sse_terminal_contract import install_cancelled_terminal_event
 
-
 install_cancelled_terminal_event()
 
 

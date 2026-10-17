@@ -13,8 +13,8 @@ protection applies from here forward.
 Revision ID: p169_oauth_account_binding
 Revises: p168_alembic_version_pk
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "p169_oauth_account_binding"
 down_revision = "p168_alembic_version_pk"
@@ -58,7 +58,7 @@ def upgrade() -> None:
     # login and is treated as verified, so nobody is locked out by the deploy.
     op.execute(
         sa.text(
-            "UPDATE \"user\" SET email_verified_at = CURRENT_TIMESTAMP "
+            'UPDATE "user" SET email_verified_at = CURRENT_TIMESTAMP '
             "WHERE email_verified_at IS NULL"
         )
     )

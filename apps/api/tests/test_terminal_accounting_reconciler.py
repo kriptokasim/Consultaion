@@ -1,3 +1,6 @@
+from tests.utils import add_rows_in_order
+
+
 def _seed_terminal_attempt(db_session, *, debate_id="acct-debate", tokens=321):
     from models import Debate, DebateAttempt, User
 
@@ -21,7 +24,7 @@ def _seed_terminal_attempt(db_session, *, debate_id="acct-debate", tokens=321):
         status="completed",
         tokens_used=tokens,
     )
-    db_session.add_all([user, debate, attempt])
+    add_rows_in_order(db_session, user, debate, attempt)
     db_session.commit()
     return user, debate, attempt
 
@@ -178,7 +181,7 @@ def test_terminal_success_settles_reserved_hosted_credit(db_session):
         debate_id=debate.id,
         meta={"run_attempt": 1, "continuation_id": None},
     )
-    db_session.add_all([user, debate, entry])
+    add_rows_in_order(db_session, user, debate, entry)
     db_session.commit()
 
     assert _settle_credit_entry(db_session, entry) == "settled"
@@ -227,7 +230,7 @@ def test_failed_continuation_refunds_its_own_reservation(db_session):
         debate_id=debate.id,
         meta={"run_attempt": 1, "continuation_id": continuation.id},
     )
-    db_session.add_all([user, debate, continuation, entry])
+    add_rows_in_order(db_session, user, debate, continuation, entry)
     db_session.commit()
 
     assert _settle_credit_entry(db_session, entry) == "refunded"

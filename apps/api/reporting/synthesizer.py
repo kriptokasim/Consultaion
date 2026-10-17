@@ -408,6 +408,10 @@ async def _run_synthesis_preanalysis(
     return evaluations, semantic_analysis
 
 
+def _report_max_tokens() -> int:
+    return int(getattr(settings, "SYNTHESIS_MAX_TOKENS", 2000) or 2000)
+
+
 async def generate_decision_report(
     prompt: str,
     responses: List[Dict[str, Any]],
@@ -552,7 +556,9 @@ async def generate_decision_report(
                 messages,
                 role="Arena:Synthesizer",
                 temperature=0.3,
-                max_tokens=1500,
+                # A fixed 1500 ignored SYNTHESIS_MAX_TOKENS and truncated the
+                # JSON for larger panels, which forced the repair round trip.
+                max_tokens=_report_max_tokens(),
                 model_id=model_override,
                 debate_id=debate_id,
                 response_format=response_format,
@@ -595,7 +601,10 @@ async def generate_decision_report(
                     repair_messages,
                     role="Arena:JSONRepair",
                     temperature=0.1,
-                    max_tokens=1500,
+                    max_tokens=_report_max_tokens(),
+                    # Same model as the draft: without it the repair ran on the
+                    # global default model, usually weaker than the synthesiser.
+                    model_id=model_override,
                     debate_id=debate_id,
                 )
                 if usage is not None and hasattr(usage, "add_call"):
@@ -730,7 +739,7 @@ async def generate_decision_report(
                     revise_messages,
                     role="Arena:Synthesizer",
                     temperature=0.2,
-                    max_tokens=1500,
+                    max_tokens=_report_max_tokens(),
                     model_id=model_override,
                     debate_id=debate_id,
                 )
@@ -834,9 +843,11 @@ async def generate_decision_report(
             ),
             "critic_revision_triggered": critic_revision_triggered,
             "report_validation_repaired": report_validation_repaired,
+            # None when the critic produced no score; defaulting to 1.0 made
+            # unscored reports look perfect in quality telemetry.
             "report_quality_scores": {
-                "completeness": critic_res.get("completeness_score", 1.0),
-                "faithfulness": critic_res.get("faithfulness_score", 1.0),
+                "completeness": critic_res.get("completeness_score"),
+                "faithfulness": critic_res.get("faithfulness_score"),
             },
         }
 
@@ -880,6 +891,18 @@ async def generate_decision_report(
         )
         return final_report
     except Exception as exc:
+        from orchestration.checkpoints import (
+            CheckpointIntegrityError,
+            CheckpointOwnershipLostError,
+        )
+        from orchestration.execution_lease import ExecutionSupersededError
+
+        # Ownership loss is not a synthesis failure; wrapping it let the caller
+        # persist a fallback verdict under a lease it no longer holds.
+        if isinstance(
+            exc, (ExecutionSupersededError, CheckpointOwnershipLostError, CheckpointIntegrityError)
+        ):
+            raise
         logger.exception(
             "arena_synthesis_failed",
             extra={

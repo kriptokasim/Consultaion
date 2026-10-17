@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from models import Debate, User
+from parliament.model_registry import get_model_info
 from parliament.router_v2 import CandidateDecision
 from sqlmodel import Session, select
 
@@ -28,9 +29,9 @@ def mock_rate_limiter():
 
 def test_create_debate_uses_routing(authenticated_client, db_session: Session, mock_choose_model):
     # Setup mock return
-    mock_choose_model.return_value = ("routed-model-id", [
+    mock_choose_model.return_value = ("gpt4o-mini", [
         CandidateDecision(
-            model="routed-model-id",
+            model="gpt4o-mini",
             total_score=0.9,
             cost_score=0.1,
             latency_score=0.1,
@@ -47,12 +48,10 @@ def test_create_debate_uses_routing(authenticated_client, db_session: Session, m
         "mode": "debate"
     }
     
-    # Patchset 49.2: Validation requires checking model tier, so we must mock enabled models
+    # Debate seats are validated against the real registry, so offer one
+    # real, standard-tier model rather than a stand-in.
     with patch("routes.debates.crud.list_enabled_models_for_user") as mock_list:
-        mock_model = MagicMock()
-        mock_model.id = "routed-model-id"
-        mock_model.tier = "standard"
-        mock_list.return_value = [mock_model]
+        mock_list.return_value = [get_model_info("gpt4o-mini")]
         
         response = authenticated_client.post("/debates", json=payload)
     assert response.status_code == 200
@@ -67,16 +66,16 @@ def test_create_debate_uses_routing(authenticated_client, db_session: Session, m
     
     # Verify DB
     debate = db_session.get(Debate, debate_id)
-    assert debate.model_id == "routed-model-id"
-    assert debate.routed_model == "routed-model-id"
+    assert debate.model_id == "gpt4o-mini"
+    assert debate.routed_model == "gpt4o-mini"
     assert debate.routing_policy == "router-deep"
-    assert debate.routing_meta["candidates"][0]["model"] == "routed-model-id"
+    assert debate.routing_meta["candidates"][0]["model"] == "gpt4o-mini"
 
 def test_create_debate_explicit_model_routing(authenticated_client, db_session: Session, mock_choose_model):
     # Setup mock return
-    mock_choose_model.return_value = ("gpt-4o", [
+    mock_choose_model.return_value = ("gpt4o-mini", [
         CandidateDecision(
-            model="gpt-4o",
+            model="gpt4o-mini",
             total_score=1.0,
             cost_score=0.0,
             latency_score=0.0,
@@ -89,7 +88,7 @@ def test_create_debate_explicit_model_routing(authenticated_client, db_session: 
     
     payload = {
         "prompt": "Test explicit model",
-        "model_id": "gpt-4o",
+        "model_id": "gpt4o-mini",
         "mode": "debate"
     }
     
@@ -99,10 +98,7 @@ def test_create_debate_explicit_model_routing(authenticated_client, db_session: 
     # But gpt-4o is likely in default registry.
     
     with patch("routes.debates.crud.list_enabled_models_for_user") as mock_list:
-        mock_model = MagicMock()
-        mock_model.id = "gpt-4o"
-        mock_model.tier = "standard"  # Patchset 49.2: Required for validation
-        mock_list.return_value = [mock_model]
+        mock_list.return_value = [get_model_info("gpt4o-mini")]
         
         response = authenticated_client.post("/debates", json=payload)
         assert response.status_code == 200
@@ -110,12 +106,12 @@ def test_create_debate_explicit_model_routing(authenticated_client, db_session: 
     # Verify mock call
     assert mock_choose_model.called
     ctx = mock_choose_model.call_args[0][0]
-    assert ctx.requested_model == "gpt-4o"
+    assert ctx.requested_model == "gpt4o-mini"
     
     debate_id = response.json()["id"]
     debate = db_session.get(Debate, debate_id)
-    assert debate.model_id == "gpt-4o"
-    assert debate.routed_model == "gpt-4o"
+    assert debate.model_id == "gpt4o-mini"
+    assert debate.routed_model == "gpt4o-mini"
 
 
 def test_create_debate_refunds_hourly_slot_after_panel_validation_failure(

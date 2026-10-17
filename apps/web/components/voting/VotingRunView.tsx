@@ -69,15 +69,15 @@ export function VotingRunView({
         return () => controller.abort();
     }, [fetchReveal]);
 
+    const resolvedAt = revealData?.prediction?.resolved_at;
     useEffect(() => {
-        const prediction = revealData?.prediction;
-        if (!prediction?.resolved_at) return;
-        const key = `voting_resolution_seen_${debate.id}_${prediction.resolved_at}`;
+        if (!resolvedAt) return;
+        const key = `voting_resolution_seen_${debate.id}_${resolvedAt}`;
         if (!localStorage.getItem(key)) {
             localStorage.setItem(key, "true");
             setShowResolutionCue(true);
         }
-    }, [debate.id, revealData?.prediction?.resolved_at]);
+    }, [debate.id, resolvedAt]);
 
     // Handle prediction lock-in
     const handleLockPrediction = async (pred: { predicted_winner: string; confidence_score: number }) => {

@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 from models import Debate, Message, PairwiseVote, Score  # re-export for backward compat
+from sse_terminal_contract import install_cancelled_terminal_event
 from sse_terminal_guard import install_terminal_commit_guard
 from structured_judge_guard import install_structured_judge_guard
-from sse_terminal_contract import install_cancelled_terminal_event
 
 from routes.debates.config_routes import (
     get_default_config,
@@ -32,13 +32,13 @@ install_structured_judge_guard()
 install_terminal_commit_guard()
 install_cancelled_terminal_event()
 
+from routes.debates.cancel import router as _cancel_router  # noqa: E402
 from routes.debates.hardening import (  # noqa: E402
     create_debate_hardened as create_debate,
     retry_agent_hardened as retry_agent,
     retry_debate_run_hardened as retry_debate_run,
     router as _hardening_router,
 )
-from routes.debates.cancel import router as _cancel_router  # noqa: E402
 from routes.debates.moderation import (  # noqa: E402
     get_argument_tree,
     moderate_debate,

@@ -15,6 +15,7 @@ from sqlmodel import SQLModel
 
 import models  # noqa: F401  # Register every SQLModel table before comparison.
 from billing import models as billing_models  # noqa: F401
+from promotions import models as promotion_models  # noqa: F401
 from config import AppSettings
 
 # Tables deliberately owned by Alembic rather than the runtime ORM. These are

@@ -2,16 +2,19 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from tests.utils import add_rows_in_order
+
 
 @pytest.mark.anyio
 async def test_stale_summary_claim_is_completed_when_delivery_is_disabled(db_session, monkeypatch):
-    from config import settings
     from models import Debate, TerminalTransition, User
     from services.terminal_transition import (
         TERMINAL_TRANSITION_CLAIM_TTL_SECONDS,
         TRANSITION_SUMMARY_EMAIL,
     )
     from worker.terminal_tasks import _reconcile_stale_summary_email_claims
+
+    from config import settings
 
     user = User(
         id="terminal-summary-user",
@@ -34,7 +37,7 @@ async def test_stale_summary_claim_is_completed_when_delivery_is_disabled(db_ses
         created_at=datetime.now(timezone.utc)
         - timedelta(seconds=TERMINAL_TRANSITION_CLAIM_TTL_SECONDS + 1),
     )
-    db_session.add_all([user, debate, transition])
+    add_rows_in_order(db_session, user, debate, transition)
     db_session.commit()
 
     monkeypatch.setattr(settings, "ENABLE_EMAIL_SUMMARIES", False)

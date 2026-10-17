@@ -4,6 +4,8 @@ from routes.arena import _compute_claim_id
 from sqlmodel import select
 from worker.arena_tasks import _execute_divergence_computation, compute_string_similarity
 
+from tests.utils import ensure_user
+
 
 def test_similarity_algorithm():
     """Verify compute_string_similarity returns high score for similar claims and low for distinct ones."""
@@ -28,6 +30,7 @@ async def test_compute_divergence_success(db_session, monkeypatch):
         mode="arena",
         config={}
     )
+    ensure_user(db_session, "user-123")
     db_session.add(debate)
     
     # Add candidate model responses

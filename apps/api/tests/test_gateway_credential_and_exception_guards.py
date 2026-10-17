@@ -2,6 +2,8 @@ import asyncio
 
 import pytest
 
+from tests.utils import add_rows_in_order
+
 
 def _seed_identity(db_session, *, suffix: str):
     from models import Debate, DebateAttempt, User
@@ -23,7 +25,7 @@ def _seed_identity(db_session, *, suffix: str):
         attempt_number=1,
         status="running",
     )
-    db_session.add_all([user, debate, attempt])
+    add_rows_in_order(db_session, user, debate, attempt)
     db_session.commit()
     return user, debate
 

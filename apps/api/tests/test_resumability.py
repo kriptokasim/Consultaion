@@ -1,12 +1,13 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from database import session_scope
 from models import Debate
 from orchestrator import _heartbeat, _release_lease, _try_acquire_lease
-from orchestrator_cleanup import cleanup_stale_debates
+
+from tests.utils import ensure_user
 
 # Use a test-specific runner ID
 TEST_RUNNER_A = "runner-a"
@@ -30,6 +31,7 @@ def create_test_debate(session, debate_id="test-debate-lease"):
         status="queued",
         user_id="test-user"
     )
+    ensure_user(session, "test-user")
     session.add(debate)
     session.commit()
     return debate
@@ -122,57 +124,68 @@ async def test_release_lease():
 
 @pytest.mark.anyio
 async def test_cleanup_requeue():
+    """An expired lease is redispatched, bounded per logical attempt.
+
+    run_attempt is the product-attempt identity, not a crash-retry counter;
+    exhaustion is tracked in final_meta.recovery_dispatch.
+    """
+    import orchestrator_cleanup
+    from cleanup_recovery_guard import _MAX_RECOVERY_DISPATCHES, install_cleanup_recovery_guard
+
+    install_cleanup_recovery_guard()
     debate_id = "test-debate-requeue"
     runner_id = "crashed-runner"
-    
+
     with session_scope() as session:
-        # Clean up if exists
         existing = session.get(Debate, debate_id)
         if existing:
             session.delete(existing)
         session.commit()
 
-        debate = Debate(
-            id=debate_id,
-            prompt="Stale",
-            status="running",
-            runner_id=runner_id,
-            lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=5),
-            run_attempt=0,
-            user_id="test-user"
+        ensure_user(session, "test-user")
+        session.add(
+            Debate(
+                id=debate_id,
+                prompt="Stale",
+                status="running",
+                runner_id=runner_id,
+                lease_expires_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+                run_attempt=1,
+                user_id="test-user",
+            )
         )
-        session.add(debate)
         session.commit()
-    
-    # Run cleanup
-    with patch("orchestrator_cleanup.settings") as mock_settings:
-        # Mock settings so existing checks don't interfere (or ensure they align)
-        mock_settings.DEBATE_STALE_RUNNING_SECONDS = 3600
-        mock_settings.DEBATE_STALE_QUEUED_SECONDS = 3600
-        
-        await cleanup_stale_debates()
-    
+
+    with patch("debate_dispatch.dispatch_debate_run", new_callable=AsyncMock) as dispatch:
+        await orchestrator_cleanup.cleanup_stale_debates()
+
+    dispatch.assert_awaited_once()
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
-        # Should be requeued
-        assert debate.status == "queued"
+        assert debate.status == "scheduled"
         assert debate.runner_id is None
         assert debate.lease_expires_at is None
-        
-        # Test retry exhaustion
+        assert debate.run_attempt == 1
+        assert debate.final_meta["recovery_dispatch"]["count"] == 1
+
+        # Exhaust the recovery budget for this attempt, then crash again.
+        final_meta = dict(debate.final_meta)
+        final_meta["recovery_dispatch"] = {
+            **final_meta["recovery_dispatch"],
+            "count": _MAX_RECOVERY_DISPATCHES,
+        }
+        debate.final_meta = final_meta
         debate.status = "running"
         debate.runner_id = runner_id
         debate.lease_expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
-        debate.run_attempt = 3 # Limit reached
         session.add(debate)
         session.commit()
-        
-    # Run cleanup again
-    with patch("orchestrator_cleanup.settings") as mock_settings:
-         mock_settings.DEBATE_STALE_RUNNING_SECONDS = 3600
-         mock_settings.DEBATE_STALE_QUEUED_SECONDS = 3600
-         await cleanup_stale_debates()
 
+    with patch("debate_dispatch.dispatch_debate_run", new_callable=AsyncMock) as dispatch:
+        await orchestrator_cleanup.cleanup_stale_debates()
+
+    dispatch.assert_not_awaited()
     with session_scope() as session:
         debate = session.get(Debate, debate_id)
         assert debate.status == "failed"
+        assert debate.final_meta["stale_cleanup"]["failure_code"] == "recovery_dispatches_exhausted"

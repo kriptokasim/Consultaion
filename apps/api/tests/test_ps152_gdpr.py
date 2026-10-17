@@ -225,13 +225,17 @@ class TestRuntimeConfigHelpers:
             assert get_web_app_origin() == "https://example.com"
 
     def test_get_web_app_origin_raises_on_missing(self):
+        from exceptions import AppError
         from routes.auth import get_web_app_origin
 
         from config import settings
 
         with patch.object(settings, "WEB_APP_ORIGIN", None):
-            with pytest.raises(ValueError):
+            with pytest.raises(AppError) as exc:
                 get_web_app_origin()
+        assert exc.value.code == "auth.configuration_error"
+        assert exc.value.status_code == 500
+        assert exc.value.retryable is False
 
 
 # ── Audit follow-up: transaction and complete erasure ───────────────

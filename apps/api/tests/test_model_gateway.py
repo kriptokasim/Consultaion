@@ -254,6 +254,9 @@ def test_free_only_mode_serves_four_distinct_free_seats(monkeypatch):
 
     monkeypatch.setattr("config.settings.USE_MOCK", False)
     monkeypatch.setattr("config.settings.OPENROUTER_API_KEY", "test-openrouter-key")
+    # The free roster's first seat is Groq-direct and deliberately never routed
+    # through OpenRouter, so a complete free roster needs both keys.
+    monkeypatch.setattr("config.settings.GROQ_API_KEY", "test-groq-key")
     monkeypatch.setattr("config.settings.FREE_ONLY_MODE", True)
 
     for model_id in FREE_ARENA_MODELS:
@@ -262,6 +265,22 @@ def test_free_only_mode_serves_four_distinct_free_seats(monkeypatch):
     served = [model.id for model in get_arena_models()]
     assert served == FREE_ARENA_MODELS
     assert len(set(served)) == len(served), "free arena seats must be distinct models"
+
+
+def test_free_only_mode_without_groq_key_drops_only_the_groq_seat(monkeypatch):
+    """Without GROQ_API_KEY the Groq seat is omitted, not misrouted.
+
+    This is the degraded shape an OpenRouter-only deployment serves.
+    """
+    from parliament.model_registry import FREE_ARENA_MODELS
+
+    monkeypatch.setattr("config.settings.USE_MOCK", False)
+    monkeypatch.setattr("config.settings.OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setattr("config.settings.GROQ_API_KEY", None)
+    monkeypatch.setattr("config.settings.FREE_ONLY_MODE", True)
+
+    served = [model.id for model in get_arena_models()]
+    assert served == [m for m in FREE_ARENA_MODELS if m != "groq-llama-3-3"]
 
 
 @pytest.mark.anyio

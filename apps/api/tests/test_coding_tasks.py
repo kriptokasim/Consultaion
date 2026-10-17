@@ -4,6 +4,8 @@ import pytest
 from models import CodingLaneResult, CodingRun, CodingTurn
 from worker.coding_tasks import LANE_MODELS, _async_execute_turn, compute_similarity
 
+from tests.utils import ensure_user
+
 
 # Setup mock for gateway
 @pytest.fixture
@@ -30,6 +32,7 @@ async def test_execute_turn_early_exit(db_session, mock_gateway):
     """Test Tier 1 execution exits early when fast and thinking converge."""
     
     # Setup test data (long prompt to trigger Tier 1)
+    ensure_user(db_session, "u1")
     run = CodingRun(user_id="u1", tier=1, file_paths=["main.py"])
     db_session.add(run)
     db_session.commit()
@@ -59,6 +62,7 @@ async def test_execute_turn_early_exit(db_session, mock_gateway):
 async def test_execute_turn_tier_2_judge(db_session, mock_gateway):
     """Test Tier 2 execution falls back to judge when divergent."""
     
+    ensure_user(db_session, "u1")
     run = CodingRun(user_id="u1", tier=2, file_paths=["main.py"])
     db_session.add(run)
     db_session.commit()

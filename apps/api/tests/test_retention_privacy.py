@@ -53,6 +53,7 @@ def test_retention_scrubs_normalized_debate_content(
         updated_at=utcnow() - timedelta(days=59),
     )
     db_session.add(debate)
+    db_session.flush()
     db_session.add(
         Message(
             debate_id=debate.id,
@@ -173,6 +174,8 @@ def test_retention_scrubs_normalized_debate_content(
     )
     db_session.commit()
 
+    # The purge deletes the challenge row, so its id cannot be refreshed later.
+    challenge_id = challenge.id
     assert purge_old_debates(db_session) == 1
     db_session.expire_all()
 
@@ -227,7 +230,7 @@ def test_retention_scrubs_normalized_debate_content(
         select(ChallengeSession).where(ChallengeSession.debate_id == debate.id)
     ).first() is None
     assert db_session.exec(
-        select(ChallengeRound).where(ChallengeRound.session_id == challenge.id)
+        select(ChallengeRound).where(ChallengeRound.session_id == challenge_id)
     ).first() is None
 
     checkpoint = db_session.exec(

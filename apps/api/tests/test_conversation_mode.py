@@ -1,6 +1,6 @@
 import pytest
 from conversation.engine import run_conversation_debate
-from models import Debate, Message
+from models import Debate, Message, Team
 from orchestration.execution_context import bind_execution_lease, reset_execution_lease
 from orchestration.execution_lease import acquire_execution_lease
 from orchestrator import run_debate
@@ -9,6 +9,7 @@ from sqlmodel import select
 from sse_backend import get_sse_backend, reset_sse_backend_for_tests
 
 from config import settings
+from tests.utils import ensure_user
 
 
 async def _bind_live_lease(debate_id: str):
@@ -31,6 +32,10 @@ async def test_conversation_engine_runs_with_mock_llm(db_session):
         team_id="test-team-id",
         user_id="test-user-id"
     )
+    ensure_user(db_session, "test-user-id")
+    if db_session.get(Team, "test-team-id") is None:
+        db_session.add(Team(id="test-team-id", name="test team"))
+        db_session.flush()
     db_session.add(debate)
     db_session.commit()
     db_session.refresh(debate)
@@ -105,6 +110,10 @@ async def test_conversation_truncation(db_session):
         team_id="test-team-id",
         user_id="test-user-id"
     )
+    ensure_user(db_session, "test-user-id")
+    if db_session.get(Team, "test-team-id") is None:
+        db_session.add(Team(id="test-team-id", name="test team"))
+        db_session.flush()
     db_session.add(debate)
     db_session.commit()
     db_session.refresh(debate)

@@ -6,10 +6,13 @@ from models import Debate, DebateStageCheckpoint, DivergenceReport, Message, Sco
 from orchestration.checkpoints import run_with_checkpoint
 from sqlmodel import select
 
+from tests.utils import seed_debate
+
 
 @pytest.mark.anyio
 async def test_checkpoint_idempotency(db_session):
     debate_id = "test-checkpoint-debate-id"
+    seed_debate(debate_id)
     stage_key = "test_stage"
     input_data = {"key": "value"}
 
@@ -64,6 +67,7 @@ async def test_checkpoint_idempotency(db_session):
 @pytest.mark.anyio
 async def test_checkpoint_input_hash_change(db_session):
     debate_id = "test-hash-debate-id"
+    seed_debate(debate_id)
     stage_key = "test_stage_hash"
     
     run_count = 0
@@ -101,6 +105,7 @@ async def test_checkpoint_input_hash_change(db_session):
 @pytest.mark.anyio
 async def test_checkpoint_attempt_and_output_ref(db_session):
     debate_id = "test-attempt-ref-debate-id"
+    seed_debate(debate_id)
     stage_key = "synthesis"
     input_data = {"data": "test"}
 
@@ -248,6 +253,7 @@ def test_retry_api_downstream_clearing(authenticated_client, db_session):
 async def test_debate_workspace_serialization(db_session):
     # Setup test objects in db
     from models import Debate, DebateStageCheckpoint, Message, Score
+    from parliament.model_registry import get_arena_models
     from serializers import serialize_debate_private, serialize_debate_public
 
     debate = Debate(
@@ -280,7 +286,8 @@ async def test_debate_workspace_serialization(db_session):
     assert serialized_pub["current_stage"] == "divergence_analysis"
     assert serialized_pub["responses_received"] == 1
     assert serialized_pub["scores_received"] == 1
-    assert serialized_pub["models_expected"] == 4  # Default for arena
+    # With no panel seats configured, arena expects the active roster size.
+    assert serialized_pub["models_expected"] == len(get_arena_models())
     assert len(serialized_pub["stage_checkpoints"]) == 2
     assert serialized_pub["synthesis_error"] is None  # Excluded from public DTO
 
@@ -289,6 +296,6 @@ async def test_debate_workspace_serialization(db_session):
     assert serialized_priv["current_stage"] == "divergence_analysis"
     assert serialized_priv["responses_received"] == 1
     assert serialized_priv["scores_received"] == 1
-    assert serialized_priv["models_expected"] == 4
+    assert serialized_priv["models_expected"] == len(get_arena_models())
     assert len(serialized_priv["stage_checkpoints"]) == 2
 

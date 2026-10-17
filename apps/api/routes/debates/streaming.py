@@ -457,6 +457,12 @@ async def stream_events(
         raise HTTPException(status_code=401, detail="authentication required")
 
     require_debate_access(session.get(Debate, debate_id), user, session)
+    user_id = user.id
+    # The stream never touches the database again, but FastAPI only tears down
+    # the request-scoped session after the response body finishes. Holding it
+    # open would pin one pooled connection per viewer for the whole run, so
+    # enough open streams would exhaust the pool and fail unrelated requests.
+    session.close()
     # Validate CORS before channel creation, metrics, and especially lease
     # acquisition so rejected requests cannot consume concurrent stream slots.
     allowed_origin = _resolve_stream_allowed_origin(request)
@@ -492,7 +498,7 @@ async def stream_events(
     # exception raised by the generator can only truncate a 200 response.
     from sse_backend import StreamLeaseResult, get_stream_lease_manager
     lease_mgr = get_stream_lease_manager()
-    subscriber_id = f"{user.id}:{uuid.uuid4().hex}"
+    subscriber_id = f"{user_id}:{uuid.uuid4().hex}"
     lease_result = await lease_mgr.try_acquire(debate_id, subscriber_id)
     if lease_result in (StreamLeaseResult.DENIED, StreamLeaseResult.ERROR_FAIL_CLOSED):
         active = await lease_mgr.active_count(debate_id)

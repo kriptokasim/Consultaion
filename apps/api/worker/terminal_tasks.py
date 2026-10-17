@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -8,6 +7,7 @@ from schemas import DebateSummary
 from sqlmodel import select
 
 from worker.celery_app import celery_app
+from worker.loop_runtime import run_task_coroutine
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ async def _reconcile_stale_summary_email_claims(limit: int = 50) -> int:
 @celery_app.task(name="maintenance.reconcile_terminal_summary_emails", bind=True, max_retries=3)
 def reconcile_terminal_summary_emails(self) -> int:
     try:
-        return asyncio.run(_reconcile_stale_summary_email_claims())
+        return run_task_coroutine(_reconcile_stale_summary_email_claims)
     except Exception as exc:
         logger.exception("Failed to reconcile stale summary-email claims")
         raise self.retry(exc=exc, countdown=60) from exc

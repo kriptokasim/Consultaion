@@ -8,7 +8,15 @@ def test_legacy_openrouter_fallback_aliases_resolve_to_free_routes():
     assert OpenRouterAdapter._resolve_model("router-smart") == "openrouter/openrouter/free"
     assert OpenRouterAdapter._resolve_model("gpt4o-mini") == "openrouter/openrouter/free"
     assert OpenRouterAdapter._resolve_model("groq-llama-3-3") != "openrouter/openai/gpt-oss-20b:free"
-    assert OpenRouterAdapter._resolve_model("openrouter-nemotron-free") == "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+    # The seat keeps its historical key; its upstream follows the current free
+    # catalog, so assert agreement with MODEL_MAP rather than a pinned slug.
+    from model_gateway.model_map import MODEL_MAP
+
+    assert (
+        OpenRouterAdapter._resolve_model("openrouter-nemotron-free")
+        == MODEL_MAP["openrouter-nemotron-free"]["litellm_model"]
+    )
+    assert "nemotron-3-ultra" not in OpenRouterAdapter._resolve_model("openrouter-nemotron-free")
 
 
 def test_current_free_candidates_are_not_old_nemotron_or_llama_slugs():

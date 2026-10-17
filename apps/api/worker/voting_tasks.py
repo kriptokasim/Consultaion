@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from agents import call_llm_for_role
@@ -11,6 +10,7 @@ from sqlmodel import select
 from utils.json_utils import extract_and_parse_json
 
 from worker.celery_app import celery_app
+from worker.loop_runtime import run_task_coroutine
 
 logger = get_task_logger(__name__)
 module_logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ async def _execute_vote_reasons_extraction(debate_id: str) -> None:
 def extract_vote_reasons_task(self, debate_id: str) -> None:
     """Celery task to run LLM extraction of vote highlights/criticisms."""
     try:
-        asyncio.run(_execute_vote_reasons_extraction(debate_id))
+        run_task_coroutine(lambda: _execute_vote_reasons_extraction(debate_id))
     except Exception as exc:
         logger.exception("Error while extracting vote reasons for debate %s", debate_id)
         raise self.retry(exc=exc, countdown=10) from exc

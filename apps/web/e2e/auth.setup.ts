@@ -12,7 +12,11 @@ setup('authenticate', async ({ page }) => {
 
     await page.goto('/login?next=/dashboard');
 
-    if (await page.getByText('Recent Debates').isVisible().catch(() => false)) {
+    // The authenticated app shell (not a dashboard section label, which the
+    // redesigns keep renaming) is the stable signal that login succeeded.
+    const appNav = page.getByRole('link', { name: /^Settings$/ });
+
+    if (await appNav.isVisible().catch(() => false)) {
         await page.context().storageState({ path: authFile });
         return;
     }
@@ -22,7 +26,7 @@ setup('authenticate', async ({ page }) => {
     await page.getByRole('button', { name: /Sign in/i }).click();
 
     await page.waitForURL('**/dashboard');
-    await expect(page.getByText('Recent Debates')).toBeVisible();
+    await expect(appNav).toBeVisible();
 
     await page.context().storageState({ path: authFile });
 });

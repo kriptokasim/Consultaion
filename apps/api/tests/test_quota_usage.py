@@ -78,7 +78,10 @@ def test_debate_execution_records_token_usage_for_user():
         # Check initial usage
         initial_usage = get_or_create_usage(session, user.id)
         initial_tokens = initial_usage.tokens_used
-        
+        # get_or_create_usage may insert the usage row; end this transaction so
+        # the debate's own writers are not blocked by this test's open write.
+        session.commit()
+
         # Run debate (in mock mode it will complete quickly)
         channel_id = f"test-channel-{uuid.uuid4()}"
         asyncio.run(

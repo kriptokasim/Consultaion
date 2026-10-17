@@ -53,10 +53,16 @@ class TestRequireLLMActionAllowed:
     async def test_consume_credit_on_success(self, _mock_bucket):
         user = _make_user(hosted_credits_used=5, hosted_credits_limit=10)
         session = _make_session()
+        session.exec.return_value.rowcount = 1
         await require_llm_action_allowed(user=user, action="oracle_session", session=session)
-        assert user.hosted_credits_used == 6
-        session.add.assert_called_once_with(user)
+        # Credits are debited by one conditional UPDATE (safe across workers),
+        # then the in-memory user is refreshed from the row.
+        session.exec.assert_called_once()
+        statement = session.exec.call_args.args[0]
+        assert statement.is_update
+        assert statement.table.name == "user"
         session.commit.assert_called_once()
+        session.refresh.assert_called_once_with(user)
 
     @pytest.mark.asyncio
     @patch("guards.llm_action_guard.increment_ip_bucket", return_value=(True, 0))

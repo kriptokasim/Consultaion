@@ -235,11 +235,12 @@ def _distributed_sse_leases_required() -> bool:
 
 async def _strict_stream_try_acquire(self, debate_id: str, subscriber_id: str, user_id: str | None = None):
     """Use Redis as the authority when distributed leases are required."""
-    from config import settings
     from metrics import increment_metric
     from redis_pool import get_async_redis_client
     from services.lease import sse_acquire_lease_async
     from sse_backend import StreamLeaseResult
+
+    from config import settings
 
     if not _distributed_sse_leases_required():
         return await _original_stream_try_acquire(self, debate_id, subscriber_id, user_id)
@@ -280,8 +281,9 @@ async def _strict_stream_try_acquire(self, debate_id: str, subscriber_id: str, u
 
 def _strict_checkpoint_resolve(execution_lease, allow_unfenced: bool = False):
     """Make staging obey the same checkpoint fencing contract as production."""
-    from config import settings
     from orchestration.execution_context import get_current_execution_lease
+
+    from config import settings
 
     lease = execution_lease or get_current_execution_lease()
     env = str(getattr(settings, "APP_ENV", "local")).lower()

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 from model_gateway.types import GatewayModelCallResult, GatewayQuotaExceededError
 
@@ -71,15 +70,16 @@ def reserve_gateway_budget_sync(
 ) -> GatewayBudgetReservation:
     """Atomically reserve monthly dollars and daily tokens for one call."""
     from database import session_scope
+    from models import LLMUsageLog, UsageLedgerEntry, User
+    from sqlalchemy import func
+    from sqlmodel import select
+    from usage_limits import QuotaExceededError, check_quota, record_token_usage
+
     from model_gateway.costs import (
         MAX_COST_PER_RUN_USD,
         MAX_MONTHLY_SAFETY_LIMIT_USD,
         _month_bounds_utc,
     )
-    from models import LLMUsageLog, UsageLedgerEntry, User
-    from sqlalchemy import func
-    from sqlmodel import select
-    from usage_limits import QuotaExceededError, check_quota, record_token_usage
 
     cost = max(float(estimated_cost_usd or 0.0), 0.0)
     tokens = max(int(estimated_tokens or 0), 0)

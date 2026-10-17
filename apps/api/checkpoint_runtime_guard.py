@@ -23,8 +23,9 @@ def install_checkpoint_runtime_guard() -> None:
         return
 
     import orchestration.checkpoints as checkpoints
-    from config import settings
     from orchestration.execution_context import get_current_execution_lease
+
+    from config import settings
 
     _original_resolve_lease = checkpoints._resolve_lease
 

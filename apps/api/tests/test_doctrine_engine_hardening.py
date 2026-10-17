@@ -180,8 +180,9 @@ async def test_redis_history_gap_is_replayed_before_heartbeat():
 async def test_distributed_sse_lease_backend_error_fails_closed(monkeypatch):
     import redis_pool
     import sse_execution_guard as guard
-    from config import settings
     from sse_backend import StreamLeaseManager, StreamLeaseResult
+
+    from config import settings
 
     monkeypatch.setattr(guard, "_distributed_sse_leases_required", lambda: True)
     monkeypatch.setattr(settings, "SSE_LEASE_FAIL_OPEN", False, raising=False)
@@ -200,6 +201,7 @@ async def test_distributed_sse_lease_backend_error_fails_closed(monkeypatch):
 
 def test_staging_checkpoint_requires_execution_lease(monkeypatch):
     import sse_execution_guard as guard
+
     from config import settings
 
     monkeypatch.setattr(settings, "APP_ENV", "staging")
@@ -222,9 +224,10 @@ def test_month_bounds_are_calendar_month_not_lifetime():
 
 @pytest.mark.anyio
 async def test_monthly_cost_check_fails_closed_in_production(monkeypatch):
-    from config import settings
     from model_gateway.costs import check_credit_and_cost_safety
     from model_gateway.types import GatewayQuotaExceededError
+
+    from config import settings
 
     class BrokenSession:
         def execute(self, *_args, **_kwargs):
@@ -264,6 +267,9 @@ async def test_concurrent_coding_lanes_use_distinct_sessions(db_session, monkeyp
     from models import CodingRun, CodingTurn
     from worker import coding_tasks
 
+    from tests.utils import ensure_user
+
+    ensure_user(db_session, "coding-user")
     run = CodingRun(user_id="coding-user", tier=1, file_paths=["main.py"])
     db_session.add(run)
     db_session.commit()
@@ -271,10 +277,10 @@ async def test_concurrent_coding_lanes_use_distinct_sessions(db_session, monkeyp
     db_session.add(turn)
     db_session.commit()
 
-    session_ids = []
+    gateway_sessions = []
 
     async def fake_gateway(*_args, **kwargs):
-        session_ids.append(id(kwargs["db_session"]))
+        gateway_sessions.append(kwargs["db_session"])
         await asyncio.sleep(0.02)
         return "patch", SimpleNamespace(
             prompt_tokens=1,
@@ -304,5 +310,6 @@ async def test_concurrent_coding_lanes_use_distinct_sessions(db_session, monkeyp
     )
 
     assert {result.status for result in results} == {"completed"}
-    assert len(session_ids) == 2
-    assert len(set(session_ids)) == 2
+    # Lanes scope their own sessions to claim/finalize and hold none across the
+    # provider call, so concurrent lanes can never share one.
+    assert gateway_sessions == [None, None]
