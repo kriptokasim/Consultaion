@@ -74,8 +74,8 @@ def _embedding_blocked_reason(model_name: str) -> str | None:
         try:
             from model_gateway.proxy_transport import proxy_enabled
 
-            if not proxy_enabled():
-                return "production embeddings require the budget-enforcing LiteLLM proxy"
+            if not proxy_enabled() or not getattr(settings, "LITELLM_PROXY_API_KEY", None):
+                return "production embeddings require the configured budget-enforcing LiteLLM proxy"
         except Exception:
             return "cannot verify the production embedding budget proxy"
     if getattr(settings, "FREE_ONLY_MODE", False):
