@@ -15,10 +15,11 @@ def client():
 @patch("config.settings.ANTHROPIC_API_KEY", "sk-test-anthropic")
 @patch("config.settings.GEMINI_API_KEY", "sk-test-gemini")
 @patch("config.settings.OPENROUTER_API_KEY", "sk-test-openrouter")
-def test_api_status_success(mock_sse, mock_db, client):
+def test_api_status_success(mock_sse, mock_db, client, monkeypatch):
     """Test /api/status when database and SSE are operational, and all SOTA provider keys are configured."""
     mock_db.return_value = (True, {"ping": True})
     mock_sse.return_value = (True, {"ok": True})
+    monkeypatch.setattr("routes.ops.get_provider_circuit_status", lambda provider: {"state": "closed", "consecutive_failures": 0, "ttl": None, "redis_connected": True})
     
     response = client.get("/api/status")
     assert response.status_code == 200
@@ -38,10 +39,11 @@ def test_api_status_success(mock_sse, mock_db, client):
 @patch("config.settings.ANTHROPIC_API_KEY", "sk-test-anthropic")
 @patch("config.settings.GEMINI_API_KEY", None)
 @patch("config.settings.OPENROUTER_API_KEY", None)
-def test_api_status_degraded(mock_sse, mock_db, client):
+def test_api_status_degraded(mock_sse, mock_db, client, monkeypatch):
     """Test /api/status when database and SSE are operational but some provider keys are missing."""
     mock_db.return_value = (True, {"ping": True})
     mock_sse.return_value = (True, {"ok": True})
+    monkeypatch.setattr("routes.ops.get_provider_circuit_status", lambda provider: {"state": "closed", "consecutive_failures": 0, "ttl": None, "redis_connected": True})
     
     response = client.get("/api/status")
     assert response.status_code == 200
