@@ -85,7 +85,7 @@ multi-model debate** — then synthesises it into a decision.
 | Database | PostgreSQL (prod) · SQLite (CI) |
 | Task queue | Celery 5.4, Redis |
 | LLM routing | LiteLLM 1.84+ with OpenRouter fallback |
-| Auth | PyJWT 2.13, bcrypt, Google OAuth, progressive account lockout |
+| Auth | PyJWT 2.15, bcrypt, Google OAuth, progressive account lockout |
 | Observability | Sentry, PostHog, Prometheus, OpenTelemetry, Langfuse |
 | CI | GitHub Actions — Bandit, pip-audit, npm audit, ruff, mypy, pytest (≥75% coverage) |
 
