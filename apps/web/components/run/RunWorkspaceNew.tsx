@@ -64,7 +64,8 @@ export default function RunWorkspaceNew({
   const { t } = useI18n();
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [auxRun, setAuxRun] = useState<AuxiliaryRun>(initialAuxRun);
-  const [question, setQuestion] = useState(initialPrompt ? decodeURIComponent(initialPrompt) : "");
+  // Next.js searchParams already percent-decodes query values; decoding again breaks literal % characters.
+  const [question, setQuestion] = useState(initialPrompt ?? "");
   const [modeId, setModeId] = useState<ModeId>("arena");
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [selectedRiskLenses, setSelectedRiskLenses] = useState<string[]>(["security", "scaling", "compliance"]);
