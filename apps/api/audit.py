@@ -35,6 +35,36 @@ def _new_audit_log(
     )
 
 
+def stage_audit(
+    session: Session,
+    action: str,
+    *,
+    user_id: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    meta: Optional[dict[str, Any]] = None,
+) -> None:
+    """Stage an audit event in the caller's transaction without committing it."""
+    final_meta = dict(meta or {})
+    if ip_address and action not in _IP_SUPPRESSED_ACTIONS:
+        final_meta["ip_address"] = ip_address
+    else:
+        final_meta.pop("ip_address", None)
+        if action in _IP_SUPPRESSED_ACTIONS:
+            final_meta.pop("client_ip", None)
+            final_meta.pop("remote_addr", None)
+    session.add(
+        _new_audit_log(
+            action,
+            user_id=user_id,
+            target_type=target_type,
+            target_id=target_id,
+            meta=final_meta,
+        )
+    )
+
+
 def record_audit(
     action: str,
     *,
