@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -45,12 +46,15 @@ def _request(method: str, url: str, token: str | None = None, body: dict | None 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Pipeline Smoke Test")
     parser.add_argument("--base-url", required=True, help="API base URL (e.g. https://api.example.com)")
-    parser.add_argument("--token", required=True, help="Admin JWT token")
+    parser.add_argument("--token", default=os.environ.get("SMOKE_ADMIN_TOKEN"), help="Admin JWT token (or set SMOKE_ADMIN_TOKEN)")
     parser.add_argument("--provider", default="openrouter", help="Provider to smoke test")
-    parser.add_argument("--model-id", default=None, help="Model ID for smoke test")
+    parser.add_argument("--model-id", default=None, help="Model ID for smoke test (defaults to OpenRouter Free Router when --free-model is set)")
+    parser.add_argument("--free-model", action="store_true", help="Exercise the OpenRouter free path end-to-end with one router-smart seat")
     parser.add_argument("--poll-timeout", type=int, default=300, help="Max seconds to poll debate status")
     parser.add_argument("--poll-interval", type=int, default=5, help="Seconds between status polls")
     args = parser.parse_args()
+    if not args.token:
+        parser.error("pass --token or set SMOKE_ADMIN_TOKEN; the pipeline diagnostics are admin-only")
 
     base = args.base_url.rstrip("/")
     passed = []
@@ -91,9 +95,11 @@ def main() -> None:
     # 2. LLM Smoke Test
     print("\n[2/4] Running LLM smoke test...")
     try:
-        smoke_body: dict = {"provider": args.provider}
+        smoke_body: dict = {"provider": "openrouter" if args.free_model else args.provider}
         if args.model_id:
             smoke_body["model_id"] = args.model_id
+        elif args.free_model:
+            smoke_body["model_id"] = "openrouter/openrouter/free"
         smoke = _request("POST", f"{base}/ops/llm-smoke-test", token=args.token, body=smoke_body)
         if smoke.get("success"):
             latency = smoke.get("latency_ms", 0)
@@ -112,10 +118,30 @@ def main() -> None:
     print("\n[3/4] Creating test debate...")
     debate_id = None
     try:
-        create_resp = _request("POST", f"{base}/debates", token=args.token, body={
-            "prompt": "Reply with exactly: OK",
+        create_body: dict = {
+            "prompt": "Reply with exactly OK. This is a controlled backend smoke test.",
             "mode": "arena",
-        })
+        }
+        if args.free_model:
+            # Avoid the default multi-provider Arena roster: explicitly test one
+            # OpenRouter Free Router seat through the same run pipeline as New UX.
+            create_body.update({
+                "mode": "conversation",
+                "model_id": "router-smart",
+                "gateway_policy": "auto",
+                "panel_config": {
+                    "seats": [{
+                        "seat_id": "openrouter-free-smoke",
+                        "display_name": "OpenRouter Free Smoke",
+                        "provider_key": "openrouter",
+                        "model": "router-smart",
+                        "role_profile": "architect",
+                        "temperature": 0.0,
+                    }],
+                },
+            })
+        print(f"  run mode: {create_body['mode']}; free-model path: {'enabled' if args.free_model else 'disabled'}")
+        create_resp = _request("POST", f"{base}/debates", token=args.token, body=create_body)
         debate_id = create_resp.get("id")
         autorun = create_resp.get("autorun")
         dispatch_mode = create_resp.get("dispatch_mode")
@@ -161,6 +187,24 @@ def main() -> None:
         if final_status in ("completed", "completed_with_warnings"):
             print(f"  debate status: {final_status}")
             passed.append("debate_completed")
+            # A terminal status alone is insufficient: verify the run persisted
+            # at least one non-empty model response, as the UI expects.
+            print("\\n[5/5] Verifying persisted model response...")
+            try:
+                response_payload = _request("GET", f"{base}/debates/{debate_id}/responses", token=args.token)
+                items = response_payload.get("items", [])
+                content_items = [item for item in items if isinstance(item, dict) and str(item.get("content") or "").strip()]
+                if content_items:
+                    print(f"  persisted responses: {len(items)}; non-empty: {len(content_items)}")
+                    passed.append("persisted_response")
+                else:
+                    print(f"  response payload had no non-empty content (items={len(items)})", file=sys.stderr)
+                    failed.append("persisted_response_empty")
+            except SystemExit:
+                failed.append("persisted_response_fetch")
+            except Exception as exc:
+                print(f"  ERROR fetching persisted responses: {exc}", file=sys.stderr)
+                failed.append("persisted_response_fetch")
         elif final_status in ("failed", "degraded"):
             print(f"  debate status: {final_status}")
             failed.append("debate_failed")
