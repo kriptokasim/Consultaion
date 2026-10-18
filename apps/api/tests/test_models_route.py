@@ -28,6 +28,15 @@ def client():
     return TestClient(app)
 
 
+def test_models_without_trailing_slash_does_not_redirect(client):
+    """The model registry must be fetchable without a redirect (including cross-origin clients)."""
+    response = client.get("/models", follow_redirects=False)
+
+    assert response.status_code == 200
+    assert response.headers.get("location") is None
+    assert isinstance(response.json().get("models"), list)
+
+
 def test_models_returns_200_and_non_empty_list(client):
     """Test that /models endpoint returns 200 and a non-empty list."""
     response = client.get("/models")
