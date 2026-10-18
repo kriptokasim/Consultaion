@@ -189,7 +189,7 @@ def main() -> None:
             passed.append("debate_completed")
             # A terminal status alone is insufficient: verify the run persisted
             # at least one non-empty model response, as the UI expects.
-            print("\\n[5/5] Verifying persisted model response...")
+            print("\n[5/5] Verifying persisted model response...")
             try:
                 response_payload = _request("GET", f"{base}/debates/{debate_id}/responses", token=args.token)
                 items = response_payload.get("items", [])
