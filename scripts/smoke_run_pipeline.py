@@ -184,7 +184,7 @@ def main() -> None:
                 print(f"  poll error: {exc}", file=sys.stderr)
             time.sleep(args.poll_interval)
 
-        if final_status in ("completed", "completed_with_warnings"):
+        if final_status in ("completed", "completed_with_warnings", "completed_budget"):
             print(f"  debate status: {final_status}")
             passed.append("debate_completed")
             # A terminal status alone is insufficient: verify the run persisted
