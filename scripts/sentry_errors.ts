@@ -76,7 +76,12 @@ async function fetchSentryIssues(limit: number): Promise<SentryIssue[]> {
     }
 
     const baseUrl = 'https://sentry.io/api/0';
-    const url = `${baseUrl}/projects/${org}/${project}/issues/?query=is:unresolved&statsPeriod=14d&limit=${limit}`;
+    // SENTRY_ENV was previously logged but not applied, mixing production and
+    // non-production incidents in the same report. Encode the Sentry search query
+    // and enforce the requested environment at the API boundary.
+    const query = `is:unresolved environment:${env}`;
+    const params = new URLSearchParams({ query, statsPeriod: '14d', limit: String(limit) });
+    const url = `${baseUrl}/projects/${encodeURIComponent(org)}/${encodeURIComponent(project)}/issues/?${params.toString()}`;
 
     console.log(`Fetching issues from Sentry: ${org}/${project} (env: ${env})`);
 
