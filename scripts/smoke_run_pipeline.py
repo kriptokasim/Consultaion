@@ -11,8 +11,11 @@ Proves end-to-end execution by:
 
 Usage:
     python scripts/smoke_run_pipeline.py --base-url https://api.example.com --token <admin-jwt>
+    SMOKE_ADMIN_TOKEN=<admin-jwt> python scripts/smoke_run_pipeline.py --base-url https://api.consultaion.com --free-model
 
-Exit code 0 on PASS, non-zero on failure.
+The --free-model path exercises OpenRouter Free Router, creates a single-seat
+conversation, waits for a terminal status, and verifies that response content
+was persisted. Exit code 0 on PASS, non-zero on failure.
 """
 from __future__ import annotations
 
