@@ -72,10 +72,10 @@ function idleWorkspace(overrides: Partial<any> = {}) {
   };
 }
 
-function renderWorkspace(initialRunId: string | null = null) {
+function renderWorkspace(initialRunId: string | null = null, initialPrompt?: string) {
   return render(
     <I18nClientProvider locale="en" messages={getDictionary("en")}>
-      <RunWorkspaceNew initialRunId={initialRunId} />
+      <RunWorkspaceNew initialRunId={initialRunId} initialPrompt={initialPrompt} />
     </I18nClientProvider>,
   );
 }
@@ -95,6 +95,11 @@ describe("RunWorkspaceNew", () => {
     expect(screen.getByRole("button", { name: /GPT-4o Mini/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Claude 3.5 Sonnet/ })).toBeInTheDocument();
     expect(screen.queryByText("Disabled Model")).not.toBeInTheDocument();
+  });
+
+  it("preserves literal percent characters in a URL-prefilled prompt", () => {
+    renderWorkspace(null, "Is 50% growth realistic?");
+    expect(screen.getByPlaceholderText("Should we…")).toHaveValue("Is 50% growth realistic?");
   });
 
   it("uses the dedicated Oracle composer without a model panel", () => {
