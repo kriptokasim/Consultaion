@@ -2,7 +2,7 @@ name: Docker Smoke Test
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, feat/consultaion-new-ux]
   pull_request:
     branches: [main]
 
