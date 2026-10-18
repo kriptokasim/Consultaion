@@ -26,3 +26,6 @@ def test_current_free_candidates_are_not_old_nemotron_or_llama_slugs():
 
     assert "openrouter/nvidia/nemotron-3-ultra:free" not in FREE_OPENROUTER_CANDIDATES
     assert "openrouter/openai/gpt-oss-20b:free" not in FREE_OPENROUTER_CANDIDATES
+    assert FREE_OPENROUTER_CANDIDATES[0] == "openrouter/nvidia/nemotron-3.5-lightning:free"
+    assert "openrouter/thinkingmachines/inkling:free" in FREE_OPENROUTER_CANDIDATES
+    assert "openrouter/cohere/north-mini-code:free" in FREE_OPENROUTER_CANDIDATES
