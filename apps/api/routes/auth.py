@@ -7,7 +7,7 @@ from typing import Any, Optional
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from audit import record_audit
+from audit import record_audit, stage_audit
 from auth import (
     clear_auth_cookie,
     clear_csrf_cookie,
@@ -403,20 +403,23 @@ async def google_callback(
             email_verified_at=datetime.now(timezone.utc),
         )
         session.add(user)
+        # PostgreSQL enforces audit_log.user_id immediately; persist the user
+        # row before staging its audit event in this same transaction.
+        session.flush()
         audit_action = "register_google"
     else:
         _adopt_or_link_oauth_account(user, "google", ip)
         session.add(user)
     
     # Stage audit before commit so it persists atomically
-    record_audit(
+    stage_audit(
+        session,
         audit_action,
         user_id=user.id,
         target_type="user",
         target_id=user.id,
         ip_address=ip,
         meta={"email": user.email, "provider": "google"},
-        session=session,
     )
     session.commit()
     session.refresh(user)
@@ -691,33 +694,30 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
         email_verified_at=None,
     )
     session.add(user)
+    # The pre-check is not a lock. Flush catches duplicate-email races here,
+    # and guarantees the referenced user row exists before the audit row.
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise ValidationError(
+            message="Email already registered", code="auth.email_exists"
+        ) from None
     token = create_access_token(user_id=user.id, email=user.email, role=user.role)
     set_auth_cookie(response, token)
     if is_csrf_enabled():
         set_csrf_cookie(response, generate_csrf_token())
-    record_audit(
+    stage_audit(
+        session,
         "register",
         user_id=user.id,
         target_type="user",
         target_id=user.id,
         ip_address=ip,
         meta={"email": user.email},
-        session=session,
     )
-    # The existence check above is not a lock: two concurrent signups for the
-    # same address both pass it and the loser hits the unique constraint. That
-    # surfaced as an unhandled IntegrityError (HTTP 500) rather than the 409
-    # the first branch returns.
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        raise ValidationError(
-            message="Email already registered", code="auth.email_exists"
-        )
+    session.commit()
     return serialize_user(user)
-
-
 @csrf_exempt
 @router.post("/auth/login")
 async def login_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
@@ -897,48 +897,3 @@ async def delete_my_account(
 ):
     """
     Soft-delete user account and anonymize their data (FH125 H-1).
-
-    Uses the shared AccountErasureService for consistent behavior
-    with scheduled GDPR deletion.
-    """
-    from services.account_erasure import erase_user_account
-
-    user_id = current_user.id
-
-    result = erase_user_account(session, current_user, reason="user_request")
-
-    record_audit(
-        "account_deleted",
-        user_id=user_id,
-        target_type="user",
-        target_id=user_id,
-        meta={
-            "debates_anonymized": result.debates_anonymized,
-            "api_keys_deleted": result.api_keys_deleted,
-            "provider_keys_deleted": result.provider_keys_deleted,
-        },
-        session=session,
-    )
-
-    session.commit()
-
-    logger.info("User account deleted: %s, debates anonymized: %d", user_id, result.debates_anonymized)
-
-    # Clear auth cookies
-    clear_auth_cookie(response)
-    clear_csrf_cookie(response)
-
-    return {
-        "status": "ok",
-        "message": "Your account has been deleted and your data has been anonymized.",
-    }
-
-
-
-
-def _user_team_role(session: Session, user_id: str, team_id: str) -> Optional[str]:
-    return user_team_role(session, user_id, team_id)
-
-
-# Alias for main import compatibility
-auth_router = router
