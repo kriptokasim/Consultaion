@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/consultaion-new-ux]
   pull_request:
     branches: [main]
 
