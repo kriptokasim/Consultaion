@@ -19,6 +19,8 @@ export default defineConfig([
     "playwright-report/**",
     "test-results/**",
     "next-env.d.ts",
+    // Vendored, minified Three.js chamber bundle; lint its source upstream instead.
+    "public/embeds/three-chamber.js",
   ]),
   {
     files: sourceFiles,
