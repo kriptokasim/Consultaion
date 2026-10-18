@@ -12,10 +12,14 @@ _installed = False
 # Keep a small, current set of general-purpose free models. OpenRouter's live
 # catalog changes frequently, so these IDs are intentionally isolated here.
 FREE_OPENROUTER_CANDIDATES = (
-    "openrouter/qwen/qwen3.8-27b:free",
+    # Prefer current catalog entries before models that have recently returned
+    # 404/429 in production. OpenRouter's free inventory is volatile.
+    "openrouter/nvidia/nemotron-3.5-lightning:free",
+    "openrouter/inclusionai/ling-3.0-flash-fin:free",
+    "openrouter/thinkingmachines/inkling:free",
+    "openrouter/cohere/north-mini-code:free",
     "openrouter/google/gemma-4-26b-a4b-it:free",
     "openrouter/poolside/laguna-s-2.1:free",
-    "openrouter/inclusionai/ling-3.0-flash-fin:free",
 )
 
 
@@ -68,8 +72,8 @@ _RUNTIME_MODEL_ADDITIONS: dict[str, dict[str, Any]] = {
         "free_tier_limit_notes": "Free endpoint; rate limited.",
     },
     "openrouter_nemotron_free": {
-        "provider": "openrouter", "provider_model_id": "qwen/qwen3.8-27b:free",
-        "litellm_model": "openrouter/qwen/qwen3.8-27b:free", "cost_class": "free",
+        "provider": "openrouter", "provider_model_id": "nvidia/nemotron-3.5-lightning:free",
+        "litellm_model": "openrouter/nvidia/nemotron-3.5-lightning:free", "cost_class": "free",
         "deprecated": False, "replacement": None, "last_verified_at": "2026-08-30",
         "free_tier_verified_at": "2026-08-30", "free_tier_source": "OpenRouter",
         "free_tier_limit_notes": "Free endpoint; rate limited.",
@@ -148,7 +152,7 @@ def install_current_free_model_targets() -> None:
         "router-deep": "openrouter/poolside/laguna-s-2.1:free",
         "llama-3-free": "openrouter/inclusionai/ling-3.0-flash-fin:free",
         "mimo-v2-free": "openrouter/google/gemma-4-26b-a4b-it:free",
-        "openrouter-nemotron-free": "openrouter/qwen/qwen3.8-27b:free",
+        "openrouter-nemotron-free": "openrouter/nvidia/nemotron-3.5-lightning:free",
     })
 
     if not getattr(OpenRouterAdapter, "_consultaion_free_cascade_installed", False):
