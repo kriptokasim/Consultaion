@@ -32,15 +32,24 @@ def _engine_kwargs() -> dict:
     # pre-ping also turns every connection closed by an idle timeout (pgbouncer,
     # Supabase, NAT) into a user-visible 500 instead of a silent reconnect.
     if not settings.DATABASE_URL_ASYNC.startswith("sqlite"):
+        # NullPool (used by tests to isolate event-loop-bound connections) does
+        # not accept queue-pool sizing arguments. Keep connection liveness
+        # settings for every non-SQLite engine, but apply pool sizing only when
+        # SQLAlchemy is actually using a sized production pool.
         kwargs.update(
             {
-                "pool_size": settings.DB_POOL_SIZE,
-                "max_overflow": settings.DB_MAX_OVERFLOW,
                 "pool_recycle": settings.DB_POOL_RECYCLE,
-                "pool_timeout": settings.DB_POOL_TIMEOUT,
                 "pool_pre_ping": True,
             }
         )
+        if settings.ENV != "test":
+            kwargs.update(
+                {
+                    "pool_size": settings.DB_POOL_SIZE,
+                    "max_overflow": settings.DB_MAX_OVERFLOW,
+                    "pool_timeout": settings.DB_POOL_TIMEOUT,
+                }
+            )
 
     # Tests intentionally reset the global engine between cases while pytest-anyio
     # and pytest-asyncio may use different event-loop lifetimes. A pooled aiosqlite
