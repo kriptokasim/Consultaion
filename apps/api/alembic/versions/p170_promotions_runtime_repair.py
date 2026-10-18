@@ -114,7 +114,7 @@ def upgrade() -> None:
                  priority, target_plan_slug)
             SELECT lower(hex(randomblob(16))), 'dashboard_sidebar', 'Upgrade to Pro',
                    'Increase your monthly debates, unlock exports, and add more models to each run.',
-                   'View pricing', 1, 10, 'free'
+                   'View pricing', '/pricing', 1, 10, 'free'
             WHERE NOT EXISTS (
                 SELECT 1 FROM promotions
                 WHERE location = 'dashboard_sidebar'
