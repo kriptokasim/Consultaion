@@ -5,6 +5,7 @@ from schemas import ModelPublic
 router = APIRouter(prefix="/models", tags=["models"])
 
 
+@router.get("", summary="List enabled models", response_model=dict[str, list[ModelPublic]])
 @router.get("/", summary="List enabled models", response_model=dict[str, list[ModelPublic]])
 async def list_models():
     models = list_enabled_models()
