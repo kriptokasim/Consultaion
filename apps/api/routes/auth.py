@@ -616,19 +616,21 @@ async def google_callback_post(
             email_verified_at=datetime.now(timezone.utc),
         )
         session.add(user)
+        # Flush the referenced user before its audit row; PostgreSQL enforces the FK.
+        session.flush()
         audit_action = "register_google"
     else:
         _adopt_or_link_oauth_account(user, "google", ip)
         session.add(user)
     
-    record_audit(
+    stage_audit(
+        session,
         audit_action,
         user_id=user.id,
         target_type="user",
         target_id=user.id,
         ip_address=ip,
         meta={"email": user.email, "provider": "google"},
-        session=session,
     )
     session.commit()
     session.refresh(user)
