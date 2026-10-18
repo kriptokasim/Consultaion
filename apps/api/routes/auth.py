@@ -720,6 +720,8 @@ async def register_user(body: AuthRequest, request: Request, response: Response,
     )
     session.commit()
     return serialize_user(user)
+
+
 @csrf_exempt
 @router.post("/auth/login")
 async def login_user(body: AuthRequest, request: Request, response: Response, session: Session = Depends(get_session)):
