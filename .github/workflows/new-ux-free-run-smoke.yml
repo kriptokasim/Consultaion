@@ -1,0 +1,56 @@
+name: New UX OpenRouter Free Run Smoke
+
+on:
+  push:
+    branches: [feat/consultaion-new-ux]
+    paths:
+      - scripts/smoke_run_pipeline.py
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "API base URL"
+        required: true
+        default: "https://api.consultaion.com"
+
+jobs:
+  free-run-smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[free-smoke]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate smoke runner syntax
+        run: python -m py_compile scripts/smoke_run_pipeline.py
+
+      - name: Check whether live smoke credentials are configured
+        id: token-check
+        env:
+          SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -n "$SMOKE_ADMIN_TOKEN" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Admin smoke credential is configured."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Live API smoke skipped: repository secret SMOKE_ADMIN_TOKEN is not configured."
+            echo "Live API smoke skipped because SMOKE_ADMIN_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run real OpenRouter Free end-to-end pipeline test
+        if: steps.token-check.outputs.available == 'true'
+        env:
+          SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+          API_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_url || 'https://api.consultaion.com' }}
+        shell: bash
+        run: |
+          python scripts/smoke_run_pipeline.py \
+            --base-url "$API_BASE_URL" \
+            --free-model \
+            --poll-timeout 300 \
+            --poll-interval 5
